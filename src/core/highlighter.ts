@@ -1,3 +1,4 @@
+import {AESTHETIC_LINE_CAPTURE_REGEX} from './aesthetic.ts';
 import {
   DIALOGUE_REGEX,
   EXECUTION_HEADERS,
@@ -48,8 +49,6 @@ export interface InlineTokenizeOptions {
 
 const ABBREVIATION_BEFORE_PERIOD_REGEX =
   /(?:^|[\s(])(?:(?:[A-Za-z]\.){1,3}[A-Za-z]|Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|vs|etc)$/i;
-
-const AESTHETIC_LINE_CAPTURE_REGEX = /^(\s*)([A-Za-z0-9 _/-]+:)(\s*)(.*)$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -423,8 +422,9 @@ export function tokenizeSourceDocument(
     if (idx > 0) out.push({kind: 'plain', text: '\n'});
 
     const trimmed = line.trim();
-    if (!inExecution && MACRO_HEADER_REGEX.test(trimmed)) {
-      const headerName = trimmed.slice(1, -1).trim();
+    const headerMatch = !inExecution ? MACRO_HEADER_REGEX.exec(trimmed) : null;
+    const headerName = headerMatch ? headerMatch[1].trim() : '';
+    if (!inExecution && headerName.length > 0) {
       const kind = classifyMacroBlock(headerName);
       if (EXECUTION_HEADERS.has(headerName)) {
         inExecution = true;

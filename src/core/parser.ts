@@ -10,11 +10,37 @@ import type {
   SubStateNode,
 } from './types.ts';
 
+/** Allowed characters inside a Macro-Block header name or Sub-State tag */
+export const MACRO_HEADER_NAME_REGEX = /^[A-Z0-9 _-]+$/;
+
 /** Standalone Macro-Block header line, e.g. [INTENT], [CONTINUITY PROTOCOL], [EXECUTION] */
 export const MACRO_HEADER_REGEX = /^\[([A-Z0-9 _-]+)\]$/;
 
 /** Execution phase header aliases per Open Block Principle */
 export const EXECUTION_HEADERS = new Set(['EXECUTION', 'TIMELINE', 'BEATS', 'SHOTLIST']);
+
+/** Returns true when a Macro-Block header name is reserved for Phase 2 Execution */
+export function isReservedExecutionHeader(name: string): boolean {
+  return EXECUTION_HEADERS.has(name.trim().toUpperCase());
+}
+
+/**
+ * Sanitizes a user- or tool-supplied Staging Macro-Block header name so any non-empty result
+ * is guaranteed to match MACRO_HEADER_REGEX (`^[A-Z0-9 _-]+$` inside brackets) on re-parse.
+ */
+export function sanitizeStagingHeaderName(rawName: string): string {
+  const cleaned = rawName
+    .trim()
+    .replace(/^\[+/, '')
+    .replace(/\]+$/, '')
+    .replace(/\//g, ' ')
+    .replace(/[^A-Za-z0-9 _-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+  return cleaned.length > 0 && MACRO_HEADER_REGEX.test(`[${cleaned}]`) ? cleaned : '';
+}
 
 /** Canonical Phase 1 Staging Macro-Block headers in recommended authoring order */
 export const CANONICAL_STAGING_HEADERS: readonly Exclude<MacroBlockKind, 'EXECUTION' | 'CUSTOM'>[] = [
@@ -45,7 +71,8 @@ export function isMultiBlockAuteurScript(raw: string): boolean {
   for (const line of lines) {
     const trimmed = line.trim();
     const match = MACRO_HEADER_REGEX.exec(trimmed);
-    if (match && KNOWN_CANONICAL_HEADERS.has(match[1].trim().toUpperCase())) {
+    const headerName = match ? match[1].trim().toUpperCase() : '';
+    if (headerName.length > 0 && KNOWN_CANONICAL_HEADERS.has(headerName)) {
       headerCount += 1;
       if (headerCount >= 2) {
         return true;
@@ -140,8 +167,9 @@ export function parseSubState(segment: string, index: number): SubStateNode {
   const trimmed = segment.trim();
 
   const tagMatch = SUBSTATE_TAG_REGEX.exec(trimmed);
-  if (tagMatch) {
-    const tag = tagMatch[1].trim();
+  const matchedTag = tagMatch ? tagMatch[1].trim() : '';
+  if (tagMatch && matchedTag.length > 0) {
+    const tag = matchedTag;
     const body = (tagMatch[2] ?? '').trim();
     const camera = parseCameraTag(tag, body);
 
@@ -173,7 +201,7 @@ export function parseSubState(segment: string, index: number): SubStateNode {
   }
 
   const foleyMatch = FOLEY_REGEX.exec(trimmed);
-  if (foleyMatch) {
+  if (foleyMatch && foleyMatch[1].trim().length > 0) {
     return {
       index,
       raw: trimmed,
@@ -193,7 +221,7 @@ export function parseSubState(segment: string, index: number): SubStateNode {
   }
 
   const scoreMatch = SCORE_REGEX.exec(trimmed);
-  if (scoreMatch) {
+  if (scoreMatch && scoreMatch[1].trim().length > 0) {
     return {
       index,
       raw: trimmed,
@@ -224,7 +252,12 @@ export function parseSubState(segment: string, index: number): SubStateNode {
 export function parseExecutionLine(line: string, beatIndex: number, lineIndex: number): ExecutionBeat {
   const trimmed = line.trim();
   const segments = splitExecutionSubStates(trimmed);
-  const subStates = segments.map((seg, idx) => parseSubState(seg, idx));
+  const subStates =
+    segments.length > 0
+      ? segments.map((seg, idx) => parseSubState(seg, idx))
+      : trimmed.length > 0
+        ? [parseSubState(trimmed, 0)]
+        : [];
 
   return {
     id: `beat-${beatIndex}`,
@@ -295,8 +328,8 @@ export function parseAuteurScript(input: string): AuteurDocument {
 
     if (!execution) {
       const headerMatch = MACRO_HEADER_REGEX.exec(trimmed);
-      if (headerMatch) {
-        const headerName = headerMatch[1].trim();
+      const headerName = headerMatch ? headerMatch[1].trim() : '';
+      if (headerName.length > 0) {
         flushStaging();
 
         if (EXECUTION_HEADERS.has(headerName)) {

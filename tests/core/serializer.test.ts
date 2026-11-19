@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
+  MACRO_HEADER_REGEX,
   deleteExecutionBeat,
   deleteExecutionSubState,
   deleteStagingBlock,
@@ -12,6 +13,7 @@ import {
   parseAuteurScript,
   reorderExecutionBeats,
   reorderStagingBlocks,
+  sanitizeStagingHeaderName,
   updateExecutionBeat,
   updateExecutionSubState,
   updateStagingBlock,
@@ -220,5 +222,37 @@ describe('Auteur Script Serializer & Tagless Exporter', () => {
     expect(exportPlainText(messy)).toBe(
       '[INTENT]\nCreate a scene.\n\n[EXECUTION]\n[CAM 01] MS -> [ACT] Hold'
     );
+  });
+
+  it('sanitizes custom Staging headers containing "/" so they always re-parse cleanly via MACRO_HEADER_REGEX', () => {
+    const withSlash = insertStagingBlock(
+      INTERROGATION,
+      'PROPS / WARDROBE',
+      'Manila folder; charcoal overcoat'
+    );
+    const parsed = parseAuteurScript(withSlash);
+    const inserted = parsed.stagingBlocks[parsed.stagingBlocks.length - 1];
+
+    expect(inserted.name).toBe('PROPS WARDROBE');
+    expect(inserted.rawBody).toBe('Manila folder; charcoal overcoat');
+    expect(MACRO_HEADER_REGEX.test(`[${inserted.name}]`)).toBe(true);
+    expect(parsed.execution?.beats).toHaveLength(3);
+
+    // Compact slash without spaces and bracket-wrapped slash headers also remain grammar-valid
+    expect(sanitizeStagingHeaderName('PROPS/WARDROBE')).toBe('PROPS WARDROBE');
+    expect(sanitizeStagingHeaderName('[audio / sfx]')).toBe('AUDIO SFX');
+    expect(sanitizeStagingHeaderName('///')).toBe('');
+
+    // Slash-only input is a safe no-op
+    expect(insertStagingBlock(INTERROGATION, '///', 'ignored')).toBe(
+      parseAuteurScript(INTERROGATION).raw
+    );
+  });
+
+  it('blocks all reserved Execution headers in insertStagingBlock regardless of case or brackets', () => {
+    const canonicalRaw = parseAuteurScript(INTERROGATION).raw;
+    for (const reserved of ['EXECUTION', 'timeline', '[BEATS]', '  Shotlist  ']) {
+      expect(insertStagingBlock(INTERROGATION, reserved, 'should not insert')).toBe(canonicalRaw);
+    }
   });
 });

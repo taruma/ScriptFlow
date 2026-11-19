@@ -1,4 +1,5 @@
-import {fromAuteurIR, toAuteurEnvelope} from './ir.ts';
+import {parseAestheticLine, parseAestheticTokenSegment} from './aesthetic.ts';
+import {fromAuteurIR, renderSubState, toAuteurEnvelope} from './ir.ts';
 import {
   AuteurPatchSchema,
   type AestheticEntryDraft,
@@ -13,9 +14,7 @@ import {
   type SubStateDraft,
   type SubStateIR,
 } from './irSchemas.ts';
-import {classifyMacroBlock} from './parser.ts';
-
-const AESTHETIC_TOKEN_SEGMENT_REGEX = /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)\s*$/;
+import {classifyMacroBlock, normalizeLineEndings} from './parser.ts';
 
 export interface ApplyPatchOptions {
   /** When true, rejects patches that introduce new severity='error' Script Supervisor diagnostics */
@@ -51,8 +50,87 @@ export interface PatchApplyResult {
   errors: PatchError[];
 }
 
-function diagnosticSignature(d: DerivedDiagnosticIR): string {
-  return `${d.ruleId}::${d.severity}::${d.message}`;
+function normalizeDiagnosticMessage(message: string): string {
+  return message.replace(/(?<![@\[A-Za-z0-9_-])S\d+(?![A-Za-z0-9_\]-])/g, 'S#');
+}
+
+function diagnosticSignature(d: DerivedDiagnosticIR, originTargetId = d.targetId): string {
+  return `${originTargetId}::${d.ruleId}::${d.severity}::${normalizeDiagnosticMessage(d.message)}`;
+}
+
+/**
+ * Maps each post-compilation snapshot ID (`MB#`, `S#`) back to its pre-patch origin ID
+ * (`MB#`/`S#` for surviving nodes, or `__new_*` for newly inserted nodes) so beat or block
+ * index shifts never cause false `LINT_ERROR_INTRODUCED` rejections or false resolutions.
+ */
+function buildAfterToOriginTargetMap(working: AuteurScriptIR): Map<string, string> {
+  const map = new Map<string, string>();
+
+  working.stagingMacroBlocks.forEach((block, idx) => {
+    map.set(`MB${idx}`, block.id);
+  });
+
+  if (working.executionMacroBlock) {
+    let beatIdx = 0;
+    for (const ms of working.executionMacroBlock.macroStates) {
+      const renderedLine = ms.subStates
+        .map((sub) => renderSubState(sub))
+        .filter((segment) => segment.length > 0)
+        .join(' -> ');
+      if (renderedLine.length > 0) {
+        beatIdx += 1;
+        map.set(`S${beatIdx}`, ms.id);
+      }
+    }
+  }
+
+  return map;
+}
+
+function diffDiagnostics(
+  diagnosticsBefore: DerivedDiagnosticIR[],
+  diagnosticsAfter: DerivedDiagnosticIR[],
+  afterToOriginTargetId: Map<string, string>
+): {
+  introduced: DerivedDiagnosticIR[];
+  resolved: DerivedDiagnosticIR[];
+} {
+  const beforeCounts = new Map<string, number>();
+  for (const d of diagnosticsBefore) {
+    const sig = diagnosticSignature(d);
+    beforeCounts.set(sig, (beforeCounts.get(sig) ?? 0) + 1);
+  }
+
+  const remainingBefore = new Map(beforeCounts);
+  const introduced: DerivedDiagnosticIR[] = [];
+  const afterCounts = new Map<string, number>();
+
+  for (const d of diagnosticsAfter) {
+    const originId = afterToOriginTargetId.get(d.targetId) ?? d.targetId;
+    const sig = diagnosticSignature(d, originId);
+    afterCounts.set(sig, (afterCounts.get(sig) ?? 0) + 1);
+
+    const prevCount = remainingBefore.get(sig) ?? 0;
+    if (prevCount > 0) {
+      remainingBefore.set(sig, prevCount - 1);
+    } else {
+      introduced.push(d);
+    }
+  }
+
+  const remainingAfter = new Map(afterCounts);
+  const resolved: DerivedDiagnosticIR[] = [];
+  for (const d of diagnosticsBefore) {
+    const sig = diagnosticSignature(d);
+    const nextCount = remainingAfter.get(sig) ?? 0;
+    if (nextCount > 0) {
+      remainingAfter.set(sig, nextCount - 1);
+    } else {
+      resolved.push(d);
+    }
+  }
+
+  return {introduced, resolved};
 }
 
 function cloneIR(ir: AuteurScriptIR): AuteurScriptIR {
@@ -187,12 +265,12 @@ function applySingleOp(
             value: entry.value,
           }));
         } else if (op.body !== undefined) {
-          const lines = op.body.replace(/\r\n?/g, '\n').split('\n');
+          const lines = normalizeLineEndings(op.body).split('\n');
           target.entries = lines.map((line) => {
-            const m = /^([A-Za-z0-9 _/-]+):\s*(.*)$/.exec(line);
-            return m
-              ? {id: nextId(), key: m[1].trim(), value: m[2]}
-              : {id: nextId(), key: null, value: line};
+            const parsed = parseAestheticLine(line);
+            return parsed.type === 'kv'
+              ? {id: nextId(), key: parsed.key, value: parsed.value}
+              : {id: nextId(), key: null, value: parsed.raw};
           });
         }
       } else {
@@ -323,8 +401,8 @@ function applySingleOp(
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
         const matchIdx = segments.findIndex((seg) => {
-          const m = AESTHETIC_TOKEN_SEGMENT_REGEX.exec(seg);
-          return m !== null && m[2].trim() === token;
+          const parsed = parseAestheticTokenSegment(seg);
+          return parsed !== null && parsed.token === token;
         });
 
         if (matchIdx !== -1) {
@@ -382,8 +460,8 @@ function applySingleOp(
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
         const nextSegments = segments.filter((seg) => {
-          const m = AESTHETIC_TOKEN_SEGMENT_REGEX.exec(seg);
-          if (m !== null && m[2].trim() === token) {
+          const parsed = parseAestheticTokenSegment(seg);
+          if (parsed !== null && parsed.token === token) {
             found = true;
             return false;
           }
@@ -690,17 +768,18 @@ export function applyAuteurPatch(
     }
   }
 
+  const afterToOriginTargetId = buildAfterToOriginTargetMap(working);
   const candidateRawText = fromAuteurIR(working);
   const nextEnvelope = toAuteurEnvelope(candidateRawText);
   const diagnosticsAfter = nextEnvelope.derived.diagnostics;
 
-  const beforeSigs = new Set(diagnosticsBefore.map(diagnosticSignature));
-  const afterSigs = new Set(diagnosticsAfter.map(diagnosticSignature));
-
-  const introduced = diagnosticsAfter.filter((d) => !beforeSigs.has(diagnosticSignature(d)));
+  const {introduced, resolved: resolvedDiagnostics} = diffDiagnostics(
+    diagnosticsBefore,
+    diagnosticsAfter,
+    afterToOriginTargetId
+  );
   const introducedErrors = introduced.filter((d) => d.severity === 'error');
   const introducedWarnings = introduced.filter((d) => d.severity === 'warning');
-  const resolvedDiagnostics = diagnosticsBefore.filter((d) => !afterSigs.has(diagnosticSignature(d)));
 
   if (options?.rejectOnNewErrors && introducedErrors.length > 0) {
     return {

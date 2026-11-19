@@ -1,4 +1,6 @@
 import {z} from 'zod';
+import {AESTHETIC_TOKEN_NAME_REGEX} from './aesthetic.ts';
+import {MACRO_HEADER_NAME_REGEX, isReservedExecutionHeader} from './parser.ts';
 
 export const AUTEUR_IR_SCHEMA_VERSION = '0.4.0' as const;
 
@@ -68,9 +70,17 @@ export const SubStateDimensionSchema = z.enum([
   'plain',
 ]);
 
-const UPPERCASE_TAG_REGEX = /^[A-Z0-9 _-]+$/;
 const CAMERA_IDENTIFIER_REGEX = /^\d+[A-Z]?$/i;
-const TOKEN_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
+
+export const StagingHeaderSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .regex(MACRO_HEADER_NAME_REGEX, 'Macro-Block header must be uppercase alphanumeric')
+  .refine((header) => !isReservedExecutionHeader(header), {
+    message:
+      'Reserved Phase 2 Execution headers (EXECUTION, TIMELINE, BEATS, SHOTLIST) cannot be used as Staging Macro-Block headers',
+  });
 
 // ---------------------------------------------------------------------------
 // Staging Macro-Block Schemas (Phase 1: STAGING)
@@ -88,7 +98,7 @@ export const AestheticEntryIRSchema = AestheticEntryDraftSchema.extend({
 
 export const ProseStagingMacroBlockDraftSchema = z.object({
   id: z.string().min(1).optional(),
-  header: z.string().trim().min(1).regex(UPPERCASE_TAG_REGEX, 'Macro-Block header must be uppercase alphanumeric'),
+  header: StagingHeaderSchema,
   kind: StagingMacroBlockKindSchema.optional(),
   format: z.literal('prose'),
   body: z.string(),
@@ -101,7 +111,7 @@ export const ProseStagingMacroBlockIRSchema = ProseStagingMacroBlockDraftSchema.
 
 export const KeyValueStagingMacroBlockDraftSchema = z.object({
   id: z.string().min(1).optional(),
-  header: z.string().trim().min(1).regex(UPPERCASE_TAG_REGEX, 'Macro-Block header must be uppercase alphanumeric'),
+  header: StagingHeaderSchema,
   kind: z.literal('AESTHETIC').optional(),
   format: z.literal('key_value'),
   entries: z.array(AestheticEntryDraftSchema),
@@ -109,7 +119,7 @@ export const KeyValueStagingMacroBlockDraftSchema = z.object({
 
 export const KeyValueStagingMacroBlockIRSchema = z.object({
   id: z.string().min(1),
-  header: z.string().trim().min(1).regex(UPPERCASE_TAG_REGEX),
+  header: StagingHeaderSchema,
   kind: z.literal('AESTHETIC'),
   format: z.literal('key_value'),
   entries: z.array(AestheticEntryIRSchema),
@@ -152,8 +162,11 @@ export const ActionSubStateDraftSchema = z.object({
   content: z.string().trim().min(1),
 });
 
-export const ActionSubStateIRSchema = ActionSubStateDraftSchema.extend({
+export const ActionSubStateIRSchema = z.object({
   id: z.string().min(1),
+  dimension: z.literal('action'),
+  subStateTag: z.literal('ACT'),
+  content: z.string(),
 });
 
 export const BlockSubStateDraftSchema = z.object({
@@ -163,8 +176,11 @@ export const BlockSubStateDraftSchema = z.object({
   content: z.string().trim().min(1),
 });
 
-export const BlockSubStateIRSchema = BlockSubStateDraftSchema.extend({
+export const BlockSubStateIRSchema = z.object({
   id: z.string().min(1),
+  dimension: z.literal('block'),
+  subStateTag: z.literal('BLOCK'),
+  content: z.string(),
 });
 
 export const LightSubStateDraftSchema = z.object({
@@ -174,8 +190,11 @@ export const LightSubStateDraftSchema = z.object({
   content: z.string().trim().min(1),
 });
 
-export const LightSubStateIRSchema = LightSubStateDraftSchema.extend({
+export const LightSubStateIRSchema = z.object({
   id: z.string().min(1),
+  dimension: z.literal('light'),
+  subStateTag: z.literal('LIGHT'),
+  content: z.string(),
 });
 
 export const StateBoundarySubStateDraftSchema = z.object({
@@ -185,8 +204,11 @@ export const StateBoundarySubStateDraftSchema = z.object({
   content: z.string().trim().min(1),
 });
 
-export const StateBoundarySubStateIRSchema = StateBoundarySubStateDraftSchema.extend({
+export const StateBoundarySubStateIRSchema = z.object({
   id: z.string().min(1),
+  dimension: z.literal('state_boundary'),
+  subStateTag: z.enum(['STATE IN', 'STATE OUT']),
+  content: z.string(),
 });
 
 export const Tier2SubStateDraftSchema = z.object({
@@ -196,7 +218,7 @@ export const Tier2SubStateDraftSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .regex(UPPERCASE_TAG_REGEX, 'Sub-State Tag must be uppercase (e.g. "PROP", "FOCUS", "SPEED", "VFX")'),
+    .regex(MACRO_HEADER_NAME_REGEX, 'Sub-State Tag must be uppercase (e.g. "PROP", "FOCUS", "SPEED", "VFX")'),
   content: z.string(),
 });
 
@@ -303,7 +325,10 @@ export const ExecutionHeaderSchema = z
   .string()
   .trim()
   .min(1)
-  .regex(UPPERCASE_TAG_REGEX, 'Execution header must be uppercase (e.g. "EXECUTION", "TIMELINE", "BEATS", "SHOTLIST")');
+  .regex(
+    MACRO_HEADER_NAME_REGEX,
+    'Execution header must be uppercase (e.g. "EXECUTION", "TIMELINE", "BEATS", "SHOTLIST")'
+  );
 
 export const ExecutionMacroBlockDraftSchema = z.object({
   header: ExecutionHeaderSchema.default('EXECUTION'),
@@ -453,12 +478,15 @@ export const UpsertTokenMappingOpSchema = z.object({
   op: z.literal('upsert_token_mapping'),
   category: z.string().trim().min(1),
   description: z.string().trim().min(1),
-  token: z.string().trim().regex(TOKEN_NAME_REGEX, 'Token must be alphanumeric/underscore/hyphen (e.g. "LOC01")'),
+  token: z
+    .string()
+    .trim()
+    .regex(AESTHETIC_TOKEN_NAME_REGEX, 'Token must be alphanumeric/underscore/hyphen (e.g. "LOC01")'),
 });
 
 export const DeleteTokenMappingOpSchema = z.object({
   op: z.literal('delete_token_mapping'),
-  token: z.string().trim().regex(TOKEN_NAME_REGEX),
+  token: z.string().trim().regex(AESTHETIC_TOKEN_NAME_REGEX),
 });
 
 export const ReplaceMacroStateOpSchema = z.object({

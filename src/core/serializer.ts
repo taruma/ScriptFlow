@@ -1,7 +1,8 @@
 import {
-  EXECUTION_HEADERS,
+  isReservedExecutionHeader,
   normalizeLineEndings,
   parseAuteurScript,
+  sanitizeStagingHeaderName,
   splitExecutionSubStates,
 } from './parser.ts';
 
@@ -74,17 +75,6 @@ export function updateStagingBlock(raw: string, blockIndex: number, newBody: str
   return serializeBlocksAndBeats(doc.preambleLines, nextStaging, nextExecution);
 }
 
-function sanitizeStagingHeaderName(rawName: string): string {
-  return rawName
-    .trim()
-    .replace(/^\[+/, '')
-    .replace(/\]+$/, '')
-    .replace(/[^A-Za-z0-9 _/-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
-}
-
 /**
  * Inserts a new Staging Macro-Block at the end of Phase 1 (or immediately after
  * afterBlockIndex when specified), preserving all other blocks and Execution beats losslessly.
@@ -98,7 +88,7 @@ export function insertStagingBlock(
 ): string {
   const doc = parseAuteurScript(raw);
   const cleanName = sanitizeStagingHeaderName(headerName);
-  if (cleanName.length === 0 || EXECUTION_HEADERS.has(cleanName)) {
+  if (cleanName.length === 0 || isReservedExecutionHeader(cleanName)) {
     return doc.raw;
   }
 

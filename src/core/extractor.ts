@@ -1,3 +1,4 @@
+import {extractAestheticTokenSegments, parseAestheticLine} from './aesthetic.ts';
 import type {
   AestheticToken,
   AuteurDocument,
@@ -9,8 +10,6 @@ import type {
 
 const CHARACTER_BINDING_REGEX =
   /(@[A-Za-z0-9_-]+)\s+[aA][sS]\s+([A-Za-z0-9_-]+(?:\s+(?!(?:and|with|locked|in|on|at|from|who|a|an|the|as|pressing|confronting|facing|featuring|set)\b)[A-Z][A-Za-z0-9_-]+)*)(?:\s*\(\s*[vV][oO][iI][cC][eE]\s*:\s*(@[A-Za-z0-9_-]+)\s*\))?/g;
-
-const AESTHETIC_TOKEN_SEGMENT_REGEX = /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)\s*$/;
 
 const CONTINUATION_REF_REGEX = /(?:@video[A-Za-z0-9_-]*|@?PREVIOUS_CLIP)\b/i;
 
@@ -54,36 +53,19 @@ export function extractAestheticTokens(doc: AuteurDocument): AestheticToken[] {
 
     block.lines.forEach((line, offset) => {
       const lineIndex = block.contentStartLine + offset;
-      const trimmed = line.trim();
-      if (!trimmed || (!trimmed.includes('->') && !trimmed.includes('→'))) return;
+      const parsed = parseAestheticLine(line);
+      const category = parsed.type === 'kv' ? parsed.key : undefined;
+      const remainder = parsed.type === 'kv' ? parsed.value : parsed.raw;
 
-      let category: string | undefined;
-      let remainder = trimmed;
-
-      const labelMatch = /^([A-Za-z0-9 _/-]+):\s*(.*)$/.exec(trimmed);
-      if (labelMatch) {
-        category = labelMatch[1].trim();
-        remainder = labelMatch[2];
-      }
-
-      const segments = remainder.split(';');
-      for (const rawSeg of segments) {
-        const seg = rawSeg.trim();
-        if (!seg) continue;
-
-        const tokenMatch = AESTHETIC_TOKEN_SEGMENT_REGEX.exec(seg);
-        if (tokenMatch) {
-          const description = tokenMatch[1].trim();
-          const token = tokenMatch[2].trim();
-          if (token && !seen.has(token)) {
-            seen.add(token);
-            results.push({
-              token,
-              description,
-              ...(category ? {category} : {}),
-              lineIndex,
-            });
-          }
+      for (const {description, token} of extractAestheticTokenSegments(remainder)) {
+        if (!seen.has(token)) {
+          seen.add(token);
+          results.push({
+            token,
+            description,
+            ...(category ? {category} : {}),
+            lineIndex,
+          });
         }
       }
     });

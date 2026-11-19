@@ -3,12 +3,33 @@ import {normalizeLineEndings} from './parser.ts';
 /**
  * Canonical [AESTHETIC] lookbook `Key: Value` line matcher.
  * Supports multi-word keys, digits, underscores, slashes, and hyphens (e.g. `Color Palette:`).
+ * Requires at least one non-whitespace key character so `: value` / `  : value` stay freeform.
  */
-export const AESTHETIC_KEY_VALUE_REGEX = /^\s*([A-Za-z0-9 _/-]+):(?:\s*(.*))?$/;
+export const AESTHETIC_KEY_VALUE_REGEX = /^\s*([A-Za-z0-9_/-][A-Za-z0-9 _/-]*):(?:\s*(.*))?$/;
+
+/**
+ * Lossless line capture regex for syntax highlighting `[AESTHETIC]` lines
+ * (`leadingWs`, `keyWithColon`, `afterColonWs`, `value`).
+ */
+export const AESTHETIC_LINE_CAPTURE_REGEX = /^(\s*)([A-Za-z0-9_/-][A-Za-z0-9 _/-]*:)(\s*)(.*)$/;
+
+/** Canonical shorthand token identifier in `[AESTHETIC]` mappings (e.g. `LOC01`, `EV01`) */
+export const AESTHETIC_TOKEN_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Canonical `[AESTHETIC]` shorthand token mapping segment: `Description -> TOKEN`
+ * (supports both ASCII `->` and Unicode `→`).
+ */
+export const AESTHETIC_TOKEN_SEGMENT_REGEX = /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)\s*$/;
 
 export type AestheticRow =
   | {type: 'kv'; key: string; value: string}
   | {type: 'free'; raw: string};
+
+export interface ParsedAestheticTokenSegment {
+  description: string;
+  token: string;
+}
 
 /**
  * Parses a single [AESTHETIC] line into a structured `Key: Value` row or a freeform fallback line.
@@ -26,6 +47,45 @@ export function parseAestheticLine(line: string): AestheticRow {
     type: 'free',
     raw: line,
   };
+}
+
+/**
+ * Parses a single semicolon-delimited `[AESTHETIC]` segment (`Description -> TOKEN`).
+ * Returns null when the segment does not declare a shorthand token mapping.
+ */
+export function parseAestheticTokenSegment(segment: string): ParsedAestheticTokenSegment | null {
+  const trimmed = segment.trim();
+  if (!trimmed) return null;
+
+  const match = AESTHETIC_TOKEN_SEGMENT_REGEX.exec(trimmed);
+  if (!match) return null;
+
+  const token = match[2].trim();
+  if (!token) return null;
+
+  return {
+    description: match[1].trim(),
+    token,
+  };
+}
+
+/**
+ * Extracts all `Description -> TOKEN` mappings from an `[AESTHETIC]` value string
+ * (supporting multiple semicolon-delimited mappings on one line).
+ */
+export function extractAestheticTokenSegments(value: string): ParsedAestheticTokenSegment[] {
+  if (!value.includes('->') && !value.includes('→')) {
+    return [];
+  }
+
+  const results: ParsedAestheticTokenSegment[] = [];
+  for (const rawSeg of value.split(';')) {
+    const parsed = parseAestheticTokenSegment(rawSeg);
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+  return results;
 }
 
 /**

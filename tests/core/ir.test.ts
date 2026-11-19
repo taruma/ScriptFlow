@@ -1,9 +1,13 @@
 import {describe, expect, it} from 'vitest';
 import {
+  AuteurEnvelopeSchema,
+  AuteurScriptIRSchema,
   compileAuteurDraft,
   exportPlainText,
   fromAuteurIR,
   getAuteurJsonSchemas,
+  parseAestheticRows,
+  serializeAestheticRows,
   toAuteurEnvelope,
   toAuteurIR,
 } from '../../src/core/index.ts';
@@ -269,6 +273,92 @@ Continue seamlessly from @video1.
       expect(schemas[key]).toBeTruthy();
       expect(typeof schemas[key]).toBe('object');
       expect(schemas[key]).toHaveProperty('type', 'object');
+    }
+  });
+
+  it('blocks reserved Execution headers in compileAuteurDraft for both prose and key_value staging blocks', () => {
+    for (const reserved of ['EXECUTION', 'TIMELINE', 'BEATS', 'SHOTLIST']) {
+      const proseResult = compileAuteurDraft({
+        stagingMacroBlocks: [
+          {
+            header: reserved,
+            format: 'prose',
+            body: 'Should never compile as a staging block.',
+          },
+        ],
+        executionMacroBlock: null,
+      });
+      expect(proseResult.ok).toBe(false);
+      if (!proseResult.ok) {
+        expect(proseResult.errors.some((e) => e.path.includes('header'))).toBe(true);
+      }
+
+      const kvResult = compileAuteurDraft({
+        stagingMacroBlocks: [
+          {
+            header: reserved,
+            format: 'key_value',
+            entries: [{key: 'Medium', value: '35mm'}],
+          },
+        ],
+        executionMacroBlock: null,
+      });
+      expect(kvResult.ok).toBe(false);
+      if (!kvResult.ok) {
+        expect(kvResult.errors.some((e) => e.path.includes('header'))).toBe(true);
+      }
+    }
+  });
+
+  it('always produces AuteurScriptIRSchema- and AuteurEnvelopeSchema-valid output for live-edited bare tags and edge cases', () => {
+    const liveEdited = `[INTENT]
+Draft in progress.
+
+[AESTHETIC]
+Medium: 35mm film
+Wardrobe:
+  : stray colon value
+
+[   ]
+Loose line after blank brackets.
+
+[EXECUTION]
+[CAM 01] MS -> [ACT] -> [BLOCK] -> [LIGHT] -> [STATE IN] -> [STATE OUT]
+[CAM 01] -> [   ] -> < > -> ( )
+->`;
+
+    const ir = toAuteurIR(liveEdited);
+    const envelope = toAuteurEnvelope(liveEdited);
+
+    expect(AuteurScriptIRSchema.safeParse(ir).success).toBe(true);
+    expect(AuteurEnvelopeSchema.safeParse(envelope).success).toBe(true);
+
+    // Round-trips bare tags and empty-value [AESTHETIC] keys without trailing whitespace drift
+    expect(fromAuteurIR(ir)).toBe(exportPlainText(liveEdited));
+
+    // Matches aesthetic serializer verbatim for empty-value keys
+    const aestheticBlock = ir.stagingMacroBlocks.find((b) => b.format === 'key_value');
+    expect(aestheticBlock).toBeDefined();
+    const rawAestheticBody = 'Medium: 35mm film\nWardrobe:\n  : stray colon value';
+    expect(serializeAestheticRows(parseAestheticRows(rawAestheticBody))).toBe(rawAestheticBody);
+    expect(fromAuteurIR(ir)).toContain('[AESTHETIC]\nMedium: 35mm film\nWardrobe:\n  : stray colon value');
+  });
+
+  it('still rejects empty content on AI-authored action/block/light/state_boundary drafts', () => {
+    for (const subState of [
+      {dimension: 'action', subStateTag: 'ACT', content: ''},
+      {dimension: 'block', subStateTag: 'BLOCK', content: '   '},
+      {dimension: 'light', subStateTag: 'LIGHT', content: ''},
+      {dimension: 'state_boundary', subStateTag: 'STATE IN', content: ''},
+    ]) {
+      const result = compileAuteurDraft({
+        stagingMacroBlocks: [],
+        executionMacroBlock: {
+          header: 'EXECUTION',
+          macroStates: [{subStates: [subState]}],
+        },
+      });
+      expect(result.ok).toBe(false);
     }
   });
 });

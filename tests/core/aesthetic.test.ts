@@ -1,10 +1,14 @@
 import {describe, expect, it} from 'vitest';
 import {
   countAestheticKeys,
+  extractAestheticTokenSegments,
+  extractAestheticTokens,
   parseAestheticEntries,
   parseAestheticLine,
   parseAestheticRows,
+  parseAuteurScript,
   serializeAestheticRows,
+  toAuteurEnvelope,
 } from '../../src/core/index.ts';
 
 describe('Aesthetic Lookbook Row Codec', () => {
@@ -69,5 +73,28 @@ describe('Aesthetic Lookbook Row Codec', () => {
         expect(entries[idx].value).toBe(row.raw);
       }
     });
+  });
+
+  it('treats whitespace-only colon prefixes as freeform lines and keeps token extraction consistent across extractor and IR', () => {
+    expect(parseAestheticLine(': orphan value')).toEqual({type: 'free', raw: ': orphan value'});
+    expect(parseAestheticLine('   : orphan value')).toEqual({
+      type: 'free',
+      raw: '   : orphan value',
+    });
+
+    const script = `[AESTHETIC]
+Location: dim alley -> LOC01; neon diner → LOC02
+   : unlabelled note -> NOTE01`;
+
+    const extracted = extractAestheticTokens(parseAuteurScript(script));
+    const envelopeTokens = toAuteurEnvelope(script).derived.tokenMappings;
+
+    expect(extractAestheticTokenSegments('dim alley -> LOC01; neon diner → LOC02')).toEqual([
+      {description: 'dim alley', token: 'LOC01'},
+      {description: 'neon diner', token: 'LOC02'},
+    ]);
+    expect(extracted.map(({token, description, category}) => ({token, description, category}))).toEqual(
+      envelopeTokens.map(({token, description, category}) => ({token, description, category}))
+    );
   });
 });

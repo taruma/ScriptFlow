@@ -1,6 +1,10 @@
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {Plus, X} from 'lucide-react';
-import {CANONICAL_STAGING_HEADERS, EXECUTION_HEADERS} from '../core/parser.ts';
+import {
+  CANONICAL_STAGING_HEADERS,
+  isReservedExecutionHeader,
+  sanitizeStagingHeaderName,
+} from '../core/parser.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
 
 const CANONICAL_STAGING_BLOCKS = CANONICAL_STAGING_HEADERS;
@@ -55,18 +59,11 @@ export function StagingBlockPickerPanel({
 
   const handleSubmitCustom = (event: FormEvent) => {
     event.preventDefault();
-    const normalized = customName
-      .trim()
-      .replace(/^\[+/, '')
-      .replace(/\]+$/, '')
-      .replace(/[^A-Za-z0-9 _/-]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toUpperCase();
+    const normalized = sanitizeStagingHeaderName(customName);
 
     if (!normalized) return;
 
-    if (EXECUTION_HEADERS.has(normalized)) {
+    if (isReservedExecutionHeader(normalized)) {
       setCustomError(UI_LABELS.staging.customHeaderReservedError);
       return;
     }

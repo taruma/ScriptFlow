@@ -230,4 +230,140 @@ MS on Miller seated frame-left facing screen-right.
     expect(badRes.introducedErrors[0].ruleId).toBe('viewport-coordinate-purity');
     expect(badRes.errors[0].code).toBe('LINT_ERROR_INTRODUCED');
   });
+
+  it('blocks reserved Execution headers in insert_macro_block patches', () => {
+    for (const reserved of ['EXECUTION', 'TIMELINE', 'BEATS', 'SHOTLIST']) {
+      const res = applyAuteurPatch(INTERROGATION, {
+        ops: [
+          {
+            op: 'insert_macro_block',
+            afterMacroBlockId: 'MB0',
+            macroBlock: {
+              header: reserved,
+              format: 'prose',
+              body: 'Invalid staging block using reserved execution header.',
+            },
+          },
+        ],
+      });
+
+      expect(res.ok).toBe(false);
+      expect(res.errors[0].code).toBe('VALIDATION_ERROR');
+      expect(res.nextRawText).toBe(INTERROGATION);
+    }
+  });
+
+  it('does not falsely reject patches with rejectOnNewErrors when inserting, deleting, or reordering beats shifts pre-existing S# diagnostics', () => {
+    const scriptWithPreExistingError = `[INTENT]
+Create a tense standoff.
+
+[LOGIC]
+Maintain 180-degree axis. No subtitles appear on screen.
+
+[OPENING]
+MS on Miller seated frame-left facing screen-right.
+
+[EXECUTION]
+[CAM 01] MS on Miller -> [ACT] Miller checks his watch -> <ticking watch>
+[CAM 02] CU on Ray -> [ACT] Ray enters stage-left with a folder -> <folder slap>
+[CAM 01] WS on room -> [ACT] Park stands still -> <chair creak>`;
+
+    // 1. Insert a clean beat BEFORE S1 (shifts S2 error -> S3 and S3 camera-redef warning -> S4)
+    const insertRes = applyAuteurPatch(
+      scriptWithPreExistingError,
+      {
+        ops: [
+          {
+            op: 'insert_macro_state',
+            afterMacroStateId: null,
+            subStates: [
+              {dimension: 'camera', subStateTag: 'CAM', identifier: '03', content: 'EWS hallway'},
+              {dimension: 'action', subStateTag: 'ACT', content: 'Fluorescent tube flickers overhead'},
+              {dimension: 'foley', sound: 'ballast buzz'},
+            ],
+          },
+        ],
+      },
+      {rejectOnNewErrors: true}
+    );
+
+    expect(insertRes.ok).toBe(true);
+    expect(insertRes.introducedErrors).toHaveLength(0);
+    expect(insertRes.introducedWarnings).toHaveLength(0);
+    expect(insertRes.resolvedDiagnostics).toHaveLength(0);
+
+    // 2. Delete clean S1 BEFORE S2 (shifts S2 error -> S1)
+    const deleteRes = applyAuteurPatch(
+      scriptWithPreExistingError,
+      {
+        ops: [{op: 'delete_macro_state', macroStateId: 'S1'}],
+      },
+      {rejectOnNewErrors: true}
+    );
+
+    expect(deleteRes.ok).toBe(true);
+    expect(deleteRes.introducedErrors).toHaveLength(0);
+    expect(deleteRes.errors).toHaveLength(0);
+
+    // 3. Reorder S2 to top (shifts S2 error -> S1)
+    const reorderRes = applyAuteurPatch(
+      scriptWithPreExistingError,
+      {
+        ops: [{op: 'reorder_macro_states', macroStateId: 'S2', afterMacroStateId: null}],
+      },
+      {rejectOnNewErrors: true}
+    );
+
+    expect(reorderRes.ok).toBe(true);
+    expect(reorderRes.introducedErrors).toHaveLength(0);
+
+    // 4. Still REJECTS a patch that introduces a NEW beat with the SAME pre-existing error text!
+    const duplicateErrRes = applyAuteurPatch(
+      scriptWithPreExistingError,
+      {
+        ops: [
+          {
+            op: 'insert_macro_state',
+            afterMacroStateId: 'S2',
+            subStates: [
+              {dimension: 'camera', subStateTag: 'CAM', identifier: '03', content: 'CU on door'},
+              {dimension: 'action', subStateTag: 'ACT', content: 'Park enters stage-left quickly'},
+            ],
+          },
+        ],
+      },
+      {rejectOnNewErrors: true}
+    );
+
+    expect(duplicateErrRes.ok).toBe(false);
+    expect(duplicateErrRes.introducedErrors).toHaveLength(1);
+    expect(duplicateErrRes.introducedErrors[0].targetId).toBe('S3');
+    expect(duplicateErrRes.errors[0].code).toBe('LINT_ERROR_INTRODUCED');
+  });
+
+  it('parses [AESTHETIC] prose body updates via canonical parseAestheticLine consistently', () => {
+    const res = applyAuteurPatch(INTERROGATION, {
+      ops: [
+        {
+          op: 'set_macro_block',
+          header: 'AESTHETIC',
+          body: '  Medium: 16mm grainy\nWardrobe:\n  : stray colon note',
+        },
+      ],
+    });
+
+    expect(res.ok).toBe(true);
+    const aesthetic = res.nextEnvelope!.document.stagingMacroBlocks.find(
+      (b) => b.format === 'key_value'
+    );
+    expect(aesthetic?.format).toBe('key_value');
+    if (aesthetic?.format === 'key_value') {
+      expect(aesthetic.entries).toEqual([
+        {id: 'MB2.0', key: 'Medium', value: '16mm grainy'},
+        {id: 'MB2.1', key: 'Wardrobe', value: ''},
+        {id: 'MB2.2', key: null, value: '  : stray colon note'},
+      ]);
+    }
+    expect(res.nextRawText).toContain('[AESTHETIC]\nMedium: 16mm grainy\nWardrobe:\n  : stray colon note');
+  });
 });

@@ -20,12 +20,15 @@ import {
   type SubStateIR,
   type TokenMappingIR,
 } from './irSchemas.ts';
-import {parseAestheticLine} from './aesthetic.ts';
+import {
+  extractAestheticTokenSegments,
+  parseAestheticLine,
+  serializeAestheticRows,
+  type AestheticRow,
+} from './aesthetic.ts';
 import {lintDocument} from './linter.ts';
 import {classifyMacroBlock, normalizeLineEndings, parseAuteurScript} from './parser.ts';
 import type {AuteurDocument, ExtractedMetadata, LintDiagnostic, SubStateNode} from './types.ts';
-
-const AESTHETIC_TOKEN_SEGMENT_REGEX = /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)\s*$/;
 
 function sanitizeSingleLine(value: string): string {
   return normalizeLineEndings(value)
@@ -183,14 +186,22 @@ export function renderSubState(subState: SubStateDraft | SubStateIR): string {
       const content = sanitizeSingleLine(subState.content);
       return content.length > 0 ? `${tag} ${content}` : tag;
     }
-    case 'action':
-      return `[ACT] ${sanitizeSingleLine(subState.content)}`;
-    case 'block':
-      return `[BLOCK] ${sanitizeSingleLine(subState.content)}`;
-    case 'light':
-      return `[LIGHT] ${sanitizeSingleLine(subState.content)}`;
-    case 'state_boundary':
-      return `[${subState.subStateTag}] ${sanitizeSingleLine(subState.content)}`;
+    case 'action': {
+      const content = sanitizeSingleLine(subState.content);
+      return content.length > 0 ? `[ACT] ${content}` : '[ACT]';
+    }
+    case 'block': {
+      const content = sanitizeSingleLine(subState.content);
+      return content.length > 0 ? `[BLOCK] ${content}` : '[BLOCK]';
+    }
+    case 'light': {
+      const content = sanitizeSingleLine(subState.content);
+      return content.length > 0 ? `[LIGHT] ${content}` : '[LIGHT]';
+    }
+    case 'state_boundary': {
+      const content = sanitizeSingleLine(subState.content);
+      return content.length > 0 ? `[${subState.subStateTag}] ${content}` : `[${subState.subStateTag}]`;
+    }
     case 'tier2': {
       const tag = subState.subStateTag.trim().toUpperCase();
       const content = sanitizeSingleLine(subState.content);
@@ -281,15 +292,12 @@ function renderStagingBlock(block: StagingMacroBlockDraft | StagingMacroBlockIR)
   let body: string;
 
   if (block.format === 'key_value') {
-    body = block.entries
-      .map((entry) => {
-        if (entry.key !== null && entry.key.trim().length > 0) {
-          return `${entry.key.trim()}: ${entry.value}`;
-        }
-        return entry.value;
-      })
-      .join('\n')
-      .replace(/\n+$/, '');
+    const rows: AestheticRow[] = block.entries.map((entry) =>
+      entry.key !== null && entry.key.trim().length > 0
+        ? {type: 'kv', key: entry.key, value: entry.value}
+        : {type: 'free', raw: entry.value}
+    );
+    body = serializeAestheticRows(rows).replace(/\n+$/, '');
   } else {
     body = normalizeLineEndings(block.body).replace(/\n+$/, '');
   }
@@ -368,26 +376,15 @@ function extractDerivedTokenMappings(ir: AuteurScriptIR): TokenMappingIR[] {
     if (block.format !== 'key_value') continue;
 
     for (const entry of block.entries) {
-      if (!entry.value.includes('->') && !entry.value.includes('→')) continue;
-
-      const segments = entry.value.split(';');
-      for (const rawSeg of segments) {
-        const seg = rawSeg.trim();
-        if (!seg) continue;
-
-        const match = AESTHETIC_TOKEN_SEGMENT_REGEX.exec(seg);
-        if (match) {
-          const description = match[1].trim();
-          const token = match[2].trim();
-          if (token && !seen.has(token)) {
-            seen.add(token);
-            results.push({
-              token,
-              description,
-              ...(entry.key ? {category: entry.key} : {}),
-              entryId: entry.id,
-            });
-          }
+      for (const {description, token} of extractAestheticTokenSegments(entry.value)) {
+        if (!seen.has(token)) {
+          seen.add(token);
+          results.push({
+            token,
+            description,
+            ...(entry.key ? {category: entry.key} : {}),
+            entryId: entry.id,
+          });
         }
       }
     }
