@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {reconcileStepFocusOnDelete} from '../../src/ui/beatFocus.ts';
+import {matchHistoryShortcut} from '../../src/ui/historyShortcuts.ts';
 import {
   deleteCollapsedIndex,
   insertCollapsedIndex,
@@ -141,3 +142,30 @@ describe('reconcileStepFocusOnDelete', () => {
     });
   });
 });
+
+describe('matchHistoryShortcut', () => {
+  const base = {key: '', metaKey: false, ctrlKey: false, shiftKey: false, altKey: false};
+
+  it('matches Cmd+Z and Ctrl+Z as undo (case-insensitive)', () => {
+    expect(matchHistoryShortcut({...base, key: 'z', metaKey: true})).toBe('undo');
+    expect(matchHistoryShortcut({...base, key: 'Z', ctrlKey: true})).toBe('undo');
+  });
+
+  it('matches Cmd+Shift+Z, Ctrl+Shift+Z, and Ctrl+Y as redo', () => {
+    expect(matchHistoryShortcut({...base, key: 'z', metaKey: true, shiftKey: true})).toBe('redo');
+    expect(matchHistoryShortcut({...base, key: 'Z', ctrlKey: true, shiftKey: true})).toBe('redo');
+    expect(matchHistoryShortcut({...base, key: 'y', ctrlKey: true})).toBe('redo');
+    expect(matchHistoryShortcut({...base, key: 'Y', ctrlKey: true})).toBe('redo');
+  });
+
+  it('ignores non-matching chords, Cmd+Y, Alt combinations, and IME composition events', () => {
+    expect(matchHistoryShortcut({...base, key: 'z'})).toBeNull();
+    expect(matchHistoryShortcut({...base, key: 'y', metaKey: true})).toBeNull();
+    expect(matchHistoryShortcut({...base, key: 'y', ctrlKey: true, shiftKey: true})).toBeNull();
+    expect(matchHistoryShortcut({...base, key: 'z', ctrlKey: true, altKey: true})).toBeNull();
+    expect(
+      matchHistoryShortcut({...base, key: 'z', metaKey: true, isComposing: true})
+    ).toBeNull();
+  });
+});
+

@@ -63,6 +63,8 @@ export const UI_TOKENS = {
       'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-surface text-text-main shadow-xs transition-colors cursor-pointer whitespace-nowrap shrink-0',
     iconClose:
       'p-1.5 hover:bg-surface-muted rounded-full transition-colors active:scale-90 text-text-faint hover:text-text-main cursor-pointer',
+    iconGhost:
+      'inline-flex items-center justify-center p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-muted transition-colors active:scale-95 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-muted disabled:cursor-not-allowed cursor-pointer shrink-0',
   },
 
   input: {

@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {GripVertical, Plus, Trash2, X} from 'lucide-react';
+import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AestheticToken,
   BeatCameraLink,
@@ -24,10 +25,21 @@ interface ExecutionBeatRowProps {
   connectsToNext: boolean;
   aestheticTokens: AestheticToken[];
   diagnostics: LintDiagnostic[];
+  historyRevision: number;
   autoFocusEdit?: boolean;
   onClearAutoFocus?: () => void;
-  onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
-  onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
+  onUpdateSubState: (
+    beatIndex: number,
+    subStateIndex: number,
+    nextSubStateRaw: string,
+    mode?: HistoryCommitMode
+  ) => void;
+  onInsertSubState: (
+    beatIndex: number,
+    afterSubStateIndex: number,
+    starterText: string,
+    mode?: HistoryCommitMode
+  ) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
   onDeleteBeat: (beatIndex: number) => void;
@@ -48,6 +60,7 @@ export function ExecutionBeatRow({
   connectsToNext,
   aestheticTokens,
   diagnostics,
+  historyRevision,
   autoFocusEdit = false,
   onClearAutoFocus,
   onUpdateSubState,
@@ -65,6 +78,7 @@ export function ExecutionBeatRow({
   const stepRefs = useRef<Map<number, HTMLTextAreaElement>>(new Map());
   const pendingRef = useRef<HTMLTextAreaElement | null>(null);
   const nextFocusRef = useRef<PendingFocusTarget | null>(null);
+  const lastHistoryRevisionRef = useRef<number>(historyRevision);
 
   const registerStepRef = (index: number) => (el: HTMLTextAreaElement | null) => {
     if (el) {
@@ -110,23 +124,52 @@ export function ExecutionBeatRow({
     onClearAutoFocus?.();
   }, [autoFocusEdit, beat.subStates, onClearAutoFocus]);
 
-  // Clamp out-of-bounds focus or pending anchor if sub-states shrink externally
+  // Reconcile focus & active drafts on external sub-state shrink or Undo/Redo history jumps
   useEffect(() => {
-    if (focusedStepIndex !== null && focusedStepIndex >= beat.subStates.length) {
-      if (beat.subStates.length === 0) {
-        setFocusedStepIndex(null);
-        setActiveDraft('');
-      } else {
-        const clamped = beat.subStates.length - 1;
-        setFocusedStepIndex(clamped);
-        setActiveDraft(beat.subStates[clamped]?.raw ?? '');
+    const isHistoryJump = lastHistoryRevisionRef.current !== historyRevision;
+    lastHistoryRevisionRef.current = historyRevision;
+
+    if (isHistoryJump && pendingAfterIndex !== null) {
+      const targetIdx =
+        beat.subStates.length > 0 ? Math.min(pendingAfterIndex, beat.subStates.length - 1) : null;
+      setPendingAfterIndex(null);
+      setPendingDraft('');
+      if (targetIdx !== null) {
+        const syncedRaw = beat.subStates[targetIdx]?.raw ?? '';
+        setFocusedStepIndex(targetIdx);
+        setActiveDraft(syncedRaw);
+        nextFocusRef.current = {type: 'step', index: targetIdx, caret: syncedRaw.length};
       }
+      return;
     }
+
     if (pendingAfterIndex !== null && pendingAfterIndex >= beat.subStates.length) {
       setPendingAfterIndex(null);
       setPendingDraft('');
     }
-  }, [beat.subStates, focusedStepIndex, pendingAfterIndex]);
+
+    if (focusedStepIndex !== null) {
+      if (beat.subStates.length === 0) {
+        setFocusedStepIndex(null);
+        setActiveDraft('');
+        return;
+      }
+      if (focusedStepIndex >= beat.subStates.length) {
+        const clamped = beat.subStates.length - 1;
+        const syncedRaw = beat.subStates[clamped]?.raw ?? '';
+        setFocusedStepIndex(clamped);
+        setActiveDraft(syncedRaw);
+        if (isHistoryJump) {
+          nextFocusRef.current = {type: 'step', index: clamped, caret: syncedRaw.length};
+        }
+        return;
+      }
+      if (isHistoryJump) {
+        const syncedRaw = beat.subStates[focusedStepIndex]?.raw ?? '';
+        setActiveDraft(syncedRaw);
+      }
+    }
+  }, [historyRevision, beat.subStates, focusedStepIndex, pendingAfterIndex]);
 
   const isBeatFocused = focusedStepIndex !== null || pendingAfterIndex !== null;
 
@@ -190,7 +233,7 @@ export function ExecutionBeatRow({
 
       if (left.length > 0 && right.trim().length > 0) {
         const rightTrimmed = right.trim();
-        onUpdateSubState(beat.index, index, `${left} -> ${rightTrimmed}`);
+        onUpdateSubState(beat.index, index, `${left} -> ${rightTrimmed}`, 'checkpoint');
         setFocusedStepIndex(index + 1);
         setActiveDraft(rightTrimmed);
         nextFocusRef.current = {type: 'step', index: index + 1, caret: rightTrimmed.length};
@@ -198,7 +241,7 @@ export function ExecutionBeatRow({
       }
 
       if (left.length > 0 && right.trim().length === 0) {
-        onUpdateSubState(beat.index, index, left);
+        onUpdateSubState(beat.index, index, left, 'checkpoint');
         openPendingStepAfter(index);
         return;
       }
@@ -206,7 +249,7 @@ export function ExecutionBeatRow({
 
     setActiveDraft(singleLine);
     if (singleLine.trim().length > 0) {
-      onUpdateSubState(beat.index, index, singleLine);
+      onUpdateSubState(beat.index, index, singleLine, 'coalesce');
     }
   };
 
@@ -217,7 +260,7 @@ export function ExecutionBeatRow({
       if (trimmed.length === 0) {
         onDeleteSubState(beat.index, index);
       } else if (trimmed !== (beat.subStates[index]?.raw ?? '')) {
-        onUpdateSubState(beat.index, index, trimmed);
+        onUpdateSubState(beat.index, index, trimmed, 'coalesce');
       }
     }
   };
@@ -248,12 +291,12 @@ export function ExecutionBeatRow({
       const after = currentText.slice(caretEnd).trim();
 
       if (before.length > 0 && after.length > 0) {
-        onUpdateSubState(beat.index, index, `${before} -> ${after}`);
+        onUpdateSubState(beat.index, index, `${before} -> ${after}`, 'checkpoint');
         setFocusedStepIndex(index + 1);
         setActiveDraft(after);
         nextFocusRef.current = {type: 'step', index: index + 1, caret: 0};
       } else if (before.length > 0) {
-        onUpdateSubState(beat.index, index, before);
+        onUpdateSubState(beat.index, index, before, 'checkpoint');
         openPendingStepAfter(index);
       } else {
         openPendingStepAfter(index);
@@ -314,7 +357,8 @@ export function ExecutionBeatRow({
     if (singleLine.trim().length > 0 && pendingAfterIndex !== null) {
       const insertAfter = pendingAfterIndex;
       const newStepIdx = insertAfter + 1;
-      onInsertSubState(beat.index, insertAfter, singleLine);
+      const commitMode: HistoryCommitMode = singleLine.trim().length <= 2 ? 'coalesce' : 'checkpoint';
+      onInsertSubState(beat.index, insertAfter, singleLine, commitMode);
       setPendingAfterIndex(null);
       setPendingDraft('');
       setFocusedStepIndex(newStepIdx);

@@ -10,6 +10,8 @@ import {
   Copy,
   Eye,
   FilePlus2,
+  Redo2,
+  Undo2,
 } from 'lucide-react';
 import type {LintDiagnostic} from '../core/types.ts';
 import type {ScriptPreset} from '../data/presets.ts';
@@ -39,6 +41,10 @@ interface TopSlateBarProps {
   copiedKind: 'plain' | 'tagless' | null;
   onOpenDebug?: () => void;
   isDebugOpen?: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 type OpenMenu = 'presets' | 'settings' | 'copy' | null;
@@ -62,6 +68,10 @@ export function TopSlateBar({
   copiedKind,
   onOpenDebug,
   isDebugOpen = false,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: TopSlateBarProps) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const barRef = useRef<HTMLElement | null>(null);
@@ -102,6 +112,7 @@ export function TopSlateBar({
           </span>
           <input
             type="text"
+            data-native-undo="true"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
             aria-label={UI_LABELS.topBar.sceneTitleAria}
@@ -180,8 +191,39 @@ export function TopSlateBar({
         </div>
       </div>
 
-      {/* Right Zone: Optional Debug Inspector, Presets, Settings, Copy */}
+      {/* Right Zone: Quiet Undo/Redo, Optional Debug Inspector, Presets, Settings, Copy */}
       <div className="flex flex-1 items-center justify-end gap-1.5 pl-2">
+        <div
+          role="group"
+          aria-label={UI_LABELS.topBar.historyGroupAria}
+          className="inline-flex items-center gap-0.5 shrink-0"
+        >
+          <button
+            type="button"
+            disabled={!canUndo}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onUndo}
+            title={UI_LABELS.topBar.undoTitle}
+            aria-label={UI_LABELS.topBar.undoAria}
+            className={UI_TOKENS.button.iconGhost}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            disabled={!canRedo}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onRedo}
+            title={UI_LABELS.topBar.redoTitle}
+            aria-label={UI_LABELS.topBar.redoAria}
+            className={UI_TOKENS.button.iconGhost}
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-border-main shrink-0" />
+
         {onOpenDebug && (
           <button
             type="button"

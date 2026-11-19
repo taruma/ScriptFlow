@@ -9,4 +9,5 @@ export * from './irSchemas.ts';
 export * from './ir.ts';
 export * from './patch.ts';
 export * from './slicer.ts';
+export * from './history.ts';
 

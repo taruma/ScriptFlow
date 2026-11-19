@@ -8,7 +8,10 @@ import {
 } from '../core/aesthetic.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
-import type {StagingBlockEditorProps} from './stagingBlockRegistry.ts';
+import type {
+  StagingBlockCommitOptions,
+  StagingBlockEditorProps,
+} from './stagingBlockRegistry.ts';
 
 interface PendingFocus {
   index: number;
@@ -25,6 +28,7 @@ interface PendingFocus {
 export function AestheticBlockEditor({
   rawBody,
   aestheticTokens,
+  historyRevision = 0,
   autoFocus = false,
   onClearAutoFocus,
   onCommit,
@@ -37,14 +41,18 @@ export function AestheticBlockEditor({
   const valueRefs = useRef<Map<number, HTMLTextAreaElement>>(new Map());
   const pendingFocusRef = useRef<PendingFocus | null>(null);
   const lastCommittedRef = useRef<string>(rawBody);
+  const lastHistoryRevisionRef = useRef<number>(historyRevision);
 
-  // Sync external plain-text updates (e.g. preset switches, Source Mode edits, patches)
+  // Sync external plain-text updates (preset switches, Source Mode edits, patches)
+  // AND actively focused drafts whenever document-level Undo/Redo fires
   useEffect(() => {
-    if (!isContainerFocused && rawBody !== lastCommittedRef.current) {
+    const isHistoryJump = lastHistoryRevisionRef.current !== historyRevision;
+    lastHistoryRevisionRef.current = historyRevision;
+    if (isHistoryJump || (!isContainerFocused && rawBody !== lastCommittedRef.current)) {
       lastCommittedRef.current = rawBody;
       setRows(parseAestheticRows(rawBody));
     }
-  }, [rawBody, isContainerFocused]);
+  }, [rawBody, isContainerFocused, historyRevision]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -76,11 +84,11 @@ export function AestheticBlockEditor({
     }
   });
 
-  const commitRows = (nextRows: AestheticRow[]) => {
+  const commitRows = (nextRows: AestheticRow[], options?: StagingBlockCommitOptions) => {
     setRows(nextRows);
     const serialized = serializeAestheticRows(nextRows);
     lastCommittedRef.current = serialized;
-    onCommit(serialized);
+    onCommit(serialized, options);
   };
 
   const handleContainerFocus = () => {
@@ -115,7 +123,7 @@ export function AestheticBlockEditor({
     lastCommittedRef.current = serialized;
     setRows(parseAestheticRows(serialized));
     if (serialized !== rawBody) {
-      onCommit(serialized);
+      onCommit(serialized, {mode: 'coalesce'});
     }
   };
 
@@ -134,7 +142,7 @@ export function AestheticBlockEditor({
           : existingValue;
         return {type: 'kv' as const, key: beforeColon, value: mergedValue};
       });
-      commitRows(nextRows);
+      commitRows(nextRows, {mode: 'checkpoint'});
       pendingFocusRef.current = {index, column: 'value', caret: afterColon.length};
       return;
     }
@@ -142,7 +150,7 @@ export function AestheticBlockEditor({
     const nextRows = rows.map((row, idx) =>
       idx === index && row.type === 'kv' ? {...row, key: nextKey} : row
     );
-    commitRows(nextRows);
+    commitRows(nextRows, {mode: 'coalesce', groupKey: `aesthetic:key:${index}`});
   };
 
   const handleValueChange = (index: number, nextValue: string) => {
@@ -159,7 +167,7 @@ export function AestheticBlockEditor({
         ...extraRows,
         ...rows.slice(index + 1),
       ];
-      commitRows(nextRows);
+      commitRows(nextRows, {mode: 'checkpoint'});
       const lastNewIdx = index + extraRows.length;
       const lastRow = extraRows[extraRows.length - 1];
       pendingFocusRef.current = {
@@ -178,7 +186,7 @@ export function AestheticBlockEditor({
       // If a freeform line gets "Key: value" typed into it, promote it to a 2-column row
       return parseAestheticLine(nextValue);
     });
-    commitRows(nextRows);
+    commitRows(nextRows, {mode: 'coalesce', groupKey: `aesthetic:val:${index}`});
   };
 
   const insertRowAfter = (index: number) => {
@@ -187,18 +195,18 @@ export function AestheticBlockEditor({
       {type: 'kv' as const, key: '', value: ''},
       ...rows.slice(index + 1),
     ];
-    commitRows(nextRows);
+    commitRows(nextRows, {mode: 'checkpoint'});
     pendingFocusRef.current = {index: index + 1, column: 'key', caret: 0};
   };
 
   const deleteRowAt = (index: number) => {
     if (rows.length <= 1) {
-      commitRows([{type: 'kv', key: '', value: ''}]);
+      commitRows([{type: 'kv', key: '', value: ''}], {mode: 'checkpoint'});
       pendingFocusRef.current = {index: 0, column: 'key', caret: 0};
       return;
     }
     const nextRows = rows.filter((_, idx) => idx !== index);
-    commitRows(nextRows);
+    commitRows(nextRows, {mode: 'checkpoint'});
     const targetIdx = Math.max(0, index - 1);
     const targetRow = nextRows[targetIdx];
     pendingFocusRef.current = {

@@ -107,6 +107,11 @@ export const UI_LABELS = {
     copyTaglessDesc: 'Strips [TAG] labels, keeps -> flow',
     debugButton: 'JSON IR',
     debugAria: 'Open JSON IR Debug Inspector',
+    historyGroupAria: 'Document history',
+    undoAria: 'Undo',
+    redoAria: 'Redo',
+    undoTitle: 'Undo (⌘Z / Ctrl+Z)',
+    redoTitle: 'Redo (⇧⌘Z / Ctrl+Y)',
   },
 
   document: {

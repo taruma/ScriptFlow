@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {GripVertical, Plus} from 'lucide-react';
+import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AestheticToken,
   BeatCameraLink,
@@ -17,8 +18,19 @@ interface ExecutionPaneProps {
   beatLinks: BeatCameraLink[];
   aestheticTokens: AestheticToken[];
   diagnosticsByBeatIndex: Map<number, LintDiagnostic[]>;
-  onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
-  onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
+  historyRevision: number;
+  onUpdateSubState: (
+    beatIndex: number,
+    subStateIndex: number,
+    nextSubStateRaw: string,
+    mode?: HistoryCommitMode
+  ) => void;
+  onInsertSubState: (
+    beatIndex: number,
+    afterSubStateIndex: number,
+    starterText: string,
+    mode?: HistoryCommitMode
+  ) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
   onInsertBeat: (afterBeatIndex: number, starterLine: string) => void;
@@ -57,6 +69,7 @@ export function ExecutionPane({
   beatLinks,
   aestheticTokens,
   diagnosticsByBeatIndex,
+  historyRevision,
   onUpdateSubState,
   onInsertSubState,
   onDeleteSubState,
@@ -227,6 +240,7 @@ export function ExecutionPane({
                   connectsToNext={connectsToNext}
                   aestheticTokens={aestheticTokens}
                   diagnostics={diagnosticsByBeatIndex.get(beat.index) ?? []}
+                  historyRevision={historyRevision}
                   autoFocusEdit={autoFocusBeatIndex === beat.index}
                   onClearAutoFocus={() => setAutoFocusBeatIndex(null)}
                   onUpdateSubState={onUpdateSubState}

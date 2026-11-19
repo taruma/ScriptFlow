@@ -1,5 +1,10 @@
 import {lazy, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
 import {
+  breakHistoryCoalescing,
+  canRedoDocument,
+  canUndoDocument,
+  commitDocumentHistory,
+  createDocumentHistory,
   deleteExecutionBeat,
   deleteExecutionSubState,
   deleteStagingBlock,
@@ -13,14 +18,20 @@ import {
   lintDocument,
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
+  redoDocumentHistory,
   reorderExecutionBeats,
   reorderStagingBlocks,
+  undoDocumentHistory,
   updateExecutionSubState,
   updateStagingBlock,
+  type DocumentHistoryState,
+  type HistoryCommitMode,
+  type HistoryCommitOptions,
 } from './core/index.ts';
 import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDialog.tsx';
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
+import type {StagingBlockCommitOptions} from './components/stagingBlockRegistry.ts';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
 import {
   BLANK_SCRIPT_TEMPLATE,
@@ -30,6 +41,7 @@ import {
 } from './data/presets.ts';
 import {copyTextToClipboard} from './ui/clipboard.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
+import {matchHistoryShortcut} from './ui/historyShortcuts.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
 import {
   readSavedScript,
@@ -60,8 +72,14 @@ function isEditableElement(el: Element | null): boolean {
 }
 
 export default function App() {
-  // Plain-Text-as-Truth: canonical raw Auteur Script string
-  const [rawText, setRawText] = useState<string>(loadInitialScript);
+  // Plain-Text-as-Truth: document-level Undo / Redo history over canonical raw Auteur Script
+  const [history, setHistory] = useState<DocumentHistoryState>(() =>
+    createDocumentHistory(loadInitialScript())
+  );
+  const rawText = history.present;
+  const canUndo = canUndoDocument(history);
+  const canRedo = canRedoDocument(history);
+
   const [sceneTitle, setSceneTitle] = useState<string>(loadInitialTitle);
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const {settings, updateSettings} = useEditorSettings();
@@ -69,6 +87,35 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
+
+  const commitRawText = useCallback(
+    (
+      updater: string | ((prev: string) => string),
+      options: Omit<HistoryCommitOptions, 'timestamp'> = {mode: 'checkpoint'}
+    ) => {
+      setHistory((prev) => {
+        const nextText = typeof updater === 'function' ? updater(prev.present) : updater;
+        return commitDocumentHistory(prev, nextText, {
+          ...options,
+          timestamp: options.mode === 'coalesce' ? Date.now() : null,
+        });
+      });
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    setHistory((prev) => undoDocumentHistory(prev));
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    setHistory((prev) => redoDocumentHistory(prev));
+  }, []);
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    setHistory((prev) => breakHistoryCoalescing(prev));
+  }, []);
 
   // Persist canonical plain text & title to localStorage
   useEffect(() => {
@@ -131,23 +178,67 @@ export default function App() {
       if (active instanceof HTMLElement) {
         active.blur();
       }
-      setRawText(pasted.replace(/\r\n?/g, '\n'));
+      commitRawText(pasted.replace(/\r\n?/g, '\n'), {mode: 'checkpoint'});
       setViewMode('live');
       setToastMessage(UI_LABELS.toasts.scriptHydrated);
     };
 
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [viewMode, isDebugOpen, confirmRequest]);
+  }, [viewMode, isDebugOpen, confirmRequest, commitRawText]);
+
+  // Document-level Undo / Redo keyboard shortcuts (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const action = matchHistoryShortcut(event);
+      if (!action) return;
+
+      // Never interfere with open modals/dialogs (ConfirmDialog, JsonIrDebugDrawer, etc.)
+      if (isDebugOpen || confirmRequest !== null) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+
+      // Never interfere with non-document inputs (Scene Title, custom block header input)
+      const active = document.activeElement;
+      if (active instanceof Element && active.closest('[data-native-undo="true"]')) {
+        return;
+      }
+
+      event.preventDefault();
+      if (action === 'undo') {
+        handleUndo();
+      } else {
+        handleRedo();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isDebugOpen, confirmRequest, handleUndo, handleRedo]);
 
   // Pure Serializer Mutations
-  const handleUpdateStaging = useCallback((blockIndex: number, nextBody: string) => {
-    setRawText((prev) => updateStagingBlock(prev, blockIndex, nextBody));
-  }, []);
+  const handleUpdateStaging = useCallback(
+    (blockIndex: number, nextBody: string, options?: StagingBlockCommitOptions) => {
+      const mode = options?.mode ?? 'coalesce';
+      const groupKey = options?.groupKey
+        ? `staging:${blockIndex}:${options.groupKey}`
+        : `staging:${blockIndex}`;
+      commitRawText((prev) => updateStagingBlock(prev, blockIndex, nextBody), {
+        mode,
+        groupKey: mode === 'coalesce' ? groupKey : null,
+      });
+    },
+    [commitRawText]
+  );
 
-  const handleInsertStaging = useCallback((headerName: string, afterBlockIndex?: number) => {
-    setRawText((prev) => insertStagingBlock(prev, headerName, '', afterBlockIndex));
-  }, []);
+  const handleInsertStaging = useCallback(
+    (headerName: string, afterBlockIndex?: number) => {
+      commitRawText((prev) => insertStagingBlock(prev, headerName, '', afterBlockIndex), {
+        mode: 'checkpoint',
+      });
+    },
+    [commitRawText]
+  );
 
   const handleRequestDeleteStaging = useCallback(
     (blockIndex: number) => {
@@ -162,46 +253,84 @@ export default function App() {
         cancelLabel: UI_LABELS.confirm.cancel,
         tone: 'danger',
         onConfirm: () => {
-          setRawText((prev) => deleteStagingBlock(prev, blockIndex));
+          commitRawText((prev) => deleteStagingBlock(prev, blockIndex), {mode: 'checkpoint'});
         },
       });
     },
-    [doc.stagingBlocks]
+    [doc.stagingBlocks, commitRawText]
   );
 
-  const handleReorderStaging = useCallback((fromBlockIndex: number, toBlockIndex: number) => {
-    setRawText((prev) => reorderStagingBlocks(prev, fromBlockIndex, toBlockIndex));
-  }, []);
+  const handleReorderStaging = useCallback(
+    (fromBlockIndex: number, toBlockIndex: number) => {
+      commitRawText((prev) => reorderStagingBlocks(prev, fromBlockIndex, toBlockIndex), {
+        mode: 'checkpoint',
+      });
+    },
+    [commitRawText]
+  );
 
   const handleUpdateSubState = useCallback(
-    (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => {
-      setRawText((prev) =>
-        updateExecutionSubState(prev, beatIndex, subStateIndex, nextSubStateRaw)
+    (
+      beatIndex: number,
+      subStateIndex: number,
+      nextSubStateRaw: string,
+      mode: HistoryCommitMode = 'coalesce'
+    ) => {
+      commitRawText(
+        (prev) => updateExecutionSubState(prev, beatIndex, subStateIndex, nextSubStateRaw),
+        {
+          mode,
+          groupKey: mode === 'coalesce' ? `beat:${beatIndex}:step:${subStateIndex}` : null,
+        }
       );
     },
-    []
+    [commitRawText]
   );
 
   const handleInsertSubState = useCallback(
-    (beatIndex: number, afterSubStateIndex: number, starterText: string) => {
-      setRawText((prev) =>
-        insertExecutionSubState(prev, beatIndex, afterSubStateIndex, starterText)
+    (
+      beatIndex: number,
+      afterSubStateIndex: number,
+      starterText: string,
+      mode: HistoryCommitMode = 'checkpoint'
+    ) => {
+      commitRawText(
+        (prev) => insertExecutionSubState(prev, beatIndex, afterSubStateIndex, starterText),
+        {
+          mode,
+          groupKey: mode === 'coalesce' ? `beat:${beatIndex}:step:${afterSubStateIndex + 1}` : null,
+        }
       );
     },
-    []
+    [commitRawText]
   );
 
-  const handleDeleteSubState = useCallback((beatIndex: number, subStateIndex: number) => {
-    setRawText((prev) => deleteExecutionSubState(prev, beatIndex, subStateIndex));
-  }, []);
+  const handleDeleteSubState = useCallback(
+    (beatIndex: number, subStateIndex: number) => {
+      commitRawText((prev) => deleteExecutionSubState(prev, beatIndex, subStateIndex), {
+        mode: 'checkpoint',
+      });
+    },
+    [commitRawText]
+  );
 
-  const handleMergeSubState = useCallback((beatIndex: number, subStateIndex: number) => {
-    setRawText((prev) => mergeExecutionSubStateWithPrevious(prev, beatIndex, subStateIndex));
-  }, []);
+  const handleMergeSubState = useCallback(
+    (beatIndex: number, subStateIndex: number) => {
+      commitRawText((prev) => mergeExecutionSubStateWithPrevious(prev, beatIndex, subStateIndex), {
+        mode: 'checkpoint',
+      });
+    },
+    [commitRawText]
+  );
 
-  const handleInsertBeat = useCallback((afterBeatIndex: number, starterLine: string) => {
-    setRawText((prev) => insertExecutionBeat(prev, afterBeatIndex, starterLine));
-  }, []);
+  const handleInsertBeat = useCallback(
+    (afterBeatIndex: number, starterLine: string) => {
+      commitRawText((prev) => insertExecutionBeat(prev, afterBeatIndex, starterLine), {
+        mode: 'checkpoint',
+      });
+    },
+    [commitRawText]
+  );
 
   const handleRequestDeleteBeat = useCallback(
     (beatIndex: number) => {
@@ -214,28 +343,43 @@ export default function App() {
         cancelLabel: UI_LABELS.confirm.cancel,
         tone: 'danger',
         onConfirm: () => {
-          setRawText((prev) => deleteExecutionBeat(prev, beatIndex));
+          commitRawText((prev) => deleteExecutionBeat(prev, beatIndex), {mode: 'checkpoint'});
         },
       });
     },
-    [doc.execution]
+    [doc.execution, commitRawText]
   );
 
-  const handleReorderBeats = useCallback((fromBeatIndex: number, toBeatIndex: number) => {
-    setRawText((prev) => reorderExecutionBeats(prev, fromBeatIndex, toBeatIndex));
-  }, []);
+  const handleReorderBeats = useCallback(
+    (fromBeatIndex: number, toBeatIndex: number) => {
+      commitRawText((prev) => reorderExecutionBeats(prev, fromBeatIndex, toBeatIndex), {
+        mode: 'checkpoint',
+      });
+    },
+    [commitRawText]
+  );
 
-  const handleSelectPreset = useCallback((preset: ScriptPreset) => {
-    setRawText(preset.content);
-    setSceneTitle(preset.title);
-    setViewMode('live');
-  }, []);
+  const handleUpdateSource = useCallback(
+    (nextRawText: string) => {
+      commitRawText(nextRawText, {mode: 'coalesce', groupKey: 'source'});
+    },
+    [commitRawText]
+  );
+
+  const handleSelectPreset = useCallback(
+    (preset: ScriptPreset) => {
+      commitRawText(preset.content, {mode: 'checkpoint'});
+      setSceneTitle(preset.title);
+      setViewMode('live');
+    },
+    [commitRawText]
+  );
 
   const handleNewBlank = useCallback(() => {
-    setRawText(BLANK_SCRIPT_TEMPLATE);
+    commitRawText(BLANK_SCRIPT_TEMPLATE, {mode: 'checkpoint'});
     setSceneTitle(APP_META.untitledScene);
     setViewMode('live');
-  }, []);
+  }, [commitRawText]);
 
   const handleCopyPlainText = useCallback(async () => {
     const text = exportPlainText(rawText);
@@ -253,12 +397,15 @@ export default function App() {
     }
   }, [rawText]);
 
-  const handleCommitFromDebug = useCallback((nextRawText: string, message?: string) => {
-    setRawText(nextRawText);
-    if (message) {
-      setToastMessage(message);
-    }
-  }, []);
+  const handleCommitFromDebug = useCallback(
+    (nextRawText: string, message?: string) => {
+      commitRawText(nextRawText, {mode: 'checkpoint'});
+      if (message) {
+        setToastMessage(message);
+      }
+    },
+    [commitRawText]
+  );
 
   const handleJumpToFirstDiagnostic = useCallback(() => {
     const first = diagnostics[0];
@@ -288,7 +435,7 @@ export default function App() {
         diagnostics={diagnostics}
         onJumpToFirstDiagnostic={handleJumpToFirstDiagnostic}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={handleViewModeChange}
         presets={SCRIPT_PRESETS}
         activePresetId={activePresetId}
         onSelectPreset={handleSelectPreset}
@@ -300,6 +447,10 @@ export default function App() {
         copiedKind={copiedKind}
         onOpenDebug={() => setIsDebugOpen(true)}
         isDebugOpen={isDebugOpen}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       <div className="flex-1">
@@ -308,6 +459,7 @@ export default function App() {
             doc={doc}
             metadata={metadata}
             diagnostics={diagnostics}
+            historyRevision={history.revision}
             onUpdateStaging={handleUpdateStaging}
             onInsertStaging={handleInsertStaging}
             onDeleteStaging={handleRequestDeleteStaging}
@@ -324,7 +476,7 @@ export default function App() {
           <SourceEditor
             rawText={rawText}
             aestheticTokens={metadata.aestheticTokens}
-            onChange={setRawText}
+            onChange={handleUpdateSource}
           />
         )}
       </div>

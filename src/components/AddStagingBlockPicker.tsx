@@ -132,6 +132,7 @@ export function StagingBlockPickerPanel({
         <div className="flex items-center gap-1.5">
           <input
             type="text"
+            data-native-undo="true"
             value={customName}
             onChange={(e) => {
               setCustomName(e.target.value);

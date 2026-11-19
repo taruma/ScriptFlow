@@ -1,5 +1,6 @@
 import type {ComponentType} from 'react';
 import {countAestheticKeys} from '../core/aesthetic.ts';
+import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AestheticToken,
   CharacterBinding,
@@ -9,6 +10,11 @@ import type {
 import {UI_LABELS} from '../ui/labels.ts';
 import {AestheticBlockEditor} from './AestheticBlockEditor.tsx';
 
+export interface StagingBlockCommitOptions {
+  mode?: HistoryCommitMode;
+  groupKey?: string;
+}
+
 /**
  * Standard props contract for any specialized Staging Macro-Block editor plugin.
  * Every plugin must commit canonical plain-text body updates via `onCommit`
@@ -17,9 +23,10 @@ import {AestheticBlockEditor} from './AestheticBlockEditor.tsx';
 export interface StagingBlockEditorProps {
   rawBody: string;
   aestheticTokens: AestheticToken[];
+  historyRevision?: number;
   autoFocus?: boolean;
   onClearAutoFocus?: () => void;
-  onCommit: (nextBody: string) => void;
+  onCommit: (nextBody: string, options?: StagingBlockCommitOptions) => void;
   onFocusChange: (focused: boolean) => void;
 }
 

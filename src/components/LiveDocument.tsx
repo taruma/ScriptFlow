@@ -1,4 +1,5 @@
 import {useMemo} from 'react';
+import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AuteurDocument,
   ExtractedMetadata,
@@ -6,17 +7,33 @@ import type {
 } from '../core/types.ts';
 import {ExecutionPane} from './ExecutionPane.tsx';
 import {StagingPane} from './StagingPane.tsx';
+import type {StagingBlockCommitOptions} from './stagingBlockRegistry.ts';
 
 interface LiveDocumentProps {
   doc: AuteurDocument;
   metadata: ExtractedMetadata;
   diagnostics: LintDiagnostic[];
-  onUpdateStaging: (blockIndex: number, nextBody: string) => void;
+  historyRevision: number;
+  onUpdateStaging: (
+    blockIndex: number,
+    nextBody: string,
+    options?: StagingBlockCommitOptions
+  ) => void;
   onInsertStaging: (headerName: string, afterBlockIndex?: number) => void;
   onDeleteStaging: (blockIndex: number) => void;
   onReorderStaging: (fromBlockIndex: number, toBlockIndex: number) => void;
-  onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
-  onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
+  onUpdateSubState: (
+    beatIndex: number,
+    subStateIndex: number,
+    nextSubStateRaw: string,
+    mode?: HistoryCommitMode
+  ) => void;
+  onInsertSubState: (
+    beatIndex: number,
+    afterSubStateIndex: number,
+    starterText: string,
+    mode?: HistoryCommitMode
+  ) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
   onInsertBeat: (afterBeatIndex: number, starterLine: string) => void;
@@ -32,6 +49,7 @@ export function LiveDocument({
   doc,
   metadata,
   diagnostics,
+  historyRevision,
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
@@ -76,6 +94,7 @@ export function LiveDocument({
           characters={metadata.characters}
           aestheticTokens={metadata.aestheticTokens}
           diagnosticsByBlockIndex={stagingDiagnosticsByIndex}
+          historyRevision={historyRevision}
           onUpdateStaging={onUpdateStaging}
           onInsertStaging={onInsertStaging}
           onDeleteStaging={onDeleteStaging}
@@ -88,6 +107,7 @@ export function LiveDocument({
           beatLinks={metadata.beatLinks}
           aestheticTokens={metadata.aestheticTokens}
           diagnosticsByBeatIndex={beatDiagnosticsByIndex}
+          historyRevision={historyRevision}
           onUpdateSubState={onUpdateSubState}
           onInsertSubState={onInsertSubState}
           onDeleteSubState={onDeleteSubState}

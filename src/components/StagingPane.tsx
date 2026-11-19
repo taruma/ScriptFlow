@@ -18,14 +18,22 @@ import {AddStagingBlockPicker, StagingBlockPickerPanel} from './AddStagingBlockP
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
 import {SortableList} from './SortableList.tsx';
 import {StagingBlockCard} from './StagingBlockCard.tsx';
-import {formatStagingCollapsedMeta} from './stagingBlockRegistry.ts';
+import {
+  formatStagingCollapsedMeta,
+  type StagingBlockCommitOptions,
+} from './stagingBlockRegistry.ts';
 
 interface StagingPaneProps {
   stagingBlocks: StagingBlock[];
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
   diagnosticsByBlockIndex: Map<number, LintDiagnostic[]>;
-  onUpdateStaging: (blockIndex: number, nextBody: string) => void;
+  historyRevision: number;
+  onUpdateStaging: (
+    blockIndex: number,
+    nextBody: string,
+    options?: StagingBlockCommitOptions
+  ) => void;
   onInsertStaging: (headerName: string, afterBlockIndex?: number) => void;
   onDeleteStaging: (blockIndex: number) => void;
   onReorderStaging: (fromBlockIndex: number, toBlockIndex: number) => void;
@@ -43,6 +51,7 @@ export function StagingPane({
   characters,
   aestheticTokens,
   diagnosticsByBlockIndex,
+  historyRevision,
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
@@ -291,6 +300,7 @@ export function StagingPane({
                     <StagingBlockCard
                       block={block}
                       blockIndex={index}
+                      historyRevision={historyRevision}
                       collapsed={collapsedIndices.has(index)}
                       onToggleCollapse={() => toggleSingleBlock(index)}
                       onCommit={onUpdateStaging}

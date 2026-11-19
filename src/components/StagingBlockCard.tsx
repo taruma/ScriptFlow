@@ -13,14 +13,16 @@ import type {SortableItemBinding} from './SortableList.tsx';
 import {
   formatStagingCollapsedMeta,
   getStagingBlockPlugin,
+  type StagingBlockCommitOptions,
 } from './stagingBlockRegistry.ts';
 
 interface StagingBlockCardProps {
   block: StagingBlock;
   blockIndex: number;
+  historyRevision: number;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  onCommit: (blockIndex: number, nextBody: string) => void;
+  onCommit: (blockIndex: number, nextBody: string, options?: StagingBlockCommitOptions) => void;
   onDelete: (blockIndex: number) => void;
   autoFocusEdit?: boolean;
   onClearAutoFocus?: () => void;
@@ -40,6 +42,7 @@ function getCollapsedPreviewText(block: StagingBlock): string {
 export function StagingBlockCard({
   block,
   blockIndex,
+  historyRevision,
   collapsed,
   onToggleCollapse,
   onCommit,
@@ -54,16 +57,19 @@ export function StagingBlockCard({
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(block.rawBody);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastHistoryRevisionRef = useRef(historyRevision);
 
   const phase = getMacroBlockMeta(block.kind);
   const plugin = getStagingBlockPlugin(block.kind);
   const CustomEditor = plugin?.Editor;
 
   useEffect(() => {
-    if (!isFocused) {
+    const isHistoryJump = lastHistoryRevisionRef.current !== historyRevision;
+    lastHistoryRevisionRef.current = historyRevision;
+    if (!isFocused || isHistoryJump) {
       setLocalValue(block.rawBody);
     }
-  }, [block.rawBody, isFocused]);
+  }, [block.rawBody, isFocused, historyRevision]);
 
   useEffect(() => {
     if (!autoFocusEdit || collapsed || CustomEditor) return;
@@ -73,14 +79,14 @@ export function StagingBlockCard({
 
   const handleChange = (nextValue: string) => {
     setLocalValue(nextValue);
-    onCommit(blockIndex, nextValue);
+    onCommit(blockIndex, nextValue, {mode: 'coalesce'});
   };
 
   const handleBlur = () => {
     setIsFocused(false);
     const cleaned = localValue.replace(/\n+$/, '');
     if (cleaned !== block.rawBody) {
-      onCommit(blockIndex, cleaned);
+      onCommit(blockIndex, cleaned, {mode: 'coalesce'});
     }
     setLocalValue(cleaned);
   };
@@ -213,9 +219,10 @@ export function StagingBlockCard({
             <CustomEditor
               rawBody={block.rawBody}
               aestheticTokens={aestheticTokens}
+              historyRevision={historyRevision}
               autoFocus={autoFocusEdit}
               onClearAutoFocus={onClearAutoFocus}
-              onCommit={(nextBody) => onCommit(blockIndex, nextBody)}
+              onCommit={(nextBody, options) => onCommit(blockIndex, nextBody, options)}
               onFocusChange={setIsFocused}
             />
           </div>
