@@ -96,10 +96,10 @@ export function StagingBlockCard({
   return (
     <section
       id={`staging-block-${blockIndex}`}
-      className="group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_28px] items-start gap-2"
+      className="group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5"
     >
       <div
-        className={`min-w-0 rounded-xl border transition-colors ${
+        className={`min-w-0 rounded-lg border transition-colors ${
           isFocused
             ? 'border-text-muted/60 bg-surface shadow-xs'
             : 'border-border-main bg-surface hover:border-text-faint/50'
@@ -116,9 +116,9 @@ export function StagingBlockCard({
               onToggleCollapse();
             }
           }}
-          className="flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer select-none"
+          className="flex items-center justify-between gap-2.5 px-3 py-1.5 cursor-pointer select-none"
         >
-          <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="text-text-faint shrink-0">
               {collapsed ? (
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -128,15 +128,15 @@ export function StagingBlockCard({
             </span>
 
             <span
-              className={`${phase.badgeClass} inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[11px] font-semibold tracking-tight shrink-0`}
+              className={`${phase.badgeClass} inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold tracking-tight shrink-0`}
             >
               [{block.name}]
             </span>
 
             {collapsed ? (
-              <span className="truncate font-mono text-xs text-text-muted">{summary}</span>
+              <span className="truncate font-script text-[12px] text-text-muted">{summary}</span>
             ) : (
-              <span className="text-xs text-text-faint truncate">{phase.caption}</span>
+              <span className="text-[11.5px] text-text-faint truncate">{phase.caption}</span>
             )}
           </div>
         </div>
@@ -145,7 +145,7 @@ export function StagingBlockCard({
         {!collapsed && (
           <div
             onClick={() => editorRef.current?.focus()}
-            className="border-t border-border-subtle px-4 py-3 cursor-text"
+            className="border-t border-border-subtle px-3 py-2 cursor-text"
           >
             <LiveHighlightedEditor
               ref={editorRef}
@@ -165,7 +165,7 @@ export function StagingBlockCard({
       </div>
 
       {/* Right Margin Diagnostics (zero layout shift) */}
-      <div className="flex w-7 justify-center pt-1.5">
+      <div className="flex w-6 justify-center pt-1">
         <DiagnosticDot diagnostics={diagnostics} />
       </div>
     </section>

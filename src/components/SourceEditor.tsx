@@ -13,8 +13,8 @@ export function SourceEditor({rawText, aestheticTokens, onChange}: SourceEditorP
   const charCount = rawText.length;
 
   return (
-    <main className="mx-auto w-full max-w-[760px] px-4 sm:px-6 pt-7 pb-24">
-      <div className="mb-3 flex items-center justify-between px-1">
+    <main className="mx-auto w-full max-w-[820px] px-4 sm:px-6 pt-5 pb-20">
+      <div className="mb-2.5 flex items-center justify-between px-1">
         <span className="font-serif text-sm text-text-muted">{UI_LABELS.source.heading}</span>
         <div className="flex items-center gap-2 font-mono text-[11px] text-text-faint tabular-nums">
           <span>{UI_LABELS.source.linesCount(lineCount)}</span>
@@ -23,7 +23,7 @@ export function SourceEditor({rawText, aestheticTokens, onChange}: SourceEditorP
         </div>
       </div>
 
-      <div className="rounded-xl border border-border-main bg-surface p-5 shadow-2xs">
+      <div className="rounded-lg border border-border-main bg-surface p-4 shadow-2xs">
         <LiveHighlightedEditor
           value={rawText}
           onChange={onChange}

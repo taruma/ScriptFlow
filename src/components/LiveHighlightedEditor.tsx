@@ -47,6 +47,7 @@ function highlightInlineFragments(
   text: string,
   aestheticTokens: AestheticToken[],
   flagBannedViewport: boolean,
+  isProportional: boolean,
   flagBracketsAsError = false
 ): ReactNode {
   if (!text) return null;
@@ -82,7 +83,10 @@ function highlightInlineFragments(
     const matched = match[0];
     if (matched.startsWith('@')) {
       out.push(
-        <span key={`r-${match.index}`} className="auteur-live-tok-ref font-medium">
+        <span
+          key={`r-${match.index}`}
+          className={`auteur-live-tok-ref ${isProportional ? '' : 'font-medium'}`}
+        >
           {matched}
         </span>
       );
@@ -100,7 +104,10 @@ function highlightInlineFragments(
       );
     } else if (tokenSet.has(matched)) {
       out.push(
-        <span key={`t-${match.index}`} className="auteur-live-tok-ref font-semibold">
+        <span
+          key={`t-${match.index}`}
+          className={`auteur-live-tok-ref ${isProportional ? '' : 'font-semibold'}`}
+        >
           {matched}
         </span>
       );
@@ -108,7 +115,7 @@ function highlightInlineFragments(
       out.push(matched);
     }
 
-    lastIndex = match.index + matched.length;
+    lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) {
@@ -124,6 +131,7 @@ function highlightInlineFragments(
 function highlightSubStateSegment(
   segment: string,
   aestheticTokens: AestheticToken[],
+  isProportional: boolean,
   isLead = false
 ): ReactNode {
   if (!segment) return null;
@@ -151,12 +159,20 @@ function highlightSubStateSegment(
     renderedCore = (
       <>
         <span
-          className={`${isCamera ? 'auteur-live-tok-cam' : 'auteur-live-tok-tag'} font-semibold`}
+          className={`${isCamera ? 'auteur-live-tok-cam' : 'auteur-live-tok-tag'} ${
+            isProportional ? '' : 'font-semibold'
+          }`}
         >
           {tagRaw}
         </span>
-        <span className={isLead && isCamera ? 'font-medium text-text-main' : 'text-text-body'}>
-          {highlightInlineFragments(rest, aestheticTokens, true)}
+        <span
+          className={
+            isLead && isCamera
+              ? `${isProportional ? '' : 'font-medium'} text-text-main`
+              : 'text-text-body'
+          }
+        >
+          {highlightInlineFragments(rest, aestheticTokens, true, isProportional)}
         </span>
       </>
     );
@@ -176,17 +192,21 @@ function highlightSubStateSegment(
 
       renderedCore = (
         <>
-          <span className="auteur-tok-speaker font-bold">{speakerPart}</span>
-          <span className="auteur-tok-verb italic">{verbAndModsPart}</span>
+          <span className={isProportional ? 'auteur-live-tok-speaker' : 'auteur-tok-speaker font-bold'}>
+            {speakerPart}
+          </span>
+          <span className={`auteur-tok-verb ${isProportional ? '' : 'italic'}`}>
+            {verbAndModsPart}
+          </span>
           <span className="auteur-live-tok-dial">
-            {highlightInlineFragments(speechPart, aestheticTokens, false)}
+            {highlightInlineFragments(speechPart, aestheticTokens, false, isProportional)}
           </span>
         </>
       );
     } else {
       renderedCore = (
         <span className="text-text-body">
-          {highlightInlineFragments(core, aestheticTokens, true)}
+          {highlightInlineFragments(core, aestheticTokens, true, isProportional)}
         </span>
       );
     }
@@ -194,7 +214,7 @@ function highlightSubStateSegment(
     // Partial typing states (e.g. while user is mid-way typing "{dialogue" or "<foley" or "[TAG")
     renderedCore = (
       <span className="text-text-body">
-        {highlightInlineFragments(core, aestheticTokens, true)}
+        {highlightInlineFragments(core, aestheticTokens, true, isProportional)}
       </span>
     );
   }
@@ -214,20 +234,24 @@ function highlightSubStateSegment(
 function highlightExecutionLine(
   line: string,
   aestheticTokens: AestheticToken[],
+  isProportional: boolean,
   isLead = false
 ): ReactNode {
   const parts = line.split(/(\s*(?:->|→)\s*)/);
   return parts.map((part, idx) => {
     if (idx % 2 === 1) {
       return (
-        <span key={`arr-${idx}`} className="auteur-tok-arrow font-bold">
+        <span
+          key={`arr-${idx}`}
+          className={`auteur-tok-arrow ${isProportional ? '' : 'font-bold'}`}
+        >
           {part}
         </span>
       );
     }
     return (
       <Fragment key={`seg-${idx}`}>
-        {highlightSubStateSegment(part, aestheticTokens, isLead && idx === 0)}
+        {highlightSubStateSegment(part, aestheticTokens, isProportional, isLead && idx === 0)}
       </Fragment>
     );
   });
@@ -236,7 +260,7 @@ function highlightExecutionLine(
 /**
  * Highlights a single line inside [AESTHETIC] (Label: keys + -> TOKEN mappings + @refs) verbatim.
  */
-function highlightAestheticLine(line: string): ReactNode {
+function highlightAestheticLine(line: string, isProportional: boolean): ReactNode {
   const kvMatch = /^(\s*)([A-Za-z0-9 _/-]+:)(\s*)(.*)$/.exec(line);
   const renderValue = (val: string) => {
     const regex = /(->|→)(\s*)([A-Za-z0-9_-]+)|((?<![A-Za-z0-9._%+-])@[A-Za-z0-9_-]+)/g;
@@ -250,19 +274,28 @@ function highlightAestheticLine(line: string): ReactNode {
       }
       if (match[1]) {
         out.push(
-          <span key={`a-${match.index}`} className="auteur-tok-arrow font-semibold">
+          <span
+            key={`a-${match.index}`}
+            className={`auteur-tok-arrow ${isProportional ? '' : 'font-semibold'}`}
+          >
             {match[1]}
           </span>
         );
         out.push(match[2]);
         out.push(
-          <span key={`tk-${match.index}`} className="auteur-live-tok-ref font-semibold">
+          <span
+            key={`tk-${match.index}`}
+            className={`auteur-live-tok-ref ${isProportional ? '' : 'font-semibold'}`}
+          >
             {match[3]}
           </span>
         );
       } else if (match[4]) {
         out.push(
-          <span key={`rf-${match.index}`} className="auteur-live-tok-ref font-medium">
+          <span
+            key={`rf-${match.index}`}
+            className={`auteur-live-tok-ref ${isProportional ? '' : 'font-medium'}`}
+          >
             {match[4]}
           </span>
         );
@@ -280,7 +313,9 @@ function highlightAestheticLine(line: string): ReactNode {
     return (
       <>
         {kvMatch[1]}
-        <span className="font-semibold text-text-main">{kvMatch[2]}</span>
+        <span className={isProportional ? 'auteur-live-tok-key' : 'font-semibold text-text-main'}>
+          {kvMatch[2]}
+        </span>
         {kvMatch[3]}
         <span className="text-text-body">{renderValue(kvMatch[4])}</span>
       </>
@@ -303,10 +338,10 @@ function highlightStagingBody(
     <Fragment key={idx}>
       {idx > 0 && '\n'}
       {kind === 'AESTHETIC' ? (
-        highlightAestheticLine(line)
+        highlightAestheticLine(line, true)
       ) : (
         <span className="text-text-body">
-          {highlightInlineFragments(line, aestheticTokens, flagViewport, flagBrackets)}
+          {highlightInlineFragments(line, aestheticTokens, flagViewport, true, flagBrackets)}
         </span>
       )}
     </Fragment>
@@ -345,9 +380,9 @@ function highlightSourceDocument(text: string, aestheticTokens: AestheticToken[]
         </>
       );
     } else if (inExecution) {
-      content = highlightExecutionLine(line, aestheticTokens, true);
+      content = highlightExecutionLine(line, aestheticTokens, false, true);
     } else if (activeStagingKind === 'AESTHETIC') {
-      content = highlightAestheticLine(line);
+      content = highlightAestheticLine(line, false);
     } else {
       content = (
         <span className="text-text-body">
@@ -355,6 +390,7 @@ function highlightSourceDocument(text: string, aestheticTokens: AestheticToken[]
             line,
             aestheticTokens,
             activeStagingKind === 'LOGIC' || activeStagingKind === 'OPENING',
+            false,
             activeStagingKind === 'OPENING'
           )}
         </span>
@@ -372,8 +408,9 @@ function highlightSourceDocument(text: string, aestheticTokens: AestheticToken[]
 
 /**
  * Pixel-locked syntax-highlighted overlay editor using CSS Grid layering.
- * Keeps formatted syntax tokens visible live on every keystroke with zero layout shift
- * and 100% native textarea caret, selection, undo/redo, and clipboard behavior.
+ * Uses proportional IBM Plex Sans in Live Mode (with uniform glyph weight/kerning)
+ * and compact JetBrains Mono in Source Mode, keeping 100% native textarea caret,
+ * selection, undo/redo, and clipboard behavior with zero horizontal drift.
  */
 export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlightedEditorProps>(
   function LiveHighlightedEditor(
@@ -393,9 +430,11 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
     },
     ref
   ) {
+    const isSourceMode = mode === 'source';
+
     let highlighted: ReactNode;
     if (mode === 'substate') {
-      highlighted = highlightExecutionLine(value, aestheticTokens, isLead);
+      highlighted = highlightExecutionLine(value, aestheticTokens, true, isLead);
     } else if (mode === 'staging') {
       highlighted = highlightStagingBody(value, stagingKind, aestheticTokens);
     } else {
@@ -405,15 +444,24 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
     // Ensure empty strings or trailing newlines hold exact matching height in the mirror div
     const trailingSentinel = value.length === 0 || value.endsWith('\n') ? '\u200b' : '';
 
-    const sharedTypography =
-      'col-start-1 row-start-1 w-full m-0 p-0 border-0 font-mono text-[13px] leading-relaxed tracking-normal whitespace-pre-wrap break-words';
+    const typographyClass = isSourceMode
+      ? 'font-mono text-[12.5px] leading-[1.5] tracking-normal auteur-live-mono'
+      : 'font-script text-[13px] leading-[1.42] tracking-normal auteur-live-proportional';
+
+    const sharedTypography = `col-start-1 row-start-1 w-full m-0 p-0 border-0 font-normal ${typographyClass} whitespace-pre-wrap break-words`;
+
+    const metricStyle = {
+      fontVariantLigatures: 'none' as const,
+      fontKerning: 'none' as const,
+      tabSize: 2,
+    };
 
     return (
       <div className={`grid grid-cols-1 grid-rows-1 w-full ${minHeightClass}`}>
         <div
           aria-hidden="true"
           className={`${sharedTypography} pointer-events-none select-none ${minHeightClass}`}
-          style={{fontVariantLigatures: 'none', tabSize: 2}}
+          style={metricStyle}
         >
           {highlighted}
           {trailingSentinel}
@@ -431,7 +479,7 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
           aria-label={ariaLabel}
           placeholder={placeholder}
           className={`${sharedTypography} auteur-live-textarea bg-transparent resize-none overflow-hidden outline-none ${minHeightClass}`}
-          style={{fontVariantLigatures: 'none', tabSize: 2}}
+          style={metricStyle}
         />
       </div>
     );

@@ -323,10 +323,10 @@ export function ExecutionBeatRow({
   const showWaterfallRail = tailNodes.length > 0 || pendingAfterIndex !== null;
 
   const renderPendingRow = () => (
-    <div className="flex items-start gap-2">
+    <div className="flex items-start gap-1.5">
       <span
         aria-hidden="true"
-        className="auteur-tok-arrow mt-0.5 select-none text-xs font-bold opacity-85 shrink-0"
+        className="auteur-tok-arrow mt-[1px] select-none text-[11px] font-bold opacity-85 shrink-0"
       >
         ↳
       </span>
@@ -356,28 +356,28 @@ export function ExecutionBeatRow({
       id={`execution-beat-${beat.index}`}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`group/beat relative grid grid-cols-[52px_minmax(0,1fr)_28px] items-stretch gap-2 transition-opacity ${
+      className={`group/beat relative grid grid-cols-[46px_minmax(0,1fr)_24px] items-stretch gap-1.5 transition-opacity ${
         isDragging ? 'opacity-40' : 'opacity-100'
       }`}
     >
       {/* Drag drop target line */}
       {isDragOver && (
-        <div className="pointer-events-none absolute -top-1 left-12 right-7 h-0.5 rounded-full bg-blueprint-accent z-20" />
+        <div className="pointer-events-none absolute -top-1 left-11 right-6 h-0.5 rounded-full bg-blueprint-accent z-20" />
       )}
 
       {/* Left Margin: Camera Continuity Rail + Beat Index + Drag Handle */}
-      <div className="relative flex items-start justify-end gap-0.5 pr-1 pt-3 select-none">
+      <div className="relative flex items-start justify-end gap-0.5 pr-0.5 pt-2 select-none">
         {connectsFromPrevious && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute right-[15px] top-0 h-[14px] w-[2px] opacity-45"
+            className="pointer-events-none absolute right-[12px] top-0 h-[10px] w-[2px] opacity-45"
             style={{backgroundColor: 'var(--tok-continuity)'}}
           />
         )}
         {connectsToNext && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute right-[15px] top-[32px] bottom-0 w-[2px] opacity-45"
+            className="pointer-events-none absolute right-[12px] top-[25px] bottom-0 w-[2px] opacity-45"
             style={{backgroundColor: 'var(--tok-continuity)'}}
           />
         )}
@@ -387,38 +387,52 @@ export function ExecutionBeatRow({
           onDragStart={handleDragStart}
           onDragEnd={onDragEnd}
           title={UI_LABELS.execution.dragReorderTitle}
-          className="mt-0.5 flex h-5 w-4 items-center justify-center rounded text-text-faint opacity-0 group-hover/beat:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
+          className="mt-0.5 flex h-4 w-3.5 items-center justify-center rounded text-text-faint opacity-0 group-hover/beat:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
         >
-          <GripVertical className="h-3.5 w-3.5" />
+          <GripVertical className="h-3 w-3" />
         </div>
 
-        <span className="relative z-10 inline-flex min-w-[24px] justify-center rounded bg-app px-1 py-0.5 font-mono text-[11px] font-medium tabular-nums text-text-faint group-hover/beat:text-text-muted">
+        <span className="relative z-10 inline-flex min-w-[22px] justify-center rounded bg-app px-1 py-0.5 font-mono text-[10.5px] font-medium tabular-nums text-text-faint group-hover/beat:text-text-muted">
           S{beat.index}
         </span>
       </div>
 
-      {/* Main Beat Card — Always-Formatted Option A Waterfall Stack */}
+      {/* Main Beat Card — Compact Always-Formatted Option A Waterfall Stack */}
       <div
-        className={`relative min-w-0 rounded-xl border px-4 py-3 transition-colors ${
+        className={`relative min-w-0 rounded-lg border px-3 py-2 transition-colors ${
           isBeatFocused
             ? 'border-text-muted/60 bg-surface shadow-xs'
             : 'border-border-main bg-surface hover:border-text-faint/50'
         }`}
       >
-        {/* Hover Delete Beat Button */}
-        <button
-          type="button"
-          onClick={() => onDeleteBeat(beat.index)}
-          title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
-          aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
-          className="absolute right-2.5 top-2.5 z-10 rounded-md p-1 text-text-faint opacity-0 group-hover/beat:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {/* Compact Hover Actions (Add Step + Delete Beat — zero idle vertical footprint) */}
+        <div className="absolute right-2 top-1.5 z-10 flex items-center gap-0.5 opacity-0 group-hover/beat:opacity-100 focus-within:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              openPendingStepAfter(Math.max(0, subStates.length - 1));
+            }}
+            title={UI_LABELS.execution.addStep}
+            aria-label={UI_LABELS.execution.addStep}
+            className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDeleteBeat(beat.index)}
+            title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+            aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+            className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-red-500 transition-colors cursor-pointer"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
 
         {/* Step 1 — Lead Sub-State (always formatted, directly editable) */}
         {leadNode && (
-          <div className="relative flex items-baseline gap-2 pr-7">
+          <div className="relative flex items-baseline gap-2 pr-12">
             <div className="min-w-0 flex-1">
               <LiveHighlightedEditor
                 ref={registerStepRef(0)}
@@ -438,7 +452,7 @@ export function ExecutionBeatRow({
             {leadNode.kind === 'camera' &&
               leadNode.body.length === 0 &&
               focusedStepIndex !== 0 && (
-                <span className="pointer-events-none select-none font-mono text-[11px] italic text-text-faint shrink-0">
+                <span className="pointer-events-none select-none font-mono text-[10.5px] italic text-text-faint shrink-0">
                   {UI_LABELS.execution.holdFraming}
                 </span>
               )}
@@ -447,17 +461,17 @@ export function ExecutionBeatRow({
 
         {/* Steps 2..k — Waterfall Indented Rail (always formatted, each step directly editable) */}
         {showWaterfallRail && (
-          <div className="auteur-waterfall-rail mt-2.5 ml-1.5 pl-3.5 space-y-1.5">
+          <div className="auteur-waterfall-rail mt-1.5 ml-1 pl-2.5 space-y-0.5">
             {pendingAfterIndex === 0 && renderPendingRow()}
 
             {tailNodes.map((sub, offset) => {
               const stepIdx = offset + 1;
               return (
-                <div key={`step-${stepIdx}`} className="space-y-1.5">
-                  <div className="group/step relative flex items-start gap-2 pr-5">
+                <div key={`step-${stepIdx}`} className="space-y-0.5">
+                  <div className="group/step relative flex items-start gap-1.5 pr-5">
                     <span
                       aria-hidden="true"
-                      className="auteur-tok-arrow mt-0.5 select-none text-xs font-bold opacity-85 shrink-0"
+                      className="auteur-tok-arrow mt-[1px] select-none text-[11px] font-bold opacity-85 shrink-0"
                     >
                       ↳
                     </span>
@@ -496,38 +510,32 @@ export function ExecutionBeatRow({
           </div>
         )}
 
-        {/* Quiet hover/focus affordance to append a new ↳ Sub-State step */}
-        <div
-          className={`mt-2 ml-1.5 flex flex-wrap items-center justify-between gap-2 transition-opacity ${
-            isBeatFocused
-              ? 'opacity-100'
-              : 'opacity-0 group-hover/beat:opacity-100'
-          }`}
-        >
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              openPendingStepAfter(Math.max(0, subStates.length - 1));
-            }}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
-          >
-            <Plus className="h-3 w-3" />
-            <span>{UI_LABELS.execution.addStep}</span>
-          </button>
+        {/* Focused-only step append + chaining hint (zero layout height when resting) */}
+        {isBeatFocused && (
+          <div className="mt-1.5 ml-1 flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border-subtle/80">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                openPendingStepAfter(Math.max(0, subStates.length - 1));
+              }}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10.5px] text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+            >
+              <Plus className="h-3 w-3" />
+              <span>{UI_LABELS.execution.addStep}</span>
+            </button>
 
-          {isBeatFocused && (
             <span className="font-sans text-[10px] text-text-faint select-none">
               {UI_LABELS.execution.chainHintLead}{' '}
               <code className="font-mono">{UI_LABELS.execution.chainHintArrow}</code>{' '}
               {UI_LABELS.execution.chainHintTail}
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Right Margin Diagnostics (zero layout shift) */}
-      <div className="flex w-7 justify-center pt-2.5">
+      <div className="flex w-6 justify-center pt-1.5">
         <DiagnosticDot diagnostics={diagnostics} />
       </div>
     </div>

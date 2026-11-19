@@ -126,8 +126,8 @@ export function LiveDocument({
 
   return (
     <main className="w-full lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
-      <div className="grid h-full w-full grid-cols-1 lg:grid-cols-2">
-        {/* Left Column — Phase 1: Staging */}
+      <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        {/* Left Column — Phase 1: Staging (40%) */}
         <section
           aria-label={UI_LABELS.document.stagingPaneAria}
           onScroll={(e) => {
@@ -144,22 +144,22 @@ export function LiveDocument({
                 : 'bg-app border-b border-transparent'
             }`}
           >
-            <div className="mx-auto w-full max-w-[740px] px-4 sm:px-6 lg:ml-auto lg:mr-0 lg:pl-7 lg:pr-5">
-              <div className="grid grid-cols-[minmax(0,1fr)_28px] items-center gap-2">
+            <div className="mx-auto w-full max-w-[660px] px-3 sm:px-5 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_24px] items-center gap-1.5">
                 <div
-                  className={`flex h-14 min-w-0 items-center justify-between gap-3 px-0.5 transition-colors duration-200 ${
+                  className={`flex h-10 min-w-0 items-center justify-between gap-2.5 px-0.5 transition-colors duration-200 ${
                     stagingScrolled ? 'border-b border-transparent' : 'border-b border-border-main/70'
                   }`}
                 >
-                  <div className="flex min-w-0 items-baseline gap-2.5">
-                    <span className="whitespace-nowrap shrink-0 font-mono text-[11px] font-medium tracking-wide text-text-faint">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className="whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium tracking-wide text-text-faint">
                       {UI_LABELS.document.phase1Kicker}
                     </span>
                     <span
                       aria-hidden="true"
-                      className="h-3 w-px self-center bg-border-main shrink-0"
+                      className="h-2.5 w-px self-center bg-border-main shrink-0"
                     />
-                    <h2 className="truncate font-serif text-[15px] font-bold tracking-tight text-text-main">
+                    <h2 className="truncate font-serif text-[13.5px] font-bold tracking-tight text-text-main">
                       {UI_LABELS.document.phase1Name}
                     </h2>
                     <span
@@ -168,7 +168,7 @@ export function LiveDocument({
                     >
                       ·
                     </span>
-                    <span className="hidden sm:inline whitespace-nowrap shrink-0 font-mono text-[11px] text-text-faint tabular-nums">
+                    <span className="hidden sm:inline whitespace-nowrap shrink-0 font-mono text-[10.5px] text-text-faint tabular-nums">
                       {UI_LABELS.document.stagingBlockCount(doc.stagingBlocks.length)}
                     </span>
                   </div>
@@ -177,12 +177,12 @@ export function LiveDocument({
                     <button
                       type="button"
                       onClick={toggleAllStaging}
-                      className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
                     >
                       {allStagingCollapsed ? (
-                        <ChevronsUpDown className="h-3.5 w-3.5 text-text-faint" />
+                        <ChevronsUpDown className="h-3 w-3 text-text-faint" />
                       ) : (
-                        <ChevronsDownUp className="h-3.5 w-3.5 text-text-faint" />
+                        <ChevronsDownUp className="h-3 w-3 text-text-faint" />
                       )}
                       <span>
                         {allStagingCollapsed
@@ -199,15 +199,15 @@ export function LiveDocument({
             {/* Soft scroll veil so cards melt smoothly beneath the sticky header */}
             <div
               aria-hidden="true"
-              className={`pointer-events-none absolute inset-x-0 top-full h-5 bg-gradient-to-b from-app/90 via-app/40 to-transparent transition-opacity duration-200 ${
+              className={`pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-app/90 via-app/40 to-transparent transition-opacity duration-200 ${
                 stagingScrolled ? 'opacity-100' : 'opacity-0'
               }`}
             />
           </div>
 
-          <div className="mx-auto w-full max-w-[740px] px-4 pt-4 pb-10 sm:px-6 lg:ml-auto lg:mr-0 lg:pl-7 lg:pr-5 lg:pb-28">
+          <div className="mx-auto w-full max-w-[660px] px-3 pt-2.5 pb-8 sm:px-5 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3 lg:pb-24">
             {doc.stagingBlocks.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {doc.stagingBlocks.map((block, index) => (
                   <StagingBlockCard
                     key={block.id}
@@ -223,8 +223,8 @@ export function LiveDocument({
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-[minmax(0,1fr)_28px] gap-2">
-                <div className="rounded-xl border border-dashed border-border-main bg-surface/50 px-4 py-6 text-center text-xs leading-relaxed text-text-faint">
+              <div className="grid grid-cols-[minmax(0,1fr)_24px] gap-1.5">
+                <div className="rounded-lg border border-dashed border-border-main bg-surface/50 px-3 py-5 text-center text-xs leading-relaxed text-text-faint">
                   {UI_LABELS.document.noStagingBlocks}
                 </div>
                 <div />
@@ -233,7 +233,7 @@ export function LiveDocument({
           </div>
         </section>
 
-        {/* Right Column — Phase 2: Execution Timeline */}
+        {/* Right Column — Phase 2: Execution Timeline (60%) */}
         <section
           aria-label={UI_LABELS.document.executionPaneAria}
           onScroll={(e) => {
@@ -250,33 +250,33 @@ export function LiveDocument({
                 : 'bg-app border-b border-transparent'
             }`}
           >
-            <div className="mx-auto w-full max-w-[740px] px-3 sm:px-6 lg:ml-0 lg:mr-auto lg:pl-4 lg:pr-7">
-              <div className="grid grid-cols-[52px_minmax(0,1fr)_28px] items-center gap-2">
+            <div className="mx-auto w-full max-w-[920px] px-2.5 sm:px-5 lg:ml-0 lg:mr-auto lg:pl-3 lg:pr-5">
+              <div className="grid grid-cols-[46px_minmax(0,1fr)_24px] items-center gap-1.5">
                 <div />
                 <div
-                  className={`flex h-14 min-w-0 items-center justify-between gap-3 px-0.5 transition-colors duration-200 ${
+                  className={`flex h-10 min-w-0 items-center justify-between gap-2.5 px-0.5 transition-colors duration-200 ${
                     executionScrolled
                       ? 'border-b border-transparent'
                       : 'border-b border-border-main/70'
                   }`}
                 >
-                  <div className="flex min-w-0 items-baseline gap-2.5">
-                    <span className="whitespace-nowrap shrink-0 font-mono text-[11px] font-medium tracking-wide text-text-faint">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className="whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium tracking-wide text-text-faint">
                       {UI_LABELS.document.phase2Kicker}
                     </span>
                     <span
                       aria-hidden="true"
-                      className="h-3 w-px self-center bg-border-main shrink-0"
+                      className="h-2.5 w-px self-center bg-border-main shrink-0"
                     />
-                    <h2 className="truncate font-serif text-[15px] font-bold tracking-tight text-text-main">
+                    <h2 className="truncate font-serif text-[13.5px] font-bold tracking-tight text-text-main">
                       {UI_LABELS.document.phase2Name}
                     </h2>
-                    <span className="auteur-phase-execution inline-flex shrink-0 self-center items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-tight whitespace-nowrap">
+                    <span className="auteur-phase-execution inline-flex shrink-0 self-center items-center rounded border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold tracking-tight whitespace-nowrap">
                       [{executionLabel}]
                     </span>
                   </div>
 
-                  <span className="whitespace-nowrap shrink-0 font-mono text-[11px] font-medium text-text-muted tabular-nums">
+                  <span className="whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium text-text-muted tabular-nums">
                     {UI_LABELS.document.beatRange(beats.length)}
                   </span>
                 </div>
@@ -287,20 +287,20 @@ export function LiveDocument({
             {/* Soft scroll veil so beats melt smoothly beneath the sticky header */}
             <div
               aria-hidden="true"
-              className={`pointer-events-none absolute inset-x-0 top-full h-5 bg-gradient-to-b from-app/90 via-app/40 to-transparent transition-opacity duration-200 ${
+              className={`pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-app/90 via-app/40 to-transparent transition-opacity duration-200 ${
                 executionScrolled ? 'opacity-100' : 'opacity-0'
               }`}
             />
           </div>
 
           <div
-            className={`mx-auto w-full max-w-[740px] px-3 pb-24 sm:px-6 lg:ml-0 lg:mr-auto lg:pl-4 lg:pr-7 lg:pb-28 ${
-              beats.length > 0 ? 'pt-1' : 'pt-4'
+            className={`mx-auto w-full max-w-[920px] px-2.5 pb-20 sm:px-5 lg:ml-0 lg:mr-auto lg:pl-3 lg:pr-5 lg:pb-24 ${
+              beats.length > 0 ? 'pt-1' : 'pt-2.5'
             }`}
           >
             {/* Surgical insert before Beat 1 */}
             {beats.length > 0 && (
-              <div className="group/seam relative grid h-3 grid-cols-[52px_minmax(0,1fr)_28px] items-center gap-2">
+              <div className="group/seam relative grid h-2 grid-cols-[46px_minmax(0,1fr)_24px] items-center gap-1.5">
                 <div />
                 <div className="relative flex items-center justify-center">
                   <div className="w-full border-t border-transparent group-hover/seam:border-border-main transition-colors" />
@@ -309,9 +309,9 @@ export function LiveDocument({
                     onClick={() => handleInsertBeatAt(0)}
                     title={UI_LABELS.document.insertBeatBeforeFirst}
                     aria-label={UI_LABELS.document.insertBeatBeforeFirst}
-                    className="absolute flex h-5 w-5 items-center justify-center rounded-full border border-border-main bg-surface text-text-faint opacity-0 group-hover/seam:opacity-100 hover:border-text-muted hover:text-text-main transition-all cursor-pointer shadow-2xs"
+                    className="absolute z-10 flex h-4 w-4 items-center justify-center rounded-full border border-border-main bg-surface text-text-faint opacity-0 group-hover/seam:opacity-100 hover:border-text-muted hover:text-text-main transition-all cursor-pointer shadow-2xs"
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-2.5 w-2.5" />
                   </button>
                 </div>
                 <div />
@@ -330,24 +330,28 @@ export function LiveDocument({
                   <div key={beat.id}>
                     {/* Seam between previous beat and current beat */}
                     {idx > 0 && (
-                      <div className="group/seam relative grid grid-cols-[52px_minmax(0,1fr)_28px] items-stretch gap-2">
+                      <div className="group/seam relative grid grid-cols-[46px_minmax(0,1fr)_24px] items-stretch gap-1.5">
                         {/* Left margin keeps continuity rail flush with zero overlap */}
                         <div className="relative">
                           {link?.connectsFromPrevious && (
                             <div
                               aria-hidden="true"
-                              className="pointer-events-none absolute right-[15px] inset-y-0 w-[2px] opacity-45"
+                              className="pointer-events-none absolute right-[12px] inset-y-0 w-[2px] opacity-45"
                               style={{backgroundColor: 'var(--tok-continuity)'}}
                             />
                           )}
                         </div>
 
-                        {/* Center seam: Dotted CUT hairline vs quiet hover insert divider */}
-                        <div className="relative flex h-7 items-center justify-center">
+                        {/* Center seam: Compact HOLD gap (8px) vs Dotted CUT hairline (20px) */}
+                        <div
+                          className={`relative flex items-center justify-center ${
+                            isCutBefore ? 'h-5' : 'h-2'
+                          }`}
+                        >
                           {isCutBefore ? (
                             <>
                               <div className="w-full border-t border-dashed border-border-main" />
-                              <span className="absolute bg-app px-2 font-mono text-[10px] font-medium tracking-widest text-text-faint uppercase group-hover/seam:opacity-0 transition-opacity select-none">
+                              <span className="absolute bg-app px-2 font-mono text-[9.5px] font-medium tracking-widest text-text-faint uppercase group-hover/seam:opacity-0 transition-opacity select-none">
                                 {link?.transition === 'RECALL'
                                   ? UI_LABELS.document.cutRecallMarker
                                   : UI_LABELS.document.cutMarker}
@@ -365,9 +369,9 @@ export function LiveDocument({
                               beat.index - 1,
                               beat.index
                             )}
-                            className="absolute flex h-5 w-5 items-center justify-center rounded-full border border-border-main bg-surface text-text-faint opacity-0 group-hover/seam:opacity-100 hover:border-text-muted hover:text-text-main transition-all cursor-pointer shadow-2xs"
+                            className="absolute z-10 flex h-4 w-4 items-center justify-center rounded-full border border-border-main bg-surface text-text-faint opacity-0 group-hover/seam:opacity-100 hover:border-text-muted hover:text-text-main transition-all cursor-pointer shadow-2xs"
                           >
-                            <Plus className="h-3 w-3" />
+                            <Plus className="h-2.5 w-2.5" />
                           </button>
                         </div>
 
@@ -408,12 +412,12 @@ export function LiveDocument({
             </div>
 
             {/* Quiet bottom Add Beat action */}
-            <div className="mt-4 grid grid-cols-[52px_minmax(0,1fr)_28px] items-center gap-2">
+            <div className="mt-2.5 grid grid-cols-[46px_minmax(0,1fr)_24px] items-center gap-1.5">
               <div />
               <button
                 type="button"
                 onClick={() => handleInsertBeatAt(beats.length)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border-main py-2.5 text-xs font-medium text-text-muted hover:border-text-faint hover:bg-surface hover:text-text-main transition-colors cursor-pointer"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-main py-2 text-xs font-medium text-text-muted hover:border-text-faint hover:bg-surface hover:text-text-main transition-colors cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>{UI_LABELS.document.addBeat}</span>
@@ -422,9 +426,9 @@ export function LiveDocument({
             </div>
 
             {/* Subtle Paste-and-Hydrate hint */}
-            <footer className="mt-12 grid grid-cols-[52px_minmax(0,1fr)_28px] items-center gap-2">
+            <footer className="mt-8 grid grid-cols-[46px_minmax(0,1fr)_24px] items-center gap-1.5">
               <div />
-              <p className="text-center text-xs text-text-faint">
+              <p className="text-center text-[11px] text-text-faint">
                 {UI_LABELS.document.footerHint}
               </p>
               <div />

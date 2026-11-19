@@ -6,21 +6,22 @@ The Auteur Script Editor blends **Obsidian Live Preview** with **Notion's calm s
 
 ## 1. Two-Column Live Workspace & Single-Document Source Mode
 
-- **Two-Column Live Mode (`lg:` split)**: On desktop, Live Mode splits cleanly into two equal `50/50` independently scrollable columns separated by a `1px` structural hairline—**Phase 1: Staging** on the left and **Phase 2: Execution** on the right, each with an aligned sticky header bar so cast bindings (`@ref`), lookbook tokens, and coordinate fences stay visible while authoring beats (`S1` → `S{N}`). On smaller viewports (`< lg`), both phases stack smoothly in a single vertical flow.
-- **Single-Document Source Mode**: Switching to `Source` collapses into a single centered canonical plain-text document (`~760px` reading measure) for raw editing and inspection.
+- **Two-Column Live Mode (`lg:` split)**: On desktop, Live Mode splits cleanly into an asymmetric `40/60` pair of independently scrollable columns separated by a `1px` structural hairline—**Phase 1: Staging** on the left (`40%`) and **Phase 2: Execution** on the right (`60%`), each with a slim sticky header bar (`h-10`) so cast bindings (`@ref`), lookbook tokens, and coordinate fences stay visible while giving Execution beats generous horizontal measure (`S1` → `S{N}`). On smaller viewports (`< lg`), both phases stack smoothly in a single vertical flow.
+- **Single-Document Source Mode**: Switching to `Source` collapses into a single centered canonical plain-text document (`~820px` reading measure) in compact `JetBrains Mono` for raw editing and inspection.
 - **Whisper-Quiet Top Bar (`h-12`)**: Holds only essential workflow controls—editable scene title (`Libre Baskerville`), live tabular beat count, `[ Live | Source ]` segmented switcher, `Presets` dropdown, 4-mode `Theme` switcher, and `Copy` menu (`Copy Plain Text` / `Copy Tagless`).
-- **Zero Chrome Bloat**: No noisy telemetry widgets, and zero layout shift when diagnostics appear in the right margin of either column.
+- **Zero Chrome Bloat**: No noisy telemetry widgets, zero idle vertical footer padding inside resting beat cards, and zero layout shift when diagnostics appear in the right margin of either column.
 - **Headless Programmatic Engine**: All AI-facing JSON IR serialization, transactional patching, and Script Supervisor dimension slicing live strictly inside `src/core/` (`docs/JSON_IR_SPEC.md`)—keeping the human editor purely focused on canonical plain text and live formatting.
 
 ---
 
-## 2. Typography Triad
+## 2. Typography System
 
 | Font | Class | Role |
 |---|---|---|
 | **`Libre Baskerville`** | `font-serif` | Scene titles and Phase headings (`Phase 1 — Staging`, `Phase 2 — Execution`) |
+| **`IBM Plex Sans`** | `font-script` | Live Mode script prose, Staging block bodies, and Execution Waterfall Sub-States (high-density proportional reading with zero-width-shift live token highlighting) |
 | **`Inter`** | `font-sans` | Quiet UI controls, dropdown menus, buttons, diagnostic popover prose |
-| **`JetBrains Mono`** | `font-mono` | Script content, Macro-Block headers, inline `[TAG]` tokens, beat indices (`S1`, `S2`), and Source Mode editor |
+| **`JetBrains Mono`** | `font-mono` | Structural badges (`[INTENT]`, `[EXECUTION]`), beat indices (`S1`, `S2`), tabular counts, and Source Mode raw plain-text editor |
 
 ---
 
