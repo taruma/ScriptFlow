@@ -21,17 +21,24 @@ Rules never apply blindly across genres—every audit begins by identifying the 
 
 ---
 
-## 2. Deterministic Rules (Live Automated Linter)
+## 2. Deterministic Rules (Live Automated Linter — `LINT_RULE_REGISTRY`)
 
-These **5 V1 rules** run automatically inside `src/core/linter.ts` (surfaced in the editor's right-margin `DiagnosticDot`, in `AuteurEnvelope.derived.diagnostics`, and enforced by `applyAuteurPatch(..., { rejectOnNewErrors: true })`):
+These **5 declarative rules** live in `LINT_RULE_REGISTRY` inside `src/core/linter.ts`. They run synchronously on every edit (surfaced in the editor's right-margin `DiagnosticDot`, top-bar diagnostic counter, and `AuteurEnvelope.derived.diagnostics`) and are enforced by `applyAuteurPatch(..., { rejectOnNewErrors: true })`.
 
-| # | Rule ID | Lens | Severity | What It Checks | How to Fix |
-|---|---|---|---|---|---|
-| **1** | `viewport-coordinate-purity` | **Lens 1: Spatial & Optics** | `error` | Flags banned theatrical directions (`stage-left` / `stage-right`) in `[LOGIC]`, `[OPENING]`, or `[EXECUTION]`. | Use camera-viewport coordinates (`frame-left` / `frame-right` or `screen-left` / `screen-right`) and separate position from `facing screen-*` orientation. |
-| **2** | `camera-redefinition-guard` | **Lens 1: Spatial & Optics** | `warning` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`) re-declares a static shot-scale token (`WS`, `MS`, `CU`, `OTS`, `POV`, `low-angle`, etc.) on a later beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `PUSHING`, `TILTING`, `ARCING`, etc.). | Use a bare hold/recall (`[CAM 01] ->`), an operator motion transition (`[CAM 01] PAN LEFT ->`), or cut to a new camera slot (`[CAM 02]`). *(First appearances in continuation scripts with `[CONTINUITY PROTOCOL]` / `@video1` are allowed.)* |
-| **3** | `macro-state-resolution` | **Lens 4: Acoustics & Voice** | `warning` | Flags any `[EXECUTION]` Macro-State whose final Sub-State is spoken `{dialogue}`. | Always chain an immediate physical `[ACT]` follow-through or `<foley>` trigger after the spoken line. |
-| **4** | `multimodal-reference-isolation` | **Lens 5: Blocks & Grammar** | `error` | Flags `@ref` tags (`@image1`, `@audio1`, etc.) leaking outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. | Declare `@ref as Name` exclusively in Phase 1 Staging, then use canonical character names downstream. |
-| **5** | `frozen-first-frame-purity` | **Lens 5: Blocks & Grammar** | `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. | Write `[OPENING]` strictly as 2–4 sentences of motionless plain prose locking $t = 0$. |
+### Overridable Severity Behavior
+- **In-App Controls**: Open **Settings → Supervisor rules** to set any rule to **`Off`**, **`Warn`**, or **`Error`** (plus **Reset defaults**). Changes update diagnostics immediately and persist in `localStorage`.
+- **Programmatic API**: Call `lintDocument(doc, metadata?, ruleOverrides?)` with `Partial<Record<LintRuleId, 'off' | 'warning' | 'error'>>`:
+  - **Omitted / Default**: Runs every rule with its built-in default severity (including phase-contextual defaults such as `multimodal-reference-isolation`).
+  - **`'off'`**: Suppresses the rule completely without affecting any other rule.
+  - **`'warning'` / `'error'`**: Demotes or promotes every diagnostic emitted by that rule to the chosen severity.
+
+| # | Rule ID | Status | Lens | Default Severity | Overridable Behavior | What It Checks & How to Fix |
+|---|---|---|---|---|---|---|
+| **1** | `viewport-coordinate-purity` | Active · Configurable | **Lens 1: Spatial & Optics** | `error` | `off` \| `warning` \| `error` | Flags banned theatrical directions (`stage-left` / `stage-right`) in `[LOGIC]`, `[OPENING]`, or `[EXECUTION]`. **Fix:** Use camera-viewport coordinates (`frame-left` / `frame-right` or `screen-left` / `screen-right`) and separate position from `facing screen-*` orientation. |
+| **2** | `camera-redefinition-guard` | Active · Configurable | **Lens 1: Spatial & Optics** | `warning` | `off` \| `warning` \| `error` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`) re-declares a static shot-scale token (`WS`, `MS`, `CU`, `OTS`, `POV`, `low-angle`, etc.) on a later beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `PUSHING`, `TILTING`, `ARCING`, etc.). **Fix:** Use a bare hold/recall (`[CAM 01] ->`), an operator motion transition (`[CAM 01] PAN LEFT ->`), or cut to a new camera slot (`[CAM 02]`). *(First appearances in continuation scripts with `[CONTINUITY PROTOCOL]` / `@video1` are allowed.)* |
+| **3** | `macro-state-resolution` | Active · Configurable | **Lens 4: Acoustics & Voice** | `warning` | `off` \| `warning` \| `error` | Flags any `[EXECUTION]` Macro-State whose final Sub-State is spoken `{dialogue}`. **Fix:** Always chain an immediate physical `[ACT]` follow-through or `<foley>` trigger after the spoken line. |
+| **4** | `multimodal-reference-isolation` | Active · Configurable | **Lens 5: Blocks & Grammar** | Staging: `warning`<br>Execution: `error` | `off` \| `warning` \| `error` | Flags `@ref` tags (`@image1`, `@audio1`, etc.) outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. Defaults to a soft **rule-of-thumb `warning`** inside other Phase 1 Staging blocks (`[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, custom blocks) and a strict **`error`** inside `[EXECUTION]`. **Fix:** Declare `@ref as Name` in `[INTENT]`, `[CHARACTERS]`, or `[REFERENCES]`, then use canonical character names downstream. |
+| **5** | `frozen-first-frame-purity` | Active · Configurable | **Lens 5: Blocks & Grammar** | `error` | `off` \| `warning` \| `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. **Fix:** Write `[OPENING]` strictly as 2–4 sentences of motionless plain prose locking $t = 0$. |
 
 ---
 
@@ -42,12 +49,12 @@ Use this checklist when reviewing a script manually or configuring an automated 
 ### Lens 1 — Spatial & Optics (`lens1_spatial_optics`)
 *Focus: 180° axis, viewport geometry, camera visibility, $S_0 \to S_1$ handoff, and camera numbering.*
 
-- [ ] **No Theatrical Directions** *(Automated · Error)*: Zero `stage-left` or `stage-right` anywhere in `[LOGIC]`, `[OPENING]`, or `[EXECUTION]`.
+- [ ] **No Theatrical Directions** *(Automated · Default `error`)*: Zero `stage-left` or `stage-right` anywhere in `[LOGIC]`, `[OPENING]`, or `[EXECUTION]`.
 - [ ] **Position vs. Orientation Separated**: Screen position uses `frame-left` / `frame-center` / `frame-right` + depth (`FG`, `MG`, `BG`); anatomical yaw uses `facing screen-left/right`, `in profile-left/right`, or `back to camera`.
 - [ ] **180° Axis & Eyeline Parity**: If Subject A is `frame-left` looking `screen-right`, a reverse shot places Subject B `frame-right` looking `screen-left` unless crossed via an explicit neutral shot (frontal CU/POV) or arcing camera move.
 - [ ] **Action Visibility vs. Active Camera**: Every `[ACT]` detail (e.g., an eye blink, palm press, or hand gesture) is physically visible from the active `resolvedCamera.effectiveFraming` (for example, an OTS behind Miller cannot clearly show Miller's subtle eye movement).
 - [ ] **Clean $S_0 \to S_1$ Handoff**: Line 1 (`S1`) opens with the exact camera setup, spatial layout, posture, and hand grips locked in `[OPENING]`.
-- [ ] **No Oner Jump-Cut Re-Declarations** *(Automated · Warning)*: Established `[CAM 01]` setups hold via `[CAM 01] ->` or move via operator verbs (`PAN`, `TRACKING`, `CRANING`), never re-stating static shot scales.
+- [ ] **No Oner Jump-Cut Re-Declarations** *(Automated · Default `warning`)*: Established `[CAM 01]` setups hold via `[CAM 01] ->` or move via operator verbs (`PAN`, `TRACKING`, `CRANING`), never re-stating static shot scales.
 - [ ] **Spatial Fence for 3+ Subjects**: Multi-character rooms or mark swaps use an explicit inline `[BLOCK]` Sub-State to lock viewport coordinates.
 
 #### Viewport Reference Diagram
@@ -89,7 +96,7 @@ Use this checklist when reviewing a script manually or configuring an automated 
 ### Lens 4 — Acoustics & Voice (`lens4_acoustics_voice`)
 *Focus: Dialogue formatting, selective `<foley>`, room tone isolation, and beat resolution.*
 
-- [ ] **Macro-State Resolution Rule** *(Automated · Warning)*: No Macro-State line ends on spoken `{dialogue}`; always follow with `[ACT]` physical reaction or `<foley>` trigger.
+- [ ] **Macro-State Resolution Rule** *(Automated · Default `warning`)*: No Macro-State line ends on spoken `{dialogue}`; always follow with `[ACT]` physical reaction or `<foley>` trigger.
 - [ ] **Curly-Brace Dialogue Lock**: Spoken lines strictly use `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`), never quotation marks and never legacy `[DIAL]`/`[AUDIO]` tags.
 - [ ] **Room Tone Isolation**: Continuous background ambience (rain, ballast hum, wind, traffic) stays in `[AESTHETIC]` (`Audio:`) and is not spammed as `<foley>` on every `[EXECUTION]` line.
 - [ ] **Selective Diegetic `<foley>`**: Use `<sound>` only for distinct physical friction, impacts, or off-screen triggers; restate persistent discrete sounds explicitly (`<low growl continues>`).
@@ -101,8 +108,8 @@ Use this checklist when reviewing a script manually or configuring an automated 
 ### Lens 5 — Blocks & Grammar (`lens5_blocks_grammar`)
 *Focus: Phase Partition Law, Block Orthogonality, Single-Dimension Law, and canonical syntax purity.*
 
-- [ ] **Multimodal Reference Isolation** *(Automated · Error)*: `@image` / `@audio` / `@video` tags appear exclusively in `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, or `[CONTINUITY PROTOCOL]`.
-- [ ] **Frozen First-Frame Purity** *(Automated · Error)*: `[OPENING]` contains zero `[TAG]` tokens, zero motion verbs, and zero audio cues—pure $t = 0$ still description.
+- [ ] **Multimodal Reference Isolation** *(Automated · Default `warning` in Staging, `error` in Execution)*: Keep `@image` / `@audio` / `@video` bindings in `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, or `[CONTINUITY PROTOCOL]`, and never leak `@ref` tokens into `[EXECUTION]`.
+- [ ] **Frozen First-Frame Purity** *(Automated · Default `error`)*: `[OPENING]` contains zero `[TAG]` tokens, zero motion verbs, and zero audio cues—pure $t = 0$ still description.
 - [ ] **Flowing `[INTENT]` (Zero Shot List)**: `[INTENT]` is one concise directorial sentence starting with `"Create …"`, never a play-by-play shot list.
 - [ ] **Zero Lookbook Bleed**: `[EXECUTION]` does not restate static wardrobe, lens stock, color palette, or room architecture already locked in `[AESTHETIC]` (use declared shorthand tokens like `LOC01` when referencing settings in montage/multi-location scripts).
 - [ ] **Single-Dimension Law**: Each Sub-State separated by `->` directs strictly one dimension (e.g., never blend camera motion and actor choreography inside a single `[CAM 01]` tag—split into `[CAM 01] PUSH-IN -> [ACT] ...`).
@@ -111,19 +118,21 @@ Use this checklist when reviewing a script manually or configuring an automated 
 
 ## 4. Quick Pass / Fail Examples
 
-| Rule | Fail (Violates Rule) | Pass (Canonical `v0.4.0`) |
+| Rule | Fail / Warning (Violates Rule) | Pass (Canonical `v0.4.0`) |
 |---|---|---|
-| **Viewport Coordinates** | `[ACT] Miller steps stage-left toward Ray` | `[ACT] Miller steps frame-right toward Ray` |
-| **Oner Camera Continuity** | Line 2: `[CAM 01] Low-angle MS -> [ACT] ...` | Line 2: `[CAM 01] CRANING DOWN -> [ACT] ...` *(or bare `[CAM 01] ->`)* |
-| **Macro-State Resolution** | `[CAM 02] CU Ray -> Ray says {Never.}` | `[CAM 02] CU Ray -> Ray says {Never.} -> [ACT] Ray taps ash onto the steel` |
-| **Reference Isolation** | `[EXECUTION]` → `[ACT] @image1 slides folder` | `[INTENT]` binds `@image1 as Miller`; `[EXECUTION]` → `[ACT] Miller slides folder` |
-| **Frozen `[OPENING]`** | `[OPENING]` → `[CAM 01] MS. Miller walks in.` | `[OPENING]` → `MS at eye level. Frame-left, Miller stands facing screen-right.` |
+| **Viewport Coordinates** | `[ACT] Miller steps stage-left toward Ray` *(Error)* | `[ACT] Miller steps frame-right toward Ray` |
+| **Oner Camera Continuity** | Line 2: `[CAM 01] Low-angle MS -> [ACT] ...` *(Warning)* | Line 2: `[CAM 01] CRANING DOWN -> [ACT] ...` *(or bare `[CAM 01] ->`)* |
+| **Macro-State Resolution** | `[CAM 02] CU Ray -> Ray says {Never.}` *(Warning)* | `[CAM 02] CU Ray -> Ray says {Never.} -> [ACT] Ray taps ash onto the steel` |
+| **Reference Isolation (Staging)** | `[AESTHETIC]` → `Wardrobe: @image1 in wool coat` *(Warning)* | `[INTENT]` binds `@image1 as Miller`; `[AESTHETIC]` → `Wardrobe: Miller in wool coat` |
+| **Reference Isolation (Execution)** | `[EXECUTION]` → `[ACT] @image1 slides folder` *(Error)* | `[INTENT]` binds `@image1 as Miller`; `[EXECUTION]` → `[ACT] Miller slides folder` |
+| **Frozen `[OPENING]`** | `[OPENING]` → `[CAM 01] MS. Miller walks in.` *(Error)* | `[OPENING]` → `MS at eye level. Frame-left, Miller stands facing screen-right.` |
 | **Single-Dimension Law** | `[CAM 01] PUSH-IN as Miller slams the file` | `[CAM 01] PUSH-IN -> [ACT] Miller slams the file -> <heavy thud>` |
 
 ---
 
 ## 5. Where Rules Live in the Codebase
 
-- **Live Automated Deterministic Rules**: `src/core/linter.ts` (`lintViewportCoordinates`, `lintMacroStateResolution`, `lintMultimodalReferenceIsolation`, `lintFrozenFirstFrame`, `lintCameraRedefinition`, composed in `lintDocument()`).
-- **Automated Rule Unit Tests**: `tests/core/linter.test.ts` (positive & negative cases + zero-false-positive check across all 4 presets).
+- **Declarative Rule Registry & Engine**: `src/core/linter.ts` (`LINT_RULE_REGISTRY`, `getLintRuleDefinition`, `lintDocument(doc, metadata?, ruleOverrides?)`, plus exported pure rule functions `lintViewportCoordinates`, `lintCameraRedefinition`, `lintMacroStateResolution`, `lintMultimodalReferenceIsolation`, `lintFrozenFirstFrame`).
+- **In-App Rule Settings & Persistence**: `src/ui/lintRules.ts` (`sanitizeLintRuleOverrides`, `getEffectiveLintRuleSeverity`, `setLintRuleOverride`, `countCustomLintRules`), `src/ui/editorSettings.ts` (`useEditorSettings`), and `src/components/SettingsPopover.tsx` (**Settings → Supervisor rules**).
+- **Automated Rule Unit Tests**: `tests/core/linter.test.ts` (positive & negative cases, Staging vs Execution `@ref` defaults, `ruleOverrides` suppression/promotion/demotion, and zero-false-positive check across all 4 presets) and `tests/ui/uiState.test.ts` (`lintRules` state helpers).
 - **Lens Evaluation Slicers & Review Schema**: `src/core/slicer.ts` (`AUDIT_LENS_PRESETS`, `sliceAuteurScript`, `validateAuteurReview`) and `docs/JSON_IR_SPEC.md`.

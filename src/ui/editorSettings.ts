@@ -1,10 +1,17 @@
 import {useCallback, useEffect, useState} from 'react';
+import type {LintRuleOverrides} from '../core/types.ts';
 import {
   applyClauseGuides,
   DEFAULT_CLAUSE_GUIDES,
   loadStoredClauseGuides,
   saveStoredClauseGuides,
 } from './clauseGuides.ts';
+import {
+  areLintRuleOverridesEqual,
+  DEFAULT_LINT_RULE_OVERRIDES,
+  loadStoredLintRuleOverrides,
+  saveStoredLintRuleOverrides,
+} from './lintRules.ts';
 import {
   applyTextSize,
   DEFAULT_TEXT_SIZE,
@@ -23,12 +30,14 @@ export interface EditorSettings {
   themeMode: ThemeMode;
   textSize: TextSizePreset;
   clauseGuides: boolean;
+  lintRuleOverrides: LintRuleOverrides;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   themeMode: 'dark',
   textSize: DEFAULT_TEXT_SIZE,
   clauseGuides: DEFAULT_CLAUSE_GUIDES,
+  lintRuleOverrides: DEFAULT_LINT_RULE_OVERRIDES,
 };
 
 export function loadEditorSettings(): EditorSettings {
@@ -36,6 +45,7 @@ export function loadEditorSettings(): EditorSettings {
     themeMode: loadStoredTheme(),
     textSize: loadStoredTextSize(),
     clauseGuides: loadStoredClauseGuides(),
+    lintRuleOverrides: loadStoredLintRuleOverrides(),
   };
 }
 
@@ -79,6 +89,12 @@ export function useEditorSettings(): {
       if (patch.clauseGuides !== undefined && patch.clauseGuides !== prev.clauseGuides) {
         saveStoredClauseGuides(patch.clauseGuides);
         applyClauseGuides(patch.clauseGuides);
+      }
+      if (
+        patch.lintRuleOverrides !== undefined &&
+        !areLintRuleOverridesEqual(patch.lintRuleOverrides, prev.lintRuleOverrides)
+      ) {
+        saveStoredLintRuleOverrides(patch.lintRuleOverrides);
       }
 
       return next;

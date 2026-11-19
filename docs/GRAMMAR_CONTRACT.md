@@ -55,13 +55,15 @@ An Auteur Script is plain text partitioned into **Macro-Blocks** separated by a 
 
 ## 5. V1 Deterministic Script Supervisor Linter Rules (`src/core/linter.ts`)
 
-| # | Rule ID | Audit Lens | Severity | Contract |
+All 5 rules are registered declaratively in `LINT_RULE_REGISTRY` and executed via `lintDocument(doc, metadata?, ruleOverrides?)`, where each rule accepts an optional `'off' | 'warning' | 'error'` override (defaults apply when `ruleOverrides` is omitted):
+
+| # | Rule ID | Audit Lens | Default Severity | Contract |
 |---|---|---|---|---|
 | **1** | `viewport-coordinate-purity` | `Lens 1: Spatial & Optics` | `error` | Flags `stage-left` / `stage-right` (case-insensitive) in `[LOGIC]`, `[OPENING]`, and `[EXECUTION]`. Recommends `frame-left/right` or `screen-left/right`. |
-| **2** | `macro-state-resolution` | `Lens 4: Acoustics & Voice` | `warning` | Flags any `[EXECUTION]` beat whose final non-empty Sub-State is spoken `{dialogue}` without trailing `[ACT]` follow-through or `<foley>` trigger. |
-| **3** | `multimodal-reference-isolation` | `Lens 5: Blocks & Grammar` | `error` | Flags `@ref` tokens appearing outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. |
-| **4** | `frozen-first-frame-purity` | `Lens 5: Blocks & Grammar` | `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. |
-| **5** | `camera-redefinition-guard` | `Lens 1: Spatial & Optics` | `warning` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`, ...) re-declares a static shot-scale token (`WS`, `EWS`, `FS`, `MS`, `MWS`, `MLS`, `MCU`, `CU`, `ECU`, `OTS`, `POV`, `INS`, `two-shot`, `low-angle`, `high-angle`) on a subsequent beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `TILTING`, `PUSHING`, `ARCING`, etc.). Bare holds/recalls (`[CAM 01] ->`) and first appearances in continuation scripts (`[CONTINUITY PROTOCOL]` / `@video1`) are never flagged. |
+| **2** | `camera-redefinition-guard` | `Lens 1: Spatial & Optics` | `warning` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`, ...) re-declares a static shot-scale token (`WS`, `EWS`, `FS`, `MS`, `MWS`, `MLS`, `MCU`, `CU`, `ECU`, `OTS`, `POV`, `INS`, `two-shot`, `low-angle`, `high-angle`) on a subsequent beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `TILTING`, `PUSHING`, `ARCING`, etc.). Bare holds/recalls (`[CAM 01] ->`) and first appearances in continuation scripts (`[CONTINUITY PROTOCOL]` / `@video1`) are never flagged. |
+| **3** | `macro-state-resolution` | `Lens 4: Acoustics & Voice` | `warning` | Flags any `[EXECUTION]` beat whose final non-empty Sub-State is spoken `{dialogue}` without trailing `[ACT]` follow-through or `<foley>` trigger. |
+| **4** | `multimodal-reference-isolation` | `Lens 5: Blocks & Grammar` | Staging: `warning` / Execution: `error` | Flags `@ref` tokens appearing outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. Defaults to a soft `warning` in other Phase 1 Staging blocks (`[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, custom blocks) and `error` inside `[EXECUTION]`. |
+| **5** | `frozen-first-frame-purity` | `Lens 5: Blocks & Grammar` | `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. |
 
 ---
 

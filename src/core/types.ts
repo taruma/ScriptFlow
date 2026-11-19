@@ -157,6 +157,17 @@ export type AuditLens =
 
 export type LintSeverity = 'error' | 'warning';
 
+export type LintRuleId =
+  | 'viewport-coordinate-purity'
+  | 'camera-redefinition-guard'
+  | 'macro-state-resolution'
+  | 'multimodal-reference-isolation'
+  | 'frozen-first-frame-purity';
+
+export type LintRuleSeveritySetting = 'off' | LintSeverity;
+
+export type LintRuleOverrides = Partial<Record<LintRuleId, LintRuleSeveritySetting>>;
+
 export type LintTarget =
   | {
       phase: 'staging';
@@ -180,4 +191,13 @@ export interface LintDiagnostic {
   repairHint: string;
   target: LintTarget;
   excerpt?: string;
+}
+
+export interface LintRuleDefinition {
+  id: LintRuleId;
+  name: string;
+  lens: AuditLens;
+  defaultSeverity: LintSeverity;
+  description: string;
+  run: (doc: AuteurDocument, metadata: ExtractedMetadata) => LintDiagnostic[];
 }

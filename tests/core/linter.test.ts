@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {
+  getLintRuleDefinition,
+  LINT_RULE_REGISTRY,
   lintCameraRedefinition,
   lintDocument,
   lintFrozenFirstFrame,
@@ -17,6 +19,115 @@ describe('Script Supervisor Deterministic Linter (5 V1 Rules)', () => {
       const diagnostics = lintDocument(doc);
       expect(diagnostics, `Unexpected lint errors on preset "${preset.title}"`).toEqual([]);
     }
+  });
+
+  describe('Declarative LINT_RULE_REGISTRY & Per-Rule Overrides', () => {
+    const multiViolationScript = `[INTENT]
+Create a tense hallway confrontation featuring @image1 as Mark.
+
+[LOGIC]
+Keep @image1 stage-left facing screen-right.
+
+[AESTHETIC]
+Wardrobe: @image1 in dark wool
+
+[OPENING]
+[CAM 01] MS on @image1 standing frame-left.
+
+[EXECUTION]
+[CAM 01] MS on Mark -> [ACT] @image1 checks the door -> Mark says {Wait.}
+[CAM 01] CU on Mark -> [ACT] Mark turns frame-right -> <boot scuff>`;
+
+    it('exposes a complete declarative metadata and runner catalog with unique rule IDs', () => {
+      expect(LINT_RULE_REGISTRY).toHaveLength(5);
+      const ids = LINT_RULE_REGISTRY.map((r) => r.id);
+      expect(new Set(ids).size).toBe(5);
+
+      for (const rule of LINT_RULE_REGISTRY) {
+        expect(rule.name.length).toBeGreaterThan(0);
+        expect(rule.description.length).toBeGreaterThan(0);
+        expect(['warning', 'error']).toContain(rule.defaultSeverity);
+        expect(typeof rule.run).toBe('function');
+        expect(getLintRuleDefinition(rule.id)).toBe(rule);
+      }
+    });
+
+    it('preserves built-in defaults when ruleOverrides is omitted or empty', () => {
+      const doc = parseAuteurScript(multiViolationScript);
+      const withoutOverrides = lintDocument(doc);
+      const withEmptyOverrides = lintDocument(doc, undefined, {});
+
+      expect(withEmptyOverrides).toEqual(withoutOverrides);
+
+      // Verify Staging @ref defaults to warning while Execution @ref defaults to error
+      const refDiags = withoutOverrides.filter(
+        (d) => d.ruleId === 'multimodal-reference-isolation'
+      );
+      const stagingRefDiags = refDiags.filter((d) => d.target.phase === 'staging');
+      const execRefDiags = refDiags.filter((d) => d.target.phase === 'execution');
+
+      expect(stagingRefDiags).toHaveLength(3);
+      expect(stagingRefDiags.every((d) => d.severity === 'warning')).toBe(true);
+      expect(execRefDiags).toHaveLength(1);
+      expect(execRefDiags[0].severity).toBe('error');
+    });
+
+    it('suppresses rules completely when overridden to "off" without affecting other rules', () => {
+      const doc = parseAuteurScript(multiViolationScript);
+      const baseline = lintDocument(doc);
+      const suppressed = lintDocument(doc, undefined, {
+        'viewport-coordinate-purity': 'off',
+        'multimodal-reference-isolation': 'off',
+      });
+
+      expect(suppressed.some((d) => d.ruleId === 'viewport-coordinate-purity')).toBe(false);
+      expect(suppressed.some((d) => d.ruleId === 'multimodal-reference-isolation')).toBe(false);
+      // Other rules still report normally
+      expect(suppressed.some((d) => d.ruleId === 'frozen-first-frame-purity')).toBe(true);
+      expect(suppressed.some((d) => d.ruleId === 'macro-state-resolution')).toBe(true);
+      expect(suppressed.some((d) => d.ruleId === 'camera-redefinition-guard')).toBe(true);
+      expect(suppressed.length).toBeLessThan(baseline.length);
+    });
+
+    it('demotes error-level rules (including Execution @ref) to "warning" when overridden', () => {
+      const doc = parseAuteurScript(multiViolationScript);
+      const demoted = lintDocument(doc, undefined, {
+        'viewport-coordinate-purity': 'warning',
+        'frozen-first-frame-purity': 'warning',
+        'multimodal-reference-isolation': 'warning',
+      });
+
+      const viewportDiags = demoted.filter((d) => d.ruleId === 'viewport-coordinate-purity');
+      const openingDiags = demoted.filter((d) => d.ruleId === 'frozen-first-frame-purity');
+      const refDiags = demoted.filter((d) => d.ruleId === 'multimodal-reference-isolation');
+
+      expect(viewportDiags.length).toBeGreaterThan(0);
+      expect(viewportDiags.every((d) => d.severity === 'warning')).toBe(true);
+      expect(openingDiags.length).toBeGreaterThan(0);
+      expect(openingDiags.every((d) => d.severity === 'warning')).toBe(true);
+      expect(refDiags).toHaveLength(4);
+      expect(refDiags.every((d) => d.severity === 'warning')).toBe(true);
+    });
+
+    it('promotes warning-level rules (including Staging @ref) to "error" when explicitly overridden', () => {
+      const doc = parseAuteurScript(multiViolationScript);
+      const promoted = lintDocument(doc, undefined, {
+        'macro-state-resolution': 'error',
+        'camera-redefinition-guard': 'error',
+        'multimodal-reference-isolation': 'error',
+      });
+
+      const dialogueDiags = promoted.filter((d) => d.ruleId === 'macro-state-resolution');
+      const cameraDiags = promoted.filter((d) => d.ruleId === 'camera-redefinition-guard');
+      const refDiags = promoted.filter((d) => d.ruleId === 'multimodal-reference-isolation');
+
+      expect(dialogueDiags).toHaveLength(1);
+      expect(dialogueDiags[0].severity).toBe('error');
+      expect(cameraDiags).toHaveLength(1);
+      expect(cameraDiags[0].severity).toBe('error');
+      expect(refDiags).toHaveLength(4);
+      expect(refDiags.every((d) => d.severity === 'error')).toBe(true);
+    });
   });
 
   describe('Rule 1 — Viewport Coordinate Purity (Lens 1)', () => {
@@ -72,7 +183,7 @@ MS, Miller sits frame-left facing screen-right.
   });
 
   describe('Rule 3 — Multimodal Reference Isolation (Lens 5)', () => {
-    it('flags @ref tokens appearing in [LOGIC], [AESTHETIC], [OPENING], or [EXECUTION]', () => {
+    it('flags @ref in Phase 1 Staging blocks ([LOGIC], [AESTHETIC], [OPENING], custom) as warning and in [EXECUTION] as error by default', () => {
       const raw = `[INTENT]
 Create a scene featuring @image1 as Mark and @actor2 as Robert.
 
@@ -85,12 +196,24 @@ Wardrobe: @actor2 in a charcoal coat
 [OPENING]
 MS on @image1 standing by the door.
 
+[NOTES]
+Check @actor2 coat collar.
+
 [EXECUTION]
 [CAM 01] MS -> [ACT] @image1 turns toward the hallway -> <hinge creak>`;
 
       const diags = lintMultimodalReferenceIsolation(parseAuteurScript(raw));
-      expect(diags).toHaveLength(4);
+      expect(diags).toHaveLength(5);
       expect(diags.every((d) => d.lens === 'Lens 5: Blocks & Grammar')).toBe(true);
+
+      const stagingDiags = diags.filter((d) => d.target.phase === 'staging');
+      const execDiags = diags.filter((d) => d.target.phase === 'execution');
+
+      expect(stagingDiags).toHaveLength(4);
+      expect(stagingDiags.every((d) => d.severity === 'warning')).toBe(true);
+
+      expect(execDiags).toHaveLength(1);
+      expect(execDiags[0].severity).toBe('error');
     });
 
     it('permits @ref tokens inside [INTENT], [CHARACTERS], [REFERENCES], and [CONTINUITY PROTOCOL]', () => {

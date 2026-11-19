@@ -1,5 +1,12 @@
 import {extractMetadata} from './extractor.ts';
-import type {AuteurDocument, ExtractedMetadata, LintDiagnostic} from './types.ts';
+import type {
+  AuteurDocument,
+  ExtractedMetadata,
+  LintDiagnostic,
+  LintRuleDefinition,
+  LintRuleId,
+  LintRuleOverrides,
+} from './types.ts';
 
 const BANNED_THEATRICAL_COORD_REGEX = /\bstage-(left|right)\b/gi;
 
@@ -126,8 +133,13 @@ export function lintMacroStateResolution(doc: AuteurDocument): LintDiagnostic[] 
 
 /**
  * Rule 3 — Multimodal Reference Isolation (Lens 5: Blocks & Grammar)
- * Flags any @ref token appearing outside [INTENT], [CHARACTERS], [REFERENCES],
- * or [CONTINUITY PROTOCOL].
+ * Flags @ref tokens outside [INTENT], [CHARACTERS], [REFERENCES],
+ * [CONTINUITY PROTOCOL], [GOAL], or [UNUSED MATERIALS].
+ *
+ * Defaults:
+ * - Phase 1 Staging blocks ([LOGIC], [AESTHETIC], [OPENING], custom blocks): soft `warning`
+ *   (rule of thumb recommending [INTENT] / [CHARACTERS] / [REFERENCES]).
+ * - Phase 2 [EXECUTION] beats: `error`.
  */
 export function lintMultimodalReferenceIsolation(doc: AuteurDocument): LintDiagnostic[] {
   const diagnostics: LintDiagnostic[] = [];
@@ -150,10 +162,10 @@ export function lintMultimodalReferenceIsolation(doc: AuteurDocument): LintDiagn
         ruleId: 'multimodal-reference-isolation',
         ruleName: 'Multimodal Reference Isolation',
         lens: 'Lens 5: Blocks & Grammar',
-        severity: 'error',
-        message: `Reference tag (${refs}) leaked into [${block.name}].`,
+        severity: 'warning',
+        message: `Reference tag (${refs}) used in [${block.name}]. As a rule of thumb, keep @ref declarations in [INTENT], [CHARACTERS], or [REFERENCES].`,
         repairHint:
-          'Declare @reference bindings exclusively in [INTENT], [CHARACTERS], [REFERENCES], or [CONTINUITY PROTOCOL], then use canonical character names downstream.',
+          'Declare @reference bindings in [INTENT], [CHARACTERS], [REFERENCES], or [CONTINUITY PROTOCOL], then use canonical character names in other Staging blocks.',
         target: {
           phase: 'staging',
           blockIndex,
@@ -305,19 +317,91 @@ export function lintCameraRedefinition(
 }
 
 /**
- * Runs all deterministic V1 Script Supervisor linter rules over a parsed AuteurDocument.
+ * Declarative catalog of all deterministic Script Supervisor linter rules.
+ * Adding, refining, or reordering rules happens here so lintDocument() and UI toggles stay in sync.
+ */
+export const LINT_RULE_REGISTRY: readonly LintRuleDefinition[] = [
+  {
+    id: 'viewport-coordinate-purity',
+    name: 'Viewport Coordinate Purity',
+    lens: 'Lens 1: Spatial & Optics',
+    defaultSeverity: 'error',
+    description:
+      'Flags theatrical stage-left / stage-right terms in [LOGIC], [OPENING], and [EXECUTION].',
+    run: (doc) => lintViewportCoordinates(doc),
+  },
+  {
+    id: 'camera-redefinition-guard',
+    name: 'Camera Re-Definition Guard',
+    lens: 'Lens 1: Spatial & Optics',
+    defaultSeverity: 'warning',
+    description:
+      'Flags established [CAM XX] slots re-declaring static shot scales without an operator move.',
+    run: (doc, metadata) => lintCameraRedefinition(doc, metadata),
+  },
+  {
+    id: 'macro-state-resolution',
+    name: 'Macro-State Resolution',
+    lens: 'Lens 4: Acoustics & Voice',
+    defaultSeverity: 'warning',
+    description:
+      'Flags [EXECUTION] beats ending on spoken {dialogue} without [ACT] or <foley> follow-through.',
+    run: (doc) => lintMacroStateResolution(doc),
+  },
+  {
+    id: 'multimodal-reference-isolation',
+    name: 'Reference Isolation (@ref)',
+    lens: 'Lens 5: Blocks & Grammar',
+    defaultSeverity: 'error',
+    description:
+      'Warn in Staging blocks outside [INTENT]/[CHARACTERS]/[REFERENCES]; error in [EXECUTION].',
+    run: (doc) => lintMultimodalReferenceIsolation(doc),
+  },
+  {
+    id: 'frozen-first-frame-purity',
+    name: 'Frozen First-Frame Purity',
+    lens: 'Lens 5: Blocks & Grammar',
+    defaultSeverity: 'error',
+    description: 'Flags square-bracketed [TAG] tokens inside [OPENING] still-frame prose.',
+    run: (doc) => lintFrozenFirstFrame(doc),
+  },
+] as const;
+
+export function getLintRuleDefinition(id: LintRuleId): LintRuleDefinition | undefined {
+  return LINT_RULE_REGISTRY.find((rule) => rule.id === id);
+}
+
+/**
+ * Runs all declarative Script Supervisor linter rules over a parsed AuteurDocument.
+ *
+ * When `ruleOverrides` is omitted, every rule runs with its built-in default severities
+ * (preserving phase-contextual defaults such as Staging warning vs Execution error for
+ * `multimodal-reference-isolation`). Passing `'off'` suppresses a rule completely, while
+ * passing `'warning'` or `'error'` overrides the severity of all diagnostics from that rule.
  */
 export function lintDocument(
   doc: AuteurDocument,
-  metadata?: ExtractedMetadata
+  metadata?: ExtractedMetadata,
+  ruleOverrides?: LintRuleOverrides
 ): LintDiagnostic[] {
   const meta = metadata ?? extractMetadata(doc);
+  const diagnostics: LintDiagnostic[] = [];
 
-  return [
-    ...lintViewportCoordinates(doc),
-    ...lintMacroStateResolution(doc),
-    ...lintMultimodalReferenceIsolation(doc),
-    ...lintFrozenFirstFrame(doc),
-    ...lintCameraRedefinition(doc, meta),
-  ];
+  for (const rule of LINT_RULE_REGISTRY) {
+    const override = ruleOverrides?.[rule.id];
+    if (override === 'off') {
+      continue;
+    }
+
+    const ruleDiagnostics = rule.run(doc, meta);
+    if (override === 'warning' || override === 'error') {
+      for (const diag of ruleDiagnostics) {
+        diagnostics.push(diag.severity === override ? diag : {...diag, severity: override});
+      }
+    } else {
+      diagnostics.push(...ruleDiagnostics);
+    }
+  }
+
+  return diagnostics;
 }

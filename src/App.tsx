@@ -144,7 +144,10 @@ export default function App() {
   // Synchronous pure derivations from Plain-Text-as-Truth
   const doc = useMemo(() => parseAuteurScript(rawText), [rawText]);
   const metadata = useMemo(() => extractMetadata(doc), [doc]);
-  const diagnostics = useMemo(() => lintDocument(doc, metadata), [doc, metadata]);
+  const diagnostics = useMemo(
+    () => lintDocument(doc, metadata, settings.lintRuleOverrides),
+    [doc, metadata, settings.lintRuleOverrides]
+  );
   const stableAestheticTokens = useStableValue(metadata.aestheticTokens, stabilizeAestheticTokens);
 
   const docRef = useRef(doc);

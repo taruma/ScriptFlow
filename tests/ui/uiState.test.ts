@@ -10,6 +10,14 @@ import {
 import {reconcileStepFocusOnDelete} from '../../src/ui/beatFocus.ts';
 import {matchHistoryShortcut} from '../../src/ui/historyShortcuts.ts';
 import {
+  areLintRuleOverridesEqual,
+  countCustomLintRules,
+  DEFAULT_LINT_RULE_OVERRIDES,
+  getEffectiveLintRuleSeverity,
+  sanitizeLintRuleOverrides,
+  setLintRuleOverride,
+} from '../../src/ui/lintRules.ts';
+import {
   stabilizeAestheticTokens,
   stabilizeBeatLinks,
   stabilizeCharacters,
@@ -346,6 +354,69 @@ describe('referenceStability helpers', () => {
       'beat-3',
       'beat-4',
     ]);
+  });
+});
+
+describe('lintRules UI state helpers', () => {
+  it('sanitizes persisted override payloads by dropping unknown rule IDs and invalid values', () => {
+    expect(sanitizeLintRuleOverrides(null)).toEqual({});
+    expect(sanitizeLintRuleOverrides(['off'])).toEqual({});
+    expect(
+      sanitizeLintRuleOverrides({
+        'viewport-coordinate-purity': 'warning',
+        'macro-state-resolution': 'off',
+        'unknown-rule': 'error',
+        'frozen-first-frame-purity': 'critical',
+      })
+    ).toEqual({
+      'viewport-coordinate-purity': 'warning',
+      'macro-state-resolution': 'off',
+    });
+  });
+
+  it('resolves effective severities, updates overrides cleanly, and removes keys returning to default', () => {
+    let overrides = DEFAULT_LINT_RULE_OVERRIDES;
+    expect(getEffectiveLintRuleSeverity('viewport-coordinate-purity', overrides)).toBe('error');
+    expect(getEffectiveLintRuleSeverity('macro-state-resolution', overrides)).toBe('warning');
+    expect(countCustomLintRules(overrides)).toBe(0);
+
+    // Override a default-error rule to off
+    overrides = setLintRuleOverride(overrides, 'viewport-coordinate-purity', 'off');
+    expect(getEffectiveLintRuleSeverity('viewport-coordinate-purity', overrides)).toBe('off');
+    expect(countCustomLintRules(overrides)).toBe(1);
+
+    // Promote a default-warning rule to error
+    overrides = setLintRuleOverride(overrides, 'macro-state-resolution', 'error');
+    expect(getEffectiveLintRuleSeverity('macro-state-resolution', overrides)).toBe('error');
+    expect(countCustomLintRules(overrides)).toBe(2);
+
+    // Selecting the same severity again returns the exact same reference
+    expect(setLintRuleOverride(overrides, 'macro-state-resolution', 'error')).toBe(overrides);
+
+    // Returning rules to their built-in defaults removes the override keys
+    overrides = setLintRuleOverride(overrides, 'viewport-coordinate-purity', 'error');
+    expect(overrides['viewport-coordinate-purity']).toBeUndefined();
+    expect(countCustomLintRules(overrides)).toBe(1);
+
+    overrides = setLintRuleOverride(overrides, 'macro-state-resolution', 'warning');
+    expect(overrides).toBe(DEFAULT_LINT_RULE_OVERRIDES);
+    expect(countCustomLintRules(overrides)).toBe(0);
+  });
+
+  it('compares override maps structurally with areLintRuleOverridesEqual', () => {
+    expect(areLintRuleOverridesEqual({}, {})).toBe(true);
+    expect(
+      areLintRuleOverridesEqual(
+        {'viewport-coordinate-purity': 'warning'},
+        {'viewport-coordinate-purity': 'warning'}
+      )
+    ).toBe(true);
+    expect(
+      areLintRuleOverridesEqual(
+        {'viewport-coordinate-purity': 'warning'},
+        {'viewport-coordinate-purity': 'off'}
+      )
+    ).toBe(false);
   });
 });
 
