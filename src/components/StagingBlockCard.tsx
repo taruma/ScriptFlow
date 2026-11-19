@@ -93,7 +93,6 @@ export function StagingBlockCard({
   };
 
   const isDragging = Boolean(drag?.isDragging);
-  const isDragOver = Boolean(drag?.isDragOver);
   const handleProps = drag ? drag.getHandleProps(isFocused) : null;
 
   const collapsedMeta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
@@ -101,19 +100,11 @@ export function StagingBlockCard({
 
   return (
     <section
-      ref={drag?.containerRef}
-      style={drag?.containerStyle}
       id={`staging-block-${blockIndex}`}
-      {...drag?.containerProps}
       className={`group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5 transition-opacity ${
         isDragging ? 'opacity-30' : 'opacity-100'
       }`}
     >
-      {/* Drag drop target line */}
-      {isDragOver && (
-        <div className="pointer-events-none absolute -top-1 left-0 right-6 h-0.5 rounded-full bg-blueprint-accent z-20" />
-      )}
-
       <div
         className={`min-w-0 rounded-lg border transition-colors ${
           isDragging
@@ -129,6 +120,7 @@ export function StagingBlockCard({
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               onToggleCollapse();

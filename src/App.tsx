@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {lazy, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
 import {
   deleteExecutionBeat,
   deleteExecutionSubState,
@@ -22,41 +22,34 @@ import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDial
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
-import {JsonIrDebugDrawer} from './components/debug/JsonIrDebugDrawer.tsx';
 import {
   BLANK_SCRIPT_TEMPLATE,
   DEFAULT_PRESET,
   SCRIPT_PRESETS,
   type ScriptPreset,
 } from './data/presets.ts';
+import {copyTextToClipboard} from './ui/clipboard.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
+import {
+  readSavedScript,
+  readSavedTitle,
+  writeSavedScript,
+  writeSavedTitle,
+} from './ui/scriptStorage.ts';
 
-const SCRIPT_STORAGE_KEY = 'auteur-editor-raw-script-v1';
-const TITLE_STORAGE_KEY = 'auteur-editor-scene-title-v1';
+const JsonIrDebugDrawer = lazy(() =>
+  import('./components/debug/JsonIrDebugDrawer.tsx').then((mod) => ({
+    default: mod.JsonIrDebugDrawer,
+  }))
+);
 
 function loadInitialScript(): string {
-  try {
-    const saved = window.localStorage.getItem(SCRIPT_STORAGE_KEY);
-    if (saved && saved.trim().length > 0) {
-      return saved;
-    }
-  } catch {
-    // Ignore storage read errors
-  }
-  return DEFAULT_PRESET.content;
+  return readSavedScript() ?? DEFAULT_PRESET.content;
 }
 
 function loadInitialTitle(): string {
-  try {
-    const saved = window.localStorage.getItem(TITLE_STORAGE_KEY);
-    if (saved && saved.trim().length > 0) {
-      return saved;
-    }
-  } catch {
-    // Ignore storage read errors
-  }
-  return DEFAULT_PRESET.title;
+  return readSavedTitle() ?? DEFAULT_PRESET.title;
 }
 
 function isEditableElement(el: Element | null): boolean {
@@ -64,32 +57,6 @@ function isEditableElement(el: Element | null): boolean {
   const tag = el.tagName.toLowerCase();
   if (tag === 'input' || tag === 'textarea') return true;
   return (el as HTMLElement).isContentEditable === true;
-}
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // Fall through to legacy textarea copy
-  }
-
-  try {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    return ok;
-  } catch {
-    return false;
-  }
 }
 
 export default function App() {
@@ -105,19 +72,11 @@ export default function App() {
 
   // Persist canonical plain text & title to localStorage
   useEffect(() => {
-    try {
-      window.localStorage.setItem(SCRIPT_STORAGE_KEY, rawText);
-    } catch {
-      // Ignore storage quota errors
-    }
+    writeSavedScript(rawText);
   }, [rawText]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(TITLE_STORAGE_KEY, sceneTitle);
-    } catch {
-      // Ignore storage quota errors
-    }
+    writeSavedTitle(sceneTitle);
   }, [sceneTitle]);
 
   // Transient toast timer
@@ -280,7 +239,7 @@ export default function App() {
 
   const handleCopyPlainText = useCallback(async () => {
     const text = exportPlainText(rawText);
-    const ok = await copyToClipboard(text);
+    const ok = await copyTextToClipboard(text);
     if (ok) {
       setCopiedKind('plain');
     }
@@ -288,7 +247,7 @@ export default function App() {
 
   const handleCopyTagless = useCallback(async () => {
     const text = exportTagless(rawText);
-    const ok = await copyToClipboard(text);
+    const ok = await copyTextToClipboard(text);
     if (ok) {
       setCopiedKind('tagless');
     }
@@ -370,12 +329,16 @@ export default function App() {
         )}
       </div>
 
-      <JsonIrDebugDrawer
-        isOpen={isDebugOpen}
-        onClose={() => setIsDebugOpen(false)}
-        rawText={rawText}
-        onCommitRawText={handleCommitFromDebug}
-      />
+      {isDebugOpen && (
+        <Suspense fallback={null}>
+          <JsonIrDebugDrawer
+            isOpen={isDebugOpen}
+            onClose={() => setIsDebugOpen(false)}
+            rawText={rawText}
+            onCommitRawText={handleCommitFromDebug}
+          />
+        </Suspense>
+      )}
 
       <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
 

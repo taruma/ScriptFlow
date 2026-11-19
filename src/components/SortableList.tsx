@@ -30,15 +30,10 @@ import {CSS} from '@dnd-kit/utilities';
  * `isDragging` / `isAnyDragging` for quiet placeholder and continuity-rail states.
  */
 export interface SortableItemBinding {
-  containerRef?: (node: HTMLElement | null) => void;
-  containerStyle?: CSSProperties;
-  containerProps?: HTMLAttributes<HTMLElement>;
   getHandleProps: (
     disabled: boolean
   ) => HTMLAttributes<HTMLDivElement> & {ref?: (node: HTMLElement | null) => void};
   isDragging: boolean;
-  /** Always false with live-sliding transforms; kept for contract compatibility */
-  isDragOver: boolean;
   /** True while any item in this list is actively being dragged */
   isAnyDragging: boolean;
 }
@@ -103,7 +98,6 @@ function SortableRow<T extends {id: string}>({
       style: {touchAction: 'none'},
     }),
     isDragging,
-    isDragOver: false,
     isAnyDragging,
   };
 

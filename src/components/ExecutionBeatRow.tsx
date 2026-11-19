@@ -12,6 +12,7 @@ import type {
   ExecutionBeat,
   LintDiagnostic,
 } from '../core/types.ts';
+import {reconcileStepFocusOnDelete} from '../ui/beatFocus.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
@@ -109,6 +110,24 @@ export function ExecutionBeatRow({
     onClearAutoFocus?.();
   }, [autoFocusEdit, beat.subStates, onClearAutoFocus]);
 
+  // Clamp out-of-bounds focus or pending anchor if sub-states shrink externally
+  useEffect(() => {
+    if (focusedStepIndex !== null && focusedStepIndex >= beat.subStates.length) {
+      if (beat.subStates.length === 0) {
+        setFocusedStepIndex(null);
+        setActiveDraft('');
+      } else {
+        const clamped = beat.subStates.length - 1;
+        setFocusedStepIndex(clamped);
+        setActiveDraft(beat.subStates[clamped]?.raw ?? '');
+      }
+    }
+    if (pendingAfterIndex !== null && pendingAfterIndex >= beat.subStates.length) {
+      setPendingAfterIndex(null);
+      setPendingDraft('');
+    }
+  }, [beat.subStates, focusedStepIndex, pendingAfterIndex]);
+
   const isBeatFocused = focusedStepIndex !== null || pendingAfterIndex !== null;
 
   const openPendingStepAfter = (afterIndex: number) => {
@@ -121,8 +140,42 @@ export function ExecutionBeatRow({
   const handleStepFocus = (index: number, raw: string) => {
     setPendingAfterIndex(null);
     setPendingDraft('');
-    setFocusedStepIndex(index);
-    setActiveDraft(raw);
+    if (focusedStepIndex !== index) {
+      setFocusedStepIndex(index);
+      setActiveDraft(raw);
+    }
+  };
+
+  const handleDeleteStep = (stepIdx: number) => {
+    const subStateRaws = beat.subStates.map((s) => s.raw);
+    const activeEl =
+      focusedStepIndex !== null
+        ? stepRefs.current.get(focusedStepIndex)
+        : pendingAfterIndex !== null
+          ? pendingRef.current
+          : null;
+    const currentCaret = activeEl?.selectionStart ?? undefined;
+
+    const reconciled = reconcileStepFocusOnDelete(
+      {
+        focusedStepIndex,
+        activeDraft,
+        pendingAfterIndex,
+        pendingDraft,
+      },
+      subStateRaws,
+      stepIdx,
+      currentCaret
+    );
+
+    setFocusedStepIndex(reconciled.focusedStepIndex);
+    setActiveDraft(reconciled.activeDraft);
+    setPendingAfterIndex(reconciled.pendingAfterIndex);
+    if (reconciled.pendingAfterIndex === null && pendingAfterIndex !== null) {
+      setPendingDraft('');
+    }
+    nextFocusRef.current = reconciled.nextFocusTarget;
+    onDeleteSubState(beat.index, stepIdx);
   };
 
   const handleStepChange = (index: number, nextValue: string) => {
@@ -290,7 +343,6 @@ export function ExecutionBeatRow({
   };
 
   const isDragging = Boolean(drag?.isDragging);
-  const isDragOver = Boolean(drag?.isDragOver);
   const isAnyDragging = Boolean(drag?.isAnyDragging);
   const handleProps = drag ? drag.getHandleProps(isBeatFocused) : null;
 
@@ -332,18 +384,11 @@ export function ExecutionBeatRow({
 
   return (
     <div
-      ref={drag?.containerRef}
-      style={drag?.containerStyle}
       id={`execution-beat-${beat.index}`}
-      {...drag?.containerProps}
       className={`group/beat relative grid grid-cols-[46px_minmax(0,1fr)_24px] items-stretch gap-1.5 transition-opacity ${
         isDragging ? 'opacity-30' : 'opacity-100'
       }`}
     >
-      {/* Drag drop target line */}
-      {isDragOver && (
-        <div className="pointer-events-none absolute -top-1 left-11 right-6 h-0.5 rounded-full bg-blueprint-accent z-20" />
-      )}
 
       {/* Left Margin: Camera Continuity Rail + Beat Index + Drag Handle */}
       <div className="relative flex items-start justify-end gap-0.5 pr-0.5 pt-2 select-none">
@@ -474,13 +519,11 @@ export function ExecutionBeatRow({
                     </div>
                     <button
                       type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        onDeleteSubState(beat.index, stepIdx);
-                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleDeleteStep(stepIdx)}
                       title={UI_LABELS.execution.removeStepTitle}
                       aria-label={UI_LABELS.execution.removeStepAria(stepIdx + 1, beat.index)}
-                      className="absolute right-0 top-0.5 rounded p-0.5 text-text-faint opacity-0 group-hover/step:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer"
+                      className="absolute right-0 top-0.5 rounded p-0.5 text-text-faint opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer"
                     >
                       <X className="h-3 w-3" />
                     </button>

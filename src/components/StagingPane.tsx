@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {ChevronsDownUp, ChevronsUpDown, GripVertical} from 'lucide-react';
 import type {
   AestheticToken,
@@ -7,6 +7,13 @@ import type {
   StagingBlock,
 } from '../core/types.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
+import {
+  deleteCollapsedIndex,
+  insertCollapsedIndex,
+  pruneCollapsedIndices,
+  reorderCollapsedIndices,
+  toggleCollapsedIndex,
+} from '../ui/stagingCollapse.ts';
 import {AddStagingBlockPicker, StagingBlockPickerPanel} from './AddStagingBlockPicker.tsx';
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
 import {SortableList} from './SortableList.tsx';
@@ -41,41 +48,65 @@ export function StagingPane({
   onDeleteStaging,
   onReorderStaging,
 }: StagingPaneProps) {
-  const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
+  const [collapsedIndices, setCollapsedIndices] = useState<Set<number>>(() => new Set());
   const [activeStagingPicker, setActiveStagingPicker] = useState<number | 'bottom' | null>(null);
   const [autoFocusBlockIndex, setAutoFocusBlockIndex] = useState<number | null>(null);
   const [stagingScrolled, setStagingScrolled] = useState<boolean>(false);
   const [isDraggingAny, setIsDraggingAny] = useState<boolean>(false);
+  const pendingDeleteRef = useRef<{index: number; count: number} | null>(null);
+
+  // Reconcile index-based collapse flags after confirmed deletions or external script changes
+  useEffect(() => {
+    const pending = pendingDeleteRef.current;
+    if (pending && stagingBlocks.length === pending.count - 1) {
+      pendingDeleteRef.current = null;
+      setCollapsedIndices((prev) => deleteCollapsedIndex(prev, pending.index));
+      return;
+    }
+    if (pending && stagingBlocks.length !== pending.count) {
+      pendingDeleteRef.current = null;
+    }
+    setCollapsedIndices((prev) => pruneCollapsedIndices(prev, stagingBlocks.length));
+  }, [stagingBlocks.length]);
 
   const allStagingCollapsed =
-    stagingBlocks.length > 0 &&
-    stagingBlocks.every((block) => Boolean(collapsedBlocks[block.name]));
+    stagingBlocks.length > 0 && stagingBlocks.every((_, idx) => collapsedIndices.has(idx));
 
   const toggleAllStaging = () => {
-    const nextValue = !allStagingCollapsed;
-    const nextState: Record<string, boolean> = {};
-    for (const block of stagingBlocks) {
-      nextState[block.name] = nextValue;
+    if (allStagingCollapsed) {
+      setCollapsedIndices(new Set());
+    } else {
+      setCollapsedIndices(new Set(stagingBlocks.map((_, idx) => idx)));
     }
-    setCollapsedBlocks(nextState);
   };
 
-  const toggleSingleBlock = (blockName: string) => {
-    setCollapsedBlocks((prev) => ({
-      ...prev,
-      [blockName]: !prev[blockName],
-    }));
+  const toggleSingleBlock = (blockIndex: number) => {
+    setCollapsedIndices((prev) => toggleCollapsedIndex(prev, blockIndex));
   };
 
   const handleInsertStagingBlock = (headerName: string, afterBlockIndex?: number) => {
+    pendingDeleteRef.current = null;
     const insertedIndex =
       afterBlockIndex === undefined
         ? stagingBlocks.length
         : Math.max(0, Math.min(afterBlockIndex + 1, stagingBlocks.length));
-    setCollapsedBlocks((prev) => ({...prev, [headerName]: false}));
+    setCollapsedIndices((prev) => insertCollapsedIndex(prev, insertedIndex));
     setActiveStagingPicker(null);
     onInsertStaging(headerName, afterBlockIndex);
     setAutoFocusBlockIndex(insertedIndex);
+  };
+
+  const handleDeleteStaging = (blockIndex: number) => {
+    pendingDeleteRef.current = {index: blockIndex, count: stagingBlocks.length};
+    onDeleteStaging(blockIndex);
+  };
+
+  const handleReorderStaging = (fromIndex: number, toIndex: number) => {
+    pendingDeleteRef.current = null;
+    setCollapsedIndices((prev) =>
+      reorderCollapsedIndices(prev, fromIndex, toIndex, stagingBlocks.length)
+    );
+    onReorderStaging(fromIndex, toIndex);
   };
 
   const existingBlockNames = stagingBlocks.map((b) => b.name);
@@ -188,7 +219,7 @@ export function StagingPane({
             <SortableList
               items={stagingBlocks}
               scopeId="staging"
-              onReorder={onReorderStaging}
+              onReorder={handleReorderStaging}
               onDragStart={() => {
                 setActiveStagingPicker(null);
                 setIsDraggingAny(true);
@@ -260,10 +291,10 @@ export function StagingPane({
                     <StagingBlockCard
                       block={block}
                       blockIndex={index}
-                      collapsed={Boolean(collapsedBlocks[block.name])}
-                      onToggleCollapse={() => toggleSingleBlock(block.name)}
+                      collapsed={collapsedIndices.has(index)}
+                      onToggleCollapse={() => toggleSingleBlock(index)}
                       onCommit={onUpdateStaging}
-                      onDelete={onDeleteStaging}
+                      onDelete={handleDeleteStaging}
                       autoFocusEdit={autoFocusBlockIndex === index}
                       onClearAutoFocus={() => setAutoFocusBlockIndex(null)}
                       diagnostics={diagnosticsByBlockIndex.get(index) ?? []}

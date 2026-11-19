@@ -29,6 +29,7 @@ import {
   type PatchApplyResult,
   type SubStateDimension,
 } from '../../core/index.ts';
+import {copyTextToClipboard} from '../../ui/clipboard.ts';
 import {UI_LABELS} from '../../ui/labels.ts';
 import {UI_TOKENS} from '../../ui/tokens/ui.ts';
 
@@ -58,40 +59,15 @@ const ALL_DIMENSIONS: SubStateDimension[] = [
   'plain',
 ];
 
-const LENS_PRESET_LABELS: Array<{id: AuteurLensPresetId; shortLabel: string}> = [
-  {id: 'lens1_spatial_optics', shortLabel: 'Lens 1 · Spatial'},
-  {id: 'lens2_temporal_pacing_wear', shortLabel: 'Lens 2 · Pacing'},
-  {id: 'lens3_props_inventory', shortLabel: 'Lens 3 · Props'},
-  {id: 'lens4_acoustics_voice', shortLabel: 'Lens 4 · Acoustics'},
-  {id: 'lens5_blocks_grammar', shortLabel: 'Lens 5 · Grammar'},
+const LENS_PRESET_IDS: AuteurLensPresetId[] = [
+  'lens1_spatial_optics',
+  'lens2_temporal_pacing_wear',
+  'lens3_props_inventory',
+  'lens4_acoustics_voice',
+  'lens5_blocks_grammar',
 ];
 
 const SCHEMA_KEYS: SchemaKey[] = ['draft', 'ir', 'envelope', 'patch', 'review'];
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // Fallback below
-  }
-  try {
-    const el = document.createElement('textarea');
-    el.value = text;
-    el.style.position = 'fixed';
-    el.style.opacity = '0';
-    document.body.appendChild(el);
-    el.focus();
-    el.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(el);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 function buildSampleDraftJson(): string {
   return JSON.stringify(
@@ -239,16 +215,20 @@ function JsonIrDebugDrawerContent({
   const schemas = useMemo(() => getAuteurJsonSchemas(), []);
 
   const availableMacroBlocks = useMemo(
-    () => envelope.document.stagingMacroBlocks.map((b) => b.header),
+    () => Array.from(new Set(envelope.document.stagingMacroBlocks.map((b) => b.header))),
     [envelope.document.stagingMacroBlocks]
   );
 
   const availableAestheticKeys = useMemo(() => {
     const aesthetic = envelope.document.stagingMacroBlocks.find((b) => b.format === 'key_value');
     if (!aesthetic || aesthetic.format !== 'key_value') return [];
-    return aesthetic.entries
-      .map((e) => e.key)
-      .filter((k): k is string => k !== null && k.trim().length > 0);
+    return Array.from(
+      new Set(
+        aesthetic.entries
+          .map((e) => e.key)
+          .filter((k): k is string => k !== null && k.trim().length > 0)
+      )
+    );
   }, [envelope.document.stagingMacroBlocks]);
 
   // Seed initial sample patch when opening Patch tab with empty textarea
@@ -410,7 +390,7 @@ function JsonIrDebugDrawerContent({
   );
 
   const handleCopy = useCallback(async (id: string, text: string) => {
-    const ok = await copyText(text);
+    const ok = await copyTextToClipboard(text);
     if (ok) setCopiedId(id);
   }, []);
 
@@ -422,7 +402,9 @@ function JsonIrDebugDrawerContent({
         parsed = JSON.parse(patchText);
       } catch (err) {
         setPatchResult(null);
-        setPatchParseError(err instanceof Error ? err.message : 'Invalid JSON syntax');
+        setPatchParseError(
+          err instanceof Error ? err.message : UI_LABELS.debug.invalidJsonSyntax
+        );
         return;
       }
 
@@ -444,7 +426,9 @@ function JsonIrDebugDrawerContent({
         parsed = JSON.parse(draftText);
       } catch (err) {
         setDraftResult(null);
-        setDraftParseError(err instanceof Error ? err.message : 'Invalid JSON syntax');
+        setDraftParseError(
+          err instanceof Error ? err.message : UI_LABELS.debug.invalidJsonSyntax
+        );
         return;
       }
 
@@ -524,7 +508,10 @@ function JsonIrDebugDrawerContent({
                   {UI_LABELS.debug.title}
                 </h2>
                 <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-md border border-border-main bg-surface text-text-muted">
-                  v{envelope.document.schemaVersion} · #{envelope.snapshotHash}
+                  {UI_LABELS.debug.versionBadge(
+                    envelope.document.schemaVersion,
+                    envelope.snapshotHash
+                  )}
                 </span>
                 <span
                   className={`inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded-md border ${
@@ -590,15 +577,21 @@ function JsonIrDebugDrawerContent({
           </div>
 
           <div className="hidden lg:flex items-center gap-3 font-mono text-[11px] text-text-faint tabular-nums">
-            <span>{envelope.document.stagingMacroBlocks.length} MB</span>
+            <span>
+              {UI_LABELS.debug.stats.macroBlocks(envelope.document.stagingMacroBlocks.length)}
+            </span>
             <span>·</span>
-            <span>{envelope.document.executionMacroBlock?.macroStates.length ?? 0} S</span>
+            <span>
+              {UI_LABELS.debug.stats.macroStates(
+                envelope.document.executionMacroBlock?.macroStates.length ?? 0
+              )}
+            </span>
             <span>·</span>
-            <span>{totalSubStates} Sub-States</span>
+            <span>{UI_LABELS.debug.stats.subStates(totalSubStates)}</span>
             <span>·</span>
-            <span>{envelope.derived.tokenMappings.length} Tokens</span>
+            <span>{UI_LABELS.debug.stats.tokens(envelope.derived.tokenMappings.length)}</span>
             <span>·</span>
-            <span>{envelope.derived.referenceBindings.length} Refs</span>
+            <span>{UI_LABELS.debug.stats.refs(envelope.derived.referenceBindings.length)}</span>
             <span>·</span>
             <span className="text-text-muted">{envelope.derived.sceneTopology}</span>
           </div>
@@ -635,7 +628,7 @@ function JsonIrDebugDrawerContent({
 
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] text-text-faint tabular-nums">
-                    {envelopeJsonString.length.toLocaleString()} chars
+                    {UI_LABELS.debug.charsCount(envelopeJsonString.length)}
                   </span>
                   <button
                     type="button"
@@ -697,18 +690,18 @@ function JsonIrDebugDrawerContent({
                     >
                       {UI_LABELS.debug.slicer.customActCamPreset}
                     </button>
-                    {LENS_PRESET_LABELS.map((preset) => (
+                    {LENS_PRESET_IDS.map((presetId) => (
                       <button
-                        key={preset.id}
+                        key={presetId}
                         type="button"
-                        onClick={() => applyPresetToSlicer(preset.id)}
+                        onClick={() => applyPresetToSlicer(presetId)}
                         className={
-                          activePresetLabel === preset.id
+                          activePresetLabel === presetId
                             ? UI_TOKENS.button.actionPillActive
                             : UI_TOKENS.button.actionPill
                         }
                       >
-                        {preset.shortLabel}
+                        {UI_LABELS.debug.slicer.lensPresetShortLabels[presetId]}
                       </button>
                     ))}
                   </div>
@@ -884,7 +877,7 @@ function JsonIrDebugDrawerContent({
                                 : UI_TOKENS.button.segmentedItem
                             }
                           >
-                            {mode}
+                            {UI_LABELS.debug.slicer.tokenMappingModes[mode]}
                           </button>
                         ))}
                       </div>
@@ -901,7 +894,7 @@ function JsonIrDebugDrawerContent({
                       {UI_LABELS.debug.slicer.outputHeading}
                     </span>
                     <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-md border border-border-main bg-surface text-text-muted tabular-nums">
-                      -{sliceCompressionPct}% payload vs full envelope
+                      {UI_LABELS.debug.slicer.compressionBadge(sliceCompressionPct)}
                     </span>
                   </div>
                   <button
@@ -982,6 +975,7 @@ function JsonIrDebugDrawerContent({
                   value={patchText}
                   onChange={(e) => setPatchText(e.target.value)}
                   spellCheck={false}
+                  aria-label={UI_LABELS.debug.patch.inputHeading}
                   placeholder={UI_LABELS.debug.patch.placeholder}
                   className="flex-1 w-full resize-none bg-surface p-4 font-mono text-xs leading-relaxed text-text-body focus:outline-none"
                 />
@@ -1033,8 +1027,10 @@ function JsonIrDebugDrawerContent({
                       }`}
                     >
                       {patchResult.ok
-                        ? `OK · ${patchResult.appliedOpsCount} op(s)`
-                        : `REJECTED · ${patchResult.errors[0]?.code ?? 'ERROR'}`}
+                        ? UI_LABELS.debug.patch.statusOk(patchResult.appliedOpsCount)
+                        : UI_LABELS.debug.patch.statusRejected(
+                            patchResult.errors[0]?.code ?? UI_LABELS.debug.patch.fallbackErrorCode
+                          )}
                     </span>
                   )}
                 </div>
@@ -1042,16 +1038,20 @@ function JsonIrDebugDrawerContent({
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                   {patchParseError && (
                     <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-500 font-mono">
-                      JSON Parse Error: {patchParseError}
+                      {UI_LABELS.debug.jsonParseErrorPrefix}
+                      {patchParseError}
                     </div>
                   )}
 
                   {!patchParseError && !patchResult && (
                     <p className="text-xs text-text-muted">
-                      Edit or load a sample <code className="font-mono">AuteurPatch</code> JSON
-                      payload on the left, then click <strong>Dry Run</strong> to inspect
-                      diagnostics or <strong>Commit to Editor</strong> to update canonical plain
-                      text.
+                      {UI_LABELS.debug.patch.emptyHintLead}{' '}
+                      <code className="font-mono">{UI_LABELS.debug.patch.emptyHintType}</code>{' '}
+                      {UI_LABELS.debug.patch.emptyHintMid}{' '}
+                      <strong>{UI_LABELS.debug.patch.dryRun}</strong>{' '}
+                      {UI_LABELS.debug.patch.emptyHintOr}{' '}
+                      <strong>{UI_LABELS.debug.patch.commitToEditor}</strong>{' '}
+                      {UI_LABELS.debug.patch.emptyHintTail}
                     </p>
                   )}
 
@@ -1079,19 +1079,25 @@ function JsonIrDebugDrawerContent({
 
                       <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
                         <div className="rounded-xl border border-border-main bg-surface p-2.5">
-                          <div className="text-text-faint">Introduced Err</div>
+                          <div className="text-text-faint">
+                            {UI_LABELS.debug.patch.introducedErrLabel}
+                          </div>
                           <div className="text-sm font-bold text-text-main tabular-nums">
                             {patchResult.introducedErrors.length}
                           </div>
                         </div>
                         <div className="rounded-xl border border-border-main bg-surface p-2.5">
-                          <div className="text-text-faint">Introduced Warn</div>
+                          <div className="text-text-faint">
+                            {UI_LABELS.debug.patch.introducedWarnLabel}
+                          </div>
                           <div className="text-sm font-bold text-text-main tabular-nums">
                             {patchResult.introducedWarnings.length}
                           </div>
                         </div>
                         <div className="rounded-xl border border-border-main bg-surface p-2.5">
-                          <div className="text-text-faint">Resolved</div>
+                          <div className="text-text-faint">
+                            {UI_LABELS.debug.patch.resolvedLabel}
+                          </div>
                           <div className="text-sm font-bold text-text-main tabular-nums">
                             {patchResult.resolvedDiagnostics.length}
                           </div>
@@ -1101,7 +1107,7 @@ function JsonIrDebugDrawerContent({
                       {patchResult.candidateRawText && (
                         <div className="space-y-1.5">
                           <div className={UI_TOKENS.layout.sectionTitleMini}>
-                            Compiled v0.4.0 Plain-Text Candidate
+                            {UI_LABELS.debug.patch.candidateHeading}
                           </div>
                           <pre className="rounded-xl border border-border-main bg-surface p-3.5 font-mono text-xs leading-relaxed text-text-body whitespace-pre-wrap select-text">
                             {patchResult.candidateRawText}
@@ -1150,6 +1156,7 @@ function JsonIrDebugDrawerContent({
                   value={draftText}
                   onChange={(e) => setDraftText(e.target.value)}
                   spellCheck={false}
+                  aria-label={UI_LABELS.debug.draft.inputHeading}
                   className="flex-1 w-full resize-none bg-surface p-4 font-mono text-xs leading-relaxed text-text-body focus:outline-none"
                 />
 
@@ -1186,8 +1193,8 @@ function JsonIrDebugDrawerContent({
                       }`}
                     >
                       {draftResult.ok
-                        ? `VALID · ${draftResult.diagnostics.length} lint note(s)`
-                        : `INVALID · ${draftResult.errors.length} schema error(s)`}
+                        ? UI_LABELS.debug.draft.statusValid(draftResult.diagnostics.length)
+                        : UI_LABELS.debug.draft.statusInvalid(draftResult.errors.length)}
                     </span>
                   )}
                 </div>
@@ -1195,15 +1202,22 @@ function JsonIrDebugDrawerContent({
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                   {draftParseError && (
                     <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-500 font-mono">
-                      JSON Parse Error: {draftParseError}
+                      {UI_LABELS.debug.jsonParseErrorPrefix}
+                      {draftParseError}
                     </div>
                   )}
 
                   {!draftParseError && !draftResult && (
                     <p className="text-xs text-text-muted">
-                      Click <strong>Compile Draft</strong> to validate the JSON against{' '}
-                      <code className="font-mono">AuteurScriptDraftSchema</code> and preview the
-                      compiled canonical <code className="font-mono">v0.4.0</code> plain text.
+                      {UI_LABELS.debug.draft.emptyHintLead}{' '}
+                      <strong>{UI_LABELS.debug.draft.compileButton}</strong>{' '}
+                      {UI_LABELS.debug.draft.emptyHintMid}{' '}
+                      <code className="font-mono">
+                        {UI_LABELS.debug.draft.emptyHintSchemaName}
+                      </code>{' '}
+                      {UI_LABELS.debug.draft.emptyHintAnd}{' '}
+                      <code className="font-mono">{UI_LABELS.debug.draft.emptyHintVersion}</code>{' '}
+                      {UI_LABELS.debug.draft.emptyHintTail}
                     </p>
                   )}
 
@@ -1214,7 +1228,9 @@ function JsonIrDebugDrawerContent({
                           key={idx}
                           className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-500 font-mono"
                         >
-                          <span className="font-semibold">{err.path || '(root)'}:</span>{' '}
+                          <span className="font-semibold">
+                            {err.path || UI_LABELS.debug.draft.rootPathFallback}:
+                          </span>{' '}
                           {err.message}
                         </div>
                       ))}
@@ -1280,7 +1296,7 @@ function JsonIrDebugDrawerContent({
                             : UI_TOKENS.button.segmentedItem
                         }
                       >
-                        {key}
+                        {UI_LABELS.debug.schemas.keys[key]}
                       </button>
                     ))}
                   </div>
