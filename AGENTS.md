@@ -6,6 +6,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 - **`docs/GLOSSARY.md`**: Authoritative Pure Auteur Script vocabulary (explicit disambiguation of **Macro-Block**, **Macro-State**, **Sub-State**, **Sub-State Tag**, and inline `[BLOCK]`, plus all 27 grounded framework terms mapped to `src/core/types.ts`). **Read first** when interpreting user domain terminology.
 - **`docs/GRAMMAR_CONTRACT.md`**: Locked `v0.4.0` regexes, parsing edge cases, Tagless export rules, and deterministic linter contracts.
 - **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, module map, and pure serializer mutation contracts.
+- **`docs/JSON_IR_SPEC.md`**: Programmatic JSON IR (`AuteurScriptIR`, `AuteurEnvelope`), Zod/JSON Schema contracts, transactional `AuteurPatch` engine, and composable Script Supervisor Lens Slicer (`AUDIT_LENS_PRESETS`).
 - **`docs/UI_PHILOSOPHY.md`**: Single-column live-formatted workspace principles, Waterfall step editing, and 4-mode theme system.
 
 ---
@@ -13,7 +14,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 ## 1. Non-Negotiable Architecture Invariants
 
 1. **Zero-React Core (`src/core/`)**:
-   - Every file in `src/core/` (`types.ts`, `parser.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
+   - Every file in `src/core/` (`types.ts`, `parser.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
    - Any new parsing, extraction, serialization, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
 2. **Plain-Text-as-Truth**:
    - The raw canonical Auteur Script string (`rawText` in `src/App.tsx`) is the sole reactive source of truth.
