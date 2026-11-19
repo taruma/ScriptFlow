@@ -1,0 +1,20 @@
+[INTENT]
+Create a tense neo-noir thriller scene set in a dim concrete interrogation room, featuring detectives Miller and Park pressing a defiant suspect named Ray across a steel table.
+
+[LOGIC]
+Keep the table as the axis, with Miller and Park on one side facing screen-right and Ray opposite facing screen-left. Preserve the lit cigarette in Ray's right hand and the manila folder under Miller's left palm until someone moves them. No subtitles appear on screen.
+
+[AESTHETIC]
+Medium: 35mm film, 2.39:1 anamorphic, muted charcoal and amber tungsten
+Lighting: single amber overhead downlight, deep falloff into the corners
+Location: concrete interrogation room, scuffed linoleum floor, steel table bolted down, one-way mirror
+Wardrobe: Miller in a rumpled beige trench coat; Park in a grey suit with a loosened tie; Ray in an orange mechanic's jumpsuit with cuffed wrists
+Audio: fluorescent ballast hum, muffled hallway footsteps
+
+[OPENING]
+MS at eye level, framed over Miller's shoulder toward Ray seated across the steel table. Frame-left foreground, Miller sits facing screen-right with his left palm pressed on a manila folder. Frame-left background, Park stands against the wall facing screen-right, arms folded. Frame-right midground, Ray slouches facing screen-left in the amber downlight, a lit cigarette pinched in his cuffed right hand.
+
+[EXECUTION]
+[CAM 01] MS, OTS Miller -> [BLOCK] Miller frame-left FG facing screen-right; Park frame-left BG facing screen-right; Ray frame-right MG facing screen-left -> [ACT] Miller slides the manila folder across the steel with his left palm while smoke curls from the cigarette in Ray's right hand -> Miller says {Look at the dates, Ray.} -> [ACT] Park shifts his weight against the wall, arms still folded
+[CAM 02] CU on Ray -> [ACT] Ray tilts his head back facing screen-left and exhales smoke through narrowed eyes, cuffed wrists resting on the table, cigarette pinched in his right hand -> Ray says (unhurried) {Dates don't mean a thing.} -> Miller says (O.S., flat) {They mean twenty years.} -> [ACT] Ray taps ash onto the steel with his right hand
+[CAM 01] -> [ACT] Miller leans forward and plants both palms flat on the folder -> [ACT] Park, in the background, uncrosses his arms and takes one step toward the table -> <steel table groaning under Miller's weight>

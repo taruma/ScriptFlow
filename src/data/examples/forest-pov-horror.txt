@@ -1,0 +1,21 @@
+[INTENT]
+Create a 1980s found-footage horror scene set at night in a fog-bound forest beside a black lake, featuring investigators Arthur and Rosa as they confront a towering creature half-hidden among the trunks.
+
+[LOGIC]
+Maintain continuous first-person POV without cuts and a stable woodland geography. Keep Arthur's flashlight in his right hand and Rosa's in her left, with beams falling off over distance and casting hard shadows. No subtitles appear on screen.
+
+[AESTHETIC]
+Medium: 1980s camcorder video, magnetic tape tracking noise, soft grain
+Palette: pitch black, damp pine green, cold moonlight silver, tungsten yellow
+Lighting: narrow flashlight beams, cold moonlight through the canopy
+Location: mist-choked evergreen forest, damp pine needles, black lake shore
+Wardrobe: Arthur in a dark denim jacket; Rosa in a navy flannel shirt
+Audio: wind in the canopy, distant water lapping
+
+[OPENING]
+POV handheld MS at eye level, looking through damp boughs toward a black lake shore. Frame-right, Arthur stands in profile-left with a flashlight in his right hand, its beam fixed on swirling fog. Frame-left, Rosa stands with a second flashlight in her left hand, her gaze turned back toward the trees.
+
+[EXECUTION]
+[CAM 01] POV handheld MS, eye-level -> [ACT] Arthur, flashlight in his right hand, sweeps the beam left across tangled roots and wades forward through shallow mud -> <wet boots sucking at shallow mud>
+[CAM 01] POV PAN LEFT to Rosa -> [ACT] Rosa, flashlight in her left hand, takes a hesitant step back and clutches her collar with her right hand -> Rosa says (whispering, breathless) {Did you hear that?} -> <low wood-snapping vibration in the canopy> -> [ACT] Rosa freezes, her right hand clamped over her mouth
+[CAM 01] POV PAN RIGHT back to a two-shot -> [ACT] Arthur, flashlight in his right hand, halts, raises his left palm, and holds the beam on a towering silhouette between the trunks -> Arthur says (quietly) {Don't run.} -> [ACT] Rosa, flashlight in her left hand, retreats two steps, breath hitching

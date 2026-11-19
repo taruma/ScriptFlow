@@ -1,0 +1,23 @@
+[INTENT]
+Create a gritty 35mm neo-noir action scene captured as an unbroken tracking oner inside a violently swaying subterranean express train, featuring @image1 as Mark and @image2 as Robert locked in a lethal hand-to-hand struggle.
+
+[LOGIC]
+Maintain continuous Steadicam persistence down the narrow center aisle without cuts, anchoring combat exchanges to the centrifugal sway of the carriage. Preserve a strict 180-degree axis with Mark frame-left facing screen-right and Robert frame-right facing screen-left until the overhead pivot. Track hand allocations strictly, clamping Mark's left hand to the overhead grab rail during the swing.
+
+[AESTHETIC]
+Medium: 35mm anamorphic film, fine halide grain, optical barrel distortion, shallow focal plane
+Palette: desaturated industrial teal, tungsten amber bleed, bruised shadow tones, oxidized steel
+Lighting: flickering overhead fluorescent tubes interspersed with rhythmic orange tunnel beacons through scratched windows
+Location: narrow center aisle of an R46 commuter railcar, ribbed aluminum siding, overhead stainless steel grab bars, polycarbonate rear partition doors
+Wardrobe: Mark in a sweat-damped cream waffle-knit henley, charcoal ripstop trousers, scuffed tactical boots; Robert in a matte-black ballistic armor carrier over a slate-gray combat shirt, hard-knuckle gloves, black cargo trousers
+Audio: low-frequency railway chassis roar, metallic wheel flange squeal on curved rails, rattling ceiling panels
+
+[OPENING]
+Waist-level two-shot framed down the narrow center aisle between aluminum stanchions. Frame-left, Mark crouches in a low defensive stance facing screen-right, his bruised right forearm clamped upward against Robert's heavy left forearm. Frame-right, Robert looms in a squared clinch facing screen-left, gloved right fist cocked at his ribs under buzzing fluorescent tubes.
+
+[EXECUTION]
+[CAM 01] Waist-level MS, tracking backward down the aisle -> [ACT] Mark deflects Robert's descending hammerfist with his right forearm -> <sharp bone-on-forearm crack> -> [ACT] Robert pivots on his right heel and drives a horizontal elbow toward Mark's temple while Mark ducks inward, jamming the elbow joint with his open left palm -> <heavy fabric scuff>
+[CAM 01] TRACKING BACKWARD IN RHYTHMIC SWAY -> [ACT] Robert drives a double palm-heel strike into Mark's sternum, forcing him two steps back -> [ACT] Mark absorbs the impact through his heels and counters with a right uppercut into Robert's armored solar plexus -> <hollow thud on ballistic plate> -> [ACT] Robert winces, boots skidding on the ridged rubber floor
+[CAM 01] TILTING TO A DUTCH ANGLE AS THE CARRIAGE BANKS RIGHT -> <piercing wheel flange screech on curved track> -> [ACT] Centrifugal pull hurls both fighters against the frame-left seats, breaking their clinch -> [ACT] Robert catches a stanchion with his left hand and lunges forward with a looping right cross
+[CAM 01] CRANING DOWN AND ARCING TO FLANK MARK -> [ACT] Mark reaches upward and clamps his bare left hand onto the overhead steel grab rail -> <ringing slap on steel tubing> -> [ACT] Mark hoists his weight on his left arm, tucks under Robert's overextended punch, and hooks his right arm behind Robert's vest strap -> <strained steel creak>
+[CAM 01] PUSHING HARD FORWARD TOWARD THE REAR DOORS -> [ACT] Mark releases the rail with his left hand, twists his hips, and hurls Robert backward down the vestibule -> [ACT] Robert crashes spine-first into the polycarbonate partition doors -> <explosive crystalline spiderweb crack> -> [ACT] Robert slumps against the fractured glass as Mark plants both boots in the aisle, chest heaving

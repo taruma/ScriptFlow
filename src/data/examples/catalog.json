@@ -1,0 +1,34 @@
+[
+  {
+    "id": "interrogation-coverage",
+    "title": "Interrogation Room Coverage",
+    "topology": "Multi-Cam Coverage",
+    "summary": "Three-subject neo-noir dialogue coverage with [BLOCK], (O.S.) dialogue, and [CAM 01] recall.",
+    "file": "interrogation-coverage.txt",
+    "category": "Dialogue & Coverage"
+  },
+  {
+    "id": "subway-train-oner",
+    "title": "Subway Train Fight Oner",
+    "topology": "Continuous Moving Oner",
+    "summary": "High-tempo 5-beat combat oner with @image bindings, operator transitions, and centrifugal physics.",
+    "file": "subway-train-oner.txt",
+    "category": "Action"
+  },
+  {
+    "id": "forest-pov-horror",
+    "title": "POV Forest Horror",
+    "topology": "POV Handheld Oner",
+    "summary": "Unbroken 1980s found-footage POV with dual flashlight hand-tracking and off-screen foley trigger.",
+    "file": "forest-pov-horror.txt",
+    "category": "Horror"
+  },
+  {
+    "id": "heist-montage",
+    "title": "1970s Heist Montage",
+    "topology": "Discontinuous Montage",
+    "summary": "Elliptical rapid-cut teaser using unnumbered [CAM] shots and dynamic [LIGHT] strobes.",
+    "file": "heist-montage.txt",
+    "category": "Montage"
+  }
+]

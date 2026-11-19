@@ -1,0 +1,21 @@
+[INTENT]
+Create a kinetic 1970s heist-thriller teaser built from rapid independent shots of a getaway driver, a safecracker, and a lookout in the hour before a bank job.
+
+[LOGIC]
+Treat every shot as an independent moment with no inherited posture or props, give each line its own subject, light, and location, and keep screen direction consistent within each shot.
+
+[AESTHETIC]
+Medium: 16mm film, heavy grain, warm halation
+Palette: mustard yellow, oxblood red, smoke grey
+Lighting: hard tungsten practicals, dusk sodium streetlight
+Wardrobe: driver in a tan leather jacket and driving gloves; safecracker in a rumpled brown suit and wire glasses; lookout in a green parka with a fur hood
+Audio: rain on metal, distant traffic
+
+[OPENING]
+Low-angle MCU through a rain-streaked windshield. Frame-center, the driver sits at the wheel, gloved hands at ten and two, eyes fixed on a bank entrance across the street.
+
+[EXECUTION]
+[CAM] Low-angle MCU through a rain-streaked windshield -> [ACT] The driver in the tan leather jacket tightens his gloved grip on the wheel and glances at the rearview mirror -> <engine catching>
+[CAM] ECU on a brass dial in a dim vault -> [ACT] The safecracker in the brown suit, wire glasses glinting, presses his ear to the safe door and turns the dial a quarter turn with his right fingertips -> <tumblers clicking>
+[CAM] WS from a rooftop at dusk under sodium streetlight -> [ACT] The lookout in the green parka raises binoculars in both hands and tracks a patrol car sliding past below -> <distant siren swelling and fading>
+[CAM] CU on the driver's eyes in the rearview mirror -> [LIGHT] red and blue patrol-car strobes sweep across his face -> [ACT] The driver's pupils narrow as he shifts into gear with his right hand
