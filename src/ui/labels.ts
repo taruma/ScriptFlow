@@ -75,6 +75,13 @@ export const UI_LABELS = {
     presetsButton: 'Presets',
     presetsHeader: 'Reference Scripts (v0.4.0)',
     newBlankScript: 'New Blank Script',
+    settingsButton: 'Settings',
+    settingsAria: 'Display and editor settings',
+    settingsHeader: 'Settings',
+    settingsTextSizeLabel: 'Text size',
+    settingsClauseGuidesLabel: 'Clause underlines',
+    settingsClauseGuidesDesc: 'Dotted phrases · solid sentences',
+    settingsThemeLabel: 'Theme',
     themeHeader: 'Appearance',
     themeAria: (label: string) => `Theme: ${label}`,
     textSizeGroupAria: 'Script text size',
@@ -86,6 +93,10 @@ export const UI_LABELS = {
       isDefault ? `Text size: ${px}px (default)` : `Text size: ${px}px — click to reset`,
     resetTextSizeAria: (label: string, px: number) =>
       `Text size ${label} (${px}px). Reset to default`,
+    clauseGuidesTitle: (enabled: boolean) =>
+      enabled ? 'Phrase & sentence underlines: On' : 'Phrase & sentence underlines: Off',
+    clauseGuidesAria: (enabled: boolean) =>
+      `Toggle phrase and sentence underlines (${enabled ? 'currently on' : 'currently off'})`,
     copyButton: 'Copy',
     copiedPlain: 'Copied',
     copiedTagless: 'Copied Tagless',

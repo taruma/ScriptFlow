@@ -28,6 +28,11 @@ import {
   type ScriptPreset,
 } from './data/presets.ts';
 import {
+  applyClauseGuides,
+  loadStoredClauseGuides,
+  saveStoredClauseGuides,
+} from './ui/clauseGuides.ts';
+import {
   applyTextSize,
   loadStoredTextSize,
   saveStoredTextSize,
@@ -111,15 +116,17 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const [themeMode, setThemeMode] = useState<ThemeMode>(loadStoredTheme);
   const [textSize, setTextSize] = useState<TextSizePreset>(loadStoredTextSize);
+  const [clauseGuides, setClauseGuides] = useState<boolean>(loadStoredClauseGuides);
   const [copiedKind, setCopiedKind] = useState<'plain' | 'tagless' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
-  // Apply theme mode & text size to <html>
+  // Apply theme mode, text size & clause guide preference to <html>
   useEffect(() => {
     applyThemeMode(themeMode, false);
     applyTextSize(textSize);
+    applyClauseGuides(clauseGuides);
   }, []);
 
   const handleThemeChange = useCallback((nextMode: ThemeMode) => {
@@ -132,6 +139,15 @@ export default function App() {
     setTextSize(nextSize);
     saveStoredTextSize(nextSize);
     applyTextSize(nextSize);
+  }, []);
+
+  const handleToggleClauseGuides = useCallback(() => {
+    setClauseGuides((prev) => {
+      const next = !prev;
+      saveStoredClauseGuides(next);
+      applyClauseGuides(next);
+      return next;
+    });
   }, []);
 
   // Persist canonical plain text & title to localStorage
@@ -367,6 +383,8 @@ export default function App() {
         onThemeChange={handleThemeChange}
         textSize={textSize}
         onTextSizeChange={handleTextSizeChange}
+        clauseGuides={clauseGuides}
+        onToggleClauseGuides={handleToggleClauseGuides}
         onCopyPlainText={handleCopyPlainText}
         onCopyTagless={handleCopyTagless}
         copiedKind={copiedKind}

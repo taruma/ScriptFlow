@@ -39,16 +39,102 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const ABBREVIATION_BEFORE_PERIOD_REGEX =
+  /(?:^|[\s(])(?:(?:[A-Za-z]\.){1,3}[A-Za-z]|Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|vs|etc)$/i;
+
 /**
- * Highlights inline @refs, declared [AESTHETIC] tokens, and optional banned stage-left/right
- * terms with ZERO horizontal width shift so the caret matches the backdrop character-for-character.
+ * Wraps a text segment's inner non-whitespace characters in a subtle underline class
+ * (only painted when [data-clause-guides="true"] is toggled on) so commas, semicolons,
+ * periods, and surrounding spaces form crisp breaks between phrases/sentences.
+ */
+function wrapClauseSegment(segment: string, className: string, key: string): ReactNode {
+  if (!segment) return null;
+  const leadMatch = /^(\s*)/.exec(segment);
+  const lead = leadMatch ? leadMatch[1] : '';
+  const trailMatch = /(\s*)$/.exec(segment);
+  const trail = trailMatch ? trailMatch[1] : '';
+  const core = segment.slice(lead.length, segment.length - trail.length);
+
+  if (!core) return segment;
+
+  return (
+    <Fragment key={key}>
+      {lead}
+      <span className={className}>{core}</span>
+      {trail}
+    </Fragment>
+  );
+}
+
+/**
+ * Segments plain text into toggleable monochrome phrase/sentence underlines (Option 2):
+ * - Comma-delimited phrases -> faint dotted underline (.auteur-clause-phrase)
+ * - Period / semicolon clauses -> subtle solid hairline underline (.auteur-clause-sentence)
+ * Punctuation marks themselves stay un-underlined as clean breaks, and decimals (2.39:1),
+ * ellipses (...), abbreviations (O.S., Mr.), and spoken {dialogue} are skipped.
+ */
+function highlightPunctuationText(text: string, keyPrefix: string): ReactNode {
+  if (!text) return text;
+
+  const out: ReactNode[] = [];
+  let segStart = 0;
+  let lastDelimiter: ',' | ';' | '.' | null = null;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (ch === ',' || ch === ';') {
+      const segment = text.slice(segStart, i);
+      if (segment.length > 0) {
+        const cls = ch === ',' ? 'auteur-clause-phrase' : 'auteur-clause-sentence';
+        out.push(wrapClauseSegment(segment, cls, `${keyPrefix}-seg-${segStart}`));
+      }
+      out.push(ch);
+      lastDelimiter = ch;
+      segStart = i + 1;
+      continue;
+    }
+
+    if (ch === '.') {
+      const prev = i > 0 ? text[i - 1] : '';
+      const next = i + 1 < text.length ? text[i + 1] : '';
+      const isEllipsis = prev === '.' || next === '.';
+      const isFollowedByBoundary = next === '' || /\s/.test(next);
+      const isAbbreviation = ABBREVIATION_BEFORE_PERIOD_REGEX.test(text.slice(0, i));
+
+      if (!isEllipsis && isFollowedByBoundary && !isAbbreviation) {
+        const segment = text.slice(segStart, i);
+        if (segment.length > 0) {
+          out.push(wrapClauseSegment(segment, 'auteur-clause-sentence', `${keyPrefix}-seg-${segStart}`));
+        }
+        out.push('.');
+        lastDelimiter = '.';
+        segStart = i + 1;
+      }
+    }
+  }
+
+  if (segStart < text.length) {
+    const tail = text.slice(segStart);
+    const tailCls = lastDelimiter === ',' ? 'auteur-clause-phrase' : 'auteur-clause-sentence';
+    out.push(wrapClauseSegment(tail, tailCls, `${keyPrefix}-seg-${segStart}`));
+  }
+
+  return out;
+}
+
+/**
+ * Highlights inline @refs, declared [AESTHETIC] tokens, optional banned stage-left/right
+ * terms, and subtle structural punctuation with ZERO horizontal width shift so the caret
+ * matches the backdrop character-for-character.
  */
 function highlightInlineFragments(
   text: string,
   aestheticTokens: AestheticToken[],
   flagBannedViewport: boolean,
   isProportional: boolean,
-  flagBracketsAsError = false
+  flagBracketsAsError = false,
+  highlightPunctuation = true
 ): ReactNode {
   if (!text) return null;
 
@@ -77,7 +163,16 @@ function highlightInlineFragments(
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      out.push(text.slice(lastIndex, match.index));
+      const plainChunk = text.slice(lastIndex, match.index);
+      out.push(
+        highlightPunctuation ? (
+          <Fragment key={`tx-${lastIndex}`}>
+            {highlightPunctuationText(plainChunk, `p${lastIndex}`)}
+          </Fragment>
+        ) : (
+          plainChunk
+        )
+      );
     }
 
     const matched = match[0];
@@ -119,7 +214,16 @@ function highlightInlineFragments(
   }
 
   if (lastIndex < text.length) {
-    out.push(text.slice(lastIndex));
+    const tailChunk = text.slice(lastIndex);
+    out.push(
+      highlightPunctuation ? (
+        <Fragment key={`tx-${lastIndex}`}>
+          {highlightPunctuationText(tailChunk, `p${lastIndex}`)}
+        </Fragment>
+      ) : (
+        tailChunk
+      )
+    );
   }
 
   return out;
@@ -199,7 +303,7 @@ function highlightSubStateSegment(
             {verbAndModsPart}
           </span>
           <span className="auteur-live-tok-dial">
-            {highlightInlineFragments(speechPart, aestheticTokens, false, isProportional)}
+            {highlightInlineFragments(speechPart, aestheticTokens, false, isProportional, false, false)}
           </span>
         </>
       );
@@ -268,7 +372,11 @@ function highlightAestheticValue(val: string, isProportional: boolean): ReactNod
 
   while ((match = regex.exec(val)) !== null) {
     if (match.index > lastIdx) {
-      out.push(val.slice(lastIdx, match.index));
+      out.push(
+        <Fragment key={`av-${lastIdx}`}>
+          {highlightPunctuationText(val.slice(lastIdx, match.index), `av${lastIdx}`)}
+        </Fragment>
+      );
     }
     if (match[1]) {
       out.push(
@@ -302,7 +410,11 @@ function highlightAestheticValue(val: string, isProportional: boolean): ReactNod
   }
 
   if (lastIdx < val.length) {
-    out.push(val.slice(lastIdx));
+    out.push(
+      <Fragment key={`av-${lastIdx}`}>
+        {highlightPunctuationText(val.slice(lastIdx), `av${lastIdx}`)}
+      </Fragment>
+    );
   }
   return out;
 }

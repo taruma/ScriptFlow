@@ -91,6 +91,8 @@
   --tok-arrow: #7c3aed;
   --tok-speaker: #0f172a;
   --tok-verb: #64748b;
+  --clause-guide-comma: rgba(28, 25, 23, 0.24);
+  --clause-guide-sentence: rgba(28, 25, 23, 0.36);
   --tok-rail: #e7e5e4;
   --tok-rail-hover: #8b5cf6;
   --tok-continuity: #0284c7;
@@ -184,6 +186,8 @@
   --tok-arrow: #6d3fb5;
   --tok-speaker: #2b231d;
   --tok-verb: #75675a;
+  --clause-guide-comma: rgba(43, 35, 29, 0.24);
+  --clause-guide-sentence: rgba(43, 35, 29, 0.36);
   --tok-rail: #dfd7c5;
   --tok-rail-hover: #7c52bd;
   --tok-continuity: #18628b;
@@ -277,6 +281,8 @@
   --tok-arrow: #a78bfa;
   --tok-speaker: #f5f5f4;
   --tok-verb: #94a3b8;
+  --clause-guide-comma: rgba(245, 245, 244, 0.24);
+  --clause-guide-sentence: rgba(245, 245, 244, 0.38);
   --tok-rail: #2c2825;
   --tok-rail-hover: #8b5cf6;
   --tok-continuity: #38bdf8;
@@ -489,6 +495,22 @@
 .auteur-live-tok-speaker {
   color: var(--tok-speaker);
   box-shadow: inset 0 -1px 0 var(--tok-dial-border);
+}
+[data-clause-guides="true"] .auteur-clause-phrase {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--clause-guide-comma);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: auto;
+}
+[data-clause-guides="true"] .auteur-clause-sentence {
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-color: var(--clause-guide-sentence);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: auto;
 }
 .auteur-live-mono .auteur-live-tok-foley,
 .auteur-live-mono .auteur-live-tok-score {
