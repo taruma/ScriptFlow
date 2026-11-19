@@ -1,6 +1,9 @@
 import {
   forwardRef,
   Fragment,
+  memo,
+  useMemo,
+  type CSSProperties,
   type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -14,6 +17,7 @@ import {
 } from '../core/highlighter.ts';
 import type {AestheticToken, MacroBlockKind} from '../core/types.ts';
 import {getMacroBlockMeta} from '../ui/labels.ts';
+import {EMPTY_AESTHETIC_TOKENS} from '../ui/referenceStability.ts';
 
 export type LiveEditorMode = 'substate' | 'staging' | 'aestheticValue' | 'source';
 
@@ -192,20 +196,26 @@ function renderHighlightSpan(span: HighlightSpan, key: number, isProportional: b
   }
 }
 
+const METRIC_STYLE: CSSProperties = {
+  fontVariantLigatures: 'none',
+  fontKerning: 'none',
+  tabSize: 2,
+};
+
 /**
  * Pixel-locked syntax-highlighted overlay editor using CSS Grid layering.
  * Delegates all lexical/clause scanning to pure zero-React helpers in `src/core/highlighter.ts`
  * so proportional IBM Plex Sans (Live Mode) and JetBrains Mono (Source Mode) maintain exact
  * character-for-character caret alignment with zero horizontal drift.
  */
-export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlightedEditorProps>(
-  function LiveHighlightedEditor(
+export const LiveHighlightedEditor = memo(
+  forwardRef<HTMLTextAreaElement, LiveHighlightedEditorProps>(function LiveHighlightedEditor(
     {
       value,
       onChange,
       mode,
       stagingKind = 'CUSTOM',
-      aestheticTokens = [],
+      aestheticTokens = EMPTY_AESTHETIC_TOKENS,
       placeholder,
       ariaLabel,
       minHeightClass = '',
@@ -219,16 +229,29 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
     const isSourceMode = mode === 'source';
     const isProportional = !isSourceMode;
 
-    let spans: HighlightSpan[];
-    if (mode === 'substate') {
-      spans = tokenizeExecutionLine(value, aestheticTokens, isLead);
-    } else if (mode === 'aestheticValue') {
-      spans = tokenizeAestheticValue(value);
-    } else if (mode === 'staging') {
-      spans = tokenizeStagingBody(value, stagingKind, aestheticTokens);
-    } else {
-      spans = tokenizeSourceDocument(value, aestheticTokens);
-    }
+    // Narrow tokenization dependencies to only what each mode actually reads
+    const effectiveTokens =
+      mode === 'aestheticValue' ? EMPTY_AESTHETIC_TOKENS : aestheticTokens;
+    const effectiveStagingKind = mode === 'staging' ? stagingKind : 'CUSTOM';
+    const effectiveIsLead = mode === 'substate' ? isLead : false;
+
+    const spans = useMemo<HighlightSpan[]>(() => {
+      if (mode === 'substate') {
+        return tokenizeExecutionLine(value, effectiveTokens, effectiveIsLead);
+      }
+      if (mode === 'aestheticValue') {
+        return tokenizeAestheticValue(value);
+      }
+      if (mode === 'staging') {
+        return tokenizeStagingBody(value, effectiveStagingKind, effectiveTokens);
+      }
+      return tokenizeSourceDocument(value, effectiveTokens);
+    }, [mode, value, effectiveTokens, effectiveStagingKind, effectiveIsLead]);
+
+    const renderedSpans = useMemo(
+      () => spans.map((span, idx) => renderHighlightSpan(span, idx, isProportional)),
+      [spans, isProportional]
+    );
 
     // Ensure empty strings or trailing newlines hold exact matching height in the mirror div
     const trailingSentinel = value.length === 0 || value.endsWith('\n') ? '\u200b' : '';
@@ -239,20 +262,14 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
 
     const sharedTypography = `col-start-1 row-start-1 w-full m-0 p-0 border-0 font-normal ${typographyClass} whitespace-pre-wrap break-words`;
 
-    const metricStyle = {
-      fontVariantLigatures: 'none' as const,
-      fontKerning: 'none' as const,
-      tabSize: 2,
-    };
-
     return (
       <div className={`grid grid-cols-1 grid-rows-1 w-full ${minHeightClass}`}>
         <div
           aria-hidden="true"
           className={`${sharedTypography} pointer-events-none select-none ${minHeightClass}`}
-          style={metricStyle}
+          style={METRIC_STYLE}
         >
-          {spans.map((span, idx) => renderHighlightSpan(span, idx, isProportional))}
+          {renderedSpans}
           {trailingSentinel}
         </div>
 
@@ -268,9 +285,9 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
           aria-label={ariaLabel}
           placeholder={placeholder}
           className={`${sharedTypography} auteur-live-textarea bg-transparent resize-none overflow-hidden outline-none ${minHeightClass}`}
-          style={metricStyle}
+          style={METRIC_STYLE}
         />
       </div>
     );
-  }
+  })
 );

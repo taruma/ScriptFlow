@@ -1,4 +1,4 @@
-import {lazy, Suspense, useCallback, useEffect, useMemo, useState} from 'react';
+import {lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   breakHistoryCoalescing,
   canRedoDocument,
@@ -43,12 +43,14 @@ import {copyTextToClipboard} from './ui/clipboard.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
 import {matchHistoryShortcut} from './ui/historyShortcuts.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
+import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
 import {
   readSavedScript,
   readSavedTitle,
   writeSavedScript,
   writeSavedTitle,
 } from './ui/scriptStorage.ts';
+import {useStableValue} from './ui/useStableValue.ts';
 
 const JsonIrDebugDrawer = lazy(() =>
   import('./components/debug/JsonIrDebugDrawer.tsx').then((mod) => ({
@@ -143,6 +145,12 @@ export default function App() {
   const doc = useMemo(() => parseAuteurScript(rawText), [rawText]);
   const metadata = useMemo(() => extractMetadata(doc), [doc]);
   const diagnostics = useMemo(() => lintDocument(doc, metadata), [doc, metadata]);
+  const stableAestheticTokens = useStableValue(metadata.aestheticTokens, stabilizeAestheticTokens);
+
+  const docRef = useRef(doc);
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
 
   const activePresetId = useMemo(() => {
     const normalized = exportPlainText(rawText);
@@ -242,7 +250,7 @@ export default function App() {
 
   const handleRequestDeleteStaging = useCallback(
     (blockIndex: number) => {
-      const target = doc.stagingBlocks[blockIndex];
+      const target = docRef.current.stagingBlocks[blockIndex];
       if (!target) return;
       const excerpt = target.lines.find((line) => line.trim().length > 0)?.trim();
       setConfirmRequest({
@@ -257,7 +265,7 @@ export default function App() {
         },
       });
     },
-    [doc.stagingBlocks, commitRawText]
+    [commitRawText]
   );
 
   const handleReorderStaging = useCallback(
@@ -334,7 +342,7 @@ export default function App() {
 
   const handleRequestDeleteBeat = useCallback(
     (beatIndex: number) => {
-      const target = doc.execution?.beats.find((b) => b.index === beatIndex);
+      const target = docRef.current.execution?.beats.find((b) => b.index === beatIndex);
       setConfirmRequest({
         title: UI_LABELS.confirm.deleteMacroStateTitle(beatIndex),
         description: UI_LABELS.confirm.deleteMacroStateDesc,
@@ -347,7 +355,7 @@ export default function App() {
         },
       });
     },
-    [doc.execution, commitRawText]
+    [commitRawText]
   );
 
   const handleReorderBeats = useCallback(
@@ -475,7 +483,7 @@ export default function App() {
         ) : (
           <SourceEditor
             rawText={rawText}
-            aestheticTokens={metadata.aestheticTokens}
+            aestheticTokens={stableAestheticTokens}
             onChange={handleUpdateSource}
           />
         )}

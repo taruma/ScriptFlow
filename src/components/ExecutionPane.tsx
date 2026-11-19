@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {memo, useCallback, useEffect, useRef, useState} from 'react';
 import {GripVertical, Plus} from 'lucide-react';
 import type {HistoryCommitMode} from '../core/history.ts';
 import type {
@@ -8,9 +8,10 @@ import type {
   LintDiagnostic,
 } from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import {EMPTY_DIAGNOSTICS} from '../ui/referenceStability.ts';
 import {ExecutionBeatRow} from './ExecutionBeatRow.tsx';
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
-import {SortableList} from './SortableList.tsx';
+import {SortableList, type SortableItemBinding} from './SortableList.tsx';
 
 interface ExecutionPaneProps {
   executionLabel: string;
@@ -63,7 +64,7 @@ function getStarterBeatLine(beats: ExecutionBeat[]): string {
  * Owns its sticky editorial header, camera continuity HOLD/CUT seams,
  * surgical beat insertion, and sortable Execution waterfall cards.
  */
-export function ExecutionPane({
+export const ExecutionPane = memo(function ExecutionPane({
   executionLabel,
   beats,
   beatLinks,
@@ -81,12 +82,136 @@ export function ExecutionPane({
   const [autoFocusBeatIndex, setAutoFocusBeatIndex] = useState<number | null>(null);
   const [executionScrolled, setExecutionScrolled] = useState<boolean>(false);
   const [isDraggingAny, setIsDraggingAny] = useState<boolean>(false);
+  const beatsRef = useRef<ExecutionBeat[]>(beats);
 
-  const handleInsertBeatAt = (afterBeatIndex: number) => {
-    const starter = getStarterBeatLine(beats);
-    onInsertBeat(afterBeatIndex, starter);
-    setAutoFocusBeatIndex(afterBeatIndex + 1);
-  };
+  useEffect(() => {
+    beatsRef.current = beats;
+  }, [beats]);
+
+  const handleClearAutoFocus = useCallback(() => {
+    setAutoFocusBeatIndex(null);
+  }, []);
+
+  const handleInsertBeatAt = useCallback(
+    (afterBeatIndex: number) => {
+      const starter = getStarterBeatLine(beatsRef.current);
+      onInsertBeat(afterBeatIndex, starter);
+      setAutoFocusBeatIndex(afterBeatIndex + 1);
+    },
+    [onInsertBeat]
+  );
+
+  const handleReorder = useCallback(
+    (fromIdx: number, toIdx: number) => {
+      onReorderBeats(fromIdx + 1, toIdx + 1);
+    },
+    [onReorderBeats]
+  );
+
+  const handleDragStart = useCallback(() => {
+    setIsDraggingAny(true);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDraggingAny(false);
+  }, []);
+
+  const renderOverlay = useCallback((beat: ExecutionBeat) => {
+    const leadSummary = beat.subStates[0]?.raw || beat.raw;
+    const stepCount = beat.subStates.length;
+    return (
+      <div className={`grid ${EXECUTION_GRID} items-center gap-1.5 cursor-grabbing select-none`}>
+        <div className="flex items-center justify-end gap-0.5 pr-0.5">
+          <GripVertical className="h-3 w-3 text-text-muted" />
+          <span className="inline-flex min-w-[22px] justify-center rounded bg-surface px-1 py-0.5 font-mono text-[10.5px] font-semibold tabular-nums text-text-main shadow-xs border border-border-main">
+            S{beat.index}
+          </span>
+        </div>
+        <div className="flex min-w-0 items-center justify-between gap-2.5 rounded-lg border border-text-muted/50 bg-surface px-3 py-2 shadow-lg ring-1 ring-border-main/60">
+          <span className="truncate font-script auteur-script-size leading-[1.35] text-text-main">
+            {leadSummary}
+          </span>
+          {stepCount > 1 && (
+            <span className="font-mono text-[10.5px] text-text-faint tabular-nums whitespace-nowrap shrink-0">
+              {UI_LABELS.execution.stepsCount(stepCount)}
+            </span>
+          )}
+        </div>
+        <div />
+      </div>
+    );
+  }, []);
+
+  const renderItem = useCallback(
+    (beat: ExecutionBeat, idx: number, binding: SortableItemBinding) => {
+      const link = beatLinks[idx];
+      const nextLink = beatLinks[idx + 1];
+      const connectsToNext = Boolean(nextLink?.connectsFromPrevious);
+      const isCutBefore = idx > 0 && Boolean(link?.isCutFromPrevious);
+
+      return (
+        <>
+          {idx > 0 && (
+            <HoverInsertSeam
+              gridClass={EXECUTION_GRID}
+              heightClass={isCutBefore ? 'h-5' : 'h-2'}
+              subtleHairline
+              quiet={binding.isAnyDragging}
+              cutLabel={
+                isCutBefore
+                  ? link?.transition === 'RECALL'
+                    ? UI_LABELS.document.cutRecallMarker
+                    : UI_LABELS.document.cutMarker
+                  : undefined
+              }
+              leftGutter={
+                link?.connectsFromPrevious && !binding.isAnyDragging ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-[12px] inset-y-0 w-[2px] opacity-45"
+                    style={{backgroundColor: 'var(--tok-continuity)'}}
+                  />
+                ) : null
+              }
+              buttonLabel={UI_LABELS.document.insertBeatBetween(beat.index - 1, beat.index)}
+              onClick={() => handleInsertBeatAt(beat.index - 1)}
+            />
+          )}
+
+          <ExecutionBeatRow
+            beat={beat}
+            cameraLink={link}
+            connectsToNext={connectsToNext}
+            aestheticTokens={aestheticTokens}
+            diagnostics={diagnosticsByBeatIndex.get(beat.index) ?? EMPTY_DIAGNOSTICS}
+            historyRevision={historyRevision}
+            autoFocusEdit={autoFocusBeatIndex === beat.index}
+            onClearAutoFocus={handleClearAutoFocus}
+            onUpdateSubState={onUpdateSubState}
+            onInsertSubState={onInsertSubState}
+            onDeleteSubState={onDeleteSubState}
+            onMergeSubState={onMergeSubState}
+            onDeleteBeat={onDeleteBeat}
+            drag={binding}
+          />
+        </>
+      );
+    },
+    [
+      beatLinks,
+      aestheticTokens,
+      diagnosticsByBeatIndex,
+      historyRevision,
+      autoFocusBeatIndex,
+      handleClearAutoFocus,
+      handleInsertBeatAt,
+      onUpdateSubState,
+      onInsertSubState,
+      onDeleteSubState,
+      onMergeSubState,
+      onDeleteBeat,
+    ]
+  );
 
   return (
     <section
@@ -168,91 +293,11 @@ export function ExecutionPane({
         <SortableList
           items={beats}
           scopeId="execution"
-          onReorder={(fromIdx, toIdx) => onReorderBeats(fromIdx + 1, toIdx + 1)}
-          onDragStart={() => setIsDraggingAny(true)}
-          onDragEnd={() => setIsDraggingAny(false)}
-          renderOverlay={(beat) => {
-            const leadSummary = beat.subStates[0]?.raw || beat.raw;
-            const stepCount = beat.subStates.length;
-            return (
-              <div className={`grid ${EXECUTION_GRID} items-center gap-1.5 cursor-grabbing select-none`}>
-                <div className="flex items-center justify-end gap-0.5 pr-0.5">
-                  <GripVertical className="h-3 w-3 text-text-muted" />
-                  <span className="inline-flex min-w-[22px] justify-center rounded bg-surface px-1 py-0.5 font-mono text-[10.5px] font-semibold tabular-nums text-text-main shadow-xs border border-border-main">
-                    S{beat.index}
-                  </span>
-                </div>
-                <div className="flex min-w-0 items-center justify-between gap-2.5 rounded-lg border border-text-muted/50 bg-surface px-3 py-2 shadow-lg ring-1 ring-border-main/60">
-                  <span className="truncate font-script auteur-script-size leading-[1.35] text-text-main">
-                    {leadSummary}
-                  </span>
-                  {stepCount > 1 && (
-                    <span className="font-mono text-[10.5px] text-text-faint tabular-nums whitespace-nowrap shrink-0">
-                      {UI_LABELS.execution.stepsCount(stepCount)}
-                    </span>
-                  )}
-                </div>
-                <div />
-              </div>
-            );
-          }}
-          renderItem={(beat, idx, binding) => {
-            const link = beatLinks[idx];
-            const nextLink = beatLinks[idx + 1];
-            const connectsToNext = Boolean(nextLink?.connectsFromPrevious);
-            const isCutBefore = idx > 0 && Boolean(link?.isCutFromPrevious);
-
-            return (
-              <>
-                {idx > 0 && (
-                  <HoverInsertSeam
-                    gridClass={EXECUTION_GRID}
-                    heightClass={isCutBefore ? 'h-5' : 'h-2'}
-                    subtleHairline
-                    quiet={binding.isAnyDragging}
-                    cutLabel={
-                      isCutBefore
-                        ? link?.transition === 'RECALL'
-                          ? UI_LABELS.document.cutRecallMarker
-                          : UI_LABELS.document.cutMarker
-                        : undefined
-                    }
-                    leftGutter={
-                      link?.connectsFromPrevious && !binding.isAnyDragging ? (
-                        <div
-                          aria-hidden="true"
-                          className="pointer-events-none absolute right-[12px] inset-y-0 w-[2px] opacity-45"
-                          style={{backgroundColor: 'var(--tok-continuity)'}}
-                        />
-                      ) : null
-                    }
-                    buttonLabel={UI_LABELS.document.insertBeatBetween(
-                      beat.index - 1,
-                      beat.index
-                    )}
-                    onClick={() => handleInsertBeatAt(beat.index - 1)}
-                  />
-                )}
-
-                <ExecutionBeatRow
-                  beat={beat}
-                  cameraLink={link}
-                  connectsToNext={connectsToNext}
-                  aestheticTokens={aestheticTokens}
-                  diagnostics={diagnosticsByBeatIndex.get(beat.index) ?? []}
-                  historyRevision={historyRevision}
-                  autoFocusEdit={autoFocusBeatIndex === beat.index}
-                  onClearAutoFocus={() => setAutoFocusBeatIndex(null)}
-                  onUpdateSubState={onUpdateSubState}
-                  onInsertSubState={onInsertSubState}
-                  onDeleteSubState={onDeleteSubState}
-                  onMergeSubState={onMergeSubState}
-                  onDeleteBeat={onDeleteBeat}
-                  drag={binding}
-                />
-              </>
-            );
-          }}
+          onReorder={handleReorder}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          renderOverlay={renderOverlay}
+          renderItem={renderItem}
         />
 
         {/* Quiet bottom Add Beat action */}
@@ -280,4 +325,4 @@ export function ExecutionPane({
       </div>
     </section>
   );
-}
+});

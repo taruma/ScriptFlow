@@ -16,8 +16,8 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 ## 1. Non-Negotiable Architecture Invariants
 
 1. **Zero-React Core (`src/core/`)**:
-   - Every file in `src/core/` (`types.ts`, `parser.ts`, `aesthetic.ts`, `highlighter.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
-   - Any new parsing, lookbook row decoding, live syntax/clause tokenization, extraction, serialization, programmatic JSON IR/patching/slicing, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
+   - Every file in `src/core/` (`types.ts`, `parser.ts`, `aesthetic.ts`, `highlighter.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `history.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
+   - Any new parsing, lookbook row decoding, live syntax/clause tokenization, extraction, serialization, document history, programmatic JSON IR/patching/slicing, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
 2. **Plain-Text-as-Truth**:
    - The raw canonical Auteur Script string (`rawText` in `src/App.tsx`) is the sole reactive source of truth.
    - The AST (`AuteurDocument`), extracted metadata (`ExtractedMetadata`), camera continuity links (`HOLD` / `CUT` / `RECALL` / `MONTAGE`), diagnostics (`LintDiagnostic[]`), and programmatic JSON envelopes (`AuteurEnvelope`) are derived synchronously via pure functions.
@@ -79,7 +79,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 Run these commands after any change to `src/core/`, `src/components/`, `src/ui/`, or `src/data/`:
 
 ```bash
-npm test          # Runs the Vitest unit suite for src/core/
+npm test          # Runs the Vitest unit suite for src/core/ and src/ui/
 npm run lint      # Runs strict TypeScript type-checking (tsc --noEmit)
 npm run build     # Runs tsc --noEmit && vite build
 ```

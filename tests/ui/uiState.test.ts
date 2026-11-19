@@ -1,6 +1,23 @@
 import {describe, expect, it} from 'vitest';
+import {
+  extractMetadata,
+  lintDocument,
+  parseAuteurScript,
+  updateExecutionSubState,
+  updateStagingBlock,
+  type LintDiagnostic,
+} from '../../src/core/index.ts';
 import {reconcileStepFocusOnDelete} from '../../src/ui/beatFocus.ts';
 import {matchHistoryShortcut} from '../../src/ui/historyShortcuts.ts';
+import {
+  stabilizeAestheticTokens,
+  stabilizeBeatLinks,
+  stabilizeCharacters,
+  stabilizeDiagnosticsMap,
+  stabilizeExecutionBeats,
+  stabilizeStagingBlocks,
+  stabilizeStringArray,
+} from '../../src/ui/referenceStability.ts';
 import {
   deleteCollapsedIndex,
   insertCollapsedIndex,
@@ -166,6 +183,148 @@ describe('matchHistoryShortcut', () => {
     expect(
       matchHistoryShortcut({...base, key: 'z', metaKey: true, isComposing: true})
     ).toBeNull();
+  });
+});
+
+function groupExecutionDiagnostics(diagnostics: LintDiagnostic[]): Map<number, LintDiagnostic[]> {
+  const map = new Map<number, LintDiagnostic[]>();
+  for (const diag of diagnostics) {
+    if (diag.target.phase === 'execution') {
+      const list = map.get(diag.target.beatIndex) ?? [];
+      list.push(diag);
+      map.set(diag.target.beatIndex, list);
+    }
+  }
+  return map;
+}
+
+describe('referenceStability helpers', () => {
+  const buildLongScript = (beatCount: number): string => {
+    const beats = Array.from({length: beatCount}, (_, idx) => {
+      const beatNum = idx + 1;
+      if (beatNum === 1) {
+        return '[CAM 01] MS, eye level -> [ACT] Ada opens the ledger -> <paper rustle>';
+      }
+      if (beatNum === 10) {
+        // Intentional warning on beat 10 (ends on dialogue) to test non-empty diagnostic stability
+        return '[CAM 01] -> Ada says {Still checking.}';
+      }
+      return `[CAM 01] -> [ACT] Ada flips page ${beatNum} -> <soft tap>`;
+    });
+
+    return [
+      '[INTENT]',
+      '@img1 as ADA (voice: @audio1)',
+      '',
+      '[AESTHETIC]',
+      'Lighting: Sodium overhead -> SODIUM_KEY',
+      'Palette: Cold slate -> SLATE_WASH',
+      '',
+      '[EXECUTION]',
+      ...beats,
+    ].join('\n');
+  };
+
+  it('preserves references for all unaffected staging blocks, metadata, beats, and diagnostics on a single-beat edit', () => {
+    const raw1 = buildLongScript(80);
+    const doc1 = parseAuteurScript(raw1);
+    const meta1 = extractMetadata(doc1);
+    const diags1 = lintDocument(doc1, meta1);
+    const beatDiagMap1 = groupExecutionDiagnostics(diags1);
+
+    // Edit only Beat 42, Step 1 (an [ACT] sub-state)
+    const raw2 = updateExecutionSubState(raw1, 42, 1, '[ACT] Ada underlines page 42');
+    const doc2 = parseAuteurScript(raw2);
+    const meta2 = extractMetadata(doc2);
+    const diags2 = lintDocument(doc2, meta2);
+    const beatDiagMap2 = groupExecutionDiagnostics(diags2);
+
+    const stableStaging = stabilizeStagingBlocks(doc1.stagingBlocks, doc2.stagingBlocks);
+    const stableCharacters = stabilizeCharacters(meta1.characters, meta2.characters);
+    const stableTokens = stabilizeAestheticTokens(meta1.aestheticTokens, meta2.aestheticTokens);
+    const stableLinks = stabilizeBeatLinks(meta1.beatLinks, meta2.beatLinks);
+    const stableBeats = stabilizeExecutionBeats(
+      doc1.execution!.beats,
+      doc2.execution!.beats
+    );
+    const stableDiagMap = stabilizeDiagnosticsMap(beatDiagMap1, beatDiagMap2);
+
+    expect(stableStaging).toBe(doc1.stagingBlocks);
+    expect(stableCharacters).toBe(meta1.characters);
+    expect(stableTokens).toBe(meta1.aestheticTokens);
+    expect(stableLinks).toBe(meta1.beatLinks);
+    expect(stableDiagMap).toBe(beatDiagMap1);
+    expect(stableDiagMap.get(10)).toBe(beatDiagMap1.get(10));
+
+    // Only Beat 42 (index 41) changed; all other 79 beats preserve strict === identity
+    expect(stableBeats).not.toBe(doc1.execution!.beats);
+    for (let i = 0; i < stableBeats.length; i++) {
+      if (i === 41) {
+        expect(stableBeats[i]).not.toBe(doc1.execution!.beats[i]);
+        expect(stableBeats[i].raw).toContain('underlines page 42');
+      } else {
+        expect(stableBeats[i]).toBe(doc1.execution!.beats[i]);
+      }
+    }
+  });
+
+  it('preserves unaffected beat diagnostics when another beat gains a new lint error', () => {
+    const raw1 = buildLongScript(40);
+    const doc1 = parseAuteurScript(raw1);
+    const meta1 = extractMetadata(doc1);
+    const beatDiagMap1 = groupExecutionDiagnostics(lintDocument(doc1, meta1));
+
+    // Introduce a banned viewport term on Beat 25
+    const raw2 = updateExecutionSubState(raw1, 25, 1, '[ACT] Ada glances stage-left');
+    const doc2 = parseAuteurScript(raw2);
+    const meta2 = extractMetadata(doc2);
+    const beatDiagMap2 = groupExecutionDiagnostics(lintDocument(doc2, meta2));
+
+    const stableDiagMap = stabilizeDiagnosticsMap(beatDiagMap1, beatDiagMap2);
+
+    expect(stableDiagMap).not.toBe(beatDiagMap1);
+    expect(stableDiagMap.get(10)).toBe(beatDiagMap1.get(10));
+    expect(stableDiagMap.get(25)?.length).toBe(1);
+  });
+
+  it('keeps aestheticTokens, execution beats, and beatLinks stable when adding lines in an earlier Staging block', () => {
+    const raw1 = buildLongScript(30);
+    const doc1 = parseAuteurScript(raw1);
+    const meta1 = extractMetadata(doc1);
+
+    // Insert extra lines inside [INTENT] (block 0), shifting lineIndex of [AESTHETIC] and all beats
+    const raw2 = updateStagingBlock(
+      raw1,
+      0,
+      '@img1 as ADA (voice: @audio1)\nExtra director note\nSecond line'
+    );
+    const doc2 = parseAuteurScript(raw2);
+    const meta2 = extractMetadata(doc2);
+
+    const stableStaging = stabilizeStagingBlocks(doc1.stagingBlocks, doc2.stagingBlocks);
+    const stableTokens = stabilizeAestheticTokens(meta1.aestheticTokens, meta2.aestheticTokens);
+    const stableBeats = stabilizeExecutionBeats(
+      doc1.execution!.beats,
+      doc2.execution!.beats
+    );
+    const stableLinks = stabilizeBeatLinks(meta1.beatLinks, meta2.beatLinks);
+
+    expect(stableStaging[0]).not.toBe(doc1.stagingBlocks[0]);
+    expect(stableStaging[1]).toBe(doc1.stagingBlocks[1]);
+    expect(stableTokens).toBe(meta1.aestheticTokens);
+    expect(stableBeats).toBe(doc1.execution!.beats);
+    expect(stableLinks).toBe(meta1.beatLinks);
+  });
+
+  it('reuses string array reference when IDs/names are unchanged', () => {
+    const ids1 = ['beat-1', 'beat-2', 'beat-3'];
+    expect(stabilizeStringArray(ids1, ['beat-1', 'beat-2', 'beat-3'])).toBe(ids1);
+    expect(stabilizeStringArray(ids1, ['beat-1', 'beat-2', 'beat-3', 'beat-4'])).toEqual([
+      'beat-1',
+      'beat-2',
+      'beat-3',
+      'beat-4',
+    ]);
   });
 });
 

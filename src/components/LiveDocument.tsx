@@ -1,10 +1,20 @@
-import {useMemo} from 'react';
+import {memo, useMemo} from 'react';
 import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AuteurDocument,
   ExtractedMetadata,
   LintDiagnostic,
 } from '../core/types.ts';
+import {
+  EMPTY_BEATS,
+  stabilizeAestheticTokens,
+  stabilizeBeatLinks,
+  stabilizeCharacters,
+  stabilizeDiagnosticsMap,
+  stabilizeExecutionBeats,
+  stabilizeStagingBlocks,
+} from '../ui/referenceStability.ts';
+import {useStableValue} from '../ui/useStableValue.ts';
 import {ExecutionPane} from './ExecutionPane.tsx';
 import {StagingPane} from './StagingPane.tsx';
 import type {StagingBlockCommitOptions} from './stagingBlockRegistry.ts';
@@ -44,8 +54,10 @@ interface LiveDocumentProps {
 /**
  * Thin asymmetric 40/60 Live Mode workspace shell coordinating
  * Phase 1 (StagingPane) and Phase 2 (ExecutionPane).
+ * Reconciles freshly derived AST/metadata/diagnostic references against the last
+ * committed snapshot so editing one block or beat never forces unrelated cards to re-render.
  */
-export function LiveDocument({
+export const LiveDocument = memo(function LiveDocument({
   doc,
   metadata,
   diagnostics,
@@ -62,7 +74,13 @@ export function LiveDocument({
   onDeleteBeat,
   onReorderBeats,
 }: LiveDocumentProps) {
-  const stagingDiagnosticsByIndex = useMemo(() => {
+  const stagingBlocks = useStableValue(doc.stagingBlocks, stabilizeStagingBlocks);
+  const characters = useStableValue(metadata.characters, stabilizeCharacters);
+  const aestheticTokens = useStableValue(metadata.aestheticTokens, stabilizeAestheticTokens);
+  const beats = useStableValue(doc.execution?.beats ?? EMPTY_BEATS, stabilizeExecutionBeats);
+  const beatLinks = useStableValue(metadata.beatLinks, stabilizeBeatLinks);
+
+  const rawStagingDiagnosticsByIndex = useMemo(() => {
     const map = new Map<number, LintDiagnostic[]>();
     for (const diag of diagnostics) {
       if (diag.target.phase === 'staging') {
@@ -74,7 +92,7 @@ export function LiveDocument({
     return map;
   }, [diagnostics]);
 
-  const beatDiagnosticsByIndex = useMemo(() => {
+  const rawBeatDiagnosticsByIndex = useMemo(() => {
     const map = new Map<number, LintDiagnostic[]>();
     for (const diag of diagnostics) {
       if (diag.target.phase === 'execution') {
@@ -86,13 +104,22 @@ export function LiveDocument({
     return map;
   }, [diagnostics]);
 
+  const stagingDiagnosticsByIndex = useStableValue(
+    rawStagingDiagnosticsByIndex,
+    stabilizeDiagnosticsMap
+  );
+  const beatDiagnosticsByIndex = useStableValue(
+    rawBeatDiagnosticsByIndex,
+    stabilizeDiagnosticsMap
+  );
+
   return (
     <main className="w-full lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
       <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <StagingPane
-          stagingBlocks={doc.stagingBlocks}
-          characters={metadata.characters}
-          aestheticTokens={metadata.aestheticTokens}
+          stagingBlocks={stagingBlocks}
+          characters={characters}
+          aestheticTokens={aestheticTokens}
           diagnosticsByBlockIndex={stagingDiagnosticsByIndex}
           historyRevision={historyRevision}
           onUpdateStaging={onUpdateStaging}
@@ -103,9 +130,9 @@ export function LiveDocument({
 
         <ExecutionPane
           executionLabel={doc.execution?.headerName ?? 'EXECUTION'}
-          beats={doc.execution?.beats ?? []}
-          beatLinks={metadata.beatLinks}
-          aestheticTokens={metadata.aestheticTokens}
+          beats={beats}
+          beatLinks={beatLinks}
+          aestheticTokens={aestheticTokens}
           diagnosticsByBeatIndex={beatDiagnosticsByIndex}
           historyRevision={historyRevision}
           onUpdateSubState={onUpdateSubState}
@@ -119,4 +146,4 @@ export function LiveDocument({
       </div>
     </main>
   );
-}
+});

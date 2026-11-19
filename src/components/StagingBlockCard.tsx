@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
+import {memo, useCallback, useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {ChevronDown, ChevronRight, GripVertical, Trash2} from 'lucide-react';
 import type {
   AestheticToken,
@@ -21,7 +21,7 @@ interface StagingBlockCardProps {
   blockIndex: number;
   historyRevision: number;
   collapsed: boolean;
-  onToggleCollapse: () => void;
+  onToggleCollapse: (blockIndex: number) => void;
   onCommit: (blockIndex: number, nextBody: string, options?: StagingBlockCommitOptions) => void;
   onDelete: (blockIndex: number) => void;
   autoFocusEdit?: boolean;
@@ -39,7 +39,7 @@ function getCollapsedPreviewText(block: StagingBlock): string {
     .join('\n');
 }
 
-export function StagingBlockCard({
+export const StagingBlockCard = memo(function StagingBlockCard({
   block,
   blockIndex,
   historyRevision,
@@ -77,32 +77,52 @@ export function StagingBlockCard({
     onClearAutoFocus?.();
   }, [autoFocusEdit, collapsed, CustomEditor, onClearAutoFocus]);
 
-  const handleChange = (nextValue: string) => {
-    setLocalValue(nextValue);
-    onCommit(blockIndex, nextValue, {mode: 'coalesce'});
-  };
+  const handleToggleCollapse = useCallback(() => {
+    onToggleCollapse(blockIndex);
+  }, [onToggleCollapse, blockIndex]);
 
-  const handleBlur = () => {
+  const handleChange = useCallback(
+    (nextValue: string) => {
+      setLocalValue(nextValue);
+      onCommit(blockIndex, nextValue, {mode: 'coalesce'});
+    },
+    [onCommit, blockIndex]
+  );
+
+  const handleCustomCommit = useCallback(
+    (nextBody: string, options?: StagingBlockCommitOptions) => {
+      onCommit(blockIndex, nextBody, options);
+    },
+    [onCommit, blockIndex]
+  );
+
+  const handleEditorFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handleBlur = useCallback(() => {
     setIsFocused(false);
     const cleaned = localValue.replace(/\n+$/, '');
     if (cleaned !== block.rawBody) {
       onCommit(blockIndex, cleaned, {mode: 'coalesce'});
     }
     setLocalValue(cleaned);
-  };
+  }, [localValue, block.rawBody, onCommit, blockIndex]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       editorRef.current?.blur();
     }
-  };
+  }, []);
 
   const isDragging = Boolean(drag?.isDragging);
   const handleProps = drag ? drag.getHandleProps(isFocused) : null;
 
-  const collapsedMeta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
-  const previewText = getCollapsedPreviewText(block);
+  const collapsedMeta = collapsed
+    ? formatStagingCollapsedMeta(block, characters, aestheticTokens)
+    : '';
+  const previewText = collapsed ? getCollapsedPreviewText(block) : '';
 
   return (
     <section
@@ -122,14 +142,14 @@ export function StagingBlockCard({
       >
         {/* Header Bar */}
         <div
-          onClick={onToggleCollapse}
+          onClick={handleToggleCollapse}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.target !== e.currentTarget) return;
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              onToggleCollapse();
+              handleToggleCollapse();
             }
           }}
           className="flex items-center justify-between gap-2.5 px-2.5 py-1.5 cursor-pointer select-none"
@@ -192,14 +212,14 @@ export function StagingBlockCard({
         {/* Collapsed 2-Line Muted Plain-Text Preview vs. Live Syntax-Highlighted Editor */}
         {collapsed ? (
           <div
-            onClick={onToggleCollapse}
+            onClick={handleToggleCollapse}
             role="button"
             tabIndex={0}
             title={UI_LABELS.staging.expandPreviewTitle(block.name)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onToggleCollapse();
+                handleToggleCollapse();
               }
             }}
             className="border-t border-border-subtle px-3 py-1.5 cursor-pointer hover:bg-surface-subtle/50 transition-colors rounded-b-lg"
@@ -222,7 +242,7 @@ export function StagingBlockCard({
               historyRevision={historyRevision}
               autoFocus={autoFocusEdit}
               onClearAutoFocus={onClearAutoFocus}
-              onCommit={(nextBody, options) => onCommit(blockIndex, nextBody, options)}
+              onCommit={handleCustomCommit}
               onFocusChange={setIsFocused}
             />
           </div>
@@ -240,7 +260,7 @@ export function StagingBlockCard({
               aestheticTokens={aestheticTokens}
               ariaLabel={UI_LABELS.staging.editAria(block.name)}
               placeholder={UI_LABELS.staging.editPlaceholder(block.name)}
-              onFocus={() => setIsFocused(true)}
+              onFocus={handleEditorFocus}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
             />
@@ -254,4 +274,4 @@ export function StagingBlockCard({
       </div>
     </section>
   );
-}
+});

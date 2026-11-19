@@ -1,4 +1,4 @@
-import {useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
+import {memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {Plus, X} from 'lucide-react';
 import {
   parseAestheticLine,
@@ -25,7 +25,7 @@ interface PendingFocus {
  * Column 2 renders live-highlighted values with automatic hanging-indent alignment
  * across wrapped lines. Commits losslessly back to canonical plain text.
  */
-export function AestheticBlockEditor({
+export const AestheticBlockEditor = memo(function AestheticBlockEditor({
   rawBody,
   aestheticTokens,
   historyRevision = 0,
@@ -432,4 +432,4 @@ export function AestheticBlockEditor({
       )}
     </div>
   );
-}
+});

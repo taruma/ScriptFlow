@@ -6,8 +6,9 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 
 ```text
                        ┌────────────────────────────────────┐
-                       │   rawText: string (Single State)   │
-                       │   + useEditorSettings() (Display)  │
+                       │  history.present: rawText (Truth)  │
+                       │  (src/core/history.ts)             │
+                       │  + useEditorSettings() (Display)   │
                        └─────────────────┬──────────────────┘
                                          │
               ┌──────────────────────────┼──────────────────────────┐
@@ -23,8 +24,9 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
               │                          ▲                          ▲
               ▼                          │                          │
    [ Thin React + Tailwind UI (src/components/) ] ────────┘   [ AI / Automated Callers ]
-   • TopSlateBar -> SettingsPopover    • LiveDocument           • SourceEditor
-   • StagingBlockCard -> Registry      • AddStagingBlockPicker  • ExecutionBeatRow
+   • ErrorBoundary -> App              • TopSlateBar -> SettingsPopover
+   • LiveDocument -> StagingPane / ExecutionPane (SortableList + HoverInsertSeam)
+   • StagingBlockCard -> Registry      • ExecutionBeatRow       • SourceEditor
    • LiveHighlightedEditor             • DiagnosticDot          • ConfirmDialog
 ```
 
@@ -41,15 +43,17 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 | **Core Extractor** | `src/core/extractor.ts` | Pure extraction of `@ref as NAME (voice: @audio)` character bindings, `[AESTHETIC]` `Description -> TOKEN` lookup dictionaries, continuation context detection, and beat-to-beat camera transitions (`ESTABLISH`, `HOLD`, `CUT`, `RECALL`, `MONTAGE`). |
 | **Core Serializer** | `src/core/serializer.ts` | Lossless pure string mutation functions (`insertStagingBlock`, `updateStagingBlock`, `deleteStagingBlock`, Execution beat/sub-state CRUD & reorder) plus `exportPlainText()` and `exportTagless()`. |
 | **Core Linter** | `src/core/linter.ts` | Modular deterministic Script Supervisor engine with 5 isolated V1 rule functions mapped to `Lens 1`–`Lens 5`. |
+| **Core History** | `src/core/history.ts` | Pure document-level Undo/Redo stack over `rawText` with coalesced typing bursts, structural checkpoints, and a monotonic `revision` counter for active-draft resyncs. |
 | **JSON IR & Schemas** | `src/core/irSchemas.ts`, `src/core/ir.ts` | Zod-validated glossary-aligned JSON IR (`toAuteurIR`, `fromAuteurIR`, `toAuteurEnvelope`, `compileAuteurDraft`), Camera `identifier` separation, `[AESTHETIC]` `key: value` parsing, and standard JSON Schema registry (`getAuteurJsonSchemas`). See `docs/JSON_IR_SPEC.md`. |
 | **Patch Engine & Lens Slicer** | `src/core/patch.ts`, `src/core/slicer.ts` | Transactional ID-addressed `applyAuteurPatch()` with optimistic concurrency & lint gating, plus composable `sliceAuteurEnvelope()` / `AUDIT_LENS_PRESETS` and `validateAuteurReview()`. See `docs/JSON_IR_SPEC.md`. |
 | **Presets** | `src/data/presets.ts` | Four canonical `v0.4.0` worked scripts (*Interrogation Room Coverage*, *Subway Train Fight Oner*, *POV Forest Horror*, *1970s Heist Montage*) plus a clean blank template. |
 | **Display Settings & Tokens** | `src/ui/editorSettings.ts`, `src/ui/theme.ts`, `src/ui/textSize.ts`, `src/ui/clauseGuides.ts`, `src/ui/tokens/ui.ts`, `src/index.css` | Unified persisted display settings store (`useEditorSettings`), 4-mode shell theme engine (`light`, `warm`, `dark`, `oled`), script text-size presets (`13px`–`16px`), toggleable clause guides, and centralized `UI_TOKENS`. |
-| **UI Labels SSOT** | `src/ui/labels.ts` | Single Source of Truth for all interface strings: `APP_META`, `MACRO_BLOCK_META` (canonical Macro-Block captions & badge classes), and `UI_LABELS` (toolbar, settings, phase headings, staging, execution, confirmations, tooltips, aria-labels, toasts). |
+| **UI State & Stability Helpers** | `src/ui/beatFocus.ts`, `src/ui/stagingCollapse.ts`, `src/ui/historyShortcuts.ts`, `src/ui/scriptStorage.ts`, `src/ui/clipboard.ts`, `src/ui/referenceStability.ts`, `src/ui/useStableValue.ts` | Pure step-focus reconciliation, index-tracked Staging collapse transitions, Undo/Redo shortcut matching, `localStorage`/clipboard adapters, and structural reference stabilization for memoized Live Mode rendering. |
+| **UI Labels SSOT** | `src/ui/labels.ts` | Single Source of Truth for all interface strings: `APP_META`, `MACRO_BLOCK_META` (canonical Macro-Block captions & badge classes), and `UI_LABELS` (toolbar, settings, phase headings, staging, execution, confirmations, tooltips, aria-labels, toasts, error boundary). |
 | **Staging Block Registry** | `src/components/stagingBlockRegistry.ts` | Pluggable registry mapping `MacroBlockKind` to specialized structured editors (such as `AestheticBlockEditor`) and collapsed header metadata formatters, falling back to `LiveHighlightedEditor`. |
-| **UI Components** | `src/components/*.tsx` | Thin presentational React components (`TopSlateBar`, `SettingsPopover`, `LiveDocument` → `StagingPane` / `ExecutionPane`, shared `SortableList` & `HoverInsertSeam`, `StagingBlockCard`, `AestheticBlockEditor`, `AddStagingBlockPicker`, `ExecutionBeatRow`, `LiveHighlightedEditor`, `SourceEditor`, `DiagnosticDot`, `ConfirmDialog`). |
+| **UI Components** | `src/components/*.tsx` | Thin presentational React components (`ErrorBoundary`, `TopSlateBar`, `SettingsPopover`, `LiveDocument` → `StagingPane` / `ExecutionPane`, shared `SortableList` & `HoverInsertSeam`, `StagingBlockCard`, `AestheticBlockEditor`, `AddStagingBlockPicker`, `ExecutionBeatRow`, `LiveHighlightedEditor`, `SourceEditor`, `DiagnosticDot`, `ConfirmDialog`). |
 | **Debug Inspector *(Optional)*** | `src/components/debug/JsonIrDebugDrawer.tsx` | Decoupled, zero-cost-when-closed modal for inspecting `AuteurEnvelope`/IR, testing composable Lens Slicers, dry-running/committing `AuteurPatch` payloads, compiling JSON drafts, and exporting Zod JSON Schemas. |
-| **Tests** | `tests/core/*.test.ts` | Vitest unit suite verifying parser round-trips, multi-block detection, aesthetic lookbook codec, live syntax & clause tokenizer losslessness, serializer edits (Staging & Execution), Tagless export, metadata extraction, all 5 linter rules, JSON IR round-trips, transactional patches, and Lens Slicers. |
+| **Tests** | `tests/core/*.test.ts`, `tests/ui/uiState.test.ts` | Vitest unit suite verifying parser round-trips, multi-block detection, aesthetic lookbook codec, live syntax & clause tokenizer losslessness, serializer edits, Tagless export, metadata extraction, all 5 linter rules, document history, JSON IR round-trips, transactional patches, Lens Slicers, and UI state/stability helpers. |
 
 ---
 

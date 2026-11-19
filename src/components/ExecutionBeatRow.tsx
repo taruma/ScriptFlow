@@ -1,4 +1,6 @@
 import {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -54,7 +56,7 @@ interface PendingFocusTarget {
   caret: number;
 }
 
-export function ExecutionBeatRow({
+export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   beat,
   cameraLink,
   connectsToNext,
@@ -76,17 +78,25 @@ export function ExecutionBeatRow({
   const [pendingDraft, setPendingDraft] = useState<string>('');
 
   const stepRefs = useRef<Map<number, HTMLTextAreaElement>>(new Map());
+  const stepRefCallbacks = useRef<Map<number, (el: HTMLTextAreaElement | null) => void>>(new Map());
   const pendingRef = useRef<HTMLTextAreaElement | null>(null);
   const nextFocusRef = useRef<PendingFocusTarget | null>(null);
   const lastHistoryRevisionRef = useRef<number>(historyRevision);
 
-  const registerStepRef = (index: number) => (el: HTMLTextAreaElement | null) => {
-    if (el) {
-      stepRefs.current.set(index, el);
-    } else {
-      stepRefs.current.delete(index);
+  const registerStepRef = useCallback((index: number) => {
+    let callback = stepRefCallbacks.current.get(index);
+    if (!callback) {
+      callback = (el: HTMLTextAreaElement | null) => {
+        if (el) {
+          stepRefs.current.set(index, el);
+        } else {
+          stepRefs.current.delete(index);
+        }
+      };
+      stepRefCallbacks.current.set(index, callback);
     }
-  };
+    return callback;
+  }, []);
 
   // Apply queued focus + exact caret position right after React commits DOM updates
   useLayoutEffect(() => {
@@ -610,4 +620,4 @@ export function ExecutionBeatRow({
       </div>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ChevronsDownUp, ChevronsUpDown, GripVertical} from 'lucide-react';
 import type {
   AestheticToken,
@@ -7,6 +7,7 @@ import type {
   StagingBlock,
 } from '../core/types.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
+import {EMPTY_DIAGNOSTICS, stabilizeStringArray} from '../ui/referenceStability.ts';
 import {
   deleteCollapsedIndex,
   insertCollapsedIndex,
@@ -14,9 +15,10 @@ import {
   reorderCollapsedIndices,
   toggleCollapsedIndex,
 } from '../ui/stagingCollapse.ts';
+import {useStableValue} from '../ui/useStableValue.ts';
 import {AddStagingBlockPicker, StagingBlockPickerPanel} from './AddStagingBlockPicker.tsx';
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
-import {SortableList} from './SortableList.tsx';
+import {SortableList, type SortableItemBinding} from './SortableList.tsx';
 import {StagingBlockCard} from './StagingBlockCard.tsx';
 import {
   formatStagingCollapsedMeta,
@@ -46,7 +48,7 @@ const STAGING_GRID = 'grid-cols-[minmax(0,1fr)_24px]';
  * Owns its sticky editorial header, collapse state, surgical insertion pickers,
  * and sortable Staging Macro-Block cards.
  */
-export function StagingPane({
+export const StagingPane = memo(function StagingPane({
   stagingBlocks,
   characters,
   aestheticTokens,
@@ -63,6 +65,11 @@ export function StagingPane({
   const [stagingScrolled, setStagingScrolled] = useState<boolean>(false);
   const [isDraggingAny, setIsDraggingAny] = useState<boolean>(false);
   const pendingDeleteRef = useRef<{index: number; count: number} | null>(null);
+  const stagingBlocksCountRef = useRef<number>(stagingBlocks.length);
+
+  useEffect(() => {
+    stagingBlocksCountRef.current = stagingBlocks.length;
+  }, [stagingBlocks.length]);
 
   // Reconcile index-based collapse flags after confirmed deletions or external script changes
   useEffect(() => {
@@ -81,44 +88,167 @@ export function StagingPane({
   const allStagingCollapsed =
     stagingBlocks.length > 0 && stagingBlocks.every((_, idx) => collapsedIndices.has(idx));
 
-  const toggleAllStaging = () => {
-    if (allStagingCollapsed) {
-      setCollapsedIndices(new Set());
-    } else {
-      setCollapsedIndices(new Set(stagingBlocks.map((_, idx) => idx)));
-    }
-  };
+  const toggleAllStaging = useCallback(() => {
+    setCollapsedIndices((prev) => {
+      const count = stagingBlocksCountRef.current;
+      const allCollapsed = count > 0 && Array.from({length: count}, (_, idx) => idx).every((idx) => prev.has(idx));
+      if (allCollapsed) {
+        return new Set();
+      }
+      return new Set(Array.from({length: count}, (_, idx) => idx));
+    });
+  }, []);
 
-  const toggleSingleBlock = (blockIndex: number) => {
+  const toggleSingleBlock = useCallback((blockIndex: number) => {
     setCollapsedIndices((prev) => toggleCollapsedIndex(prev, blockIndex));
-  };
+  }, []);
 
-  const handleInsertStagingBlock = (headerName: string, afterBlockIndex?: number) => {
-    pendingDeleteRef.current = null;
-    const insertedIndex =
-      afterBlockIndex === undefined
-        ? stagingBlocks.length
-        : Math.max(0, Math.min(afterBlockIndex + 1, stagingBlocks.length));
-    setCollapsedIndices((prev) => insertCollapsedIndex(prev, insertedIndex));
+  const handleClearAutoFocus = useCallback(() => {
+    setAutoFocusBlockIndex(null);
+  }, []);
+
+  const handleInsertStagingBlock = useCallback(
+    (headerName: string, afterBlockIndex?: number) => {
+      pendingDeleteRef.current = null;
+      const count = stagingBlocksCountRef.current;
+      const insertedIndex =
+        afterBlockIndex === undefined
+          ? count
+          : Math.max(0, Math.min(afterBlockIndex + 1, count));
+      setCollapsedIndices((prev) => insertCollapsedIndex(prev, insertedIndex));
+      setActiveStagingPicker(null);
+      onInsertStaging(headerName, afterBlockIndex);
+      setAutoFocusBlockIndex(insertedIndex);
+    },
+    [onInsertStaging]
+  );
+
+  const handleDeleteStaging = useCallback(
+    (blockIndex: number) => {
+      pendingDeleteRef.current = {index: blockIndex, count: stagingBlocksCountRef.current};
+      onDeleteStaging(blockIndex);
+    },
+    [onDeleteStaging]
+  );
+
+  const handleReorderStaging = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      pendingDeleteRef.current = null;
+      setCollapsedIndices((prev) =>
+        reorderCollapsedIndices(prev, fromIndex, toIndex, stagingBlocksCountRef.current)
+      );
+      onReorderStaging(fromIndex, toIndex);
+    },
+    [onReorderStaging]
+  );
+
+  const handleDragStart = useCallback(() => {
     setActiveStagingPicker(null);
-    onInsertStaging(headerName, afterBlockIndex);
-    setAutoFocusBlockIndex(insertedIndex);
-  };
+    setIsDraggingAny(true);
+  }, []);
 
-  const handleDeleteStaging = (blockIndex: number) => {
-    pendingDeleteRef.current = {index: blockIndex, count: stagingBlocks.length};
-    onDeleteStaging(blockIndex);
-  };
+  const handleDragEnd = useCallback(() => {
+    setIsDraggingAny(false);
+  }, []);
 
-  const handleReorderStaging = (fromIndex: number, toIndex: number) => {
-    pendingDeleteRef.current = null;
-    setCollapsedIndices((prev) =>
-      reorderCollapsedIndices(prev, fromIndex, toIndex, stagingBlocks.length)
-    );
-    onReorderStaging(fromIndex, toIndex);
-  };
+  const rawBlockNames = useMemo(() => stagingBlocks.map((b) => b.name), [stagingBlocks]);
+  const existingBlockNames = useStableValue(rawBlockNames, stabilizeStringArray);
 
-  const existingBlockNames = stagingBlocks.map((b) => b.name);
+  const renderOverlay = useCallback(
+    (block: StagingBlock) => {
+      const phase = getMacroBlockMeta(block.kind);
+      const meta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
+      return (
+        <div className={`grid ${STAGING_GRID} items-center gap-1.5 cursor-grabbing`}>
+          <div className="flex items-center justify-between gap-2.5 rounded-lg border border-text-muted/50 bg-surface px-2.5 py-2 shadow-lg ring-1 ring-border-main/60 select-none">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <GripVertical className="h-3 w-3 shrink-0 text-text-muted" />
+              <span
+                className={`${phase.badgeClass} inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold tracking-tight shrink-0`}
+              >
+                [{block.name}]
+              </span>
+              <span className="text-[11.5px] text-text-muted truncate">{phase.caption}</span>
+            </div>
+            {meta && (
+              <span className="font-mono text-[10.5px] text-text-faint tabular-nums whitespace-nowrap shrink-0">
+                {meta}
+              </span>
+            )}
+          </div>
+          <div />
+        </div>
+      );
+    },
+    [characters, aestheticTokens]
+  );
+
+  const renderItem = useCallback(
+    (block: StagingBlock, index: number, binding: SortableItemBinding) => {
+      const prevBlockName = index > 0 ? existingBlockNames[index - 1] : null;
+      const seamSlot = index - 1;
+      return (
+        <>
+          {index > 0 && prevBlockName && (
+            <>
+              <HoverInsertSeam
+                gridClass={STAGING_GRID}
+                buttonLabel={UI_LABELS.document.insertMacroBlockBetween(prevBlockName, block.name)}
+                isPickerTrigger
+                subtleHairline
+                quiet={binding.isAnyDragging}
+                onClick={() =>
+                  setActiveStagingPicker((prev) => (prev === seamSlot ? null : seamSlot))
+                }
+              />
+
+              {activeStagingPicker === seamSlot && (
+                <div className={`grid ${STAGING_GRID} gap-1.5 py-1.5`}>
+                  <StagingBlockPickerPanel
+                    existingBlockNames={existingBlockNames}
+                    onSelectBlock={(name) => handleInsertStagingBlock(name, seamSlot)}
+                    onClose={() => setActiveStagingPicker(null)}
+                  />
+                  <div />
+                </div>
+              )}
+            </>
+          )}
+
+          <StagingBlockCard
+            block={block}
+            blockIndex={index}
+            historyRevision={historyRevision}
+            collapsed={collapsedIndices.has(index)}
+            onToggleCollapse={toggleSingleBlock}
+            onCommit={onUpdateStaging}
+            onDelete={handleDeleteStaging}
+            autoFocusEdit={autoFocusBlockIndex === index}
+            onClearAutoFocus={handleClearAutoFocus}
+            diagnostics={diagnosticsByBlockIndex.get(index) ?? EMPTY_DIAGNOSTICS}
+            characters={characters}
+            aestheticTokens={aestheticTokens}
+            drag={binding}
+          />
+        </>
+      );
+    },
+    [
+      existingBlockNames,
+      activeStagingPicker,
+      handleInsertStagingBlock,
+      historyRevision,
+      collapsedIndices,
+      toggleSingleBlock,
+      onUpdateStaging,
+      handleDeleteStaging,
+      autoFocusBlockIndex,
+      handleClearAutoFocus,
+      diagnosticsByBlockIndex,
+      characters,
+      aestheticTokens,
+    ]
+  );
 
   return (
     <section
@@ -229,92 +359,10 @@ export function StagingPane({
               items={stagingBlocks}
               scopeId="staging"
               onReorder={handleReorderStaging}
-              onDragStart={() => {
-                setActiveStagingPicker(null);
-                setIsDraggingAny(true);
-              }}
-              onDragEnd={() => setIsDraggingAny(false)}
-              renderOverlay={(block) => {
-                const phase = getMacroBlockMeta(block.kind);
-                const meta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
-                return (
-                  <div className={`grid ${STAGING_GRID} items-center gap-1.5 cursor-grabbing`}>
-                    <div className="flex items-center justify-between gap-2.5 rounded-lg border border-text-muted/50 bg-surface px-2.5 py-2 shadow-lg ring-1 ring-border-main/60 select-none">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <GripVertical className="h-3 w-3 shrink-0 text-text-muted" />
-                        <span
-                          className={`${phase.badgeClass} inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold tracking-tight shrink-0`}
-                        >
-                          [{block.name}]
-                        </span>
-                        <span className="text-[11.5px] text-text-muted truncate">
-                          {phase.caption}
-                        </span>
-                      </div>
-                      {meta && (
-                        <span className="font-mono text-[10.5px] text-text-faint tabular-nums whitespace-nowrap shrink-0">
-                          {meta}
-                        </span>
-                      )}
-                    </div>
-                    <div />
-                  </div>
-                );
-              }}
-              renderItem={(block, index, binding) => {
-                const prevBlock = index > 0 ? stagingBlocks[index - 1] : null;
-                const seamSlot = index - 1;
-                return (
-                  <>
-                    {index > 0 && prevBlock && (
-                      <>
-                        <HoverInsertSeam
-                          gridClass={STAGING_GRID}
-                          buttonLabel={UI_LABELS.document.insertMacroBlockBetween(
-                            prevBlock.name,
-                            block.name
-                          )}
-                          isPickerTrigger
-                          subtleHairline
-                          quiet={binding.isAnyDragging}
-                          onClick={() =>
-                            setActiveStagingPicker((prev) =>
-                              prev === seamSlot ? null : seamSlot
-                            )
-                          }
-                        />
-
-                        {activeStagingPicker === seamSlot && (
-                          <div className={`grid ${STAGING_GRID} gap-1.5 py-1.5`}>
-                            <StagingBlockPickerPanel
-                              existingBlockNames={existingBlockNames}
-                              onSelectBlock={(name) => handleInsertStagingBlock(name, seamSlot)}
-                              onClose={() => setActiveStagingPicker(null)}
-                            />
-                            <div />
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    <StagingBlockCard
-                      block={block}
-                      blockIndex={index}
-                      historyRevision={historyRevision}
-                      collapsed={collapsedIndices.has(index)}
-                      onToggleCollapse={() => toggleSingleBlock(index)}
-                      onCommit={onUpdateStaging}
-                      onDelete={handleDeleteStaging}
-                      autoFocusEdit={autoFocusBlockIndex === index}
-                      onClearAutoFocus={() => setAutoFocusBlockIndex(null)}
-                      diagnostics={diagnosticsByBlockIndex.get(index) ?? []}
-                      characters={characters}
-                      aestheticTokens={aestheticTokens}
-                      drag={binding}
-                    />
-                  </>
-                );
-              }}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              renderOverlay={renderOverlay}
+              renderItem={renderItem}
             />
           </div>
         ) : (
@@ -339,4 +387,4 @@ export function StagingPane({
       </div>
     </section>
   );
-}
+});

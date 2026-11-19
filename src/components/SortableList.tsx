@@ -1,4 +1,6 @@
 import {
+  memo,
+  useMemo,
   useState,
   type CSSProperties,
   type HTMLAttributes,
@@ -23,6 +25,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
+import {stabilizeStringArray} from '../ui/referenceStability.ts';
+import {useStableValue} from '../ui/useStableValue.ts';
 
 /**
  * Library-agnostic drag-and-drop binding passed to each sortable row.
@@ -55,6 +59,8 @@ const restrictToVerticalAxis: Modifier = ({transform}) => ({
   x: 0,
 });
 
+const VERTICAL_AXIS_MODIFIERS: Modifier[] = [restrictToVerticalAxis];
+
 const SLIDE_TRANSITION = 'transform 190ms cubic-bezier(0.2, 0, 0, 1)';
 
 interface SortableRowProps<T extends {id: string}> {
@@ -64,7 +70,7 @@ interface SortableRowProps<T extends {id: string}> {
   renderItem: (item: T, index: number, binding: SortableItemBinding) => ReactNode;
 }
 
-function SortableRow<T extends {id: string}>({
+function SortableRowInner<T extends {id: string}>({
   item,
   index,
   isAnyDragging,
@@ -89,17 +95,20 @@ function SortableRow<T extends {id: string}>({
     zIndex: isDragging ? 10 : undefined,
   };
 
-  const binding: SortableItemBinding = {
-    getHandleProps: (disabled: boolean) => ({
-      ref: setActivatorNodeRef,
-      ...attributes,
-      ...(disabled ? {} : listeners),
-      tabIndex: disabled ? -1 : 0,
-      style: {touchAction: 'none'},
+  const binding = useMemo<SortableItemBinding>(
+    () => ({
+      getHandleProps: (disabled: boolean) => ({
+        ref: setActivatorNodeRef,
+        ...attributes,
+        ...(disabled ? {} : listeners),
+        tabIndex: disabled ? -1 : 0,
+        style: {touchAction: 'none'},
+      }),
+      isDragging,
+      isAnyDragging,
     }),
-    isDragging,
-    isAnyDragging,
-  };
+    [setActivatorNodeRef, attributes, listeners, isDragging, isAnyDragging]
+  );
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -107,6 +116,8 @@ function SortableRow<T extends {id: string}>({
     </div>
   );
 }
+
+const SortableRow = memo(SortableRowInner) as typeof SortableRowInner;
 
 /**
  * Shared pointer- and keyboard-accessible animated vertical sortable list
@@ -132,7 +143,8 @@ export function SortableList<T extends {id: string}>({
     })
   );
 
-  const itemIds = items.map((item) => item.id);
+  const rawItemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const itemIds = useStableValue(rawItemIds, stabilizeStringArray);
   const activeIndex = activeId ? items.findIndex((item) => item.id === activeId) : -1;
   const activeItem = activeIndex >= 0 ? items[activeIndex] : null;
   const isAnyDragging = activeId !== null;
@@ -170,7 +182,7 @@ export function SortableList<T extends {id: string}>({
       id={`sortable-${scopeId}`}
       sensors={sensors}
       collisionDetection={closestCenter}
-      modifiers={[restrictToVerticalAxis]}
+      modifiers={VERTICAL_AXIS_MODIFIERS}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
@@ -190,7 +202,7 @@ export function SortableList<T extends {id: string}>({
       </SortableContext>
 
       {renderOverlay && (
-        <DragOverlay dropAnimation={null} modifiers={[restrictToVerticalAxis]}>
+        <DragOverlay dropAnimation={null} modifiers={VERTICAL_AXIS_MODIFIERS}>
           {activeItem && activeIndex >= 0 ? renderOverlay(activeItem, activeIndex) : null}
         </DragOverlay>
       )}

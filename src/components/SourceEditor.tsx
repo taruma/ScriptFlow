@@ -1,3 +1,4 @@
+import {memo} from 'react';
 import type {AestheticToken} from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
@@ -8,7 +9,11 @@ interface SourceEditorProps {
   onChange: (nextRawText: string) => void;
 }
 
-export function SourceEditor({rawText, aestheticTokens, onChange}: SourceEditorProps) {
+export const SourceEditor = memo(function SourceEditor({
+  rawText,
+  aestheticTokens,
+  onChange,
+}: SourceEditorProps) {
   const lineCount = rawText.length === 0 ? 0 : rawText.split('\n').length;
   const charCount = rawText.length;
 
@@ -36,4 +41,4 @@ export function SourceEditor({rawText, aestheticTokens, onChange}: SourceEditorP
       </div>
     </main>
   );
-}
+});

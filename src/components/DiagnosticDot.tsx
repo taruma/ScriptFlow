@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {memo, useEffect, useRef, useState} from 'react';
 import {AlertCircle, AlertTriangle, X} from 'lucide-react';
 import type {LintDiagnostic} from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -8,7 +8,10 @@ interface DiagnosticDotProps {
   align?: 'top' | 'center';
 }
 
-export function DiagnosticDot({diagnostics, align = 'top'}: DiagnosticDotProps) {
+export const DiagnosticDot = memo(function DiagnosticDot({
+  diagnostics,
+  align = 'top',
+}: DiagnosticDotProps) {
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -122,4 +125,4 @@ export function DiagnosticDot({diagnostics, align = 'top'}: DiagnosticDotProps) 
       )}
     </div>
   );
-}
+});
