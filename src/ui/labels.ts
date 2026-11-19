@@ -115,6 +115,7 @@ export const UI_LABELS = {
     beatRange: (count: number) => (count === 0 ? 'No beats yet' : count === 1 ? 'S1' : `S1 → S${count}`),
     cutMarker: 'cut',
     cutRecallMarker: 'cut · recall',
+    addMacroBlock: 'Add macro-block',
     addBeat: 'Add beat',
     insertBeatBeforeFirst: 'Insert beat before S1',
     insertBeatBetween: (prevIndex: number, nextIndex: number) =>
@@ -140,6 +141,12 @@ export const UI_LABELS = {
     aestheticKeyAria: (index: number) => `Aesthetic key ${index + 1}`,
     aestheticValueAria: (key: string, index: number) =>
       key ? `Aesthetic value for ${key}` : `Aesthetic value ${index + 1}`,
+    pickerHeader: 'Add Staging Macro-Block',
+    alreadyAdded: 'Added',
+    customHeaderPlaceholder: 'Custom block (e.g. PROPS, AUDIO NOTES)',
+    customHeaderAdd: 'Add',
+    customHeaderReservedError: 'Reserved for Phase 2 Execution',
+    deleteBlockTitle: (name: string) => `Delete [${name}]`,
   },
 
   execution: {
@@ -237,6 +244,18 @@ export const UI_LABELS = {
     schemas: {
       heading: 'Zod-Generated JSON Schema Registry',
     },
+  },
+
+  confirm: {
+    dialogAria: 'Confirm action',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    deleteMacroBlockTitle: (name: string) => `Delete [${name}] macro-block?`,
+    deleteMacroBlockDesc:
+      'This will remove this staging macro-block and its content from the script.',
+    deleteMacroStateTitle: (beatIndex: number) => `Delete S${beatIndex} macro-state?`,
+    deleteMacroStateDesc:
+      'This will remove this beat and all of its chained sub-states from the execution timeline.',
   },
 
   toasts: {

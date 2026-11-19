@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
-import {ChevronDown, ChevronRight} from 'lucide-react';
+import {ChevronDown, ChevronRight, Trash2} from 'lucide-react';
 import type {
   AestheticToken,
   CharacterBinding,
@@ -17,6 +17,9 @@ interface StagingBlockCardProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   onCommit: (blockIndex: number, nextBody: string) => void;
+  onDelete: (blockIndex: number) => void;
+  autoFocusEdit?: boolean;
+  onClearAutoFocus?: () => void;
   diagnostics: LintDiagnostic[];
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
@@ -76,6 +79,9 @@ export function StagingBlockCard({
   collapsed,
   onToggleCollapse,
   onCommit,
+  onDelete,
+  autoFocusEdit = false,
+  onClearAutoFocus,
   diagnostics,
   characters,
   aestheticTokens,
@@ -91,6 +97,12 @@ export function StagingBlockCard({
       setLocalValue(block.rawBody);
     }
   }, [block.rawBody, isFocused]);
+
+  useEffect(() => {
+    if (!autoFocusEdit || collapsed || block.kind === 'AESTHETIC') return;
+    editorRef.current?.focus();
+    onClearAutoFocus?.();
+  }, [autoFocusEdit, collapsed, block.kind, onClearAutoFocus]);
 
   const handleChange = (nextValue: string) => {
     setLocalValue(nextValue);
@@ -159,11 +171,26 @@ export function StagingBlockCard({
             <span className="text-[11.5px] text-text-faint truncate">{phase.caption}</span>
           </div>
 
-          {collapsed && collapsedMeta && (
-            <span className="font-mono text-[10.5px] text-text-faint tabular-nums whitespace-nowrap shrink-0">
-              {collapsedMeta}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {collapsed && collapsedMeta && (
+              <span className="font-mono text-[10.5px] text-text-faint tabular-nums whitespace-nowrap">
+                {collapsedMeta}
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(blockIndex);
+              }}
+              title={UI_LABELS.staging.deleteBlockTitle(block.name)}
+              aria-label={UI_LABELS.staging.deleteBlockTitle(block.name)}
+              className="rounded-md p-1 text-text-faint opacity-0 group-hover/staging:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Collapsed 2-Line Muted Plain-Text Preview vs. Live Syntax-Highlighted Editor */}
@@ -196,6 +223,8 @@ export function StagingBlockCard({
             <AestheticBlockEditor
               rawBody={block.rawBody}
               aestheticTokens={aestheticTokens}
+              autoFocus={autoFocusEdit}
+              onClearAutoFocus={onClearAutoFocus}
               onCommit={(nextBody) => onCommit(blockIndex, nextBody)}
               onFocusChange={setIsFocused}
             />

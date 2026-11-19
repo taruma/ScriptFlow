@@ -7,6 +7,8 @@ import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
 interface AestheticBlockEditorProps {
   rawBody: string;
   aestheticTokens: AestheticToken[];
+  autoFocus?: boolean;
+  onClearAutoFocus?: () => void;
   onCommit: (nextBody: string) => void;
   onFocusChange: (focused: boolean) => void;
 }
@@ -68,6 +70,8 @@ interface PendingFocus {
 export function AestheticBlockEditor({
   rawBody,
   aestheticTokens,
+  autoFocus = false,
+  onClearAutoFocus,
   onCommit,
   onFocusChange,
 }: AestheticBlockEditorProps) {
@@ -86,6 +90,13 @@ export function AestheticBlockEditor({
       setRows(parseAestheticRows(rawBody));
     }
   }, [rawBody, isContainerFocused]);
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    pendingFocusRef.current = {index: 0, column: 'key', caret: 0};
+    keyRefs.current.get(0)?.focus();
+    onClearAutoFocus?.();
+  }, [autoFocus, onClearAutoFocus]);
 
   useLayoutEffect(() => {
     const target = pendingFocusRef.current;

@@ -2,10 +2,12 @@ import {describe, expect, it} from 'vitest';
 import {
   deleteExecutionBeat,
   deleteExecutionSubState,
+  deleteStagingBlock,
   exportPlainText,
   exportTagless,
   insertExecutionBeat,
   insertExecutionSubState,
+  insertStagingBlock,
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
   reorderExecutionBeats,
@@ -31,6 +33,48 @@ describe('Auteur Script Serializer & Tagless Exporter', () => {
     );
     expect(doc.stagingBlocks[1].name).toBe('LOGIC');
     expect(doc.execution?.beats).toHaveLength(3);
+  });
+
+  it('inserts and deletes Staging Macro-Blocks cleanly while preserving Execution beats', () => {
+    const appended = insertStagingBlock(
+      INTERROGATION,
+      'continuity protocol',
+      'Inherit exact final frame from @video1.'
+    );
+    const docAppended = parseAuteurScript(appended);
+    expect(docAppended.stagingBlocks.map((b) => b.name)).toEqual([
+      'INTENT',
+      'LOGIC',
+      'AESTHETIC',
+      'OPENING',
+      'CONTINUITY PROTOCOL',
+    ]);
+    expect(docAppended.stagingBlocks[4].rawBody).toBe('Inherit exact final frame from @video1.');
+    expect(docAppended.execution?.beats).toHaveLength(3);
+
+    // Strips brackets and inserts at explicit index
+    const insertedMid = insertStagingBlock(appended, '[props]', 'Manila folder; steel handcuffs', 0);
+    const docMid = parseAuteurScript(insertedMid);
+    expect(docMid.stagingBlocks[1].name).toBe('PROPS');
+
+    // Ignores reserved Execution header names
+    const ignored = insertStagingBlock(insertedMid, 'EXECUTION', 'should not insert');
+    expect(ignored).toBe(insertedMid);
+
+    // Deletes Staging block cleanly
+    const afterDelete = deleteStagingBlock(insertedMid, 1);
+    const docAfterDelete = parseAuteurScript(afterDelete);
+    expect(docAfterDelete.stagingBlocks.map((b) => b.name)).toEqual([
+      'INTENT',
+      'LOGIC',
+      'AESTHETIC',
+      'OPENING',
+      'CONTINUITY PROTOCOL',
+    ]);
+    expect(docAfterDelete.execution?.beats).toHaveLength(3);
+
+    // Out-of-bounds delete is a safe no-op
+    expect(deleteStagingBlock(afterDelete, 99)).toBe(afterDelete);
   });
 
   it('updates, inserts, deletes, and reorders Execution beats cleanly', () => {

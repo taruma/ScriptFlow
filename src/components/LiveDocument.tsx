@@ -6,6 +6,7 @@ import type {
   LintDiagnostic,
 } from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import {AddStagingBlockPicker} from './AddStagingBlockPicker.tsx';
 import {ExecutionBeatRow} from './ExecutionBeatRow.tsx';
 import {StagingBlockCard} from './StagingBlockCard.tsx';
 
@@ -14,6 +15,8 @@ interface LiveDocumentProps {
   metadata: ExtractedMetadata;
   diagnostics: LintDiagnostic[];
   onUpdateStaging: (blockIndex: number, nextBody: string) => void;
+  onInsertStaging: (headerName: string) => void;
+  onDeleteStaging: (blockIndex: number) => void;
   onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
   onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
@@ -48,6 +51,8 @@ export function LiveDocument({
   metadata,
   diagnostics,
   onUpdateStaging,
+  onInsertStaging,
+  onDeleteStaging,
   onUpdateSubState,
   onInsertSubState,
   onDeleteSubState,
@@ -57,6 +62,7 @@ export function LiveDocument({
   onReorderBeats,
 }: LiveDocumentProps) {
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
+  const [autoFocusBlockIndex, setAutoFocusBlockIndex] = useState<number | null>(null);
   const [autoFocusBeatIndex, setAutoFocusBeatIndex] = useState<number | null>(null);
   const [draggedBeatIndex, setDraggedBeatIndex] = useState<number | null>(null);
   const [dragOverBeatIndex, setDragOverBeatIndex] = useState<number | null>(null);
@@ -105,6 +111,13 @@ export function LiveDocument({
       ...prev,
       [blockName]: !prev[blockName],
     }));
+  };
+
+  const handleInsertStagingBlock = (headerName: string) => {
+    const nextIndex = doc.stagingBlocks.length;
+    setCollapsedBlocks((prev) => ({...prev, [headerName]: false}));
+    onInsertStaging(headerName);
+    setAutoFocusBlockIndex(nextIndex);
   };
 
   const handleInsertBeatAt = (afterBeatIndex: number) => {
@@ -216,6 +229,9 @@ export function LiveDocument({
                     collapsed={Boolean(collapsedBlocks[block.name])}
                     onToggleCollapse={() => toggleSingleBlock(block.name)}
                     onCommit={onUpdateStaging}
+                    onDelete={onDeleteStaging}
+                    autoFocusEdit={autoFocusBlockIndex === index}
+                    onClearAutoFocus={() => setAutoFocusBlockIndex(null)}
                     diagnostics={stagingDiagnosticsByIndex.get(index) ?? []}
                     characters={metadata.characters}
                     aestheticTokens={metadata.aestheticTokens}
@@ -230,6 +246,12 @@ export function LiveDocument({
                 <div />
               </div>
             )}
+
+            {/* Quiet bottom Add Macro-Block action */}
+            <AddStagingBlockPicker
+              existingBlockNames={doc.stagingBlocks.map((b) => b.name)}
+              onAddBlock={handleInsertStagingBlock}
+            />
           </div>
         </section>
 

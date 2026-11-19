@@ -1,4 +1,9 @@
-import {normalizeLineEndings, parseAuteurScript, splitExecutionSubStates} from './parser.ts';
+import {
+  EXECUTION_HEADERS,
+  normalizeLineEndings,
+  parseAuteurScript,
+  splitExecutionSubStates,
+} from './parser.ts';
 
 const LEADING_TAG_STRIP_REGEX = /^\[[A-Z0-9 _-]+\]\s*/;
 
@@ -58,6 +63,83 @@ export function updateStagingBlock(raw: string, blockIndex: number, newBody: str
   const nextStaging = doc.stagingBlocks.map((block, idx) =>
     idx === blockIndex ? {name: block.name, rawBody: newBody} : {name: block.name, rawBody: block.rawBody}
   );
+
+  const nextExecution = doc.execution
+    ? {
+        headerName: doc.execution.headerName,
+        beats: doc.execution.beats.map((b) => b.raw),
+      }
+    : null;
+
+  return serializeBlocksAndBeats(doc.preambleLines, nextStaging, nextExecution);
+}
+
+function sanitizeStagingHeaderName(rawName: string): string {
+  return rawName
+    .trim()
+    .replace(/^\[+/, '')
+    .replace(/\]+$/, '')
+    .replace(/[^A-Za-z0-9 _/-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Inserts a new Staging Macro-Block at the end of Phase 1 (or immediately after
+ * afterBlockIndex when specified), preserving all other blocks and Execution beats losslessly.
+ * Ignores empty names or reserved Phase 2 Execution headers.
+ */
+export function insertStagingBlock(
+  raw: string,
+  headerName: string,
+  initialBody = '',
+  afterBlockIndex?: number
+): string {
+  const doc = parseAuteurScript(raw);
+  const cleanName = sanitizeStagingHeaderName(headerName);
+  if (cleanName.length === 0 || EXECUTION_HEADERS.has(cleanName)) {
+    return doc.raw;
+  }
+
+  const nextStaging = doc.stagingBlocks.map((block) => ({
+    name: block.name,
+    rawBody: block.rawBody,
+  }));
+
+  const insertPos =
+    afterBlockIndex === undefined
+      ? nextStaging.length
+      : Math.max(0, Math.min(afterBlockIndex + 1, nextStaging.length));
+
+  nextStaging.splice(insertPos, 0, {
+    name: cleanName,
+    rawBody: normalizeLineEndings(initialBody).replace(/\n+$/, ''),
+  });
+
+  const nextExecution = doc.execution
+    ? {
+        headerName: doc.execution.headerName,
+        beats: doc.execution.beats.map((b) => b.raw),
+      }
+    : null;
+
+  return serializeBlocksAndBeats(doc.preambleLines, nextStaging, nextExecution);
+}
+
+/**
+ * Deletes a Staging Macro-Block by its 0-based index, preserving all remaining
+ * Staging blocks and the Execution timeline losslessly.
+ */
+export function deleteStagingBlock(raw: string, blockIndex: number): string {
+  const doc = parseAuteurScript(raw);
+  if (blockIndex < 0 || blockIndex >= doc.stagingBlocks.length) {
+    return doc.raw;
+  }
+
+  const nextStaging = doc.stagingBlocks
+    .filter((_, idx) => idx !== blockIndex)
+    .map((block) => ({name: block.name, rawBody: block.rawBody}));
 
   const nextExecution = doc.execution
     ? {

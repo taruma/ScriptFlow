@@ -2,11 +2,13 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   deleteExecutionBeat,
   deleteExecutionSubState,
+  deleteStagingBlock,
   exportPlainText,
   exportTagless,
   extractMetadata,
   insertExecutionBeat,
   insertExecutionSubState,
+  insertStagingBlock,
   lintDocument,
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
@@ -14,6 +16,7 @@ import {
   updateExecutionSubState,
   updateStagingBlock,
 } from './core/index.ts';
+import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDialog.tsx';
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
@@ -111,6 +114,7 @@ export default function App() {
   const [copiedKind, setCopiedKind] = useState<'plain' | 'tagless' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   // Apply theme mode & text size to <html>
   useEffect(() => {
@@ -174,7 +178,7 @@ export default function App() {
   // Global Paste-and-Hydrate with Active-Editor Guard (07 §1)
   useEffect(() => {
     const handleGlobalPaste = (event: ClipboardEvent) => {
-      if (isDebugOpen) return;
+      if (isDebugOpen || confirmRequest) return;
       const pasted = event.clipboardData?.getData('text/plain');
       if (!pasted || pasted.trim().length === 0) return;
 
@@ -208,12 +212,36 @@ export default function App() {
 
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [viewMode, isDebugOpen]);
+  }, [viewMode, isDebugOpen, confirmRequest]);
 
   // Pure Serializer Mutations
   const handleUpdateStaging = useCallback((blockIndex: number, nextBody: string) => {
     setRawText((prev) => updateStagingBlock(prev, blockIndex, nextBody));
   }, []);
+
+  const handleInsertStaging = useCallback((headerName: string) => {
+    setRawText((prev) => insertStagingBlock(prev, headerName));
+  }, []);
+
+  const handleRequestDeleteStaging = useCallback(
+    (blockIndex: number) => {
+      const target = doc.stagingBlocks[blockIndex];
+      if (!target) return;
+      const excerpt = target.lines.find((line) => line.trim().length > 0)?.trim();
+      setConfirmRequest({
+        title: UI_LABELS.confirm.deleteMacroBlockTitle(target.name),
+        description: UI_LABELS.confirm.deleteMacroBlockDesc,
+        excerpt,
+        confirmLabel: UI_LABELS.confirm.delete,
+        cancelLabel: UI_LABELS.confirm.cancel,
+        tone: 'danger',
+        onConfirm: () => {
+          setRawText((prev) => deleteStagingBlock(prev, blockIndex));
+        },
+      });
+    },
+    [doc.stagingBlocks]
+  );
 
   const handleUpdateSubState = useCallback(
     (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => {
@@ -245,9 +273,23 @@ export default function App() {
     setRawText((prev) => insertExecutionBeat(prev, afterBeatIndex, starterLine));
   }, []);
 
-  const handleDeleteBeat = useCallback((beatIndex: number) => {
-    setRawText((prev) => deleteExecutionBeat(prev, beatIndex));
-  }, []);
+  const handleRequestDeleteBeat = useCallback(
+    (beatIndex: number) => {
+      const target = doc.execution?.beats.find((b) => b.index === beatIndex);
+      setConfirmRequest({
+        title: UI_LABELS.confirm.deleteMacroStateTitle(beatIndex),
+        description: UI_LABELS.confirm.deleteMacroStateDesc,
+        excerpt: target?.raw,
+        confirmLabel: UI_LABELS.confirm.delete,
+        cancelLabel: UI_LABELS.confirm.cancel,
+        tone: 'danger',
+        onConfirm: () => {
+          setRawText((prev) => deleteExecutionBeat(prev, beatIndex));
+        },
+      });
+    },
+    [doc.execution]
+  );
 
   const handleReorderBeats = useCallback((fromBeatIndex: number, toBeatIndex: number) => {
     setRawText((prev) => reorderExecutionBeats(prev, fromBeatIndex, toBeatIndex));
@@ -339,12 +381,14 @@ export default function App() {
             metadata={metadata}
             diagnostics={diagnostics}
             onUpdateStaging={handleUpdateStaging}
+            onInsertStaging={handleInsertStaging}
+            onDeleteStaging={handleRequestDeleteStaging}
             onUpdateSubState={handleUpdateSubState}
             onInsertSubState={handleInsertSubState}
             onDeleteSubState={handleDeleteSubState}
             onMergeSubState={handleMergeSubState}
             onInsertBeat={handleInsertBeat}
-            onDeleteBeat={handleDeleteBeat}
+            onDeleteBeat={handleRequestDeleteBeat}
             onReorderBeats={handleReorderBeats}
           />
         ) : (
@@ -362,6 +406,8 @@ export default function App() {
         rawText={rawText}
         onCommitRawText={handleCommitFromDebug}
       />
+
+      <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
 
       {/* Subtle transient feedback toast */}
       {toastMessage && (
