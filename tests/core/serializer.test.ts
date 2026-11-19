@@ -11,6 +11,7 @@ import {
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
   reorderExecutionBeats,
+  reorderStagingBlocks,
   updateExecutionBeat,
   updateExecutionSubState,
   updateStagingBlock,
@@ -176,6 +177,42 @@ describe('Auteur Script Serializer & Tagless Exporter', () => {
     expect(line3.startsWith('->')).toBe(false);
     expect(line3).toContain('-> Park, in the background, uncrosses his arms');
     expect(line3).toContain('<steel table groaning under Miller\'s weight>');
+  });
+
+  it('reorders Staging Macro-Blocks losslessly without altering bodies or Execution beats', () => {
+    const before = parseAuteurScript(INTERROGATION);
+    expect(before.stagingBlocks.map((b) => b.name)).toEqual([
+      'INTENT',
+      'LOGIC',
+      'AESTHETIC',
+      'OPENING',
+    ]);
+
+    const movedForward = reorderStagingBlocks(INTERROGATION, 0, 2);
+    const parsedForward = parseAuteurScript(movedForward);
+    expect(parsedForward.stagingBlocks.map((b) => b.name)).toEqual([
+      'LOGIC',
+      'AESTHETIC',
+      'INTENT',
+      'OPENING',
+    ]);
+    expect(parsedForward.stagingBlocks[2].rawBody).toBe(before.stagingBlocks[0].rawBody);
+    expect(parsedForward.execution?.beats.map((b) => b.raw)).toEqual(
+      before.execution?.beats.map((b) => b.raw)
+    );
+
+    const movedBack = reorderStagingBlocks(movedForward, 3, 0);
+    expect(parseAuteurScript(movedBack).stagingBlocks.map((b) => b.name)).toEqual([
+      'OPENING',
+      'LOGIC',
+      'AESTHETIC',
+      'INTENT',
+    ]);
+
+    // Out-of-range and no-op moves return canonical raw unchanged
+    expect(reorderStagingBlocks(INTERROGATION, 1, 1)).toBe(before.raw);
+    expect(reorderStagingBlocks(INTERROGATION, -1, 2)).toBe(before.raw);
+    expect(reorderStagingBlocks(INTERROGATION, 0, 99)).toBe(before.raw);
   });
 
   it('normalizes CRLF and trailing spaces in exportPlainText', () => {

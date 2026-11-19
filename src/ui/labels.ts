@@ -160,6 +160,7 @@ export const UI_LABELS = {
     customHeaderPlaceholder: 'Custom block (e.g. PROPS, AUDIO NOTES)',
     customHeaderAdd: 'Add',
     customHeaderReservedError: 'Reserved for Phase 2 Execution',
+    dragReorderTitle: 'Drag to reorder macro-block',
     deleteBlockTitle: (name: string) => `Delete [${name}]`,
   },
 

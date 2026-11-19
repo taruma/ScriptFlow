@@ -17,6 +17,7 @@ interface LiveDocumentProps {
   onUpdateStaging: (blockIndex: number, nextBody: string) => void;
   onInsertStaging: (headerName: string, afterBlockIndex?: number) => void;
   onDeleteStaging: (blockIndex: number) => void;
+  onReorderStaging: (fromBlockIndex: number, toBlockIndex: number) => void;
   onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
   onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
@@ -53,6 +54,7 @@ export function LiveDocument({
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
+  onReorderStaging,
   onUpdateSubState,
   onInsertSubState,
   onDeleteSubState,
@@ -65,6 +67,8 @@ export function LiveDocument({
   const [activeStagingPicker, setActiveStagingPicker] = useState<number | 'bottom' | null>(null);
   const [autoFocusBlockIndex, setAutoFocusBlockIndex] = useState<number | null>(null);
   const [autoFocusBeatIndex, setAutoFocusBeatIndex] = useState<number | null>(null);
+  const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
+  const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
   const [draggedBeatIndex, setDraggedBeatIndex] = useState<number | null>(null);
   const [dragOverBeatIndex, setDragOverBeatIndex] = useState<number | null>(null);
   const [stagingScrolled, setStagingScrolled] = useState<boolean>(false);
@@ -129,6 +133,14 @@ export function LiveDocument({
     const starter = getStarterBeatLine(doc);
     onInsertBeat(afterBeatIndex, starter);
     setAutoFocusBeatIndex(afterBeatIndex + 1);
+  };
+
+  const handleDropOnStagingBlock = (targetBlockIndex: number) => {
+    if (draggedBlockIndex !== null && draggedBlockIndex !== targetBlockIndex) {
+      onReorderStaging(draggedBlockIndex, targetBlockIndex);
+    }
+    setDraggedBlockIndex(null);
+    setDragOverBlockIndex(null);
   };
 
   const handleDropOnBeat = (targetBeatIndex: number) => {
@@ -323,6 +335,30 @@ export function LiveDocument({
                         diagnostics={stagingDiagnosticsByIndex.get(index) ?? []}
                         characters={metadata.characters}
                         aestheticTokens={metadata.aestheticTokens}
+                        isDragging={draggedBlockIndex === index}
+                        isDragOver={
+                          dragOverBlockIndex === index &&
+                          draggedBlockIndex !== null &&
+                          draggedBlockIndex !== index
+                        }
+                        onDragStart={(fromIdx) => {
+                          setActiveStagingPicker(null);
+                          setDraggedBlockIndex(fromIdx);
+                        }}
+                        onDragOver={
+                          draggedBlockIndex !== null
+                            ? (overIdx) => {
+                                if (overIdx !== dragOverBlockIndex) {
+                                  setDragOverBlockIndex(overIdx);
+                                }
+                              }
+                            : undefined
+                        }
+                        onDrop={draggedBlockIndex !== null ? handleDropOnStagingBlock : undefined}
+                        onDragEnd={() => {
+                          setDraggedBlockIndex(null);
+                          setDragOverBlockIndex(null);
+                        }}
                       />
                     </div>
                   );

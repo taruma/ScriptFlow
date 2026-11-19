@@ -14,6 +14,7 @@ import {
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
   reorderExecutionBeats,
+  reorderStagingBlocks,
   updateExecutionSubState,
   updateStagingBlock,
 } from './core/index.ts';
@@ -209,6 +210,10 @@ export default function App() {
     [doc.stagingBlocks]
   );
 
+  const handleReorderStaging = useCallback((fromBlockIndex: number, toBlockIndex: number) => {
+    setRawText((prev) => reorderStagingBlocks(prev, fromBlockIndex, toBlockIndex));
+  }, []);
+
   const handleUpdateSubState = useCallback(
     (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => {
       setRawText((prev) =>
@@ -347,6 +352,7 @@ export default function App() {
             onUpdateStaging={handleUpdateStaging}
             onInsertStaging={handleInsertStaging}
             onDeleteStaging={handleRequestDeleteStaging}
+            onReorderStaging={handleReorderStaging}
             onUpdateSubState={handleUpdateSubState}
             onInsertSubState={handleInsertSubState}
             onDeleteSubState={handleDeleteSubState}

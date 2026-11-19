@@ -15,7 +15,7 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
    [ Pure Synchronous Pipeline ]   [ Pure UI Mutations ]   [ Programmatic JSON Engine ]
    1. parseAuteurScript(raw)       (src/core/serializer)   (src/core/ir, patch, slicer)
    2. extractMetadata(doc)         • insert/update/delete  • toAuteurIR / fromAuteurIR
-   3. lintDocument(doc, meta)        StagingBlock          • toAuteurEnvelope / Draft
+   3. lintDocument(doc, meta)        & reorder Staging     • toAuteurEnvelope / Draft
    4. tokenize* (highlighter)      • insert/update/delete  • applyAuteurPatch (tx+lint)
    5. parseAestheticRows             ExecutionBeat/Sub…    • sliceAuteurEnvelope (L1–L5)
                                    • reorderExecutionBeats • getAuteurJsonSchemas (Zod)
@@ -57,7 +57,7 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 
 Every mutation function in `src/core/serializer.ts` obeys three invariants:
 1. **Immutability**: Takes `(raw: string, ...args)` and returns a new canonical `string` without mutating inputs.
-2. **Block Orthogonality**: Inserting (`insertStagingBlock`), editing (`updateStagingBlock`), or deleting (`deleteStagingBlock`) a Staging block preserves every other Staging block and all Execution beats untouched; editing, inserting, deleting, or reordering Execution beats never alters Staging blocks. `insertStagingBlock` also rejects reserved Execution headers (`EXECUTION`, `TIMELINE`, `BEATS`, `SHOTLIST`).
+2. **Block Orthogonality**: Inserting (`insertStagingBlock`), editing (`updateStagingBlock`), deleting (`deleteStagingBlock`), or reordering (`reorderStagingBlocks`) a Staging block preserves every other Staging block and all Execution beats untouched; editing, inserting, deleting, or reordering Execution beats never alters Staging blocks. `insertStagingBlock` also rejects reserved Execution headers (`EXECUTION`, `TIMELINE`, `BEATS`, `SHOTLIST`).
 3. **Single-Line Beat Guarantee**: `updateExecutionBeat` and `insertExecutionBeat` normalize accidental internal newlines into single spaces so each Macro-State remains one clean line inside `[EXECUTION]`.
 
 ---

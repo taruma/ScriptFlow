@@ -152,6 +152,45 @@ export function deleteStagingBlock(raw: string, blockIndex: number): string {
 }
 
 /**
+ * Reorders a Staging Macro-Block from 0-based fromBlockIndex to 0-based toBlockIndex,
+ * preserving preamble lines, all Staging block bodies, and the Execution timeline losslessly.
+ */
+export function reorderStagingBlocks(
+  raw: string,
+  fromBlockIndex: number,
+  toBlockIndex: number
+): string {
+  const doc = parseAuteurScript(raw);
+  const count = doc.stagingBlocks.length;
+
+  if (
+    fromBlockIndex < 0 ||
+    fromBlockIndex >= count ||
+    toBlockIndex < 0 ||
+    toBlockIndex >= count ||
+    fromBlockIndex === toBlockIndex
+  ) {
+    return doc.raw;
+  }
+
+  const nextStaging = doc.stagingBlocks.map((block) => ({
+    name: block.name,
+    rawBody: block.rawBody,
+  }));
+  const [moved] = nextStaging.splice(fromBlockIndex, 1);
+  nextStaging.splice(toBlockIndex, 0, moved);
+
+  const nextExecution = doc.execution
+    ? {
+        headerName: doc.execution.headerName,
+        beats: doc.execution.beats.map((b) => b.raw),
+      }
+    : null;
+
+  return serializeBlocksAndBeats(doc.preambleLines, nextStaging, nextExecution);
+}
+
+/**
  * Updates a single Execution Macro-State line by its 1-based beat index.
  * If newBeatLine is empty/whitespace, deletes the beat cleanly.
  */

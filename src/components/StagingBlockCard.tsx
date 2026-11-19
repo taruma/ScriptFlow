@@ -1,5 +1,5 @@
-import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
-import {ChevronDown, ChevronRight, Trash2} from 'lucide-react';
+import {useEffect, useRef, useState, type DragEvent, type KeyboardEvent} from 'react';
+import {ChevronDown, ChevronRight, GripVertical, Trash2} from 'lucide-react';
 import type {
   AestheticToken,
   CharacterBinding,
@@ -26,6 +26,12 @@ interface StagingBlockCardProps {
   diagnostics: LintDiagnostic[];
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
+  isDragging?: boolean;
+  isDragOver?: boolean;
+  onDragStart?: (blockIndex: number) => void;
+  onDragOver?: (blockIndex: number) => void;
+  onDrop?: (blockIndex: number) => void;
+  onDragEnd?: () => void;
 }
 
 function getCollapsedPreviewText(block: StagingBlock): string {
@@ -47,6 +53,12 @@ export function StagingBlockCard({
   diagnostics,
   characters,
   aestheticTokens,
+  isDragging = false,
+  isDragOver = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: StagingBlockCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(block.rawBody);
@@ -89,14 +101,43 @@ export function StagingBlockCard({
     }
   };
 
+  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', `staging:${blockIndex}`);
+    onDragStart?.(blockIndex);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!onDragOver) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    onDragOver(blockIndex);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    if (!onDrop) return;
+    event.preventDefault();
+    onDrop(blockIndex);
+  };
+
   const collapsedMeta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
   const previewText = getCollapsedPreviewText(block);
 
   return (
     <section
       id={`staging-block-${blockIndex}`}
-      className="group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className={`group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5 transition-opacity ${
+        isDragging ? 'opacity-40' : 'opacity-100'
+      }`}
     >
+      {/* Drag drop target line */}
+      {isDragOver && (
+        <div className="pointer-events-none absolute -top-1 left-0 right-6 h-0.5 rounded-full bg-blueprint-accent z-20" />
+      )}
+
       <div
         className={`min-w-0 rounded-lg border transition-colors ${
           isFocused
@@ -115,9 +156,23 @@ export function StagingBlockCard({
               onToggleCollapse();
             }
           }}
-          className="flex items-center justify-between gap-2.5 px-3 py-1.5 cursor-pointer select-none"
+          className="flex items-center justify-between gap-2.5 px-2.5 py-1.5 cursor-pointer select-none"
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {onDragStart && (
+              <div
+                draggable={!isFocused}
+                onDragStart={handleDragStart}
+                onDragEnd={onDragEnd}
+                onClick={(e) => e.stopPropagation()}
+                title={UI_LABELS.staging.dragReorderTitle}
+                aria-label={UI_LABELS.staging.dragReorderTitle}
+                className="flex h-4 w-3.5 shrink-0 items-center justify-center rounded text-text-faint opacity-0 group-hover/staging:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
+              >
+                <GripVertical className="h-3 w-3" />
+              </div>
+            )}
+
             <span className="text-text-faint shrink-0">
               {collapsed ? (
                 <ChevronRight className="h-3.5 w-3.5" />
