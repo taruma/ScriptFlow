@@ -52,10 +52,14 @@ describe('Auteur Script Serializer & Tagless Exporter', () => {
     expect(docAppended.stagingBlocks[4].rawBody).toBe('Inherit exact final frame from @video1.');
     expect(docAppended.execution?.beats).toHaveLength(3);
 
-    // Strips brackets and inserts at explicit index
+    // Strips brackets and inserts at explicit index (between block 0 and block 1)
     const insertedMid = insertStagingBlock(appended, '[props]', 'Manila folder; steel handcuffs', 0);
     const docMid = parseAuteurScript(insertedMid);
     expect(docMid.stagingBlocks[1].name).toBe('PROPS');
+
+    // Inserts before first block when afterBlockIndex is -1
+    const insertedTop = insertStagingBlock(insertedMid, 'STAGE', 'Concrete basement', -1);
+    expect(parseAuteurScript(insertedTop).stagingBlocks[0].name).toBe('STAGE');
 
     // Ignores reserved Execution header names
     const ignored = insertStagingBlock(insertedMid, 'EXECUTION', 'should not insert');

@@ -116,6 +116,9 @@ export const UI_LABELS = {
     cutMarker: 'cut',
     cutRecallMarker: 'cut · recall',
     addMacroBlock: 'Add macro-block',
+    insertMacroBlockBeforeFirst: 'Insert macro-block before first block',
+    insertMacroBlockBetween: (prevName: string, nextName: string) =>
+      `Insert macro-block between [${prevName}] and [${nextName}]`,
     addBeat: 'Add beat',
     insertBeatBeforeFirst: 'Insert beat before S1',
     insertBeatBetween: (prevIndex: number, nextIndex: number) =>

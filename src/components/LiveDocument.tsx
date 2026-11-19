@@ -6,7 +6,7 @@ import type {
   LintDiagnostic,
 } from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
-import {AddStagingBlockPicker} from './AddStagingBlockPicker.tsx';
+import {AddStagingBlockPicker, StagingBlockPickerPanel} from './AddStagingBlockPicker.tsx';
 import {ExecutionBeatRow} from './ExecutionBeatRow.tsx';
 import {StagingBlockCard} from './StagingBlockCard.tsx';
 
@@ -15,7 +15,7 @@ interface LiveDocumentProps {
   metadata: ExtractedMetadata;
   diagnostics: LintDiagnostic[];
   onUpdateStaging: (blockIndex: number, nextBody: string) => void;
-  onInsertStaging: (headerName: string) => void;
+  onInsertStaging: (headerName: string, afterBlockIndex?: number) => void;
   onDeleteStaging: (blockIndex: number) => void;
   onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
   onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
@@ -62,6 +62,7 @@ export function LiveDocument({
   onReorderBeats,
 }: LiveDocumentProps) {
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
+  const [activeStagingPicker, setActiveStagingPicker] = useState<number | 'bottom' | null>(null);
   const [autoFocusBlockIndex, setAutoFocusBlockIndex] = useState<number | null>(null);
   const [autoFocusBeatIndex, setAutoFocusBeatIndex] = useState<number | null>(null);
   const [draggedBeatIndex, setDraggedBeatIndex] = useState<number | null>(null);
@@ -113,11 +114,15 @@ export function LiveDocument({
     }));
   };
 
-  const handleInsertStagingBlock = (headerName: string) => {
-    const nextIndex = doc.stagingBlocks.length;
+  const handleInsertStagingBlock = (headerName: string, afterBlockIndex?: number) => {
+    const insertedIndex =
+      afterBlockIndex === undefined
+        ? doc.stagingBlocks.length
+        : Math.max(0, Math.min(afterBlockIndex + 1, doc.stagingBlocks.length));
     setCollapsedBlocks((prev) => ({...prev, [headerName]: false}));
-    onInsertStaging(headerName);
-    setAutoFocusBlockIndex(nextIndex);
+    setActiveStagingPicker(null);
+    onInsertStaging(headerName, afterBlockIndex);
+    setAutoFocusBlockIndex(insertedIndex);
   };
 
   const handleInsertBeatAt = (afterBeatIndex: number) => {
@@ -218,25 +223,110 @@ export function LiveDocument({
             />
           </div>
 
-          <div className="mx-auto w-full max-w-[660px] px-3 pt-2.5 pb-8 sm:px-5 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3 lg:pb-24">
+          <div
+            className={`mx-auto w-full max-w-[660px] px-3 pb-8 sm:px-5 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3 lg:pb-24 ${
+              doc.stagingBlocks.length > 0 ? 'pt-1' : 'pt-2.5'
+            }`}
+          >
             {doc.stagingBlocks.length > 0 ? (
-              <div className="space-y-2">
-                {doc.stagingBlocks.map((block, index) => (
-                  <StagingBlockCard
-                    key={block.id}
-                    block={block}
-                    blockIndex={index}
-                    collapsed={Boolean(collapsedBlocks[block.name])}
-                    onToggleCollapse={() => toggleSingleBlock(block.name)}
-                    onCommit={onUpdateStaging}
-                    onDelete={onDeleteStaging}
-                    autoFocusEdit={autoFocusBlockIndex === index}
-                    onClearAutoFocus={() => setAutoFocusBlockIndex(null)}
-                    diagnostics={stagingDiagnosticsByIndex.get(index) ?? []}
-                    characters={metadata.characters}
-                    aestheticTokens={metadata.aestheticTokens}
-                  />
-                ))}
+              <div>
+                {/* Surgical insert seam before the first Staging Macro-Block */}
+                <div className="group/seam relative grid h-2 grid-cols-[minmax(0,1fr)_24px] items-center gap-1.5">
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-full border-t border-transparent group-hover/seam:border-border-main transition-colors" />
+                    <button
+                      type="button"
+                      data-staging-picker-trigger="true"
+                      onClick={() =>
+                        setActiveStagingPicker((prev) => (prev === -1 ? null : -1))
+                      }
+                      title={UI_LABELS.document.insertMacroBlockBeforeFirst}
+                      aria-label={UI_LABELS.document.insertMacroBlockBeforeFirst}
+                      className="absolute z-10 flex h-4 w-4 items-center justify-center rounded-full border border-border-main bg-surface text-text-faint opacity-0 group-hover/seam:opacity-100 hover:border-text-muted hover:text-text-main transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                  <div />
+                </div>
+
+                {activeStagingPicker === -1 && (
+                  <div className="grid grid-cols-[minmax(0,1fr)_24px] gap-1.5 py-1.5">
+                    <StagingBlockPickerPanel
+                      existingBlockNames={doc.stagingBlocks.map((b) => b.name)}
+                      onSelectBlock={(name) => handleInsertStagingBlock(name, -1)}
+                      onClose={() => setActiveStagingPicker(null)}
+                    />
+                    <div />
+                  </div>
+                )}
+
+                {doc.stagingBlocks.map((block, index) => {
+                  const prevBlock = index > 0 ? doc.stagingBlocks[index - 1] : null;
+                  const seamSlot = index - 1;
+                  return (
+                    <div key={block.id}>
+                      {/* Surgical insert seam between consecutive Staging Macro-Blocks */}
+                      {index > 0 && prevBlock && (
+                        <>
+                          <div className="group/seam relative grid h-2 grid-cols-[minmax(0,1fr)_24px] items-center gap-1.5">
+                            <div className="relative flex items-center justify-center">
+                              <div className="w-full border-t border-transparent group-hover/seam:border-border-main/70 transition-colors" />
+                              <button
+                                type="button"
+                                data-staging-picker-trigger="true"
+                                onClick={() =>
+                                  setActiveStagingPicker((prev) =>
+                                    prev === seamSlot ? null : seamSlot
+                                  )
+                                }
+                                title={UI_LABELS.document.insertMacroBlockBetween(
+                                  prevBlock.name,
+                                  block.name
+                                )}
+                                aria-label={UI_LABELS.document.insertMacroBlockBetween(
+                                  prevBlock.name,
+                                  block.name
+                                )}
+                                className="absolute z-10 flex h-4 w-4 items-center justify-center rounded-full border border-border-main bg-surface text-text-faint opacity-0 group-hover/seam:opacity-100 hover:border-text-muted hover:text-text-main transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Plus className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                            <div />
+                          </div>
+
+                          {activeStagingPicker === seamSlot && (
+                            <div className="grid grid-cols-[minmax(0,1fr)_24px] gap-1.5 py-1.5">
+                              <StagingBlockPickerPanel
+                                existingBlockNames={doc.stagingBlocks.map((b) => b.name)}
+                                onSelectBlock={(name) =>
+                                  handleInsertStagingBlock(name, seamSlot)
+                                }
+                                onClose={() => setActiveStagingPicker(null)}
+                              />
+                              <div />
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      <StagingBlockCard
+                        block={block}
+                        blockIndex={index}
+                        collapsed={Boolean(collapsedBlocks[block.name])}
+                        onToggleCollapse={() => toggleSingleBlock(block.name)}
+                        onCommit={onUpdateStaging}
+                        onDelete={onDeleteStaging}
+                        autoFocusEdit={autoFocusBlockIndex === index}
+                        onClearAutoFocus={() => setAutoFocusBlockIndex(null)}
+                        diagnostics={stagingDiagnosticsByIndex.get(index) ?? []}
+                        characters={metadata.characters}
+                        aestheticTokens={metadata.aestheticTokens}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="grid grid-cols-[minmax(0,1fr)_24px] gap-1.5">
@@ -250,7 +340,12 @@ export function LiveDocument({
             {/* Quiet bottom Add Macro-Block action */}
             <AddStagingBlockPicker
               existingBlockNames={doc.stagingBlocks.map((b) => b.name)}
-              onAddBlock={handleInsertStagingBlock}
+              isOpen={activeStagingPicker === 'bottom'}
+              onToggle={() =>
+                setActiveStagingPicker((prev) => (prev === 'bottom' ? null : 'bottom'))
+              }
+              onClose={() => setActiveStagingPicker(null)}
+              onAddBlock={(name) => handleInsertStagingBlock(name)}
             />
           </div>
         </section>

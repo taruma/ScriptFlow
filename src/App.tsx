@@ -219,8 +219,8 @@ export default function App() {
     setRawText((prev) => updateStagingBlock(prev, blockIndex, nextBody));
   }, []);
 
-  const handleInsertStaging = useCallback((headerName: string) => {
-    setRawText((prev) => insertStagingBlock(prev, headerName));
+  const handleInsertStaging = useCallback((headerName: string, afterBlockIndex?: number) => {
+    setRawText((prev) => insertStagingBlock(prev, headerName, '', afterBlockIndex));
   }, []);
 
   const handleRequestDeleteStaging = useCallback(
