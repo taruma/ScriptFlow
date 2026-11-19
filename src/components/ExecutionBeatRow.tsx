@@ -3,7 +3,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type DragEvent,
   type KeyboardEvent,
 } from 'react';
 import {GripVertical, Plus, Trash2, X} from 'lucide-react';
@@ -16,6 +15,7 @@ import type {
 import {UI_LABELS} from '../ui/labels.ts';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
+import type {SortableItemBinding} from './SortableList.tsx';
 
 interface ExecutionBeatRowProps {
   beat: ExecutionBeat;
@@ -30,12 +30,7 @@ interface ExecutionBeatRowProps {
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
   onDeleteBeat: (beatIndex: number) => void;
-  onDragStart: (beatIndex: number) => void;
-  onDragOver: (beatIndex: number) => void;
-  onDrop: (targetBeatIndex: number) => void;
-  onDragEnd: () => void;
-  isDragging: boolean;
-  isDragOver: boolean;
+  drag?: SortableItemBinding;
 }
 
 const LIVE_ARROW_SPLIT_REGEX = /^(.*?)\s*(?:->|→)\s+(.*)$/;
@@ -59,12 +54,7 @@ export function ExecutionBeatRow({
   onDeleteSubState,
   onMergeSubState,
   onDeleteBeat,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  isDragging,
-  isDragOver,
+  drag,
 }: ExecutionBeatRowProps) {
   const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(null);
   const [activeDraft, setActiveDraft] = useState<string>('');
@@ -299,24 +289,13 @@ export function ExecutionBeatRow({
     }
   };
 
-  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(beat.index));
-    onDragStart(beat.index);
-  };
+  const isDragging = Boolean(drag?.isDragging);
+  const isDragOver = Boolean(drag?.isDragOver);
+  const isAnyDragging = Boolean(drag?.isAnyDragging);
+  const handleProps = drag ? drag.getHandleProps(isBeatFocused) : null;
 
-  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    onDragOver(beat.index);
-  };
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    onDrop(beat.index);
-  };
-
-  const connectsFromPrevious = Boolean(cameraLink?.connectsFromPrevious);
+  const connectsFromPrevious = Boolean(cameraLink?.connectsFromPrevious) && !isAnyDragging;
+  const showConnectsToNext = connectsToNext && !isAnyDragging;
   const subStates = beat.subStates;
   const leadNode = subStates[0];
   const tailNodes = subStates.slice(1);
@@ -353,11 +332,12 @@ export function ExecutionBeatRow({
 
   return (
     <div
+      ref={drag?.containerRef}
+      style={drag?.containerStyle}
       id={`execution-beat-${beat.index}`}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      {...drag?.containerProps}
       className={`group/beat relative grid grid-cols-[46px_minmax(0,1fr)_24px] items-stretch gap-1.5 transition-opacity ${
-        isDragging ? 'opacity-40' : 'opacity-100'
+        isDragging ? 'opacity-30' : 'opacity-100'
       }`}
     >
       {/* Drag drop target line */}
@@ -374,7 +354,7 @@ export function ExecutionBeatRow({
             style={{backgroundColor: 'var(--tok-continuity)'}}
           />
         )}
-        {connectsToNext && (
+        {showConnectsToNext && (
           <div
             aria-hidden="true"
             className="pointer-events-none absolute right-[12px] top-[25px] bottom-0 w-[2px] opacity-45"
@@ -382,15 +362,16 @@ export function ExecutionBeatRow({
           />
         )}
 
-        <div
-          draggable={!isBeatFocused}
-          onDragStart={handleDragStart}
-          onDragEnd={onDragEnd}
-          title={UI_LABELS.execution.dragReorderTitle}
-          className="mt-0.5 flex h-4 w-3.5 items-center justify-center rounded text-text-faint opacity-0 group-hover/beat:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
-        >
-          <GripVertical className="h-3 w-3" />
-        </div>
+        {handleProps && (
+          <div
+            {...handleProps}
+            title={UI_LABELS.execution.dragReorderTitle}
+            aria-label={UI_LABELS.execution.dragReorderTitle}
+            className="mt-0.5 flex h-4 w-3.5 items-center justify-center rounded text-text-faint opacity-0 group-hover/beat:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
+          >
+            <GripVertical className="h-3 w-3" />
+          </div>
+        )}
 
         <span className="relative z-10 inline-flex min-w-[22px] justify-center rounded bg-app px-1 py-0.5 font-mono text-[10.5px] font-medium tabular-nums text-text-faint group-hover/beat:text-text-muted">
           S{beat.index}
@@ -400,9 +381,11 @@ export function ExecutionBeatRow({
       {/* Main Beat Card — Compact Always-Formatted Option A Waterfall Stack */}
       <div
         className={`relative min-w-0 rounded-lg border px-3 py-2 transition-colors ${
-          isBeatFocused
-            ? 'border-text-muted/60 bg-surface shadow-xs'
-            : 'border-border-main bg-surface hover:border-text-faint/50'
+          isDragging
+            ? 'border-dashed border-text-muted/60 bg-surface-subtle/60'
+            : isBeatFocused
+              ? 'border-text-muted/60 bg-surface shadow-xs'
+              : 'border-border-main bg-surface hover:border-text-faint/50'
         }`}
       >
         {/* Compact Hover Actions (Add Step + Delete Beat — zero idle vertical footprint) */}

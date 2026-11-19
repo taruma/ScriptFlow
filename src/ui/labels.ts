@@ -171,6 +171,7 @@ export const UI_LABELS = {
     chainHintArrow: '->',
     chainHintTail: 'or press Enter to chain next step',
     dragReorderTitle: 'Drag to reorder beat',
+    stepsCount: (count: number) => `${count} ${count === 1 ? 'step' : 'steps'}`,
     deleteBeatTitle: (index: number) => `Delete S${index}`,
     removeStepTitle: 'Remove step',
     removeStepAria: (stepNumber: number, beatIndex: number) =>

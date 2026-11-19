@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState, type DragEvent, type KeyboardEvent} from 'react';
+import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {ChevronDown, ChevronRight, GripVertical, Trash2} from 'lucide-react';
 import type {
   AestheticToken,
@@ -9,6 +9,7 @@ import type {
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
+import type {SortableItemBinding} from './SortableList.tsx';
 import {
   formatStagingCollapsedMeta,
   getStagingBlockPlugin,
@@ -26,12 +27,7 @@ interface StagingBlockCardProps {
   diagnostics: LintDiagnostic[];
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
-  isDragging?: boolean;
-  isDragOver?: boolean;
-  onDragStart?: (blockIndex: number) => void;
-  onDragOver?: (blockIndex: number) => void;
-  onDrop?: (blockIndex: number) => void;
-  onDragEnd?: () => void;
+  drag?: SortableItemBinding;
 }
 
 function getCollapsedPreviewText(block: StagingBlock): string {
@@ -53,12 +49,7 @@ export function StagingBlockCard({
   diagnostics,
   characters,
   aestheticTokens,
-  isDragging = false,
-  isDragOver = false,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
+  drag,
 }: StagingBlockCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(block.rawBody);
@@ -101,36 +92,21 @@ export function StagingBlockCard({
     }
   };
 
-  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', `staging:${blockIndex}`);
-    onDragStart?.(blockIndex);
-  };
-
-  const handleDragOver = (event: DragEvent<HTMLElement>) => {
-    if (!onDragOver) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    onDragOver(blockIndex);
-  };
-
-  const handleDrop = (event: DragEvent<HTMLElement>) => {
-    if (!onDrop) return;
-    event.preventDefault();
-    onDrop(blockIndex);
-  };
+  const isDragging = Boolean(drag?.isDragging);
+  const isDragOver = Boolean(drag?.isDragOver);
+  const handleProps = drag ? drag.getHandleProps(isFocused) : null;
 
   const collapsedMeta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
   const previewText = getCollapsedPreviewText(block);
 
   return (
     <section
+      ref={drag?.containerRef}
+      style={drag?.containerStyle}
       id={`staging-block-${blockIndex}`}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      {...drag?.containerProps}
       className={`group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5 transition-opacity ${
-        isDragging ? 'opacity-40' : 'opacity-100'
+        isDragging ? 'opacity-30' : 'opacity-100'
       }`}
     >
       {/* Drag drop target line */}
@@ -140,9 +116,11 @@ export function StagingBlockCard({
 
       <div
         className={`min-w-0 rounded-lg border transition-colors ${
-          isFocused
-            ? 'border-text-muted/60 bg-surface shadow-xs'
-            : 'border-border-main bg-surface hover:border-text-faint/50'
+          isDragging
+            ? 'border-dashed border-text-muted/60 bg-surface-subtle/60'
+            : isFocused
+              ? 'border-text-muted/60 bg-surface shadow-xs'
+              : 'border-border-main bg-surface hover:border-text-faint/50'
         }`}
       >
         {/* Header Bar */}
@@ -159,12 +137,13 @@ export function StagingBlockCard({
           className="flex items-center justify-between gap-2.5 px-2.5 py-1.5 cursor-pointer select-none"
         >
           <div className="flex min-w-0 items-center gap-1.5">
-            {onDragStart && (
+            {handleProps && (
               <div
-                draggable={!isFocused}
-                onDragStart={handleDragStart}
-                onDragEnd={onDragEnd}
-                onClick={(e) => e.stopPropagation()}
+                {...handleProps}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleProps.onClick?.(e);
+                }}
                 title={UI_LABELS.staging.dragReorderTitle}
                 aria-label={UI_LABELS.staging.dragReorderTitle}
                 className="flex h-4 w-3.5 shrink-0 items-center justify-center rounded text-text-faint opacity-0 group-hover/staging:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
