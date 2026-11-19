@@ -90,9 +90,16 @@ export const UI_LABELS = {
   },
 
   document: {
+    stagingPaneAria: 'Phase 1 Staging',
+    executionPaneAria: 'Phase 2 Execution',
+    phase1Kicker: 'Phase 1',
+    phase1Name: 'Staging',
+    phase2Kicker: 'Phase 2',
+    phase2Name: 'Execution',
     phase1Title: 'Phase 1 — Staging',
     phase2Title: 'Phase 2 — Execution',
-    stagingBlockCount: (count: number) => `S0 (${count} ${count === 1 ? 'block' : 'blocks'})`,
+    stagingBlockCount: (count: number) => `S0 · ${count} ${count === 1 ? 'block' : 'blocks'}`,
+    noStagingBlocks: 'No staging blocks in this script yet. Switch to Source to add [INTENT], [LOGIC], [AESTHETIC], or [OPENING].',
     expandAll: 'Expand all',
     collapseAll: 'Collapse all',
     noBeatsYet: 'No beats yet',

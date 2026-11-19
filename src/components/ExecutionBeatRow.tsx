@@ -498,7 +498,7 @@ export function ExecutionBeatRow({
 
         {/* Quiet hover/focus affordance to append a new ↳ Sub-State step */}
         <div
-          className={`mt-2 ml-1.5 flex items-center justify-between transition-opacity ${
+          className={`mt-2 ml-1.5 flex flex-wrap items-center justify-between gap-2 transition-opacity ${
             isBeatFocused
               ? 'opacity-100'
               : 'opacity-0 group-hover/beat:opacity-100'

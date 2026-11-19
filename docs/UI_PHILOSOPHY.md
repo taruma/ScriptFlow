@@ -4,11 +4,12 @@ The Auteur Script Editor blends **Obsidian Live Preview** with **Notion's calm s
 
 ---
 
-## 1. Calm Single-Column Layout
+## 1. Two-Column Live Workspace & Single-Document Source Mode
 
-- **Reading Width**: The entire script occupies a single centered vertical scroll (`~760px` text measure) with generous margins for beat indices (`S1`, `S2`...) on the left and quiet diagnostic indicators on the right.
+- **Two-Column Live Mode (`lg:` split)**: On desktop, Live Mode splits cleanly into two equal `50/50` independently scrollable columns separated by a `1px` structural hairline—**Phase 1: Staging** on the left and **Phase 2: Execution** on the right, each with an aligned sticky header bar so cast bindings (`@ref`), lookbook tokens, and coordinate fences stay visible while authoring beats (`S1` → `S{N}`). On smaller viewports (`< lg`), both phases stack smoothly in a single vertical flow.
+- **Single-Document Source Mode**: Switching to `Source` collapses into a single centered canonical plain-text document (`~760px` reading measure) for raw editing and inspection.
 - **Whisper-Quiet Top Bar (`h-12`)**: Holds only essential workflow controls—editable scene title (`Libre Baskerville`), live tabular beat count, `[ Live | Source ]` segmented switcher, `Presets` dropdown, 4-mode `Theme` switcher, and `Copy` menu (`Copy Plain Text` / `Copy Tagless`).
-- **Zero Chrome Bloat**: No permanent sidebars, no multi-pane IDE clutter, no noisy telemetry widgets, and no layout shift when diagnostics appear.
+- **Zero Chrome Bloat**: No noisy telemetry widgets, and zero layout shift when diagnostics appear in the right margin of either column.
 - **Headless Programmatic Engine**: All AI-facing JSON IR serialization, transactional patching, and Script Supervisor dimension slicing live strictly inside `src/core/` (`docs/JSON_IR_SPEC.md`)—keeping the human editor purely focused on canonical plain text and live formatting.
 
 ---
