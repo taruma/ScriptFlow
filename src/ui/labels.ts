@@ -171,6 +171,9 @@ export const UI_LABELS = {
 
   execution: {
     holdFraming: 'hold framing',
+    emptySummary: 'Empty macro-state — click to author',
+    collapseBeatTitle: (index: number) => `Collapse S${index}`,
+    expandBeatTitle: (index: number) => `Expand S${index}`,
     addStep: 'Add step',
     chainHintLead: 'Type',
     chainHintArrow: '->',

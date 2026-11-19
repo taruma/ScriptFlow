@@ -1,8 +1,26 @@
 /**
- * Pure index-based collapse state transitions for Phase 1 Staging Macro-Blocks.
- * Safe for duplicate Staging block headers while following blocks cleanly across
- * drag-and-drop reorders, insertions, and deletions.
+ * Pure index-based collapse state transitions shared by Phase 1 Staging
+ * Macro-Blocks and Phase 2 Execution Macro-States.
+ * Safe for duplicate headers and renumbered beats while following items cleanly
+ * across drag-and-drop reorders, insertions, and deletions.
  */
+
+export function areAllIndicesCollapsed(collapsed: ReadonlySet<number>, count: number): boolean {
+  if (count <= 0) return false;
+  for (let idx = 0; idx < count; idx++) {
+    if (!collapsed.has(idx)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function toggleAllCollapsedIndices(prev: ReadonlySet<number>, count: number): Set<number> {
+  if (count <= 0 || areAllIndicesCollapsed(prev, count)) {
+    return new Set();
+  }
+  return new Set(Array.from({length: count}, (_, idx) => idx));
+}
 
 export function toggleCollapsedIndex(prev: ReadonlySet<number>, index: number): Set<number> {
   const next = new Set(prev);

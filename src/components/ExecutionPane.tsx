@@ -1,5 +1,5 @@
 import {memo, useCallback, useEffect, useRef, useState} from 'react';
-import {GripVertical, Plus} from 'lucide-react';
+import {ChevronsDownUp, ChevronsUpDown, GripVertical, Plus} from 'lucide-react';
 import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AestheticToken,
@@ -9,6 +9,15 @@ import type {
 } from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {EMPTY_DIAGNOSTICS} from '../ui/referenceStability.ts';
+import {
+  areAllIndicesCollapsed,
+  deleteCollapsedIndex,
+  insertCollapsedIndex,
+  pruneCollapsedIndices,
+  reorderCollapsedIndices,
+  toggleAllCollapsedIndices,
+  toggleCollapsedIndex,
+} from '../ui/stagingCollapse.ts';
 import {ExecutionBeatRow} from './ExecutionBeatRow.tsx';
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
 import {SortableList, type SortableItemBinding} from './SortableList.tsx';
@@ -79,14 +88,40 @@ export const ExecutionPane = memo(function ExecutionPane({
   onDeleteBeat,
   onReorderBeats,
 }: ExecutionPaneProps) {
+  const [collapsedIndices, setCollapsedIndices] = useState<Set<number>>(() => new Set());
   const [autoFocusBeatIndex, setAutoFocusBeatIndex] = useState<number | null>(null);
   const [executionScrolled, setExecutionScrolled] = useState<boolean>(false);
   const [isDraggingAny, setIsDraggingAny] = useState<boolean>(false);
+  const pendingDeleteRef = useRef<{index: number; count: number} | null>(null);
   const beatsRef = useRef<ExecutionBeat[]>(beats);
 
   useEffect(() => {
     beatsRef.current = beats;
   }, [beats]);
+
+  // Reconcile index-based collapse flags after confirmed deletions or external script changes
+  useEffect(() => {
+    const pending = pendingDeleteRef.current;
+    if (pending && beats.length === pending.count - 1) {
+      pendingDeleteRef.current = null;
+      setCollapsedIndices((prev) => deleteCollapsedIndex(prev, pending.index));
+      return;
+    }
+    if (pending && beats.length !== pending.count) {
+      pendingDeleteRef.current = null;
+    }
+    setCollapsedIndices((prev) => pruneCollapsedIndices(prev, beats.length));
+  }, [beats.length]);
+
+  const allBeatsCollapsed = areAllIndicesCollapsed(collapsedIndices, beats.length);
+
+  const toggleAllBeats = useCallback(() => {
+    setCollapsedIndices((prev) => toggleAllCollapsedIndices(prev, beatsRef.current.length));
+  }, []);
+
+  const toggleSingleBeat = useCallback((beatIndex: number) => {
+    setCollapsedIndices((prev) => toggleCollapsedIndex(prev, beatIndex - 1));
+  }, []);
 
   const handleClearAutoFocus = useCallback(() => {
     setAutoFocusBeatIndex(null);
@@ -94,6 +129,9 @@ export const ExecutionPane = memo(function ExecutionPane({
 
   const handleInsertBeatAt = useCallback(
     (afterBeatIndex: number) => {
+      pendingDeleteRef.current = null;
+      const insertedIndex = Math.max(0, Math.min(afterBeatIndex, beatsRef.current.length));
+      setCollapsedIndices((prev) => insertCollapsedIndex(prev, insertedIndex));
       const starter = getStarterBeatLine(beatsRef.current);
       onInsertBeat(afterBeatIndex, starter);
       setAutoFocusBeatIndex(afterBeatIndex + 1);
@@ -101,8 +139,20 @@ export const ExecutionPane = memo(function ExecutionPane({
     [onInsertBeat]
   );
 
+  const handleDeleteBeat = useCallback(
+    (beatIndex: number) => {
+      pendingDeleteRef.current = {index: beatIndex - 1, count: beatsRef.current.length};
+      onDeleteBeat(beatIndex);
+    },
+    [onDeleteBeat]
+  );
+
   const handleReorder = useCallback(
     (fromIdx: number, toIdx: number) => {
+      pendingDeleteRef.current = null;
+      setCollapsedIndices((prev) =>
+        reorderCollapsedIndices(prev, fromIdx, toIdx, beatsRef.current.length)
+      );
       onReorderBeats(fromIdx + 1, toIdx + 1);
     },
     [onReorderBeats]
@@ -185,13 +235,15 @@ export const ExecutionPane = memo(function ExecutionPane({
             aestheticTokens={aestheticTokens}
             diagnostics={diagnosticsByBeatIndex.get(beat.index) ?? EMPTY_DIAGNOSTICS}
             historyRevision={historyRevision}
+            collapsed={collapsedIndices.has(idx)}
+            onToggleCollapse={toggleSingleBeat}
             autoFocusEdit={autoFocusBeatIndex === beat.index}
             onClearAutoFocus={handleClearAutoFocus}
             onUpdateSubState={onUpdateSubState}
             onInsertSubState={onInsertSubState}
             onDeleteSubState={onDeleteSubState}
             onMergeSubState={onMergeSubState}
-            onDeleteBeat={onDeleteBeat}
+            onDeleteBeat={handleDeleteBeat}
             drag={binding}
           />
         </>
@@ -202,6 +254,8 @@ export const ExecutionPane = memo(function ExecutionPane({
       aestheticTokens,
       diagnosticsByBeatIndex,
       historyRevision,
+      collapsedIndices,
+      toggleSingleBeat,
       autoFocusBeatIndex,
       handleClearAutoFocus,
       handleInsertBeatAt,
@@ -209,7 +263,7 @@ export const ExecutionPane = memo(function ExecutionPane({
       onInsertSubState,
       onDeleteSubState,
       onMergeSubState,
-      onDeleteBeat,
+      handleDeleteBeat,
     ]
   );
 
@@ -254,11 +308,35 @@ export const ExecutionPane = memo(function ExecutionPane({
                 <span className="auteur-phase-execution inline-flex shrink-0 self-center items-center rounded border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold tracking-tight whitespace-nowrap">
                   [{executionLabel}]
                 </span>
+                <span
+                  aria-hidden="true"
+                  className="hidden sm:inline text-text-placeholder shrink-0"
+                >
+                  ·
+                </span>
+                <span className="hidden sm:inline whitespace-nowrap shrink-0 font-mono text-[10.5px] text-text-faint tabular-nums">
+                  {UI_LABELS.document.beatRange(beats.length)}
+                </span>
               </div>
 
-              <span className="whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium text-text-muted tabular-nums">
-                {UI_LABELS.document.beatRange(beats.length)}
-              </span>
+              {beats.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleAllBeats}
+                  className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+                >
+                  {allBeatsCollapsed ? (
+                    <ChevronsUpDown className="h-3 w-3 text-text-faint" />
+                  ) : (
+                    <ChevronsDownUp className="h-3 w-3 text-text-faint" />
+                  )}
+                  <span>
+                    {allBeatsCollapsed
+                      ? UI_LABELS.document.expandAll
+                      : UI_LABELS.document.collapseAll}
+                  </span>
+                </button>
+              )}
             </div>
             <div />
           </div>

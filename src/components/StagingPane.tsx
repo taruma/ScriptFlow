@@ -9,10 +9,12 @@ import type {
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
 import {EMPTY_DIAGNOSTICS, stabilizeStringArray} from '../ui/referenceStability.ts';
 import {
+  areAllIndicesCollapsed,
   deleteCollapsedIndex,
   insertCollapsedIndex,
   pruneCollapsedIndices,
   reorderCollapsedIndices,
+  toggleAllCollapsedIndices,
   toggleCollapsedIndex,
 } from '../ui/stagingCollapse.ts';
 import {useStableValue} from '../ui/useStableValue.ts';
@@ -85,18 +87,10 @@ export const StagingPane = memo(function StagingPane({
     setCollapsedIndices((prev) => pruneCollapsedIndices(prev, stagingBlocks.length));
   }, [stagingBlocks.length]);
 
-  const allStagingCollapsed =
-    stagingBlocks.length > 0 && stagingBlocks.every((_, idx) => collapsedIndices.has(idx));
+  const allStagingCollapsed = areAllIndicesCollapsed(collapsedIndices, stagingBlocks.length);
 
   const toggleAllStaging = useCallback(() => {
-    setCollapsedIndices((prev) => {
-      const count = stagingBlocksCountRef.current;
-      const allCollapsed = count > 0 && Array.from({length: count}, (_, idx) => idx).every((idx) => prev.has(idx));
-      if (allCollapsed) {
-        return new Set();
-      }
-      return new Set(Array.from({length: count}, (_, idx) => idx));
-    });
+    setCollapsedIndices((prev) => toggleAllCollapsedIndices(prev, stagingBlocksCountRef.current));
   }, []);
 
   const toggleSingleBlock = useCallback((blockIndex: number) => {

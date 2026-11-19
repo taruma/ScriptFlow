@@ -19,10 +19,12 @@ import {
   stabilizeStringArray,
 } from '../../src/ui/referenceStability.ts';
 import {
+  areAllIndicesCollapsed,
   deleteCollapsedIndex,
   insertCollapsedIndex,
   pruneCollapsedIndices,
   reorderCollapsedIndices,
+  toggleAllCollapsedIndices,
   toggleCollapsedIndex,
 } from '../../src/ui/stagingCollapse.ts';
 
@@ -70,6 +72,25 @@ describe('stagingCollapse helpers', () => {
     // Prune when list shrinks to length 3
     const pruned = pruneCollapsedIndices(initial, 3);
     expect(Array.from(pruned).sort((a, b) => a - b)).toEqual([0, 2]);
+  });
+
+  it('detects and toggles bulk collapse/expand state across any item count', () => {
+    expect(areAllIndicesCollapsed(new Set(), 0)).toBe(false);
+    expect(areAllIndicesCollapsed(new Set([0, 1]), 3)).toBe(false);
+    expect(areAllIndicesCollapsed(new Set([0, 1, 2]), 3)).toBe(true);
+
+    // Partial -> Collapse all
+    const collapsedAll = toggleAllCollapsedIndices(new Set([1]), 4);
+    expect(Array.from(collapsedAll).sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+    expect(areAllIndicesCollapsed(collapsedAll, 4)).toBe(true);
+
+    // All collapsed -> Expand all
+    const expandedAll = toggleAllCollapsedIndices(collapsedAll, 4);
+    expect(expandedAll.size).toBe(0);
+    expect(areAllIndicesCollapsed(expandedAll, 4)).toBe(false);
+
+    // Empty list stays empty
+    expect(toggleAllCollapsedIndices(new Set(), 0).size).toBe(0);
   });
 });
 
