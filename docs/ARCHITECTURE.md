@@ -10,19 +10,18 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
                        │   Persisted via localStorage       │
                        └─────────────────┬──────────────────┘
                                          │
-              ┌──────────────────────────┴──────────────────────────┐
-              ▼                                                     ▼
-   [ Pure Synchronous Pipeline (src/core/) ]             [ Pure Mutations (serializer.ts) ]
-   1. parseAuteurScript(rawText) -> AuteurDocument       • updateStagingBlock()
-   2. extractMetadata(doc)       -> ExtractedMetadata    • updateExecutionBeat() / updateExecutionSubState()
-   3. lintDocument(doc, meta)    -> LintDiagnostic[]     • insertExecutionBeat() / insertExecutionSubState()
-                                                         • deleteExecutionBeat() / deleteExecutionSubState()
-                                                         • mergeExecutionSubStateWithPrevious()
-                                                         • reorderExecutionBeats()
-                                                         • exportPlainText() / exportTagless()
-              │                                                     ▲
-              ▼                                                     │
-   [ Thin React + Tailwind UI (src/components/) ] ──────────────────┘
+              ┌──────────────────────────┼──────────────────────────┐
+              ▼                          ▼                          ▼
+   [ Pure Synchronous Pipeline ]   [ Pure UI Mutations ]   [ Programmatic JSON Engine ]
+   1. parseAuteurScript(raw)       (src/core/serializer)   (src/core/ir, patch, slicer)
+   2. extractMetadata(doc)         • updateStagingBlock    • toAuteurIR / fromAuteurIR
+   3. lintDocument(doc, meta)      • updateExecutionBeat   • toAuteurEnvelope / Draft
+                                   • updateExecutionSub…   • applyAuteurPatch (tx+lint)
+                                   • reorderExecutionBeats • sliceAuteurEnvelope (L1–L5)
+                                   • exportTagless         • getAuteurJsonSchemas (Zod)
+              │                          ▲                          ▲
+              ▼                          │                          │
+   [ Thin React + Tailwind UI (src/components/) ] ────────┘   [ AI / Automated Callers ]
    • TopSlateBar        • LiveDocument          • SourceEditor
    • StagingBlockCard   • ExecutionBeatRow      • LiveHighlightedEditor  • DiagnosticDot
 ```
@@ -63,3 +62,14 @@ In `src/App.tsx`, a document-level `paste` handler enables frictionless script i
 - **Pasting outside any focused input/textarea**: Immediately replaces `rawText`, parses the script, switches to Live Mode, and displays a subtle toast.
 - **Pasting a multi-block Auteur Script (2+ Macro-Block headers)** while inside a focused single-block or beat editor in Live Mode: Blurs the active field and hydrates the entire script.
 - **Pasting a normal inline snippet** while focused inside a Staging block, Execution beat, Scene Title, or Source Mode editor: Passes through natively without interception.
+
+---
+
+## 5. Programmatic JSON IR, Patch & Lens Slicer Layer
+
+To support model-agnostic **Create**, **Edit**, and **Evaluate** pipelines without breaking **Plain-Text-as-Truth**, `src/core/` exposes a pure TypeScript + Zod programmatic interchange layer (fully specified in `docs/JSON_IR_SPEC.md`):
+
+- **Create**: `compileAuteurDraft(input)` validates untrusted JSON drafts against `AuteurScriptDraftSchema`, compiles deterministically to canonical `v0.4.0` plain text via `fromAuteurIR()`, and returns Script Supervisor diagnostics.
+- **Edit**: `applyAuteurPatch(rawText, patch, options)` executes multi-op batches transactionally against snapshot-stable IDs (`MB#`, `MB#.#`, `S#`, `S#.#`) with optional `expectedSnapshotHash` concurrency checks and a `rejectOnNewErrors` deterministic lint gate.
+- **Evaluate**: `sliceAuteurEnvelope()` / `sliceAuteurScript()` isolate arbitrary dimensions (plus 5 built-in `AUDIT_LENS_PRESETS`) paired with deterministically inherited `resolvedCamera.effectiveFraming`, and `validateAuteurReview()` validates structured findings with executable `suggestedPatch` payloads.
+

@@ -29,7 +29,7 @@ An Auteur Script is plain text partitioned into **Macro-Blocks** separated by a 
 
 | Kind | Canonical Pattern | Implemented Regex / Rule |
 |---|---|---|
-| **Camera** | `[CAM 01] ...`, `[CAM 01]` (bare hold/recall), `[CAM] ...` (montage) | Leading `[CAM]` or `[CAM <num>]` via `^\[([A-Z0-9 _-]+)\](?:\s+(.*))?$` |
+| **Camera** | `[CAM 01] ...`, `[CAM 02A] ...`, `[CAM 01]` (bare hold/recall), `[CAM] ...` (montage) | Leading `[CAM]` (`identifier: null`) or numbered `[CAM <id>]` matching `/^CAM\s+(\d+[A-Z]?)$/` (`subStateTag: "CAM"`, `identifier: "01" \| "02A"`) |
 | **Performance** | `[ACT] Subject active-verb ...` | Leading `[ACT]` tag |
 | **Spatial Fence** | `[BLOCK] Subject frame-left FG facing screen-right; ...` | Leading `[BLOCK]` tag |
 | **Dynamic Light** | `[LIGHT] single-dimension illumination shift` | Leading `[LIGHT]` tag |
@@ -62,3 +62,15 @@ An Auteur Script is plain text partitioned into **Macro-Blocks** separated by a 
 | **3** | `multimodal-reference-isolation` | `Lens 5: Blocks & Grammar` | `error` | Flags `@ref` tokens appearing outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. |
 | **4** | `frozen-first-frame-purity` | `Lens 5: Blocks & Grammar` | `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. |
 | **5** | `camera-redefinition-guard` | `Lens 1: Spatial & Optics` | `warning` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`, ...) re-declares a static shot-scale token (`WS`, `EWS`, `FS`, `MS`, `MWS`, `MLS`, `MCU`, `CU`, `ECU`, `OTS`, `POV`, `INS`, `two-shot`, `low-angle`, `high-angle`) on a subsequent beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `TILTING`, `PUSHING`, `ARCING`, etc.). Bare holds/recalls (`[CAM 01] ->`) and first appearances in continuation scripts (`[CONTINUITY PROTOCOL]` / `@video1`) are never flagged. |
+
+---
+
+## 6. Programmatic JSON IR Round-Trip & Schema Contract
+
+The pure core JSON engine (`src/core/irSchemas.ts`, `src/core/ir.ts`, `src/core/patch.ts`, `src/core/slicer.ts`) enforces strict grammar parity with canonical `v0.4.0` plain text (see `docs/JSON_IR_SPEC.md` for full schemas and patch operations):
+
+- **Lossless Round-Trip Lock**: `fromAuteurIR(toAuteurIR(raw))` equals `exportPlainText(raw)` across all canonical presets, custom Staging Macro-Blocks, unlabelled `[AESTHETIC]` fallback lines (`key: null`), and `plain` Sub-States.
+- **Staging Formats**: `INTENT`, `LOGIC`, `OPENING`, and custom Staging Macro-Blocks serialize as `format: "prose"`; `AESTHETIC` serializes as `format: "key_value"` (`entries[]`), preserving `Description -> TOKEN` token mappings canonically inside `entry.value`.
+- **Execution Dimensions**: All 11 `SubStateIR` dimensions (`camera`, `action`, `block`, `light`, `state_boundary`, `tier2`, `dialogue`, `foley`, `score`, `onscreen_text`, `plain`) compile deterministically via `renderSubState()`, making syntax drift (e.g., quoted dialogue or legacy `[DIAL]`/`[AUDIO]` tags) structurally impossible.
+- **Runtime Validation & JSON Schema Registry**: Every programmatic payload (`draft`, `ir`, `envelope`, `patch`, `review`) is validated at runtime via Zod and exported as standard JSON Schema objects via `getAuteurJsonSchemas()`.
+

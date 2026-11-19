@@ -15,11 +15,11 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 1. **Zero-React Core (`src/core/`)**:
    - Every file in `src/core/` (`types.ts`, `parser.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
-   - Any new parsing, extraction, serialization, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
+   - Any new parsing, extraction, serialization, programmatic JSON IR/patching/slicing, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
 2. **Plain-Text-as-Truth**:
    - The raw canonical Auteur Script string (`rawText` in `src/App.tsx`) is the sole reactive source of truth.
-   - The AST (`AuteurDocument`), extracted metadata (`ExtractedMetadata`), camera continuity links (`HOLD` / `CUT` / `RECALL` / `MONTAGE`), and diagnostics (`LintDiagnostic[]`) are derived synchronously via pure functions.
-   - Never introduce a parallel mutable UI document tree. Every Live Mode edit must call a pure serializer helper in `src/core/serializer.ts` and commit the resulting canonical plain-text string.
+   - The AST (`AuteurDocument`), extracted metadata (`ExtractedMetadata`), camera continuity links (`HOLD` / `CUT` / `RECALL` / `MONTAGE`), diagnostics (`LintDiagnostic[]`), and programmatic JSON envelopes (`AuteurEnvelope`) are derived synchronously via pure functions.
+   - Never introduce a parallel mutable UI document tree. Every Live Mode edit must call a pure serializer helper in `src/core/serializer.ts` (and every programmatic/AI edit must flow through `applyAuteurPatch()` or `compileAuteurDraft()` in `src/core/`) and commit the resulting canonical plain-text string.
 3. **100% Platform- & Model-Agnostic Purity**:
    - Never add generative video vendor names, model identifiers, or external wrapper dialects anywhere in source code, presets, UI copy, tests, or documentation.
 4. **Canonical `v0.4.0` Syntax Lock**:
@@ -34,13 +34,20 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 ### Adding a New Inline Sub-State Tag
 1. Update `SubStateKind` in `src/core/types.ts` (only if the tag needs distinct AST semantics beyond `'tier2'`).
 2. Update `parseSubState` in `src/core/parser.ts` to classify the tag cleanly.
-3. Add rendering support in `src/components/LiveHighlightedEditor.tsx` (and `src/components/SubStateRenderer.tsx` if used) using CSS custom properties defined in `src/index.css` (never hardcoded hex colors in JSX).
-4. Add unit tests in `tests/core/parser.test.ts` and `tests/core/serializer.test.ts` (including `exportTagless` verification).
+3. If introducing a distinct `dimension` beyond `'tier2'`, update `SubStateDraftSchema` / `SubStateIRSchema` in `src/core/irSchemas.ts` and `subStateNodeToIR` / `renderSubState` in `src/core/ir.ts` so `fromAuteurIR(toAuteurIR(raw))` stays 100% lossless.
+4. Add rendering support in `src/components/LiveHighlightedEditor.tsx` (and `src/components/SubStateRenderer.tsx` if used) using CSS custom properties defined in `src/index.css` (never hardcoded hex colors in JSX).
+5. Add unit tests in `tests/core/parser.test.ts`, `tests/core/serializer.test.ts` (including `exportTagless`), and `tests/core/ir.test.ts`.
+
+### Extending the Programmatic JSON IR, Patch Engine, or Lens Slicer
+1. Update the Zod source-of-truth schemas in `src/core/irSchemas.ts` (never hand-maintain duplicate JSON Schema objects—`getAuteurJsonSchemas()` derives them automatically).
+2. Implement pure codecs, transactional patch operations, or slicer presets in `src/core/ir.ts`, `src/core/patch.ts`, or `src/core/slicer.ts`.
+3. Keep all identifiers and field names strictly aligned with `docs/GLOSSARY.md` (`Macro-Block`, `Macro-State`, `Sub-State`, `Sub-State Tag`, Camera `identifier`, `tokenMappings`, `referenceBindings`) and update `docs/JSON_IR_SPEC.md`.
+4. Add round-trip, negative-validation, and lint-gate tests in `tests/core/ir.test.ts`, `tests/core/patch.test.ts`, and `tests/core/slicer.test.ts`.
 
 ### Adding a New Deterministic Linter Rule
 1. Implement the rule as an **isolated, exported pure function** in `src/core/linter.ts` returning `LintDiagnostic[]`.
 2. Tag every diagnostic with one of the five canonical Script Supervisor lenses (`Lens 1`–`Lens 5`), an explicit `severity` (`'error'` | `'warning'`), a plain-language `message`, and an actionable `repairHint`.
-3. Compose the rule inside `lintDocument()` in `src/core/linter.ts`.
+3. Compose the rule inside `lintDocument()` in `src/core/linter.ts` (automatically surfaced in both UI `DiagnosticDot` and `AuteurEnvelope.derived.diagnostics`).
 4. Add both **positive** (violation caught) and **negative** (valid construct passes) tests in `tests/core/linter.test.ts`, and verify all 4 canonical presets in `src/data/presets.ts` still pass with zero false positives.
 
 ---

@@ -9,6 +9,7 @@ The Auteur Script Editor blends **Obsidian Live Preview** with **Notion's calm s
 - **Reading Width**: The entire script occupies a single centered vertical scroll (`~760px` text measure) with generous margins for beat indices (`S1`, `S2`...) on the left and quiet diagnostic indicators on the right.
 - **Whisper-Quiet Top Bar (`h-12`)**: Holds only essential workflow controls—editable scene title (`Libre Baskerville`), live tabular beat count, `[ Live | Source ]` segmented switcher, `Presets` dropdown, 4-mode `Theme` switcher, and `Copy` menu (`Copy Plain Text` / `Copy Tagless`).
 - **Zero Chrome Bloat**: No permanent sidebars, no multi-pane IDE clutter, no noisy telemetry widgets, and no layout shift when diagnostics appear.
+- **Headless Programmatic Engine**: All AI-facing JSON IR serialization, transactional patching, and Script Supervisor dimension slicing live strictly inside `src/core/` (`docs/JSON_IR_SPEC.md`)—keeping the human editor purely focused on canonical plain text and live formatting.
 
 ---
 
