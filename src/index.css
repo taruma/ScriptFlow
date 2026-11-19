@@ -1,0 +1,504 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme-category="dark"], [data-theme-category="dark"] *));
+
+:root,
+[data-theme-category="light"] {
+  --app-bg: #f5f5f4;
+  --surface: #ffffff;
+  --surface-subtle: #fafaf9;
+  --surface-muted: #f5f5f4;
+  --surface-hover: #e7e5e4;
+  --surface-dark: #1c1917;
+  --border-main: #e7e5e4;
+  --border-subtle: #f5f5f4;
+  --border-subtle-trans: rgba(231, 229, 228, 0.4);
+  --text-main: #1c1917;
+  --text-body: #292524;
+  --text-muted: #78716c;
+  --text-faint: #a8a29e;
+  --text-placeholder: #d6d3d1;
+  --btn-primary-bg: #1c1917;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #292524;
+  --btn-secondary-bg: #f5f5f4;
+  --btn-secondary-text: #57534e;
+  --btn-secondary-hover: #e7e5e4;
+  --overlay-bg: rgba(28, 25, 23, 0.4);
+  --overlay-heavy: rgba(28, 25, 23, 0.6);
+  --color-support: #FF5E5B;
+  --color-support-hover: #e04e4b;
+
+  /* Macro-Block Phase Badges */
+  --phase-intent-bg: #fffbeb;
+  --phase-intent-text: #b45309;
+  --phase-intent-border: #fde68a;
+
+  --phase-logic-bg: #f0f9ff;
+  --phase-logic-text: #0369a1;
+  --phase-logic-border: #bae6fd;
+
+  --phase-aesthetic-bg: #ecfdf5;
+  --phase-aesthetic-text: #047857;
+  --phase-aesthetic-border: #a7f3d0;
+
+  --phase-opening-bg: #f0fdfa;
+  --phase-opening-text: #0f766e;
+  --phase-opening-border: #99f6e4;
+
+  --phase-execution-bg: #fff1f2;
+  --phase-execution-text: #be123c;
+  --phase-execution-border: #fecdd3;
+
+  --phase-continuity-bg: #faf5ff;
+  --phase-continuity-text: #7e22ce;
+  --phase-continuity-border: #e9d5ff;
+
+  --phase-slate-bg: #f1f5f9;
+  --phase-slate-text: #475569;
+  --phase-slate-border: #cbd5e1;
+
+  /* Inline v0.4.0 Syntax Tokens */
+  --tok-tag-text: #0284c7;
+  --tok-tag-bg: #e0f2fe;
+  --tok-tag-border: #bae6fd;
+
+  --tok-cam-text: #0369a1;
+  --tok-cam-bg: #f0f9ff;
+  --tok-cam-border: #7dd3fc;
+
+  --tok-ref-text: #059669;
+  --tok-ref-bg: #ecfdf5;
+  --tok-ref-border: #a7f3d0;
+
+  --tok-dial-text: #b45309;
+  --tok-dial-bg: #fffbeb;
+  --tok-dial-border: #fde68a;
+
+  --tok-foley-text: #c2410c;
+  --tok-foley-bg: #fff7ed;
+  --tok-foley-border: #fed7aa;
+
+  --tok-score-text: #6d28d9;
+  --tok-score-bg: #f5f3ff;
+  --tok-score-border: #ddd6fe;
+
+  --tok-text-text: #334155;
+  --tok-text-bg: #f1f5f9;
+  --tok-text-border: #cbd5e1;
+
+  --tok-arrow: #7c3aed;
+  --tok-speaker: #0f172a;
+  --tok-verb: #64748b;
+  --tok-rail: #e7e5e4;
+  --tok-rail-hover: #8b5cf6;
+  --tok-continuity: #0284c7;
+  --selection-bg: rgba(14, 165, 233, 0.22);
+}
+
+[data-theme-category="warm"] {
+  --app-bg: #f3efe6;
+  --surface: #faf7f0;
+  --surface-subtle: #f6f2e8;
+  --surface-muted: #ece5d6;
+  --surface-hover: #e3dcce;
+  --surface-dark: #2c251e;
+  --border-main: #dfd7c5;
+  --border-subtle: #ece5d6;
+  --border-subtle-trans: rgba(223, 215, 197, 0.5);
+  --text-main: #2b231d;
+  --text-body: #3c322a;
+  --text-muted: #7c6f62;
+  --text-faint: #a69888;
+  --text-placeholder: #c9bdae;
+  --btn-primary-bg: #2b231d;
+  --btn-primary-text: #faf7f0;
+  --btn-primary-hover: #3d3229;
+  --btn-secondary-bg: #ece5d6;
+  --btn-secondary-text: #54473c;
+  --btn-secondary-hover: #dfd7c5;
+  --overlay-bg: rgba(43, 35, 29, 0.45);
+  --overlay-heavy: rgba(43, 35, 29, 0.65);
+  --color-support: #FF5E5B;
+  --color-support-hover: #e04e4b;
+
+  /* Macro-Block Phase Badges (Warm-tinted) */
+  --phase-intent-bg: #f8eed8;
+  --phase-intent-text: #9a5210;
+  --phase-intent-border: #e7cf9d;
+
+  --phase-logic-bg: #e7f0f5;
+  --phase-logic-text: #1c5b7e;
+  --phase-logic-border: #bcd3e2;
+
+  --phase-aesthetic-bg: #e6f2ea;
+  --phase-aesthetic-text: #1d6447;
+  --phase-aesthetic-border: #b8d8c5;
+
+  --phase-opening-bg: #e4f2ef;
+  --phase-opening-text: #16605a;
+  --phase-opening-border: #b3d8d1;
+
+  --phase-execution-bg: #f6e7e9;
+  --phase-execution-text: #9f263c;
+  --phase-execution-border: #e3bcc3;
+
+  --phase-continuity-bg: #f0eaf7;
+  --phase-continuity-text: #653494;
+  --phase-continuity-border: #d4c2e8;
+
+  --phase-slate-bg: #ece6da;
+  --phase-slate-text: #574c41;
+  --phase-slate-border: #d3c9b7;
+
+  /* Inline v0.4.0 Syntax Tokens (Warm-calibrated) */
+  --tok-tag-text: #18628b;
+  --tok-tag-bg: #e4eff5;
+  --tok-tag-border: #bdd4e3;
+
+  --tok-cam-text: #145374;
+  --tok-cam-bg: #e9f2f7;
+  --tok-cam-border: #accce0;
+
+  --tok-ref-text: #1b684a;
+  --tok-ref-bg: #e5f1ea;
+  --tok-ref-border: #b8d8c5;
+
+  --tok-dial-text: #944d0e;
+  --tok-dial-bg: #f7ecd4;
+  --tok-dial-border: #e6cc98;
+
+  --tok-foley-text: #a54316;
+  --tok-foley-bg: #f7e9dc;
+  --tok-foley-border: #e5c3a8;
+
+  --tok-score-text: #5d358c;
+  --tok-score-bg: #efe8f6;
+  --tok-score-border: #d3c1e7;
+
+  --tok-text-text: #473d34;
+  --tok-text-bg: #ece5d8;
+  --tok-text-border: #d2c6b2;
+
+  --tok-arrow: #6d3fb5;
+  --tok-speaker: #2b231d;
+  --tok-verb: #75675a;
+  --tok-rail: #dfd7c5;
+  --tok-rail-hover: #7c52bd;
+  --tok-continuity: #18628b;
+  --selection-bg: rgba(24, 98, 139, 0.22);
+}
+
+[data-theme-category="dark"] {
+  --app-bg: #0c0a09;
+  --surface: #171514;
+  --surface-subtle: #1c1917;
+  --surface-muted: #24211e;
+  --surface-hover: #2e2a27;
+  --surface-dark: #0f0e0d;
+  --border-main: #2c2825;
+  --border-subtle: #201d1b;
+  --border-subtle-trans: rgba(44, 40, 37, 0.5);
+  --text-main: #f5f5f4;
+  --text-body: #e7e5e4;
+  --text-muted: #a8a29e;
+  --text-faint: #78716c;
+  --text-placeholder: #57534e;
+  --btn-primary-bg: #f5f5f4;
+  --btn-primary-text: #1c1917;
+  --btn-primary-hover: #e7e5e4;
+  --btn-secondary-bg: #24211e;
+  --btn-secondary-text: #d6d3d1;
+  --btn-secondary-hover: #2e2a27;
+  --overlay-bg: rgba(0, 0, 0, 0.65);
+  --overlay-heavy: rgba(0, 0, 0, 0.85);
+  --color-support: #FF5E5B;
+  --color-support-hover: #e04e4b;
+
+  /* Macro-Block Phase Badges (Dark) */
+  --phase-intent-bg: rgba(245, 158, 11, 0.14);
+  --phase-intent-text: #fbbf24;
+  --phase-intent-border: rgba(251, 191, 36, 0.28);
+
+  --phase-logic-bg: rgba(14, 165, 233, 0.14);
+  --phase-logic-text: #38bdf8;
+  --phase-logic-border: rgba(56, 189, 248, 0.28);
+
+  --phase-aesthetic-bg: rgba(16, 185, 129, 0.14);
+  --phase-aesthetic-text: #34d399;
+  --phase-aesthetic-border: rgba(52, 211, 153, 0.28);
+
+  --phase-opening-bg: rgba(20, 184, 166, 0.14);
+  --phase-opening-text: #2dd4bf;
+  --phase-opening-border: rgba(45, 212, 191, 0.28);
+
+  --phase-execution-bg: rgba(244, 63, 94, 0.14);
+  --phase-execution-text: #fb7185;
+  --phase-execution-border: rgba(251, 113, 133, 0.28);
+
+  --phase-continuity-bg: rgba(168, 85, 247, 0.15);
+  --phase-continuity-text: #c084fc;
+  --phase-continuity-border: rgba(192, 132, 252, 0.3);
+
+  --phase-slate-bg: rgba(148, 163, 184, 0.12);
+  --phase-slate-text: #cbd5e1;
+  --phase-slate-border: rgba(148, 163, 184, 0.24);
+
+  /* Inline v0.4.0 Syntax Tokens (Dark) */
+  --tok-tag-text: #38bdf8;
+  --tok-tag-bg: rgba(14, 165, 233, 0.16);
+  --tok-tag-border: rgba(56, 189, 248, 0.35);
+
+  --tok-cam-text: #7dd3fc;
+  --tok-cam-bg: rgba(14, 165, 233, 0.12);
+  --tok-cam-border: rgba(56, 189, 248, 0.32);
+
+  --tok-ref-text: #34d399;
+  --tok-ref-bg: rgba(16, 185, 129, 0.16);
+  --tok-ref-border: rgba(52, 211, 153, 0.35);
+
+  --tok-dial-text: #fbbf24;
+  --tok-dial-bg: rgba(245, 158, 11, 0.15);
+  --tok-dial-border: rgba(251, 191, 36, 0.30);
+
+  --tok-foley-text: #fb923c;
+  --tok-foley-bg: rgba(249, 115, 22, 0.15);
+  --tok-foley-border: rgba(251, 146, 60, 0.30);
+
+  --tok-score-text: #c4b5fd;
+  --tok-score-bg: rgba(139, 92, 246, 0.16);
+  --tok-score-border: rgba(167, 139, 250, 0.32);
+
+  --tok-text-text: #cbd5e1;
+  --tok-text-bg: rgba(148, 163, 184, 0.14);
+  --tok-text-border: rgba(148, 163, 184, 0.28);
+
+  --tok-arrow: #a78bfa;
+  --tok-speaker: #f5f5f4;
+  --tok-verb: #94a3b8;
+  --tok-rail: #2c2825;
+  --tok-rail-hover: #8b5cf6;
+  --tok-continuity: #38bdf8;
+  --selection-bg: rgba(56, 189, 248, 0.25);
+}
+
+[data-pure-black-shell="true"],
+[data-pure-black-shell="true"] [data-theme-category="dark"] {
+  --app-bg: #000000;
+  --surface: #000000;
+  --surface-subtle: #070707;
+  --surface-muted: #111111;
+  --surface-hover: #1a1a1a;
+  --surface-dark: #000000;
+  --border-main: #242424;
+  --border-subtle: #141414;
+  --border-subtle-trans: rgba(255, 255, 255, 0.08);
+  --tok-rail: #242424;
+  --selection-bg: rgba(56, 189, 248, 0.28);
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Libre Baskerville", serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-app: var(--app-bg);
+  --color-surface: var(--surface);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-dark: var(--surface-dark);
+  --color-border-main: var(--border-main);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-subtle-trans: var(--border-subtle-trans);
+  --color-text-main: var(--text-main);
+  --color-text-body: var(--text-body);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-text-placeholder: var(--text-placeholder);
+  --color-btn-primary-bg: var(--btn-primary-bg);
+  --color-btn-primary-text: var(--btn-primary-text);
+  --color-btn-primary-hover: var(--btn-primary-hover);
+  --color-btn-secondary-bg: var(--btn-secondary-bg);
+  --color-btn-secondary-text: var(--btn-secondary-text);
+  --color-btn-secondary-hover: var(--btn-secondary-hover);
+  --color-overlay-bg: var(--overlay-bg);
+  --color-overlay-heavy: var(--overlay-heavy);
+  --color-support: var(--color-support);
+  --color-support-hover: var(--color-support-hover);
+
+  --color-blueprint-accent: #38bdf8;
+  --color-blueprint-stage-cam: #f59e0b;
+}
+
+.disable-theme-transitions,
+.disable-theme-transitions * {
+  transition: none !important;
+}
+
+/* Semantic Macro-Block Phase Badges */
+.auteur-phase-intent {
+  background-color: var(--phase-intent-bg);
+  color: var(--phase-intent-text);
+  border-color: var(--phase-intent-border);
+}
+.auteur-phase-logic {
+  background-color: var(--phase-logic-bg);
+  color: var(--phase-logic-text);
+  border-color: var(--phase-logic-border);
+}
+.auteur-phase-aesthetic {
+  background-color: var(--phase-aesthetic-bg);
+  color: var(--phase-aesthetic-text);
+  border-color: var(--phase-aesthetic-border);
+}
+.auteur-phase-opening {
+  background-color: var(--phase-opening-bg);
+  color: var(--phase-opening-text);
+  border-color: var(--phase-opening-border);
+}
+.auteur-phase-execution {
+  background-color: var(--phase-execution-bg);
+  color: var(--phase-execution-text);
+  border-color: var(--phase-execution-border);
+}
+.auteur-phase-continuity {
+  background-color: var(--phase-continuity-bg);
+  color: var(--phase-continuity-text);
+  border-color: var(--phase-continuity-border);
+}
+.auteur-phase-slate {
+  background-color: var(--phase-slate-bg);
+  color: var(--phase-slate-text);
+  border-color: var(--phase-slate-border);
+}
+
+/* Inline v0.4.0 Token Styles */
+.auteur-tok-tag {
+  color: var(--tok-tag-text);
+  background-color: var(--tok-tag-bg);
+  border: 1px solid var(--tok-tag-border);
+}
+.auteur-tok-cam {
+  color: var(--tok-cam-text);
+  background-color: var(--tok-cam-bg);
+  border: 1px solid var(--tok-cam-border);
+}
+.auteur-tok-ref {
+  color: var(--tok-ref-text);
+  background-color: var(--tok-ref-bg);
+  border: 1px solid var(--tok-ref-border);
+}
+.auteur-tok-dial {
+  color: var(--tok-dial-text);
+  background-color: var(--tok-dial-bg);
+  border: 1px solid var(--tok-dial-border);
+}
+.auteur-tok-foley {
+  color: var(--tok-foley-text);
+  background-color: var(--tok-foley-bg);
+  border: 1px solid var(--tok-foley-border);
+}
+.auteur-tok-score {
+  color: var(--tok-score-text);
+  background-color: var(--tok-score-bg);
+  border: 1px solid var(--tok-score-border);
+}
+.auteur-tok-text {
+  color: var(--tok-text-text);
+  background-color: var(--tok-text-bg);
+  border: 1px solid var(--tok-text-border);
+}
+.auteur-tok-arrow {
+  color: var(--tok-arrow);
+}
+.auteur-tok-speaker {
+  color: var(--tok-speaker);
+}
+.auteur-tok-verb {
+  color: var(--tok-verb);
+}
+
+/* Waterfall indentation rail */
+.auteur-waterfall-rail {
+  border-left: 2px solid var(--tok-rail);
+  transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.group\/beat:hover .auteur-waterfall-rail,
+.group\/beat:focus-within .auteur-waterfall-rail {
+  border-left-color: var(--tok-rail-hover);
+}
+
+/* Zero-width-shift live overlay token styles (strictly preserves monospace character grid) */
+.auteur-live-tok-tag {
+  color: var(--tok-tag-text);
+  background-color: var(--tok-tag-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-tag-border);
+  border-radius: 3px;
+  padding: 1px 0;
+}
+.auteur-live-tok-cam {
+  color: var(--tok-cam-text);
+  background-color: var(--tok-cam-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-cam-border);
+  border-radius: 3px;
+  padding: 1px 0;
+}
+.auteur-live-tok-ref {
+  color: var(--tok-ref-text);
+  background-color: var(--tok-ref-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-ref-border);
+  border-radius: 3px;
+  padding: 1px 0;
+}
+.auteur-live-tok-dial {
+  color: var(--tok-dial-text);
+  background-color: var(--tok-dial-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-dial-border);
+  border-radius: 3px;
+  padding: 1px 0;
+}
+.auteur-live-tok-foley {
+  color: var(--tok-foley-text);
+  background-color: var(--tok-foley-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-foley-border);
+  border-radius: 3px;
+  padding: 1px 0;
+  font-style: italic;
+}
+.auteur-live-tok-score {
+  color: var(--tok-score-text);
+  background-color: var(--tok-score-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-score-border);
+  border-radius: 3px;
+  padding: 1px 0;
+  font-style: italic;
+}
+.auteur-live-tok-text {
+  color: var(--tok-text-text);
+  background-color: var(--tok-text-bg);
+  box-shadow: inset 0 0 0 1px var(--tok-text-border);
+  border-radius: 3px;
+  padding: 1px 0;
+  font-weight: 600;
+}
+.auteur-live-tok-error {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #ef4444;
+  text-underline-offset: 2px;
+}
+
+.auteur-live-textarea {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--text-main);
+}
+.auteur-live-textarea::selection {
+  background-color: var(--selection-bg);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.auteur-live-textarea::placeholder {
+  color: var(--text-placeholder);
+  -webkit-text-fill-color: var(--text-placeholder);
+}

@@ -1,0 +1,535 @@
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react';
+import {GripVertical, Plus, Trash2, X} from 'lucide-react';
+import type {
+  AestheticToken,
+  BeatCameraLink,
+  ExecutionBeat,
+  LintDiagnostic,
+} from '../core/types.ts';
+import {UI_LABELS} from '../ui/labels.ts';
+import {DiagnosticDot} from './DiagnosticDot.tsx';
+import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
+
+interface ExecutionBeatRowProps {
+  beat: ExecutionBeat;
+  cameraLink?: BeatCameraLink;
+  connectsToNext: boolean;
+  aestheticTokens: AestheticToken[];
+  diagnostics: LintDiagnostic[];
+  autoFocusEdit?: boolean;
+  onClearAutoFocus?: () => void;
+  onUpdateSubState: (beatIndex: number, subStateIndex: number, nextSubStateRaw: string) => void;
+  onInsertSubState: (beatIndex: number, afterSubStateIndex: number, starterText: string) => void;
+  onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
+  onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
+  onDeleteBeat: (beatIndex: number) => void;
+  onDragStart: (beatIndex: number) => void;
+  onDragOver: (beatIndex: number) => void;
+  onDrop: (targetBeatIndex: number) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
+  isDragOver: boolean;
+}
+
+const LIVE_ARROW_SPLIT_REGEX = /^(.*?)\s*(?:->|→)\s+(.*)$/;
+
+interface PendingFocusTarget {
+  type: 'step' | 'pending';
+  index: number;
+  caret: number;
+}
+
+export function ExecutionBeatRow({
+  beat,
+  cameraLink,
+  connectsToNext,
+  aestheticTokens,
+  diagnostics,
+  autoFocusEdit = false,
+  onClearAutoFocus,
+  onUpdateSubState,
+  onInsertSubState,
+  onDeleteSubState,
+  onMergeSubState,
+  onDeleteBeat,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isDragging,
+  isDragOver,
+}: ExecutionBeatRowProps) {
+  const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(null);
+  const [activeDraft, setActiveDraft] = useState<string>('');
+  const [pendingAfterIndex, setPendingAfterIndex] = useState<number | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<string>('');
+
+  const stepRefs = useRef<Map<number, HTMLTextAreaElement>>(new Map());
+  const pendingRef = useRef<HTMLTextAreaElement | null>(null);
+  const nextFocusRef = useRef<PendingFocusTarget | null>(null);
+
+  const registerStepRef = (index: number) => (el: HTMLTextAreaElement | null) => {
+    if (el) {
+      stepRefs.current.set(index, el);
+    } else {
+      stepRefs.current.delete(index);
+    }
+  };
+
+  // Apply queued focus + exact caret position right after React commits DOM updates
+  useLayoutEffect(() => {
+    const target = nextFocusRef.current;
+    if (!target) return;
+
+    if (target.type === 'pending') {
+      const el = pendingRef.current;
+      if (el) {
+        nextFocusRef.current = null;
+        el.focus();
+        const pos = Math.min(target.caret, el.value.length);
+        el.setSelectionRange(pos, pos);
+      }
+      return;
+    }
+
+    const el = stepRefs.current.get(target.index);
+    if (el) {
+      nextFocusRef.current = null;
+      el.focus();
+      const pos = Math.min(target.caret, el.value.length);
+      el.setSelectionRange(pos, pos);
+    }
+  });
+
+  // Focus newly inserted beat immediately on the last step (e.g. "[ACT] ")
+  useEffect(() => {
+    if (!autoFocusEdit) return;
+    const lastIdx = Math.max(0, beat.subStates.length - 1);
+    const initialText = beat.subStates[lastIdx]?.raw ?? '';
+    setFocusedStepIndex(lastIdx);
+    setActiveDraft(initialText);
+    nextFocusRef.current = {type: 'step', index: lastIdx, caret: initialText.length};
+    onClearAutoFocus?.();
+  }, [autoFocusEdit, beat.subStates, onClearAutoFocus]);
+
+  const isBeatFocused = focusedStepIndex !== null || pendingAfterIndex !== null;
+
+  const openPendingStepAfter = (afterIndex: number) => {
+    setFocusedStepIndex(null);
+    setPendingAfterIndex(afterIndex);
+    setPendingDraft('');
+    nextFocusRef.current = {type: 'pending', index: afterIndex, caret: 0};
+  };
+
+  const handleStepFocus = (index: number, raw: string) => {
+    setPendingAfterIndex(null);
+    setPendingDraft('');
+    setFocusedStepIndex(index);
+    setActiveDraft(raw);
+  };
+
+  const handleStepChange = (index: number, nextValue: string) => {
+    // Strip accidental raw newlines inside a single Sub-State step
+    const singleLine = nextValue.replace(/\r?\n/g, ' ');
+
+    // Live "-> " / "→ " split trigger: instantly forks into the next ↳ waterfall row
+    const splitMatch = LIVE_ARROW_SPLIT_REGEX.exec(singleLine);
+    if (splitMatch) {
+      const left = splitMatch[1].trim();
+      const right = splitMatch[2];
+
+      if (left.length > 0 && right.trim().length > 0) {
+        const rightTrimmed = right.trim();
+        onUpdateSubState(beat.index, index, `${left} -> ${rightTrimmed}`);
+        setFocusedStepIndex(index + 1);
+        setActiveDraft(rightTrimmed);
+        nextFocusRef.current = {type: 'step', index: index + 1, caret: rightTrimmed.length};
+        return;
+      }
+
+      if (left.length > 0 && right.trim().length === 0) {
+        onUpdateSubState(beat.index, index, left);
+        openPendingStepAfter(index);
+        return;
+      }
+    }
+
+    setActiveDraft(singleLine);
+    if (singleLine.trim().length > 0) {
+      onUpdateSubState(beat.index, index, singleLine);
+    }
+  };
+
+  const handleStepBlur = (index: number) => {
+    const trimmed = activeDraft.trim();
+    if (focusedStepIndex === index) {
+      setFocusedStepIndex(null);
+      if (trimmed.length === 0) {
+        onDeleteSubState(beat.index, index);
+      } else if (trimmed !== (beat.subStates[index]?.raw ?? '')) {
+        onUpdateSubState(beat.index, index, trimmed);
+      }
+    }
+  };
+
+  const handleStepKeyDown = (index: number, event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const el = event.currentTarget;
+    const caretStart = el.selectionStart ?? 0;
+    const caretEnd = el.selectionEnd ?? 0;
+    const hasSelection = caretStart !== caretEnd;
+    const currentText = focusedStepIndex === index ? activeDraft : (beat.subStates[index]?.raw ?? '');
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      el.blur();
+      return;
+    }
+
+    // Enter splits/adds a new ↳ waterfall step below (like Notion / Obsidian)
+    if (event.key === 'Enter') {
+      event.preventDefault();
+
+      if (currentText.trim().length === 0) {
+        el.blur();
+        return;
+      }
+
+      const before = currentText.slice(0, caretStart).trim();
+      const after = currentText.slice(caretEnd).trim();
+
+      if (before.length > 0 && after.length > 0) {
+        onUpdateSubState(beat.index, index, `${before} -> ${after}`);
+        setFocusedStepIndex(index + 1);
+        setActiveDraft(after);
+        nextFocusRef.current = {type: 'step', index: index + 1, caret: 0};
+      } else if (before.length > 0) {
+        onUpdateSubState(beat.index, index, before);
+        openPendingStepAfter(index);
+      } else {
+        openPendingStepAfter(index);
+      }
+      return;
+    }
+
+    // Backspace at column 0 of an indented ↳ step merges it cleanly into the previous step
+    if (event.key === 'Backspace' && !hasSelection && caretStart === 0 && index > 0) {
+      event.preventDefault();
+      const prevRaw = beat.subStates[index - 1]?.raw ?? '';
+      const currTrimmed = currentText.trim();
+
+      if (currTrimmed.length === 0) {
+        onDeleteSubState(beat.index, index);
+        setFocusedStepIndex(index - 1);
+        setActiveDraft(prevRaw);
+        nextFocusRef.current = {type: 'step', index: index - 1, caret: prevRaw.length};
+      } else {
+        onMergeSubState(beat.index, index);
+        const merged = `${prevRaw} ${currTrimmed}`;
+        setFocusedStepIndex(index - 1);
+        setActiveDraft(merged);
+        nextFocusRef.current = {type: 'step', index: index - 1, caret: prevRaw.length + 1};
+      }
+      return;
+    }
+
+    // ArrowUp at very start navigates to previous waterfall step
+    if (event.key === 'ArrowUp' && !hasSelection && caretStart === 0 && index > 0) {
+      event.preventDefault();
+      const prevRaw = beat.subStates[index - 1]?.raw ?? '';
+      setFocusedStepIndex(index - 1);
+      setActiveDraft(prevRaw);
+      nextFocusRef.current = {type: 'step', index: index - 1, caret: prevRaw.length};
+      return;
+    }
+
+    // ArrowDown at very end navigates to next waterfall step
+    if (
+      event.key === 'ArrowDown' &&
+      !hasSelection &&
+      caretStart === currentText.length &&
+      index < beat.subStates.length - 1
+    ) {
+      event.preventDefault();
+      const nextRaw = beat.subStates[index + 1]?.raw ?? '';
+      setFocusedStepIndex(index + 1);
+      setActiveDraft(nextRaw);
+      nextFocusRef.current = {type: 'step', index: index + 1, caret: 0};
+    }
+  };
+
+  const handlePendingChange = (nextValue: string) => {
+    const singleLine = nextValue.replace(/\r?\n/g, ' ');
+    setPendingDraft(singleLine);
+
+    if (singleLine.trim().length > 0 && pendingAfterIndex !== null) {
+      const insertAfter = pendingAfterIndex;
+      const newStepIdx = insertAfter + 1;
+      onInsertSubState(beat.index, insertAfter, singleLine);
+      setPendingAfterIndex(null);
+      setPendingDraft('');
+      setFocusedStepIndex(newStepIdx);
+      setActiveDraft(singleLine);
+      nextFocusRef.current = {type: 'step', index: newStepIdx, caret: singleLine.length};
+    }
+  };
+
+  const handlePendingKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Escape' || event.key === 'Enter') {
+      event.preventDefault();
+      setPendingAfterIndex(null);
+      setPendingDraft('');
+      return;
+    }
+    if (event.key === 'Backspace' && pendingDraft.length === 0 && pendingAfterIndex !== null) {
+      event.preventDefault();
+      const targetIdx = pendingAfterIndex;
+      const prevRaw = beat.subStates[targetIdx]?.raw ?? '';
+      setPendingAfterIndex(null);
+      setPendingDraft('');
+      setFocusedStepIndex(targetIdx);
+      setActiveDraft(prevRaw);
+      nextFocusRef.current = {type: 'step', index: targetIdx, caret: prevRaw.length};
+    }
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(beat.index));
+    onDragStart(beat.index);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    onDragOver(beat.index);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    onDrop(beat.index);
+  };
+
+  const connectsFromPrevious = Boolean(cameraLink?.connectsFromPrevious);
+  const subStates = beat.subStates;
+  const leadNode = subStates[0];
+  const tailNodes = subStates.slice(1);
+  const showWaterfallRail = tailNodes.length > 0 || pendingAfterIndex !== null;
+
+  const renderPendingRow = () => (
+    <div className="flex items-start gap-2">
+      <span
+        aria-hidden="true"
+        className="auteur-tok-arrow mt-0.5 select-none text-xs font-bold opacity-85 shrink-0"
+      >
+        ↳
+      </span>
+      <div className="min-w-0 flex-1">
+        <LiveHighlightedEditor
+          ref={pendingRef}
+          value={pendingDraft}
+          onChange={handlePendingChange}
+          mode="substate"
+          aestheticTokens={aestheticTokens}
+          ariaLabel={UI_LABELS.execution.newStepAria(beat.index)}
+          placeholder={UI_LABELS.execution.stepPlaceholder}
+          onBlur={() => {
+            if (pendingDraft.trim().length === 0) {
+              setPendingAfterIndex(null);
+              setPendingDraft('');
+            }
+          }}
+          onKeyDown={handlePendingKeyDown}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      id={`execution-beat-${beat.index}`}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className={`group/beat relative grid grid-cols-[52px_minmax(0,1fr)_28px] items-stretch gap-2 transition-opacity ${
+        isDragging ? 'opacity-40' : 'opacity-100'
+      }`}
+    >
+      {/* Drag drop target line */}
+      {isDragOver && (
+        <div className="pointer-events-none absolute -top-1 left-12 right-7 h-0.5 rounded-full bg-blueprint-accent z-20" />
+      )}
+
+      {/* Left Margin: Camera Continuity Rail + Beat Index + Drag Handle */}
+      <div className="relative flex items-start justify-end gap-0.5 pr-1 pt-3 select-none">
+        {connectsFromPrevious && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-[15px] top-0 h-[14px] w-[2px] opacity-45"
+            style={{backgroundColor: 'var(--tok-continuity)'}}
+          />
+        )}
+        {connectsToNext && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-[15px] top-[32px] bottom-0 w-[2px] opacity-45"
+            style={{backgroundColor: 'var(--tok-continuity)'}}
+          />
+        )}
+
+        <div
+          draggable={!isBeatFocused}
+          onDragStart={handleDragStart}
+          onDragEnd={onDragEnd}
+          title={UI_LABELS.execution.dragReorderTitle}
+          className="mt-0.5 flex h-5 w-4 items-center justify-center rounded text-text-faint opacity-0 group-hover/beat:opacity-100 hover:bg-surface-muted hover:text-text-main cursor-grab active:cursor-grabbing transition-opacity"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </div>
+
+        <span className="relative z-10 inline-flex min-w-[24px] justify-center rounded bg-app px-1 py-0.5 font-mono text-[11px] font-medium tabular-nums text-text-faint group-hover/beat:text-text-muted">
+          S{beat.index}
+        </span>
+      </div>
+
+      {/* Main Beat Card — Always-Formatted Option A Waterfall Stack */}
+      <div
+        className={`relative min-w-0 rounded-xl border px-4 py-3 transition-colors ${
+          isBeatFocused
+            ? 'border-text-muted/60 bg-surface shadow-xs'
+            : 'border-border-main bg-surface hover:border-text-faint/50'
+        }`}
+      >
+        {/* Hover Delete Beat Button */}
+        <button
+          type="button"
+          onClick={() => onDeleteBeat(beat.index)}
+          title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+          aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+          className="absolute right-2.5 top-2.5 z-10 rounded-md p-1 text-text-faint opacity-0 group-hover/beat:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+
+        {/* Step 1 — Lead Sub-State (always formatted, directly editable) */}
+        {leadNode && (
+          <div className="relative flex items-baseline gap-2 pr-7">
+            <div className="min-w-0 flex-1">
+              <LiveHighlightedEditor
+                ref={registerStepRef(0)}
+                value={focusedStepIndex === 0 ? activeDraft : leadNode.raw}
+                onChange={(val) => handleStepChange(0, val)}
+                mode="substate"
+                aestheticTokens={aestheticTokens}
+                isLead
+                ariaLabel={UI_LABELS.execution.leadStepAria(beat.index)}
+                placeholder={UI_LABELS.execution.leadPlaceholder}
+                onFocus={() => handleStepFocus(0, leadNode.raw)}
+                onBlur={() => handleStepBlur(0)}
+                onKeyDown={(e) => handleStepKeyDown(0, e)}
+              />
+            </div>
+
+            {leadNode.kind === 'camera' &&
+              leadNode.body.length === 0 &&
+              focusedStepIndex !== 0 && (
+                <span className="pointer-events-none select-none font-mono text-[11px] italic text-text-faint shrink-0">
+                  {UI_LABELS.execution.holdFraming}
+                </span>
+              )}
+          </div>
+        )}
+
+        {/* Steps 2..k — Waterfall Indented Rail (always formatted, each step directly editable) */}
+        {showWaterfallRail && (
+          <div className="auteur-waterfall-rail mt-2.5 ml-1.5 pl-3.5 space-y-1.5">
+            {pendingAfterIndex === 0 && renderPendingRow()}
+
+            {tailNodes.map((sub, offset) => {
+              const stepIdx = offset + 1;
+              return (
+                <div key={`step-${stepIdx}`} className="space-y-1.5">
+                  <div className="group/step relative flex items-start gap-2 pr-5">
+                    <span
+                      aria-hidden="true"
+                      className="auteur-tok-arrow mt-0.5 select-none text-xs font-bold opacity-85 shrink-0"
+                    >
+                      ↳
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <LiveHighlightedEditor
+                        ref={registerStepRef(stepIdx)}
+                        value={focusedStepIndex === stepIdx ? activeDraft : sub.raw}
+                        onChange={(val) => handleStepChange(stepIdx, val)}
+                        mode="substate"
+                        aestheticTokens={aestheticTokens}
+                        ariaLabel={UI_LABELS.execution.stepAria(beat.index, stepIdx + 1)}
+                        placeholder={UI_LABELS.execution.stepPlaceholder}
+                        onFocus={() => handleStepFocus(stepIdx, sub.raw)}
+                        onBlur={() => handleStepBlur(stepIdx)}
+                        onKeyDown={(e) => handleStepKeyDown(stepIdx, e)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onDeleteSubState(beat.index, stepIdx);
+                      }}
+                      title={UI_LABELS.execution.removeStepTitle}
+                      aria-label={UI_LABELS.execution.removeStepAria(stepIdx + 1, beat.index)}
+                      className="absolute right-0 top-0.5 rounded p-0.5 text-text-faint opacity-0 group-hover/step:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  {pendingAfterIndex === stepIdx && renderPendingRow()}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Quiet hover/focus affordance to append a new ↳ Sub-State step */}
+        <div
+          className={`mt-2 ml-1.5 flex items-center justify-between transition-opacity ${
+            isBeatFocused
+              ? 'opacity-100'
+              : 'opacity-0 group-hover/beat:opacity-100'
+          }`}
+        >
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              openPendingStepAfter(Math.max(0, subStates.length - 1));
+            }}
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+          >
+            <Plus className="h-3 w-3" />
+            <span>{UI_LABELS.execution.addStep}</span>
+          </button>
+
+          {isBeatFocused && (
+            <span className="font-sans text-[10px] text-text-faint select-none">
+              {UI_LABELS.execution.chainHintLead}{' '}
+              <code className="font-mono">{UI_LABELS.execution.chainHintArrow}</code>{' '}
+              {UI_LABELS.execution.chainHintTail}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Right Margin Diagnostics (zero layout shift) */}
+      <div className="flex w-7 justify-center pt-2.5">
+        <DiagnosticDot diagnostics={diagnostics} />
+      </div>
+    </div>
+  );
+}
