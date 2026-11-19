@@ -29,7 +29,7 @@ The Auteur Script Editor blends **Obsidian Live Preview** with **Notion's calm s
 
 ### Phase 1 — Collapsible Staging Cards
 - Each Staging block (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, `[CONTINUITY PROTOCOL]`, custom blocks) renders as a single-elevation stationery card with a semantic phase badge.
-- Collapsing a block condenses it into a muted 1-line summary (e.g., detected `@` bindings or mapped lookbook token count).
+- Collapsing a block keeps the header clean (`[BLOCK]` badge + caption + quiet line/token metadata) and shows a muted 2-line plain-text preview (`line-clamp-2`) of the body underneath; clicking either the header or preview expands the full block.
 - Expanded Staging blocks stay **live-formatted while typing** via `LiveHighlightedEditor` (zero-width-shift CSS Grid overlay keeping `Label:` keys, `@ref` badges, and `-> TOKEN` mappings highlighted on every keystroke with zero flash to monochrome plain text).
 
 ### Phase 2 — Always-Formatted Option A Waterfall Stack

@@ -18,7 +18,7 @@ import {
 import type {AestheticToken, MacroBlockKind} from '../core/types.ts';
 import {getMacroBlockMeta} from '../ui/labels.ts';
 
-export type LiveEditorMode = 'substate' | 'staging' | 'source';
+export type LiveEditorMode = 'substate' | 'staging' | 'aestheticValue' | 'source';
 
 interface LiveHighlightedEditorProps {
   value: string;
@@ -258,56 +258,60 @@ function highlightExecutionLine(
 }
 
 /**
+ * Highlights @refs and -> TOKEN mappings inside an [AESTHETIC] value verbatim.
+ */
+function highlightAestheticValue(val: string, isProportional: boolean): ReactNode {
+  const regex = /(->|→)(\s*)([A-Za-z0-9_-]+)|((?<![A-Za-z0-9._%+-])@[A-Za-z0-9_-]+)/g;
+  const out: ReactNode[] = [];
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(val)) !== null) {
+    if (match.index > lastIdx) {
+      out.push(val.slice(lastIdx, match.index));
+    }
+    if (match[1]) {
+      out.push(
+        <span
+          key={`a-${match.index}`}
+          className={`auteur-tok-arrow ${isProportional ? '' : 'font-semibold'}`}
+        >
+          {match[1]}
+        </span>
+      );
+      out.push(match[2]);
+      out.push(
+        <span
+          key={`tk-${match.index}`}
+          className={`auteur-live-tok-ref ${isProportional ? '' : 'font-semibold'}`}
+        >
+          {match[3]}
+        </span>
+      );
+    } else if (match[4]) {
+      out.push(
+        <span
+          key={`rf-${match.index}`}
+          className={`auteur-live-tok-ref ${isProportional ? '' : 'font-medium'}`}
+        >
+          {match[4]}
+        </span>
+      );
+    }
+    lastIdx = match.index + match[0].length;
+  }
+
+  if (lastIdx < val.length) {
+    out.push(val.slice(lastIdx));
+  }
+  return out;
+}
+
+/**
  * Highlights a single line inside [AESTHETIC] (Label: keys + -> TOKEN mappings + @refs) verbatim.
  */
 function highlightAestheticLine(line: string, isProportional: boolean): ReactNode {
   const kvMatch = /^(\s*)([A-Za-z0-9 _/-]+:)(\s*)(.*)$/.exec(line);
-  const renderValue = (val: string) => {
-    const regex = /(->|→)(\s*)([A-Za-z0-9_-]+)|((?<![A-Za-z0-9._%+-])@[A-Za-z0-9_-]+)/g;
-    const out: ReactNode[] = [];
-    let lastIdx = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = regex.exec(val)) !== null) {
-      if (match.index > lastIdx) {
-        out.push(val.slice(lastIdx, match.index));
-      }
-      if (match[1]) {
-        out.push(
-          <span
-            key={`a-${match.index}`}
-            className={`auteur-tok-arrow ${isProportional ? '' : 'font-semibold'}`}
-          >
-            {match[1]}
-          </span>
-        );
-        out.push(match[2]);
-        out.push(
-          <span
-            key={`tk-${match.index}`}
-            className={`auteur-live-tok-ref ${isProportional ? '' : 'font-semibold'}`}
-          >
-            {match[3]}
-          </span>
-        );
-      } else if (match[4]) {
-        out.push(
-          <span
-            key={`rf-${match.index}`}
-            className={`auteur-live-tok-ref ${isProportional ? '' : 'font-medium'}`}
-          >
-            {match[4]}
-          </span>
-        );
-      }
-      lastIdx = match.index + match[0].length;
-    }
-
-    if (lastIdx < val.length) {
-      out.push(val.slice(lastIdx));
-    }
-    return out;
-  };
 
   if (kvMatch) {
     return (
@@ -317,12 +321,12 @@ function highlightAestheticLine(line: string, isProportional: boolean): ReactNod
           {kvMatch[2]}
         </span>
         {kvMatch[3]}
-        <span className="text-text-body">{renderValue(kvMatch[4])}</span>
+        <span className="text-text-body">{highlightAestheticValue(kvMatch[4], isProportional)}</span>
       </>
     );
   }
 
-  return <span className="text-text-body">{renderValue(line)}</span>;
+  return <span className="text-text-body">{highlightAestheticValue(line, isProportional)}</span>;
 }
 
 function highlightStagingBody(
@@ -435,6 +439,8 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
     let highlighted: ReactNode;
     if (mode === 'substate') {
       highlighted = highlightExecutionLine(value, aestheticTokens, true, isLead);
+    } else if (mode === 'aestheticValue') {
+      highlighted = <span className="text-text-body">{highlightAestheticValue(value, true)}</span>;
     } else if (mode === 'staging') {
       highlighted = highlightStagingBody(value, stagingKind, aestheticTokens);
     } else {

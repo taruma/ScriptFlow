@@ -127,8 +127,19 @@ export const UI_LABELS = {
     emptySummary: 'Empty staging block — click to author',
     editAria: (name: string) => `Edit [${name}] block`,
     editPlaceholder: (name: string) => `Write [${name}] content...`,
-    mappedTokens: (count: number) => `${count} ${count === 1 ? 'token' : 'tokens'} mapped`,
+    castBindings: (count: number) => `${count} ${count === 1 ? '@ref' : '@refs'}`,
+    mappedTokens: (count: number) => `${count} ${count === 1 ? 'token' : 'tokens'}`,
     lookbookLines: (count: number) => `${count} lookbook ${count === 1 ? 'line' : 'lines'}`,
+    keysCount: (count: number) => `${count} ${count === 1 ? 'key' : 'keys'}`,
+    linesCount: (count: number) => `${count} ${count === 1 ? 'line' : 'lines'}`,
+    expandPreviewTitle: (name: string) => `Expand [${name}] block`,
+    aestheticKeyPlaceholder: 'Key',
+    aestheticValuePlaceholder: 'Describe lookbook detail or -> TOKEN...',
+    addAestheticKey: 'Add key',
+    removeAestheticKeyTitle: 'Remove key',
+    aestheticKeyAria: (index: number) => `Aesthetic key ${index + 1}`,
+    aestheticValueAria: (key: string, index: number) =>
+      key ? `Aesthetic value for ${key}` : `Aesthetic value ${index + 1}`,
   },
 
   execution: {
