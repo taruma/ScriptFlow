@@ -7,9 +7,12 @@ import type {
   StagingBlock,
 } from '../core/types.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
-import {AestheticBlockEditor} from './AestheticBlockEditor.tsx';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
+import {
+  formatStagingCollapsedMeta,
+  getStagingBlockPlugin,
+} from './stagingBlockRegistry.ts';
 
 interface StagingBlockCardProps {
   block: StagingBlock;
@@ -23,47 +26,6 @@ interface StagingBlockCardProps {
   diagnostics: LintDiagnostic[];
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
-}
-
-const AESTHETIC_KEY_REGEX = /^\s*[A-Za-z0-9 _/-]+:/;
-
-function countAestheticKeys(block: StagingBlock): number {
-  let count = 0;
-  for (const line of block.lines) {
-    if (AESTHETIC_KEY_REGEX.test(line)) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function getCollapsedMeta(
-  block: StagingBlock,
-  characters: CharacterBinding[],
-  aestheticTokens: AestheticToken[]
-): string {
-  const nonEmptyCount = block.lines.filter((line) => line.trim().length > 0).length;
-  if (nonEmptyCount === 0) return '';
-
-  const parts: string[] = [];
-  if (block.kind === 'INTENT' && characters.length > 0) {
-    parts.push(UI_LABELS.staging.castBindings(characters.length));
-  }
-  if (block.kind === 'AESTHETIC') {
-    if (aestheticTokens.length > 0) {
-      parts.push(UI_LABELS.staging.mappedTokens(aestheticTokens.length));
-    }
-    const keyCount = countAestheticKeys(block);
-    parts.push(
-      keyCount > 0
-        ? UI_LABELS.staging.keysCount(keyCount)
-        : UI_LABELS.staging.linesCount(nonEmptyCount)
-    );
-    return parts.join(' · ');
-  }
-
-  parts.push(UI_LABELS.staging.linesCount(nonEmptyCount));
-  return parts.join(' · ');
 }
 
 function getCollapsedPreviewText(block: StagingBlock): string {
@@ -91,6 +53,8 @@ export function StagingBlockCard({
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
 
   const phase = getMacroBlockMeta(block.kind);
+  const plugin = getStagingBlockPlugin(block.kind);
+  const CustomEditor = plugin?.Editor;
 
   useEffect(() => {
     if (!isFocused) {
@@ -99,10 +63,10 @@ export function StagingBlockCard({
   }, [block.rawBody, isFocused]);
 
   useEffect(() => {
-    if (!autoFocusEdit || collapsed || block.kind === 'AESTHETIC') return;
+    if (!autoFocusEdit || collapsed || CustomEditor) return;
     editorRef.current?.focus();
     onClearAutoFocus?.();
-  }, [autoFocusEdit, collapsed, block.kind, onClearAutoFocus]);
+  }, [autoFocusEdit, collapsed, CustomEditor, onClearAutoFocus]);
 
   const handleChange = (nextValue: string) => {
     setLocalValue(nextValue);
@@ -125,7 +89,7 @@ export function StagingBlockCard({
     }
   };
 
-  const collapsedMeta = getCollapsedMeta(block, characters, aestheticTokens);
+  const collapsedMeta = formatStagingCollapsedMeta(block, characters, aestheticTokens);
   const previewText = getCollapsedPreviewText(block);
 
   return (
@@ -218,9 +182,9 @@ export function StagingBlockCard({
               </p>
             )}
           </div>
-        ) : block.kind === 'AESTHETIC' ? (
+        ) : CustomEditor ? (
           <div className="border-t border-border-subtle px-3 py-2">
-            <AestheticBlockEditor
+            <CustomEditor
               rawBody={block.rawBody}
               aestheticTokens={aestheticTokens}
               autoFocus={autoFocusEdit}

@@ -1,19 +1,9 @@
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {Plus, X} from 'lucide-react';
-import {EXECUTION_HEADERS} from '../core/parser.ts';
-import type {MacroBlockKind} from '../core/types.ts';
+import {CANONICAL_STAGING_HEADERS, EXECUTION_HEADERS} from '../core/parser.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
 
-const CANONICAL_STAGING_BLOCKS: readonly Exclude<MacroBlockKind, 'EXECUTION' | 'CUSTOM'>[] = [
-  'INTENT',
-  'LOGIC',
-  'AESTHETIC',
-  'OPENING',
-  'CONTINUITY PROTOCOL',
-  'CHARACTERS',
-  'REFERENCES',
-  'STAGE',
-];
+const CANONICAL_STAGING_BLOCKS = CANONICAL_STAGING_HEADERS;
 
 interface StagingBlockPickerPanelProps {
   existingBlockNames: string[];

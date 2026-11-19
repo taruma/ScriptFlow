@@ -1,59 +1,14 @@
 import {useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {Plus, X} from 'lucide-react';
-import type {AestheticToken} from '../core/types.ts';
+import {
+  parseAestheticLine,
+  parseAestheticRows,
+  serializeAestheticRows,
+  type AestheticRow,
+} from '../core/aesthetic.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
-
-interface AestheticBlockEditorProps {
-  rawBody: string;
-  aestheticTokens: AestheticToken[];
-  autoFocus?: boolean;
-  onClearAutoFocus?: () => void;
-  onCommit: (nextBody: string) => void;
-  onFocusChange: (focused: boolean) => void;
-}
-
-type AestheticRow =
-  | {type: 'kv'; key: string; value: string}
-  | {type: 'free'; raw: string};
-
-const KV_LINE_REGEX = /^\s*([A-Za-z0-9 _/-]+):(?:\s*(.*))?$/;
-
-function parseAestheticRows(rawBody: string): AestheticRow[] {
-  if (rawBody.length === 0) {
-    return [{type: 'kv', key: '', value: ''}];
-  }
-
-  return rawBody.split('\n').map((line) => {
-    const match = KV_LINE_REGEX.exec(line);
-    if (match) {
-      return {type: 'kv', key: match[1], value: match[2] ?? ''};
-    }
-    return {type: 'free', raw: line};
-  });
-}
-
-function serializeAestheticRows(rows: AestheticRow[]): string {
-  return rows
-    .map((row) => {
-      if (row.type === 'free') {
-        return row.raw;
-      }
-      const cleanKey = row.key.trim();
-      const cleanValue = row.value;
-      if (cleanKey.length === 0 && cleanValue.trim().length === 0) {
-        return '';
-      }
-      if (cleanKey.length === 0) {
-        return cleanValue;
-      }
-      if (cleanValue.length === 0) {
-        return `${cleanKey}:`;
-      }
-      return `${cleanKey}: ${cleanValue}`;
-    })
-    .join('\n');
-}
+import type {StagingBlockEditorProps} from './stagingBlockRegistry.ts';
 
 interface PendingFocus {
   index: number;
@@ -74,7 +29,7 @@ export function AestheticBlockEditor({
   onClearAutoFocus,
   onCommit,
   onFocusChange,
-}: AestheticBlockEditorProps) {
+}: StagingBlockEditorProps) {
   const [rows, setRows] = useState<AestheticRow[]>(() => parseAestheticRows(rawBody));
   const [isContainerFocused, setIsContainerFocused] = useState(false);
 
@@ -195,13 +150,7 @@ export function AestheticBlockEditor({
     if (nextValue.includes('\n')) {
       const splitLines = nextValue.split(/\r?\n/);
       const firstValue = splitLines[0];
-      const extraRows = splitLines.slice(1).map((line): AestheticRow => {
-        const match = KV_LINE_REGEX.exec(line);
-        if (match) {
-          return {type: 'kv', key: match[1], value: match[2] ?? ''};
-        }
-        return {type: 'free', raw: line};
-      });
+      const extraRows = splitLines.slice(1).map(parseAestheticLine);
       const nextRows = [
         ...rows.slice(0, index),
         rows[index].type === 'kv'
@@ -227,11 +176,7 @@ export function AestheticBlockEditor({
         return {...row, value: nextValue};
       }
       // If a freeform line gets "Key: value" typed into it, promote it to a 2-column row
-      const match = KV_LINE_REGEX.exec(nextValue);
-      if (match) {
-        return {type: 'kv' as const, key: match[1], value: match[2] ?? ''};
-      }
-      return {type: 'free' as const, raw: nextValue};
+      return parseAestheticLine(nextValue);
     });
     commitRows(nextRows);
   };

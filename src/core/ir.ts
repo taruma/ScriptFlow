@@ -20,11 +20,11 @@ import {
   type SubStateIR,
   type TokenMappingIR,
 } from './irSchemas.ts';
+import {parseAestheticLine} from './aesthetic.ts';
 import {lintDocument} from './linter.ts';
 import {classifyMacroBlock, normalizeLineEndings, parseAuteurScript} from './parser.ts';
 import type {AuteurDocument, ExtractedMetadata, LintDiagnostic, SubStateNode} from './types.ts';
 
-const AESTHETIC_KEY_VALUE_REGEX = /^([A-Za-z0-9 _/-]+):\s*(.*)$/;
 const AESTHETIC_TOKEN_SEGMENT_REGEX = /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)\s*$/;
 
 function sanitizeSingleLine(value: string): string {
@@ -60,18 +60,18 @@ export function computeSnapshotHash(rawText: string): string {
 export function parseAestheticEntries(lines: string[], macroBlockId: string): AestheticEntryIR[] {
   return lines.map((line, idx) => {
     const id = `${macroBlockId}.${idx}`;
-    const match = AESTHETIC_KEY_VALUE_REGEX.exec(line);
-    if (match) {
+    const parsed = parseAestheticLine(line);
+    if (parsed.type === 'kv') {
       return {
         id,
-        key: match[1].trim(),
-        value: match[2],
+        key: parsed.key,
+        value: parsed.value,
       };
     }
     return {
       id,
       key: null,
-      value: line,
+      value: parsed.raw,
     };
   });
 }

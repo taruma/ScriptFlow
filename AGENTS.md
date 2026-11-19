@@ -8,7 +8,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 - **`docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`**: Human-readable checklist of all 4 Scene Topologies, all 5 live deterministic linter rules, all 5 Script Supervisor Audit Lenses (`Lens 1`–`Lens 5`), temporal calibration, and pass/fail examples.
 - **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, module map, and pure serializer mutation contracts.
 - **`docs/JSON_IR_SPEC.md`**: Programmatic JSON IR (`AuteurScriptIR`, `AuteurEnvelope`), Zod/JSON Schema contracts, transactional `AuteurPatch` engine, and composable Script Supervisor Lens Slicer (`AUDIT_LENS_PRESETS`).
-- **`docs/UI_PHILOSOPHY.md`**: Single-column live-formatted workspace principles, Waterfall step editing, and 4-mode theme system.
+- **`docs/UI_PHILOSOPHY.md`**: Asymmetric `40/60` Live workspace & single-document Source mode principles, 2-column Lookbook & Waterfall editing, unified Settings popover, and 4-mode theme system.
 - **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces, domain-to-UI vocabulary bridge, and theme labels).
 
 ---
@@ -16,8 +16,8 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 ## 1. Non-Negotiable Architecture Invariants
 
 1. **Zero-React Core (`src/core/`)**:
-   - Every file in `src/core/` (`types.ts`, `parser.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
-   - Any new parsing, extraction, serialization, programmatic JSON IR/patching/slicing, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
+   - Every file in `src/core/` (`types.ts`, `parser.ts`, `aesthetic.ts`, `highlighter.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain **100% pure TypeScript** with **zero** imports from `react`, `react-dom`, DOM globals (`window`, `document`, `localStorage`), or CSS/Tailwind.
+   - Any new parsing, lookbook row decoding, live syntax/clause tokenization, extraction, serialization, programmatic JSON IR/patching/slicing, or deterministic Script Supervisor linting capability belongs exclusively in `src/core/`.
 2. **Plain-Text-as-Truth**:
    - The raw canonical Auteur Script string (`rawText` in `src/App.tsx`) is the sole reactive source of truth.
    - The AST (`AuteurDocument`), extracted metadata (`ExtractedMetadata`), camera continuity links (`HOLD` / `CUT` / `RECALL` / `MONTAGE`), diagnostics (`LintDiagnostic[]`), and programmatic JSON envelopes (`AuteurEnvelope`) are derived synchronously via pure functions.
@@ -33,12 +33,22 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 ## 2. How to Safely Extend the Codebase
 
-### Adding a New Inline Sub-State Tag
+### Adding a New Inline Sub-State Tag or Highlight Rule
 1. Update `SubStateKind` in `src/core/types.ts` (only if the tag needs distinct AST semantics beyond `'tier2'`).
 2. Update `parseSubState` in `src/core/parser.ts` to classify the tag cleanly.
 3. If introducing a distinct `dimension` beyond `'tier2'`, update `SubStateDraftSchema` / `SubStateIRSchema` in `src/core/irSchemas.ts` and `subStateNodeToIR` / `renderSubState` in `src/core/ir.ts` so `fromAuteurIR(toAuteurIR(raw))` stays 100% lossless.
-4. Add rendering support in `src/components/LiveHighlightedEditor.tsx` (and `src/components/SubStateRenderer.tsx` if used) using CSS custom properties defined in `src/index.css` (never hardcoded hex colors in JSX).
-5. Add unit tests in `tests/core/parser.test.ts`, `tests/core/serializer.test.ts` (including `exportTagless`), and `tests/core/ir.test.ts`.
+4. Add pure tokenization in `src/core/highlighter.ts` (maintaining 100% character-for-character concatenation losslessness), then map the new `HighlightSpanKind` in `src/components/LiveHighlightedEditor.tsx` using CSS custom properties defined in `src/index.css` (never hardcoded hex colors in JSX, and never alter proportional `font-weight`/`font-style`/`padding` on Live Mode spans).
+5. Add unit tests in `tests/core/parser.test.ts`, `tests/core/highlighter.test.ts`, `tests/core/serializer.test.ts` (including `exportTagless`), and `tests/core/ir.test.ts`.
+
+### Registering a New Structured Staging Macro-Block Editor
+1. Keep any block-specific line parsing/serialization pure inside `src/core/` (following `src/core/aesthetic.ts` as the reference pattern) with Vitest coverage in `tests/core/`.
+2. Build the editor component conforming to `StagingBlockEditorProps` (`rawBody`, `aestheticTokens`, `autoFocus`, `onClearAutoFocus`, `onCommit`, `onFocusChange`) so it commits canonical plain text back through `updateStagingBlock`.
+3. Register the component (and optional `summarizeMeta` collapsed header formatter) in `STAGING_BLOCK_REGISTRY` inside `src/components/stagingBlockRegistry.ts`. Do not add `block.kind === '...'` conditionals to `StagingBlockCard.tsx`.
+
+### Adding a New Persisted Display / Editor Setting
+1. Add the option/DOM applier primitive under `src/ui/` (following `theme.ts`, `textSize.ts`, or `clauseGuides.ts`) and wire its field into `EditorSettings`, `loadEditorSettings`, `applyEditorSettings`, and `useEditorSettings` in `src/ui/editorSettings.ts`.
+2. Add its user-facing labels under `UI_LABELS.topBar` in `src/ui/labels.ts`.
+3. Render its control inside `src/components/SettingsPopover.tsx` so the top bar remains uncluttered.
 
 ### Extending the Programmatic JSON IR, Patch Engine, or Lens Slicer
 1. Update the Zod source-of-truth schemas in `src/core/irSchemas.ts` (never hand-maintain duplicate JSON Schema objects—`getAuteurJsonSchemas()` derives them automatically).
@@ -56,16 +66,17 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 ## 3. UI Minimalism, Labels & Theme Guardrails
 
-- Keep the workspace centered in a calm single-page reading column (`~760px` text measure) with **zero** permanent sidebars, telemetry dashboards, or cluttered IDE chrome.
+- Keep Live Mode focused on the calm asymmetric `40/60` Phase 1 Staging / Phase 2 Execution split (and Source Mode on its centered `~820px` single-document reading measure) with **zero** permanent sidebars, telemetry dashboards, or cluttered IDE chrome.
 - **UI Labeling SSOT (`src/ui/labels.ts`)**: Never hardcode interface labels, Macro-Block captions (`INTENT -> Directorial Intent`, `AESTHETIC -> World Lookbook`, etc.), phase headings, button copy, placeholders, tooltips, or aria-labels inside JSX components. Define and update all user-facing UI strings exclusively in `src/ui/labels.ts` (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS`).
 - Centralize reusable UI chrome classes in `src/ui/tokens/ui.ts` (`UI_TOKENS`) and reference semantic CSS variables (`bg-surface`, `border-border-main`, `text-text-main`) so all four shell themes (`Light`, `Warm`, `Dark`, `Pure Black OLED`) maintain full contrast parity.
+- Route every destructive confirmation (Macro-Block or Macro-State deletion) through the decoupled `ConfirmDialog` component—never use `window.confirm` or `window.alert`.
 - Keep diagnostics quiet in the right margin (`DiagnosticDot`) with zero horizontal layout shift.
 
 ---
 
 ## 4. Verification Commands
 
-Run these commands after any change to `src/core/`, `src/components/`, or `src/data/`:
+Run these commands after any change to `src/core/`, `src/components/`, `src/ui/`, or `src/data/`:
 
 ```bash
 npm test          # Runs the Vitest unit suite for src/core/

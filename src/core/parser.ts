@@ -16,6 +16,45 @@ export const MACRO_HEADER_REGEX = /^\[([A-Z0-9 _-]+)\]$/;
 /** Execution phase header aliases per Open Block Principle */
 export const EXECUTION_HEADERS = new Set(['EXECUTION', 'TIMELINE', 'BEATS', 'SHOTLIST']);
 
+/** Canonical Phase 1 Staging Macro-Block headers in recommended authoring order */
+export const CANONICAL_STAGING_HEADERS: readonly Exclude<MacroBlockKind, 'EXECUTION' | 'CUSTOM'>[] = [
+  'INTENT',
+  'LOGIC',
+  'AESTHETIC',
+  'OPENING',
+  'CONTINUITY PROTOCOL',
+  'CHARACTERS',
+  'REFERENCES',
+  'STAGE',
+];
+
+/** All recognized canonical Macro-Block header names (including GOAL and Execution aliases) */
+export const KNOWN_CANONICAL_HEADERS = new Set<string>([
+  ...CANONICAL_STAGING_HEADERS,
+  'GOAL',
+  ...EXECUTION_HEADERS,
+]);
+
+/**
+ * Returns true when raw text contains at least two standalone canonical Macro-Block headers
+ * (e.g. `[INTENT]` + `[EXECUTION]`), used to distinguish full-script pastes from inline snippets.
+ */
+export function isMultiBlockAuteurScript(raw: string): boolean {
+  const lines = normalizeLineEndings(raw).split('\n');
+  let headerCount = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = MACRO_HEADER_REGEX.exec(trimmed);
+    if (match && KNOWN_CANONICAL_HEADERS.has(match[1].trim().toUpperCase())) {
+      headerCount += 1;
+      if (headerCount >= 2) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Sub-State chaining delimiter: ASCII -> or Unicode → */
 export const CHAIN_SPLIT_REGEX = /\s*(?:->|→)\s*/;
 

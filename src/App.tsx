@@ -9,6 +9,7 @@ import {
   insertExecutionBeat,
   insertExecutionSubState,
   insertStagingBlock,
+  isMultiBlockAuteurScript,
   lintDocument,
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
@@ -27,30 +28,11 @@ import {
   SCRIPT_PRESETS,
   type ScriptPreset,
 } from './data/presets.ts';
-import {
-  applyClauseGuides,
-  loadStoredClauseGuides,
-  saveStoredClauseGuides,
-} from './ui/clauseGuides.ts';
-import {
-  applyTextSize,
-  loadStoredTextSize,
-  saveStoredTextSize,
-  type TextSizePreset,
-} from './ui/textSize.ts';
-import {
-  applyThemeMode,
-  loadStoredTheme,
-  saveStoredTheme,
-  type ThemeMode,
-} from './ui/theme.ts';
+import {useEditorSettings} from './ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
 
 const SCRIPT_STORAGE_KEY = 'auteur-editor-raw-script-v1';
 const TITLE_STORAGE_KEY = 'auteur-editor-scene-title-v1';
-
-const MULTI_BLOCK_HEADER_REGEX =
-  /^\s*\[(INTENT|GOAL|LOGIC|AESTHETIC|OPENING|EXECUTION|TIMELINE|BEATS|SHOTLIST|CONTINUITY PROTOCOL|CHARACTERS|REFERENCES|STAGE)\]\s*$/gm;
 
 function loadInitialScript(): string {
   try {
@@ -114,41 +96,11 @@ export default function App() {
   const [rawText, setRawText] = useState<string>(loadInitialScript);
   const [sceneTitle, setSceneTitle] = useState<string>(loadInitialTitle);
   const [viewMode, setViewMode] = useState<ViewMode>('live');
-  const [themeMode, setThemeMode] = useState<ThemeMode>(loadStoredTheme);
-  const [textSize, setTextSize] = useState<TextSizePreset>(loadStoredTextSize);
-  const [clauseGuides, setClauseGuides] = useState<boolean>(loadStoredClauseGuides);
+  const {settings, updateSettings} = useEditorSettings();
   const [copiedKind, setCopiedKind] = useState<'plain' | 'tagless' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
-
-  // Apply theme mode, text size & clause guide preference to <html>
-  useEffect(() => {
-    applyThemeMode(themeMode, false);
-    applyTextSize(textSize);
-    applyClauseGuides(clauseGuides);
-  }, []);
-
-  const handleThemeChange = useCallback((nextMode: ThemeMode) => {
-    setThemeMode(nextMode);
-    saveStoredTheme(nextMode);
-    applyThemeMode(nextMode, true);
-  }, []);
-
-  const handleTextSizeChange = useCallback((nextSize: TextSizePreset) => {
-    setTextSize(nextSize);
-    saveStoredTextSize(nextSize);
-    applyTextSize(nextSize);
-  }, []);
-
-  const handleToggleClauseGuides = useCallback(() => {
-    setClauseGuides((prev) => {
-      const next = !prev;
-      saveStoredClauseGuides(next);
-      applyClauseGuides(next);
-      return next;
-    });
-  }, []);
 
   // Persist canonical plain text & title to localStorage
   useEffect(() => {
@@ -201,9 +153,7 @@ export default function App() {
       const active = document.activeElement;
       const inEditable = isEditableElement(active);
 
-      MULTI_BLOCK_HEADER_REGEX.lastIndex = 0;
-      const headerMatches = pasted.match(MULTI_BLOCK_HEADER_REGEX) ?? [];
-      const hasMultiBlockScript = headerMatches.length >= 2;
+      const hasMultiBlockScript = isMultiBlockAuteurScript(pasted);
 
       // In Source Mode inside the main textarea, let native paste work normally
       if (viewMode === 'source' && inEditable) {
@@ -379,12 +329,8 @@ export default function App() {
         activePresetId={activePresetId}
         onSelectPreset={handleSelectPreset}
         onNewBlank={handleNewBlank}
-        themeMode={themeMode}
-        onThemeChange={handleThemeChange}
-        textSize={textSize}
-        onTextSizeChange={handleTextSizeChange}
-        clauseGuides={clauseGuides}
-        onToggleClauseGuides={handleToggleClauseGuides}
+        settings={settings}
+        onUpdateSettings={updateSettings}
         onCopyPlainText={handleCopyPlainText}
         onCopyTagless={handleCopyTagless}
         copiedKind={copiedKind}

@@ -1,6 +1,8 @@
 import {describe, expect, it} from 'vitest';
 import {
+  CANONICAL_STAGING_HEADERS,
   exportPlainText,
+  isMultiBlockAuteurScript,
   parseAuteurScript,
   parseExecutionLine,
   parseSubState,
@@ -146,5 +148,16 @@ Wardrobe Mapping: Evan in mustard track jacket -> EV01
     ]);
     expect(beat.subStates[0].tag).toBe('STATE IN');
     expect(beat.subStates[3].tag).toBe('STATE OUT');
+  });
+
+  it('detects multi-block canonical Auteur Scripts vs inline snippets for paste hydration', () => {
+    expect(CANONICAL_STAGING_HEADERS).toContain('AESTHETIC');
+    expect(CANONICAL_STAGING_HEADERS).toContain('INTENT');
+
+    expect(
+      isMultiBlockAuteurScript('[INTENT]\nTense standoff.\n\n[EXECUTION]\n[CAM 01] MS -> [ACT] Hold')
+    ).toBe(true);
+    expect(isMultiBlockAuteurScript('[INTENT]\nSingle header only')).toBe(false);
+    expect(isMultiBlockAuteurScript('[CAM 01] MS -> [ACT] Ray walks in')).toBe(false);
   });
 });
