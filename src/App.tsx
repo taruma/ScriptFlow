@@ -17,6 +17,7 @@ import {
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
+import {JsonIrDebugDrawer} from './components/debug/JsonIrDebugDrawer.tsx';
 import {
   BLANK_SCRIPT_TEMPLATE,
   DEFAULT_PRESET,
@@ -102,6 +103,7 @@ export default function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(loadStoredTheme);
   const [copiedKind, setCopiedKind] = useState<'plain' | 'tagless' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
 
   // Apply theme mode to <html>
   useEffect(() => {
@@ -158,6 +160,7 @@ export default function App() {
   // Global Paste-and-Hydrate with Active-Editor Guard (07 §1)
   useEffect(() => {
     const handleGlobalPaste = (event: ClipboardEvent) => {
+      if (isDebugOpen) return;
       const pasted = event.clipboardData?.getData('text/plain');
       if (!pasted || pasted.trim().length === 0) return;
 
@@ -191,7 +194,7 @@ export default function App() {
 
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [viewMode]);
+  }, [viewMode, isDebugOpen]);
 
   // Pure Serializer Mutations
   const handleUpdateStaging = useCallback((blockIndex: number, nextBody: string) => {
@@ -264,6 +267,13 @@ export default function App() {
     }
   }, [rawText]);
 
+  const handleCommitFromDebug = useCallback((nextRawText: string, message?: string) => {
+    setRawText(nextRawText);
+    if (message) {
+      setToastMessage(message);
+    }
+  }, []);
+
   const handleJumpToFirstDiagnostic = useCallback(() => {
     const first = diagnostics[0];
     if (!first) return;
@@ -302,6 +312,8 @@ export default function App() {
         onCopyPlainText={handleCopyPlainText}
         onCopyTagless={handleCopyTagless}
         copiedKind={copiedKind}
+        onOpenDebug={() => setIsDebugOpen(true)}
+        isDebugOpen={isDebugOpen}
       />
 
       <div className="flex-1">
@@ -328,12 +340,19 @@ export default function App() {
         )}
       </div>
 
+      <JsonIrDebugDrawer
+        isOpen={isDebugOpen}
+        onClose={() => setIsDebugOpen(false)}
+        rawText={rawText}
+        onCommitRawText={handleCommitFromDebug}
+      />
+
       {/* Subtle transient feedback toast */}
       {toastMessage && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-border-main bg-surface px-4 py-2 text-xs font-medium text-text-main shadow-lg"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] rounded-xl border border-border-main bg-surface px-4 py-2 text-xs font-medium text-text-main shadow-lg"
         >
           {toastMessage}
         </div>

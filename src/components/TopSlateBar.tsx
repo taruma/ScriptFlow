@@ -3,6 +3,7 @@ import {
   AlertCircle,
   AlertTriangle,
   BookOpen,
+  Braces,
   Check,
   ChevronDown,
   Code2,
@@ -36,6 +37,8 @@ interface TopSlateBarProps {
   onCopyPlainText: () => void;
   onCopyTagless: () => void;
   copiedKind: 'plain' | 'tagless' | null;
+  onOpenDebug?: () => void;
+  isDebugOpen?: boolean;
 }
 
 type OpenMenu = 'presets' | 'theme' | 'copy' | null;
@@ -57,6 +60,8 @@ export function TopSlateBar({
   onCopyPlainText,
   onCopyTagless,
   copiedKind,
+  onOpenDebug,
+  isDebugOpen = false,
 }: TopSlateBarProps) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const barRef = useRef<HTMLElement | null>(null);
@@ -176,8 +181,24 @@ export function TopSlateBar({
         </div>
       </div>
 
-      {/* Right Zone: Presets, Theme, Copy */}
+      {/* Right Zone: Optional Debug Inspector, Presets, Theme, Copy */}
       <div className="flex flex-1 items-center justify-end gap-1.5 pl-2">
+        {onOpenDebug && (
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenu(null);
+              onOpenDebug();
+            }}
+            aria-label={UI_LABELS.topBar.debugAria}
+            aria-expanded={isDebugOpen}
+            className={isDebugOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
+          >
+            <Braces className="h-3.5 w-3.5 text-text-muted" />
+            <span className="hidden lg:inline">{UI_LABELS.topBar.debugButton}</span>
+          </button>
+        )}
+
         {/* Presets Menu */}
         <div className="relative">
           <button

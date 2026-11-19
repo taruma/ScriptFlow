@@ -43,6 +43,7 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 | **Theme & Tokens** | `src/ui/theme.ts`, `src/ui/tokens/ui.ts`, `src/index.css` | 4-mode shell theme engine (`light`, `warm`, `dark`, `oled`) with zero-stutter transition disabling and centralized `UI_TOKENS`. |
 | **UI Labels SSOT** | `src/ui/labels.ts` | Single Source of Truth for all interface strings: `APP_META`, `MACRO_BLOCK_META` (canonical Macro-Block captions & badge classes), and `UI_LABELS` (toolbar, phase headings, placeholders, tooltips, aria-labels, toasts). |
 | **UI Components** | `src/components/*.tsx` | Thin presentational React components consuming derived AST/metadata/diagnostics, `UI_LABELS`, and invoking pure serializer mutations. |
+| **Debug Inspector *(Optional)*** | `src/components/debug/JsonIrDebugDrawer.tsx` | Decoupled, zero-cost-when-closed modal for inspecting `AuteurEnvelope`/IR, testing composable Lens Slicers, dry-running/committing `AuteurPatch` payloads, compiling JSON drafts, and exporting Zod JSON Schemas. |
 | **Tests** | `tests/core/*.test.ts` | Vitest unit suite verifying parser round-trips, `->` overloading, inline syntax, serializer edits, Tagless export, metadata extraction, all 5 linter rules, JSON IR round-trips, transactional patches, and Lens Slicers. |
 
 ---

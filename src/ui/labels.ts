@@ -85,6 +85,8 @@ export const UI_LABELS = {
     copyPlainDesc: 'Canonical v0.4.0 script',
     copyTaglessTitle: 'Copy Tagless',
     copyTaglessDesc: 'Strips [TAG] labels, keeps -> flow',
+    debugButton: 'JSON IR',
+    debugAria: 'Open JSON IR Debug Inspector',
   },
 
   document: {
@@ -146,6 +148,68 @@ export const UI_LABELS = {
     repairPrefix: 'Repair: ',
     triggerAria: (count: number, hasError: boolean) =>
       `${count} Script Supervisor ${hasError ? 'error' : 'warning'}${count === 1 ? '' : 's'}`,
+  },
+
+  debug: {
+    dialogAria: 'Programmatic JSON IR Inspector',
+    title: 'JSON IR Debug Inspector',
+    subtitle: 'Decoupled evaluation sandbox for AuteurScriptIR, Lens Slicer, Patch Engine & Zod Schemas',
+    closeAria: 'Close JSON IR Inspector',
+    copyJson: 'Copy JSON',
+    copiedJson: 'Copied',
+    roundTripPass: 'Round-Trip Lossless',
+    roundTripDiff: 'Round-Trip Diff',
+    tabs: {
+      envelope: 'Envelope & IR',
+      slicer: 'Lens Slicer',
+      patch: 'Patch Sandbox',
+      draft: 'Draft Compiler',
+      schemas: 'JSON Schemas',
+    },
+    envelopeViews: {
+      full: 'Full Envelope',
+      document: 'Document IR',
+      derived: 'Derived Context',
+    },
+    slicer: {
+      presetsHeading: 'Audit Lens Presets',
+      customActCamPreset: 'ACT + Resolved CAM',
+      macroBlocksHeading: 'Staging Macro-Blocks',
+      aestheticKeysHeading: '[AESTHETIC] Keys',
+      dimensionsHeading: 'Sub-State Dimensions',
+      optionsHeading: 'Derived Context Flags',
+      resolvedCameraLabel: 'Resolved Camera (effectiveFraming)',
+      referenceBindingsLabel: 'Reference Bindings (@ref as Name)',
+      sceneTopologyLabel: 'Scene Topology',
+      trailingResolutionLabel: 'Trailing Dialogue Check',
+      tokenMappingsLabel: 'Token Mappings',
+      resetFilters: 'Reset',
+      outputHeading: 'Sliced JSON Projection',
+    },
+    patch: {
+      inputHeading: 'AuteurPatch JSON Payload',
+      resultHeading: 'Transactional Evaluation Result',
+      rejectOnNewErrors: 'Reject on new lint errors',
+      dryRun: 'Dry Run',
+      commitToEditor: 'Commit to Editor',
+      sampleEditAction: 'Sample: Edit S1 Action',
+      sampleTokenMapping: 'Sample: Upsert Token LOC01',
+      sampleLintFail: 'Sample: Trigger Lint Gate',
+      placeholder: '{\n  "ops": []\n}',
+      committedToast: 'Patch committed to editor',
+    },
+    draft: {
+      inputHeading: 'AuteurScriptDraft JSON Input',
+      resultHeading: 'Compiled v0.4.0 Output & Diagnostics',
+      loadCurrent: 'Load Current as Draft',
+      loadSample: 'Load Sample Draft',
+      compileButton: 'Compile Draft',
+      applyToEditor: 'Load into Editor',
+      appliedToast: 'Compiled draft loaded into editor',
+    },
+    schemas: {
+      heading: 'Zod-Generated JSON Schema Registry',
+    },
   },
 
   toasts: {
