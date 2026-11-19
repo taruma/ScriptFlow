@@ -445,8 +445,8 @@ export const LiveHighlightedEditor = forwardRef<HTMLTextAreaElement, LiveHighlig
     const trailingSentinel = value.length === 0 || value.endsWith('\n') ? '\u200b' : '';
 
     const typographyClass = isSourceMode
-      ? 'font-mono text-[12.5px] leading-[1.5] tracking-normal auteur-live-mono'
-      : 'font-script text-[13px] leading-[1.42] tracking-normal auteur-live-proportional';
+      ? 'font-mono auteur-source-size leading-[1.5] tracking-normal auteur-live-mono'
+      : 'font-script auteur-script-size leading-[1.44] tracking-normal auteur-live-proportional';
 
     const sharedTypography = `col-start-1 row-start-1 w-full m-0 p-0 border-0 font-normal ${typographyClass} whitespace-pre-wrap break-words`;
 

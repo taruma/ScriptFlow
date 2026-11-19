@@ -77,6 +77,15 @@ export const UI_LABELS = {
     newBlankScript: 'New Blank Script',
     themeHeader: 'Appearance',
     themeAria: (label: string) => `Theme: ${label}`,
+    textSizeGroupAria: 'Script text size',
+    decreaseTextSizeLabel: 'A−',
+    increaseTextSizeLabel: 'A+',
+    decreaseTextSizeAria: 'Decrease script text size',
+    increaseTextSizeAria: 'Increase script text size',
+    resetTextSizeTitle: (px: number, isDefault: boolean) =>
+      isDefault ? `Text size: ${px}px (default)` : `Text size: ${px}px — click to reset`,
+    resetTextSizeAria: (label: string, px: number) =>
+      `Text size ${label} (${px}px). Reset to default`,
     copyButton: 'Copy',
     copiedPlain: 'Copied',
     copiedTagless: 'Copied Tagless',

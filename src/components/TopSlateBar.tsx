@@ -15,6 +15,13 @@ import {
 import type {LintDiagnostic} from '../core/types.ts';
 import type {ScriptPreset} from '../data/presets.ts';
 import {APP_META, UI_LABELS} from '../ui/labels.ts';
+import {
+  DEFAULT_TEXT_SIZE,
+  getTextSizeOption,
+  stepTextSize,
+  TEXT_SIZE_OPTIONS,
+  type TextSizePreset,
+} from '../ui/textSize.ts';
 import {THEME_OPTIONS, type ThemeMode} from '../ui/theme.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 
@@ -34,6 +41,8 @@ interface TopSlateBarProps {
   onNewBlank: () => void;
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
+  textSize: TextSizePreset;
+  onTextSizeChange: (preset: TextSizePreset) => void;
   onCopyPlainText: () => void;
   onCopyTagless: () => void;
   copiedKind: 'plain' | 'tagless' | null;
@@ -57,6 +66,8 @@ export function TopSlateBar({
   onNewBlank,
   themeMode,
   onThemeChange,
+  textSize,
+  onTextSizeChange,
   onCopyPlainText,
   onCopyTagless,
   copiedKind,
@@ -89,6 +100,10 @@ export function TopSlateBar({
   const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
   const warningCount = diagnostics.filter((d) => d.severity === 'warning').length;
   const currentTheme = THEME_OPTIONS.find((t) => t.id === themeMode) ?? THEME_OPTIONS[2];
+  const currentTextSize = getTextSizeOption(textSize);
+  const canDecreaseText = textSize !== TEXT_SIZE_OPTIONS[0].id;
+  const canIncreaseText = textSize !== TEXT_SIZE_OPTIONS[TEXT_SIZE_OPTIONS.length - 1].id;
+  const isDefaultTextSize = textSize === DEFAULT_TEXT_SIZE;
 
   return (
     <header ref={barRef} className={`${UI_TOKENS.layout.appHeader} sticky top-0`}>
@@ -264,6 +279,49 @@ export function TopSlateBar({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Text Size Stepper (A− / px / A+) */}
+        <div
+          role="group"
+          aria-label={UI_LABELS.topBar.textSizeGroupAria}
+          className="inline-flex items-center rounded-xl border border-border-main bg-surface shadow-2xs shrink-0 overflow-hidden"
+        >
+          <button
+            type="button"
+            disabled={!canDecreaseText}
+            onClick={() => onTextSizeChange(stepTextSize(textSize, -1))}
+            title={UI_LABELS.topBar.decreaseTextSizeAria}
+            aria-label={UI_LABELS.topBar.decreaseTextSizeAria}
+            className="px-2 py-1.5 text-[11px] font-medium text-text-body hover:bg-surface-subtle hover:text-text-main disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            {UI_LABELS.topBar.decreaseTextSizeLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => onTextSizeChange(DEFAULT_TEXT_SIZE)}
+            title={UI_LABELS.topBar.resetTextSizeTitle(
+              currentTextSize.scriptPx,
+              isDefaultTextSize
+            )}
+            aria-label={UI_LABELS.topBar.resetTextSizeAria(
+              currentTextSize.label,
+              currentTextSize.scriptPx
+            )}
+            className="hidden sm:inline-flex items-center justify-center border-x border-border-subtle px-1.5 py-1.5 font-mono text-[10.5px] tabular-nums text-text-muted hover:bg-surface-subtle hover:text-text-main transition-colors cursor-pointer min-w-[34px]"
+          >
+            {currentTextSize.scriptPx}px
+          </button>
+          <button
+            type="button"
+            disabled={!canIncreaseText}
+            onClick={() => onTextSizeChange(stepTextSize(textSize, 1))}
+            title={UI_LABELS.topBar.increaseTextSizeAria}
+            aria-label={UI_LABELS.topBar.increaseTextSizeAria}
+            className="px-2 py-1.5 text-[11px] font-medium text-text-body hover:bg-surface-subtle hover:text-text-main disabled:opacity-35 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            {UI_LABELS.topBar.increaseTextSizeLabel}
+          </button>
         </div>
 
         {/* Theme Switcher */}

@@ -3,6 +3,8 @@
 
 :root,
 [data-theme-category="light"] {
+  --script-font-size: 14px;
+  --source-font-size: 13px;
   --app-bg: #f5f5f4;
   --surface: #ffffff;
   --surface-subtle: #fafaf9;
@@ -427,6 +429,14 @@
 .group\/beat:hover .auteur-waterfall-rail,
 .group\/beat:focus-within .auteur-waterfall-rail {
   border-left-color: var(--tok-rail-hover);
+}
+
+/* User-adjustable editor typography scale (13px–16px Live, 12px–15px Source) */
+.auteur-script-size {
+  font-size: var(--script-font-size, 14px);
+}
+.auteur-source-size {
+  font-size: var(--source-font-size, 13px);
 }
 
 /* Zero-width-shift live overlay token styles (strictly preserves caret alignment) */

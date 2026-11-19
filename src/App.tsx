@@ -25,6 +25,12 @@ import {
   type ScriptPreset,
 } from './data/presets.ts';
 import {
+  applyTextSize,
+  loadStoredTextSize,
+  saveStoredTextSize,
+  type TextSizePreset,
+} from './ui/textSize.ts';
+import {
   applyThemeMode,
   loadStoredTheme,
   saveStoredTheme,
@@ -101,19 +107,27 @@ export default function App() {
   const [sceneTitle, setSceneTitle] = useState<string>(loadInitialTitle);
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const [themeMode, setThemeMode] = useState<ThemeMode>(loadStoredTheme);
+  const [textSize, setTextSize] = useState<TextSizePreset>(loadStoredTextSize);
   const [copiedKind, setCopiedKind] = useState<'plain' | 'tagless' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
 
-  // Apply theme mode to <html>
+  // Apply theme mode & text size to <html>
   useEffect(() => {
     applyThemeMode(themeMode, false);
+    applyTextSize(textSize);
   }, []);
 
   const handleThemeChange = useCallback((nextMode: ThemeMode) => {
     setThemeMode(nextMode);
     saveStoredTheme(nextMode);
     applyThemeMode(nextMode, true);
+  }, []);
+
+  const handleTextSizeChange = useCallback((nextSize: TextSizePreset) => {
+    setTextSize(nextSize);
+    saveStoredTextSize(nextSize);
+    applyTextSize(nextSize);
   }, []);
 
   // Persist canonical plain text & title to localStorage
@@ -309,6 +323,8 @@ export default function App() {
         onNewBlank={handleNewBlank}
         themeMode={themeMode}
         onThemeChange={handleThemeChange}
+        textSize={textSize}
+        onTextSizeChange={handleTextSizeChange}
         onCopyPlainText={handleCopyPlainText}
         onCopyTagless={handleCopyTagless}
         copiedKind={copiedKind}
