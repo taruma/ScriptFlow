@@ -41,7 +41,7 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 | **Core Lookbook Codec** | `src/core/aesthetic.ts` | Single Source of Truth for `[AESTHETIC]` `Key: Value` row parsing, lossless serialization, and key counting shared by IR, `AestheticBlockEditor`, and collapsed cards. |
 | **Core Live Tokenizer** | `src/core/highlighter.ts` | Pure character-for-character lossless lexical & clause-underline tokenizer (`segmentClauseText`, `tokenizeExecutionLine`, `tokenizeStagingBody`, `tokenizeAestheticValue`, `tokenizeSourceDocument`). |
 | **Core Extractor** | `src/core/extractor.ts` | Pure extraction of `@ref as NAME (voice: @audio)` character bindings, `[AESTHETIC]` `Description -> TOKEN` lookup dictionaries, continuation context detection, and beat-to-beat camera transitions (`ESTABLISH`, `HOLD`, `CUT`, `RECALL`, `MONTAGE`). |
-| **Core Serializer** | `src/core/serializer.ts` | Lossless pure string mutation functions (`insertStagingBlock`, `updateStagingBlock`, `deleteStagingBlock`, Execution beat/sub-state CRUD & reorder) plus `exportPlainText()` and `exportTagless()`. |
+| **Core Serializer** | `src/core/serializer.ts` | Lossless pure string mutation functions (`insertStagingBlock`, `updateStagingBlock`, `deleteStagingBlock`, `reorderStagingBlocks`, Execution beat/sub-state CRUD & reorder) plus `exportPlainText()` and `exportTagless()`. |
 | **Core Linter** | `src/core/linter.ts` | Modular deterministic Script Supervisor engine with 5 isolated V1 rule functions mapped to `Lens 1`–`Lens 5`. |
 | **Core History** | `src/core/history.ts` | Pure document-level Undo/Redo stack over `rawText` with coalesced typing bursts, structural checkpoints, and a monotonic `revision` counter for active-draft resyncs. |
 | **JSON IR & Schemas** | `src/core/irSchemas.ts`, `src/core/ir.ts` | Zod-validated glossary-aligned JSON IR (`toAuteurIR`, `fromAuteurIR`, `toAuteurEnvelope`, `compileAuteurDraft`), Camera `identifier` separation, `[AESTHETIC]` `key: value` parsing, and standard JSON Schema registry (`getAuteurJsonSchemas`). See `docs/JSON_IR_SPEC.md`. |
@@ -66,13 +66,22 @@ Every mutation function in `src/core/serializer.ts` obeys three invariants:
 
 ---
 
-## 4. Paste-and-Hydrate Active-Editor Guard
+## 4. Global Document Guards (Paste-and-Hydrate & Undo/Redo)
 
-In `src/App.tsx`, a document-level `paste` handler enables frictionless script ingestion using `isMultiBlockAuteurScript()` from `src/core/parser.ts` while protecting in-progress inline edits:
+In `src/App.tsx`, two document-level listeners coordinate frictionless script ingestion and history navigation without colliding with active inline inputs or open modals:
+
+### Paste-and-Hydrate Guard
+Uses `isMultiBlockAuteurScript()` from `src/core/parser.ts`:
 - **Modals open (`isDebugOpen` or `confirmRequest`)**: Ignored so modal inputs/interactions are never intercepted.
-- **Pasting outside any focused input/textarea**: Immediately replaces `rawText`, parses the script, switches to Live Mode, and displays a subtle toast.
+- **Pasting outside any focused input/textarea**: Immediately replaces `rawText` (as a `'checkpoint'` history entry), parses the script, switches to Live Mode, and displays a subtle toast.
 - **Pasting a multi-block Auteur Script (2+ canonical Macro-Block headers)** while inside a focused single-block or beat editor in Live Mode: Blurs the active field and hydrates the entire script.
 - **Pasting a normal inline snippet** while focused inside a Staging block, Execution beat, Scene Title, or Source Mode editor: Passes through natively without interception.
+
+### Document-Level Undo / Redo Guard
+Uses `matchHistoryShortcut()` (`src/ui/historyShortcuts.ts`) and `src/core/history.ts`:
+- **Commit Modes**: Rapid typing commits with `mode: 'coalesce'` + a scoped `groupKey` (auto-checkpointing on bulk edits > 32 chars or pauses > 800ms); structural actions (splits, merges, inserts, deletes, reorders, preset/paste hydration, debug commits) commit with `mode: 'checkpoint'`.
+- **Modal & Native-Input Isolation**: Skips shortcuts whenever a modal is open (`isDebugOpen`, `confirmRequest`, or any `[aria-modal="true"]` element) or when focus sits inside a `[data-native-undo="true"]` input (Scene Title, custom Staging header field).
+- **Active-Draft Resync**: Stepping Undo/Redo increments `history.revision`, prompting memoized Live Mode editors (`StagingBlockCard`, `AestheticBlockEditor`, `ExecutionBeatRow`) to immediately resync their local drafts even while focused.
 
 ---
 

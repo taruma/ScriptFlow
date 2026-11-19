@@ -127,4 +127,3 @@ Use this checklist when reviewing a script manually or configuring an automated 
 - **Live Automated Deterministic Rules**: `src/core/linter.ts` (`lintViewportCoordinates`, `lintMacroStateResolution`, `lintMultimodalReferenceIsolation`, `lintFrozenFirstFrame`, `lintCameraRedefinition`, composed in `lintDocument()`).
 - **Automated Rule Unit Tests**: `tests/core/linter.test.ts` (positive & negative cases + zero-false-positive check across all 4 presets).
 - **Lens Evaluation Slicers & Review Schema**: `src/core/slicer.ts` (`AUDIT_LENS_PRESETS`, `sliceAuteurScript`, `validateAuteurReview`) and `docs/JSON_IR_SPEC.md`.
-- **Original Empirical Lab Notes**: `public/assets/aistudio/04_AUDIT_EMPIRICS_AND_PARSERS_29e63e90.md`.
