@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
@@ -187,6 +188,8 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
                     <Loader2 className="h-2.5 w-2.5 animate-spin" />
                   ) : tool.status === 'error' ? (
                     <AlertCircle className="h-2.5 w-2.5" />
+                  ) : tool.status === 'stopped' ? (
+                    <Square className="h-2 w-2 fill-current text-text-faint" />
                   ) : (
                     <Check className="h-2.5 w-2.5 text-[var(--phase-aesthetic-text)]" />
                   )}
@@ -257,20 +260,20 @@ export function AiAssistantSidebar({
     REASONING_LEVEL_OPTIONS.find((r) => r.id === settings.reasoningLevel) ??
     REASONING_LEVEL_OPTIONS[1];
 
-  const cancelActiveRun = useCallback(() => {
+  const handleStopRun = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
+  const handleResetChat = useCallback(() => {
     activeRunIdRef.current += 1;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
     setIsRunning(false);
-  }, []);
-
-  const handleResetChat = useCallback(() => {
-    cancelActiveRun();
     previousInteractionIdRef.current = undefined;
     setMessages([]);
-  }, [cancelActiveRun]);
+  }, []);
 
   // Reset in-memory chat & interaction chain automatically when switching scripts
   useEffect(() => {
@@ -483,6 +486,14 @@ export function AiAssistantSidebar({
         updateAssistantMessage(assistantMessageId, (msg) => ({
           ...msg,
           isStreaming: false,
+          toolCalls: (msg.toolCalls ?? []).map((item) =>
+            item.status === 'running'
+              ? {
+                  ...item,
+                  status: serviceErr.code === 'aborted' ? 'stopped' : 'error',
+                }
+              : item
+          ),
           error: {
             code: serviceErr.code,
             message: serviceErr.message,
@@ -597,12 +608,10 @@ export function AiAssistantSidebar({
       <aside
         data-ai-sidebar="true"
         aria-label={UI_LABELS.ai.sidebarAria}
-        className="fixed inset-y-0 right-0 top-12 z-50 flex w-[min(100vw,420px)] flex-col overflow-hidden border-l border-border-main bg-surface text-text-main shadow-2xl lg:static lg:top-auto lg:z-20 lg:h-full lg:min-h-0 lg:w-auto lg:shadow-none shrink-0"
+        style={{'--ai-sidebar-width': `${sidebarWidth}px`} as CSSProperties}
+        className="fixed inset-y-0 right-0 top-12 z-50 flex w-[min(100vw,420px)] flex-col overflow-hidden border-l border-border-main bg-surface text-text-main shadow-2xl lg:static lg:top-auto lg:z-20 lg:h-full lg:min-h-0 lg:w-[var(--ai-sidebar-width)] lg:max-w-[580px] lg:min-w-[340px] lg:shadow-none shrink-0"
       >
-        <div
-          style={{width: `min(100vw, ${sidebarWidth}px)`}}
-          className="relative flex h-full min-h-0 w-full flex-col overflow-hidden lg:max-w-[580px] lg:min-w-[340px]"
-        >
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden">
           {/* Desktop drag-to-resize left edge handle */}
           <div
             role="separator"
@@ -840,6 +849,7 @@ export function AiAssistantSidebar({
                     {msg.suggestions && msg.suggestions.length > 0 && (
                       <div className="space-y-2">
                         {msg.suggestions.map((suggestion) => {
+                          const msgStreaming = Boolean(msg.isStreaming);
                           if (suggestion.kind === 'patch') {
                             return (
                               <PatchSuggestionCard
@@ -847,6 +857,7 @@ export function AiAssistantSidebar({
                                 suggestion={suggestion}
                                 currentSnapshotHash={currentSnapshotHash}
                                 readOnly={readOnly}
+                                isStreaming={msgStreaming}
                                 isApplied={applied.includes(suggestion.id)}
                                 isDismissed={dismissed.includes(suggestion.id)}
                                 onApply={(s) => void handleApplyPatch(msg.id, s, 'patch')}
@@ -860,6 +871,7 @@ export function AiAssistantSidebar({
                                 key={suggestion.id}
                                 suggestion={suggestion}
                                 readOnly={readOnly}
+                                isStreaming={msgStreaming}
                                 isApplied={applied.includes(suggestion.id)}
                                 isDismissed={dismissed.includes(suggestion.id)}
                                 onApply={(s) => void handleApplyDraft(msg.id, s)}
@@ -873,6 +885,7 @@ export function AiAssistantSidebar({
                               suggestion={suggestion}
                               currentSnapshotHash={currentSnapshotHash}
                               readOnly={readOnly}
+                              isStreaming={msgStreaming}
                               appliedIds={applied}
                               onJumpToTarget={onJumpToTarget}
                               onApplyIssueFix={(patch) => void handleApplyPatch(msg.id, patch, 'fix')}
@@ -882,34 +895,41 @@ export function AiAssistantSidebar({
                       </div>
                     )}
 
-                    {msg.error && (
-                      <div
-                        role="alert"
-                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-700 dark:text-red-300 space-y-2"
-                      >
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                          <div className="min-w-0 space-y-0.5">
-                            <p className="font-medium leading-snug">{msg.error.message}</p>
-                            {msg.error.code !== 'aborted' && (
-                              <p className="text-[11px] opacity-85">{UI_LABELS.ai.retryHint}</p>
-                            )}
-                          </div>
+                    {msg.error &&
+                      (msg.error.code === 'aborted' ? (
+                        <div
+                          role="status"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5 text-[11px] text-text-muted"
+                        >
+                          <Square className="h-2.5 w-2.5 fill-current text-text-faint" />
+                          <span>{UI_LABELS.ai.stoppedNote}</span>
                         </div>
-                        {shouldShowSettingsLinkForError(msg.error.code) && (
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => setIsSettingsOpen(true)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-main hover:bg-surface-subtle transition-colors cursor-pointer"
-                            >
-                              <Settings2 className="h-3 w-3" />
-                              <span>{UI_LABELS.ai.openSettingsAction}</span>
-                            </button>
+                      ) : (
+                        <div
+                          role="alert"
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-700 dark:text-red-300 space-y-2"
+                        >
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            <div className="min-w-0 space-y-0.5">
+                              <p className="font-medium leading-snug">{msg.error.message}</p>
+                              <p className="text-[11px] opacity-85">{UI_LABELS.ai.retryHint}</p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    )}
+                          {shouldShowSettingsLinkForError(msg.error.code) && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setIsSettingsOpen(true)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-main hover:bg-surface-subtle transition-colors cursor-pointer"
+                              >
+                                <Settings2 className="h-3 w-3" />
+                                <span>{UI_LABELS.ai.openSettingsAction}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 );
               })
@@ -935,7 +955,7 @@ export function AiAssistantSidebar({
               {isRunning ? (
                 <button
                   type="button"
-                  onClick={cancelActiveRun}
+                  onClick={handleStopRun}
                   aria-label={UI_LABELS.ai.stopAria}
                   title={UI_LABELS.ai.stopButton}
                   className="inline-flex h-7 items-center gap-1 rounded-lg bg-red-500 px-2.5 text-[11px] font-semibold text-white hover:bg-red-600 transition-colors cursor-pointer shrink-0"

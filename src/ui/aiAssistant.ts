@@ -27,7 +27,7 @@ export interface AiToolCallItem {
   callId: string;
   name: string;
   arguments: Record<string, unknown>;
-  status: 'running' | 'ok' | 'error';
+  status: 'running' | 'ok' | 'error' | 'stopped';
   stagedSuggestionId?: string;
 }
 

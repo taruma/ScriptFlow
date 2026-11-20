@@ -9,6 +9,7 @@ import {
   FileCode2,
   GitCompare,
   GitFork,
+  Loader2,
   Sparkles,
   Wrench,
   X,
@@ -80,6 +81,7 @@ export interface PatchSuggestionCardProps {
   suggestion: PatchSuggestion;
   currentSnapshotHash: string;
   readOnly: boolean;
+  isStreaming?: boolean;
   isApplied: boolean;
   isDismissed: boolean;
   onApply: (suggestion: PatchSuggestion) => void;
@@ -90,6 +92,7 @@ export const PatchSuggestionCard = memo(function PatchSuggestionCard({
   suggestion,
   currentSnapshotHash,
   readOnly,
+  isStreaming = false,
   isApplied,
   isDismissed,
   onApply,
@@ -191,12 +194,25 @@ export const PatchSuggestionCard = memo(function PatchSuggestionCard({
                 </button>
                 <button
                   type="button"
-                  disabled={stale}
+                  disabled={stale || isStreaming}
+                  title={isStreaming ? labels.waitUntilFinishedTitle : undefined}
                   onClick={() => onApply(suggestion)}
                   className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] disabled:opacity-45 disabled:cursor-not-allowed`}
                 >
-                  {readOnly ? <GitFork className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                  <span>{readOnly ? labels.forkAndApplyButton : labels.applyButton}</span>
+                  {isStreaming ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : readOnly ? (
+                    <GitFork className="h-3 w-3" />
+                  ) : (
+                    <Check className="h-3 w-3" />
+                  )}
+                  <span>
+                    {isStreaming
+                      ? labels.finishingLabel
+                      : readOnly
+                        ? labels.forkAndApplyButton
+                        : labels.applyButton}
+                  </span>
                 </button>
               </>
             )}
@@ -210,6 +226,7 @@ export const PatchSuggestionCard = memo(function PatchSuggestionCard({
 export interface DraftSuggestionCardProps {
   suggestion: DraftSuggestion;
   readOnly: boolean;
+  isStreaming?: boolean;
   isApplied: boolean;
   isDismissed: boolean;
   onApply: (suggestion: DraftSuggestion) => void;
@@ -219,6 +236,7 @@ export interface DraftSuggestionCardProps {
 export const DraftSuggestionCard = memo(function DraftSuggestionCard({
   suggestion,
   readOnly,
+  isStreaming = false,
   isApplied,
   isDismissed,
   onApply,
@@ -319,11 +337,25 @@ export const DraftSuggestionCard = memo(function DraftSuggestionCard({
                 </button>
                 <button
                   type="button"
+                  disabled={isStreaming}
+                  title={isStreaming ? labels.waitUntilFinishedTitle : undefined}
                   onClick={() => onApply(suggestion)}
-                  className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px]`}
+                  className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] disabled:opacity-45 disabled:cursor-not-allowed`}
                 >
-                  {readOnly ? <GitFork className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                  <span>{readOnly ? labels.forkAndApplyButton : labels.applyButton}</span>
+                  {isStreaming ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : readOnly ? (
+                    <GitFork className="h-3 w-3" />
+                  ) : (
+                    <Check className="h-3 w-3" />
+                  )}
+                  <span>
+                    {isStreaming
+                      ? labels.finishingLabel
+                      : readOnly
+                        ? labels.forkAndApplyButton
+                        : labels.applyButton}
+                  </span>
                 </button>
               </>
             )}
@@ -338,6 +370,7 @@ interface AuditIssueRowProps {
   issue: AuditReviewIssueItem;
   currentSnapshotHash: string;
   readOnly: boolean;
+  isStreaming: boolean;
   isFixApplied: boolean;
   onJumpToTarget: (targetId: string) => void;
   onApplyIssueFix: (patchSuggestion: PatchSuggestion) => void;
@@ -347,6 +380,7 @@ const AuditIssueRow = memo(function AuditIssueRow({
   issue,
   currentSnapshotHash,
   readOnly,
+  isStreaming,
   isFixApplied,
   onJumpToTarget,
   onApplyIssueFix,
@@ -435,12 +469,25 @@ const AuditIssueRow = memo(function AuditIssueRow({
             ) : (
               <button
                 type="button"
-                disabled={stale}
+                disabled={stale || isStreaming}
+                title={isStreaming ? labels.waitUntilFinishedTitle : undefined}
                 onClick={() => onApplyIssueFix(patch)}
                 className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1 px-2.5 py-1 text-[11px] disabled:opacity-45 disabled:cursor-not-allowed`}
               >
-                {readOnly ? <GitFork className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
-                <span>{readOnly ? labels.forkAndApplyButton : labels.applyFixButton}</span>
+                {isStreaming ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : readOnly ? (
+                  <GitFork className="h-3 w-3" />
+                ) : (
+                  <Wrench className="h-3 w-3" />
+                )}
+                <span>
+                  {isStreaming
+                    ? labels.finishingLabel
+                    : readOnly
+                      ? labels.forkAndApplyButton
+                      : labels.applyFixButton}
+                </span>
               </button>
             )}
           </div>
@@ -458,6 +505,7 @@ export interface AuditReviewSuggestionCardProps {
   suggestion: AuditReviewSuggestion;
   currentSnapshotHash: string;
   readOnly: boolean;
+  isStreaming?: boolean;
   appliedIds: readonly string[];
   onJumpToTarget: (targetId: string) => void;
   onApplyIssueFix: (patchSuggestion: PatchSuggestion) => void;
@@ -467,6 +515,7 @@ export const AuditReviewSuggestionCard = memo(function AuditReviewSuggestionCard
   suggestion,
   currentSnapshotHash,
   readOnly,
+  isStreaming = false,
   appliedIds,
   onJumpToTarget,
   onApplyIssueFix,
@@ -514,6 +563,7 @@ export const AuditReviewSuggestionCard = memo(function AuditReviewSuggestionCard
               issue={issue}
               currentSnapshotHash={currentSnapshotHash}
               readOnly={readOnly}
+              isStreaming={isStreaming}
               isFixApplied={
                 issue.patchSuggestion !== undefined &&
                 appliedIds.includes(issue.patchSuggestion.id)
