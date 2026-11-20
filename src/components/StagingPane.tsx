@@ -33,6 +33,7 @@ interface StagingPaneProps {
   aestheticTokens: AestheticToken[];
   diagnosticsByBlockIndex: Map<number, LintDiagnostic[]>;
   historyRevision: number;
+  readOnly?: boolean;
   onUpdateStaging: (
     blockIndex: number,
     nextBody: string,
@@ -56,6 +57,7 @@ export const StagingPane = memo(function StagingPane({
   aestheticTokens,
   diagnosticsByBlockIndex,
   historyRevision,
+  readOnly = false,
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
@@ -191,12 +193,13 @@ export const StagingPane = memo(function StagingPane({
                 isPickerTrigger
                 subtleHairline
                 quiet={binding.isAnyDragging}
+                readOnly={readOnly}
                 onClick={() =>
                   setActiveStagingPicker((prev) => (prev === seamSlot ? null : seamSlot))
                 }
               />
 
-              {activeStagingPicker === seamSlot && (
+              {!readOnly && activeStagingPicker === seamSlot && (
                 <div className={`grid ${STAGING_GRID} gap-1.5 py-1.5`}>
                   <StagingBlockPickerPanel
                     existingBlockNames={existingBlockNames}
@@ -213,6 +216,7 @@ export const StagingPane = memo(function StagingPane({
             block={block}
             blockIndex={index}
             historyRevision={historyRevision}
+            readOnly={readOnly}
             collapsed={collapsedIndices.has(index)}
             onToggleCollapse={toggleSingleBlock}
             onCommit={onUpdateStaging}
@@ -222,13 +226,14 @@ export const StagingPane = memo(function StagingPane({
             diagnostics={diagnosticsByBlockIndex.get(index) ?? EMPTY_DIAGNOSTICS}
             characters={characters}
             aestheticTokens={aestheticTokens}
-            drag={binding}
+            drag={readOnly ? undefined : binding}
           />
         </>
       );
     },
     [
       existingBlockNames,
+      readOnly,
       activeStagingPicker,
       handleInsertStagingBlock,
       historyRevision,
@@ -330,28 +335,33 @@ export const StagingPane = memo(function StagingPane({
         {stagingBlocks.length > 0 ? (
           <div>
             {/* Surgical insert seam before the first Staging Macro-Block */}
-            <HoverInsertSeam
-              gridClass={STAGING_GRID}
-              buttonLabel={UI_LABELS.document.insertMacroBlockBeforeFirst}
-              isPickerTrigger
-              quiet={isDraggingAny}
-              onClick={() => setActiveStagingPicker((prev) => (prev === -1 ? null : -1))}
-            />
-
-            {activeStagingPicker === -1 && (
-              <div className={`grid ${STAGING_GRID} gap-1.5 py-1.5`}>
-                <StagingBlockPickerPanel
-                  existingBlockNames={existingBlockNames}
-                  onSelectBlock={(name) => handleInsertStagingBlock(name, -1)}
-                  onClose={() => setActiveStagingPicker(null)}
+            {!readOnly && (
+              <>
+                <HoverInsertSeam
+                  gridClass={STAGING_GRID}
+                  buttonLabel={UI_LABELS.document.insertMacroBlockBeforeFirst}
+                  isPickerTrigger
+                  quiet={isDraggingAny}
+                  onClick={() => setActiveStagingPicker((prev) => (prev === -1 ? null : -1))}
                 />
-                <div />
-              </div>
+
+                {activeStagingPicker === -1 && (
+                  <div className={`grid ${STAGING_GRID} gap-1.5 py-1.5`}>
+                    <StagingBlockPickerPanel
+                      existingBlockNames={existingBlockNames}
+                      onSelectBlock={(name) => handleInsertStagingBlock(name, -1)}
+                      onClose={() => setActiveStagingPicker(null)}
+                    />
+                    <div />
+                  </div>
+                )}
+              </>
             )}
 
             <SortableList
               items={stagingBlocks}
               scopeId="staging"
+              disabled={readOnly}
               onReorder={handleReorderStaging}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
@@ -369,15 +379,17 @@ export const StagingPane = memo(function StagingPane({
         )}
 
         {/* Quiet bottom Add Macro-Block action */}
-        <AddStagingBlockPicker
-          existingBlockNames={existingBlockNames}
-          isOpen={activeStagingPicker === 'bottom'}
-          onToggle={() =>
-            setActiveStagingPicker((prev) => (prev === 'bottom' ? null : 'bottom'))
-          }
-          onClose={() => setActiveStagingPicker(null)}
-          onAddBlock={(name) => handleInsertStagingBlock(name)}
-        />
+        {!readOnly && (
+          <AddStagingBlockPicker
+            existingBlockNames={existingBlockNames}
+            isOpen={activeStagingPicker === 'bottom'}
+            onToggle={() =>
+              setActiveStagingPicker((prev) => (prev === 'bottom' ? null : 'bottom'))
+            }
+            onClose={() => setActiveStagingPicker(null)}
+            onAddBlock={(name) => handleInsertStagingBlock(name)}
+          />
+        )}
       </div>
     </section>
   );

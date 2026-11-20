@@ -20,6 +20,7 @@ interface StagingBlockCardProps {
   block: StagingBlock;
   blockIndex: number;
   historyRevision: number;
+  readOnly?: boolean;
   collapsed: boolean;
   onToggleCollapse: (blockIndex: number) => void;
   onCommit: (blockIndex: number, nextBody: string, options?: StagingBlockCommitOptions) => void;
@@ -43,6 +44,7 @@ export const StagingBlockCard = memo(function StagingBlockCard({
   block,
   blockIndex,
   historyRevision,
+  readOnly = false,
   collapsed,
   onToggleCollapse,
   onCommit,
@@ -83,17 +85,19 @@ export const StagingBlockCard = memo(function StagingBlockCard({
 
   const handleChange = useCallback(
     (nextValue: string) => {
+      if (readOnly) return;
       setLocalValue(nextValue);
       onCommit(blockIndex, nextValue, {mode: 'coalesce'});
     },
-    [onCommit, blockIndex]
+    [readOnly, onCommit, blockIndex]
   );
 
   const handleCustomCommit = useCallback(
     (nextBody: string, options?: StagingBlockCommitOptions) => {
+      if (readOnly) return;
       onCommit(blockIndex, nextBody, options);
     },
-    [onCommit, blockIndex]
+    [readOnly, onCommit, blockIndex]
   );
 
   const handleEditorFocus = useCallback(() => {
@@ -102,12 +106,13 @@ export const StagingBlockCard = memo(function StagingBlockCard({
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
+    if (readOnly) return;
     const cleaned = localValue.replace(/\n+$/, '');
     if (cleaned !== block.rawBody) {
       onCommit(blockIndex, cleaned, {mode: 'coalesce'});
     }
     setLocalValue(cleaned);
-  }, [localValue, block.rawBody, onCommit, blockIndex]);
+  }, [readOnly, localValue, block.rawBody, onCommit, blockIndex]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
@@ -117,7 +122,7 @@ export const StagingBlockCard = memo(function StagingBlockCard({
   }, []);
 
   const isDragging = Boolean(drag?.isDragging);
-  const handleProps = drag ? drag.getHandleProps(isFocused) : null;
+  const handleProps = !readOnly && drag ? drag.getHandleProps(isFocused) : null;
 
   const collapsedMeta = collapsed
     ? formatStagingCollapsedMeta(block, characters, aestheticTokens)
@@ -194,18 +199,20 @@ export const StagingBlockCard = memo(function StagingBlockCard({
               </span>
             )}
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(blockIndex);
-              }}
-              title={UI_LABELS.staging.deleteBlockTitle(block.name)}
-              aria-label={UI_LABELS.staging.deleteBlockTitle(block.name)}
-              className="rounded-md p-1 text-text-faint opacity-0 group-hover/staging:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(blockIndex);
+                }}
+                title={UI_LABELS.staging.deleteBlockTitle(block.name)}
+                aria-label={UI_LABELS.staging.deleteBlockTitle(block.name)}
+                className="rounded-md p-1 text-text-faint opacity-0 group-hover/staging:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -240,7 +247,8 @@ export const StagingBlockCard = memo(function StagingBlockCard({
               rawBody={block.rawBody}
               aestheticTokens={aestheticTokens}
               historyRevision={historyRevision}
-              autoFocus={autoFocusEdit}
+              readOnly={readOnly}
+              autoFocus={autoFocusEdit && !readOnly}
               onClearAutoFocus={onClearAutoFocus}
               onCommit={handleCustomCommit}
               onFocusChange={setIsFocused}
@@ -248,12 +256,15 @@ export const StagingBlockCard = memo(function StagingBlockCard({
           </div>
         ) : (
           <div
-            onClick={() => editorRef.current?.focus()}
-            className="border-t border-border-subtle px-3 py-2 cursor-text"
+            onClick={() => {
+              if (!readOnly) editorRef.current?.focus();
+            }}
+            className={`border-t border-border-subtle px-3 py-2 ${readOnly ? '' : 'cursor-text'}`}
           >
             <LiveHighlightedEditor
               ref={editorRef}
               value={localValue}
+              readOnly={readOnly}
               onChange={handleChange}
               mode="staging"
               stagingKind={block.kind}

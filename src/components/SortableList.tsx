@@ -46,6 +46,8 @@ interface SortableListProps<T extends {id: string}> {
   items: readonly T[];
   /** Scopes drag announcements and accessibility IDs per pane */
   scopeId: string;
+  /** Disables drag reordering entirely (e.g. read-only bundled examples) */
+  disabled?: boolean;
   onReorder: (fromIndex: number, toIndex: number) => void;
   onDragStart?: (index: number) => void;
   onDragEnd?: () => void;
@@ -66,6 +68,7 @@ const SLIDE_TRANSITION = 'transform 190ms cubic-bezier(0.2, 0, 0, 1)';
 interface SortableRowProps<T extends {id: string}> {
   item: T;
   index: number;
+  disabled: boolean;
   isAnyDragging: boolean;
   renderItem: (item: T, index: number, binding: SortableItemBinding) => ReactNode;
 }
@@ -73,6 +76,7 @@ interface SortableRowProps<T extends {id: string}> {
 function SortableRowInner<T extends {id: string}>({
   item,
   index,
+  disabled,
   isAnyDragging,
   renderItem,
 }: SortableRowProps<T>) {
@@ -84,7 +88,7 @@ function SortableRowInner<T extends {id: string}>({
     transform,
     transition,
     isDragging,
-  } = useSortable({id: item.id});
+  } = useSortable({id: item.id, disabled});
 
   // Apply live sibling sliding strictly while a drag is active so positional AST IDs
   // settle cleanly on drop with zero reverse-slide flicker.
@@ -97,17 +101,17 @@ function SortableRowInner<T extends {id: string}>({
 
   const binding = useMemo<SortableItemBinding>(
     () => ({
-      getHandleProps: (disabled: boolean) => ({
+      getHandleProps: (handleDisabled: boolean) => ({
         ref: setActivatorNodeRef,
         ...attributes,
-        ...(disabled ? {} : listeners),
-        tabIndex: disabled ? -1 : 0,
+        ...(disabled || handleDisabled ? {} : listeners),
+        tabIndex: disabled || handleDisabled ? -1 : 0,
         style: {touchAction: 'none'},
       }),
       isDragging,
       isAnyDragging,
     }),
-    [setActivatorNodeRef, attributes, listeners, isDragging, isAnyDragging]
+    [setActivatorNodeRef, attributes, listeners, disabled, isDragging, isAnyDragging]
   );
 
   return (
@@ -126,6 +130,7 @@ const SortableRow = memo(SortableRowInner) as typeof SortableRowInner;
 export function SortableList<T extends {id: string}>({
   items,
   scopeId,
+  disabled = false,
   onReorder,
   onDragStart,
   onDragEnd,
@@ -194,6 +199,7 @@ export function SortableList<T extends {id: string}>({
               key={item.id}
               item={item}
               index={index}
+              disabled={disabled}
               isAnyDragging={isAnyDragging}
               renderItem={renderItem}
             />

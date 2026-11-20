@@ -24,6 +24,7 @@ interface LiveDocumentProps {
   metadata: ExtractedMetadata;
   diagnostics: LintDiagnostic[];
   historyRevision: number;
+  readOnly?: boolean;
   onUpdateStaging: (
     blockIndex: number,
     nextBody: string,
@@ -62,6 +63,7 @@ export const LiveDocument = memo(function LiveDocument({
   metadata,
   diagnostics,
   historyRevision,
+  readOnly = false,
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
@@ -114,7 +116,11 @@ export const LiveDocument = memo(function LiveDocument({
   );
 
   return (
-    <main className="w-full lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
+    <main
+      className={`w-full ${
+        readOnly ? 'lg:h-[calc(100dvh-5.25rem)]' : 'lg:h-[calc(100dvh-3rem)]'
+      } lg:overflow-hidden`}
+    >
       <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <StagingPane
           stagingBlocks={stagingBlocks}
@@ -122,6 +128,7 @@ export const LiveDocument = memo(function LiveDocument({
           aestheticTokens={aestheticTokens}
           diagnosticsByBlockIndex={stagingDiagnosticsByIndex}
           historyRevision={historyRevision}
+          readOnly={readOnly}
           onUpdateStaging={onUpdateStaging}
           onInsertStaging={onInsertStaging}
           onDeleteStaging={onDeleteStaging}
@@ -135,6 +142,7 @@ export const LiveDocument = memo(function LiveDocument({
           aestheticTokens={aestheticTokens}
           diagnosticsByBeatIndex={beatDiagnosticsByIndex}
           historyRevision={historyRevision}
+          readOnly={readOnly}
           onUpdateSubState={onUpdateSubState}
           onInsertSubState={onInsertSubState}
           onDeleteSubState={onDeleteSubState}

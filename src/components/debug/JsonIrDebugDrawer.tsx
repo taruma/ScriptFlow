@@ -37,6 +37,7 @@ export interface JsonIrDebugDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   rawText: string;
+  readOnly?: boolean;
   onCommitRawText: (nextRawText: string, toastMessage?: string) => void;
 }
 
@@ -141,6 +142,7 @@ export function JsonIrDebugDrawer({
   isOpen,
   onClose,
   rawText,
+  readOnly = false,
   onCommitRawText,
 }: JsonIrDebugDrawerProps) {
   if (!isOpen) return null;
@@ -149,6 +151,7 @@ export function JsonIrDebugDrawer({
     <JsonIrDebugDrawerContent
       onClose={onClose}
       rawText={rawText}
+      readOnly={readOnly}
       onCommitRawText={onCommitRawText}
     />
   );
@@ -157,6 +160,7 @@ export function JsonIrDebugDrawer({
 function JsonIrDebugDrawerContent({
   onClose,
   rawText,
+  readOnly = false,
   onCommitRawText,
 }: Omit<JsonIrDebugDrawerProps, 'isOpen'>) {
   const [activeTab, setActiveTab] = useState<DebugTab>('envelope');
@@ -411,11 +415,11 @@ function JsonIrDebugDrawerContent({
       const result = applyAuteurPatch(rawText, parsed, {rejectOnNewErrors});
       setPatchResult(result);
 
-      if (commit && result.ok) {
+      if (commit && !readOnly && result.ok) {
         onCommitRawText(result.nextRawText, UI_LABELS.debug.patch.committedToast);
       }
     },
-    [patchText, rawText, rejectOnNewErrors, onCommitRawText]
+    [patchText, rawText, rejectOnNewErrors, readOnly, onCommitRawText]
   );
 
   const runDraftCompile = useCallback(
@@ -435,11 +439,11 @@ function JsonIrDebugDrawerContent({
       const result = compileAuteurDraft(parsed);
       setDraftResult(result);
 
-      if (applyToEditor && result.ok) {
+      if (applyToEditor && !readOnly && result.ok) {
         onCommitRawText(result.rawText, UI_LABELS.debug.draft.appliedToast);
       }
     },
-    [draftText, onCommitRawText]
+    [draftText, readOnly, onCommitRawText]
   );
 
   const loadCurrentAsDraft = useCallback(() => {
@@ -1003,8 +1007,10 @@ function JsonIrDebugDrawerContent({
                     </button>
                     <button
                       type="button"
+                      disabled={readOnly}
+                      title={readOnly ? UI_LABELS.debug.readOnlyCommitHint : undefined}
                       onClick={() => runPatch(true)}
-                      className={UI_TOKENS.button.primary}
+                      className={`${UI_TOKENS.button.primary} disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       {UI_LABELS.debug.patch.commitToEditor}
                     </button>
@@ -1170,8 +1176,10 @@ function JsonIrDebugDrawerContent({
                   </button>
                   <button
                     type="button"
+                    disabled={readOnly}
+                    title={readOnly ? UI_LABELS.debug.readOnlyCommitHint : undefined}
                     onClick={() => runDraftCompile(true)}
-                    className={UI_TOKENS.button.primary}
+                    className={`${UI_TOKENS.button.primary} disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
                     {UI_LABELS.debug.draft.applyToEditor}
                   </button>

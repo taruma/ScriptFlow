@@ -72,8 +72,24 @@ export const UI_LABELS = {
     viewModeAria: 'Editor view mode',
     liveMode: 'Live',
     sourceMode: 'Source',
-    presetsButton: 'Presets',
-    presetsHeader: 'Reference Scripts (v0.4.0)',
+    fileButton: 'File',
+    fileMenuAria: 'File actions',
+    fileMenuNewBlank: 'New Blank Script',
+    fileMenuImportFile: 'Import File (.txt / .json)...',
+    fileMenuExportHeader: 'Download Current',
+    fileMenuDownloadCanonical: 'Download Canonical .txt',
+    fileMenuDownloadTagless: 'Download Tagless .txt',
+    fileMenuDownloadJsonEnvelope: 'Download JSON Envelope',
+    fileMenuLibraryHeader: 'Library & Backup',
+    fileMenuBackupAll: 'Backup All Scripts (.json)',
+    fileMenuRestoreBackup: 'Restore Backup (.json)...',
+    fileMenuBrowseLibrary: 'Browse Library...',
+    libraryButton: 'Library',
+    libraryAria: 'Open Script Library',
+    readOnlyExampleBadge: 'Example · Read-only',
+    readOnlyBannerText: 'Viewing bundled reference example in read-only mode.',
+    forkToEditButton: 'Fork to Edit',
+    forkToEditTitle: 'Create an editable copy of this example in My Scripts',
     newBlankScript: 'New Blank Script',
     settingsButton: 'Settings',
     settingsAria: 'Display and editor settings',
@@ -158,6 +174,8 @@ export const UI_LABELS = {
       `Insert beat between S${prevIndex} and S${nextIndex}`,
     footerHint:
       'Click any block or step to edit live · Paste any plain-text Auteur Script anywhere to hydrate',
+    footerHintReadOnly:
+      'Read-only reference example · Click Fork to Edit to make changes, or switch to Source to inspect raw text',
   },
 
   staging: {
@@ -327,6 +345,7 @@ export const UI_LABELS = {
       emptyHintTail: 'plain text.',
       rootPathFallback: '(root)',
     },
+    readOnlyCommitHint: 'Read-only example — click Fork to Edit to apply changes',
     schemas: {
       heading: 'Zod-Generated JSON Schema Registry',
       keys: {
@@ -350,6 +369,47 @@ export const UI_LABELS = {
     noSavedScriptNote: 'No saved script found in local storage.',
   },
 
+  library: {
+    dialogAria: 'Script Library',
+    title: 'Script Library',
+    closeAria: 'Close Script Library',
+    newBlankButton: 'New Blank',
+    importButton: 'Import',
+    searchPlaceholder: 'Search scripts and examples...',
+    searchAria: 'Search scripts and examples',
+    clearSearchAria: 'Clear search',
+    tabsAria: 'Filter script library',
+    tabs: {
+      all: 'All',
+      custom: 'My Scripts',
+      examples: 'Examples',
+    },
+    exampleBadge: 'Example',
+    activeBadge: 'Active',
+    forkAction: 'Fork',
+    forkAria: (title: string) => `Fork ${title}`,
+    duplicateAction: 'Duplicate',
+    duplicateAria: (title: string) => `Duplicate ${title}`,
+    renameAction: 'Rename',
+    renameAria: (title: string) => `Rename ${title}`,
+    renameInputAria: 'Script title',
+    saveRenameAria: 'Save rename',
+    cancelRenameAria: 'Cancel rename',
+    exportTxtAction: 'Export .txt',
+    exportTxtAria: (title: string) => `Export ${title} as .txt`,
+    deleteAction: 'Delete',
+    deleteAria: (title: string) => `Delete ${title}`,
+    emptySearch: 'No scripts match your search.',
+    emptyCustom: 'No custom scripts yet. Fork an example, import a file, or create a blank script.',
+    emptyAll: 'No scripts available.',
+    showMore: (remaining: number) => `Show more (${remaining} remaining)`,
+    keyboardHint: '↑↓ navigate · Enter open · Esc close',
+    resultsCount: (shown: number, total: number) =>
+      shown === total
+        ? `${total} ${total === 1 ? 'script' : 'scripts'}`
+        : `Showing ${shown} of ${total}`,
+  },
+
   confirm: {
     dialogAria: 'Confirm action',
     cancel: 'Cancel',
@@ -360,9 +420,31 @@ export const UI_LABELS = {
     deleteMacroStateTitle: (beatIndex: number) => `Delete S${beatIndex} macro-state?`,
     deleteMacroStateDesc:
       'This will remove this beat and all of its chained sub-states from the execution timeline.',
+    deleteScriptTitle: (title: string) => `Delete "${title}"?`,
+    deleteScriptDesc:
+      'This will permanently remove this script from your browser library.',
   },
 
   toasts: {
     scriptHydrated: 'Script pasted and hydrated',
+    readOnlyPasteBlocked:
+      'Read-only example — click Fork to Edit or create a New Blank Script to paste',
+    forkedExample: (title: string) => `Forked "${title}" to My Scripts`,
+    duplicatedScript: (title: string) => `Duplicated "${title}"`,
+    createdBlankScript: 'Created new blank script',
+    importedScript: (title: string) => `Imported "${title}"`,
+    renamedScript: (title: string) => `Renamed to "${title}"`,
+    deletedScript: (title: string) => `Deleted "${title}"`,
+    backupExported: (count: number) =>
+      `Backed up ${count} ${count === 1 ? 'script' : 'scripts'}`,
+    backupEmpty: 'No custom scripts to back up yet',
+    backupRestored: (added: number, forked: number, skipped: number) => {
+      const parts: string[] = [];
+      if (added > 0) parts.push(`${added} added`);
+      if (forked > 0) parts.push(`${forked} forked`);
+      if (skipped > 0) parts.push(`${skipped} unchanged`);
+      return parts.length > 0 ? `Backup restored: ${parts.join(', ')}` : 'Backup contained no scripts';
+    },
+    fileReadError: 'Unable to read the selected file',
   },
 } as const;

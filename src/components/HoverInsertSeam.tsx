@@ -17,6 +17,8 @@ interface HoverInsertSeamProps {
   isPickerTrigger?: boolean;
   /** Quiets the hover button and cut label while a drag operation is actively in flight */
   quiet?: boolean;
+  /** Hides interactive insertion controls while keeping structural cut/continuity hairlines visible */
+  readOnly?: boolean;
   /** Subtle border opacity variant for between-card hairline hover */
   subtleHairline?: boolean;
 }
@@ -34,8 +36,11 @@ export function HoverInsertSeam({
   onClick,
   isPickerTrigger = false,
   quiet = false,
+  readOnly = false,
   subtleHairline = false,
 }: HoverInsertSeamProps) {
+  const showInteractive = !quiet && !readOnly;
+
   return (
     <div className={`group/seam relative grid ${gridClass} items-stretch gap-1.5`}>
       {leftGutter !== undefined && <div className="relative">{leftGutter}</div>}
@@ -49,7 +54,11 @@ export function HoverInsertSeam({
               }`}
             />
             {!quiet && (
-              <span className="absolute bg-app px-2 font-mono text-[9.5px] font-medium tracking-widest text-text-faint uppercase group-hover/seam:opacity-0 transition-opacity select-none">
+              <span
+                className={`absolute bg-app px-2 font-mono text-[9.5px] font-medium tracking-widest text-text-faint uppercase transition-opacity select-none ${
+                  showInteractive ? 'group-hover/seam:opacity-0' : ''
+                }`}
+              >
                 {cutLabel}
               </span>
             )}
@@ -57,7 +66,7 @@ export function HoverInsertSeam({
         ) : (
           <div
             className={`w-full border-t border-transparent transition-colors ${
-              quiet
+              !showInteractive
                 ? ''
                 : subtleHairline
                   ? 'group-hover/seam:border-border-main/70'
@@ -66,7 +75,7 @@ export function HoverInsertSeam({
           />
         )}
 
-        {!quiet && (
+        {showInteractive && (
           <button
             type="button"
             data-staging-picker-trigger={isPickerTrigger ? 'true' : undefined}

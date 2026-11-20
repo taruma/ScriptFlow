@@ -24,6 +24,7 @@ export interface StagingBlockEditorProps {
   rawBody: string;
   aestheticTokens: AestheticToken[];
   historyRevision?: number;
+  readOnly?: boolean;
   autoFocus?: boolean;
   onClearAutoFocus?: () => void;
   onCommit: (nextBody: string, options?: StagingBlockCommitOptions) => void;

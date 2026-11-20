@@ -31,6 +31,7 @@ interface LiveHighlightedEditorProps {
   ariaLabel: string;
   minHeightClass?: string;
   isLead?: boolean;
+  readOnly?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onFocus?: (event: FocusEvent<HTMLTextAreaElement>) => void;
   onBlur?: (event: FocusEvent<HTMLTextAreaElement>) => void;
@@ -220,6 +221,7 @@ export const LiveHighlightedEditor = memo(
       ariaLabel,
       minHeightClass = '',
       isLead = false,
+      readOnly = false,
       onKeyDown,
       onFocus,
       onBlur,
@@ -276,14 +278,19 @@ export const LiveHighlightedEditor = memo(
         <textarea
           ref={ref}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          readOnly={readOnly}
+          onChange={(e) => {
+            if (!readOnly) {
+              onChange(e.target.value);
+            }
+          }}
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
           rows={1}
           spellCheck={false}
           aria-label={ariaLabel}
-          placeholder={placeholder}
+          placeholder={readOnly ? undefined : placeholder}
           className={`${sharedTypography} auteur-live-textarea bg-transparent resize-none overflow-hidden outline-none ${minHeightClass}`}
           style={METRIC_STYLE}
         />

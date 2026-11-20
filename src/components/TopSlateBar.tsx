@@ -9,15 +9,14 @@ import {
   Code2,
   Copy,
   Eye,
-  FilePlus2,
   Redo2,
   Undo2,
 } from 'lucide-react';
 import type {LintDiagnostic} from '../core/types.ts';
-import type {ScriptPreset} from '../data/presets.ts';
 import type {EditorSettings} from '../ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from '../ui/labels.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {FileMenuDropdown} from './FileMenuDropdown.tsx';
 import {SettingsPopover} from './SettingsPopover.tsx';
 
 export type ViewMode = 'live' | 'source';
@@ -25,15 +24,21 @@ export type ViewMode = 'live' | 'source';
 interface TopSlateBarProps {
   title: string;
   onTitleChange: (nextTitle: string) => void;
+  readOnly?: boolean;
   beatCount: number;
   diagnostics: LintDiagnostic[];
   onJumpToFirstDiagnostic: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
-  presets: ScriptPreset[];
-  activePresetId: string | null;
-  onSelectPreset: (preset: ScriptPreset) => void;
   onNewBlank: () => void;
+  onImportFile: () => void;
+  onDownloadCanonical: () => void;
+  onDownloadTagless: () => void;
+  onDownloadJsonEnvelope: () => void;
+  onBackupAll: () => void;
+  onRestoreBackup: () => void;
+  onOpenLibrary: () => void;
+  isLibraryOpen?: boolean;
   settings: EditorSettings;
   onUpdateSettings: (patch: Partial<EditorSettings>) => void;
   onCopyPlainText: () => void;
@@ -47,20 +52,26 @@ interface TopSlateBarProps {
   onRedo: () => void;
 }
 
-type OpenMenu = 'presets' | 'settings' | 'copy' | null;
+type OpenMenu = 'file' | 'settings' | 'copy' | null;
 
 export function TopSlateBar({
   title,
   onTitleChange,
+  readOnly = false,
   beatCount,
   diagnostics,
   onJumpToFirstDiagnostic,
   viewMode,
   onViewModeChange,
-  presets,
-  activePresetId,
-  onSelectPreset,
   onNewBlank,
+  onImportFile,
+  onDownloadCanonical,
+  onDownloadTagless,
+  onDownloadJsonEnvelope,
+  onBackupAll,
+  onRestoreBackup,
+  onOpenLibrary,
+  isLibraryOpen = false,
   settings,
   onUpdateSettings,
   onCopyPlainText,
@@ -101,25 +112,47 @@ export function TopSlateBar({
 
   return (
     <header ref={barRef} className={`${UI_TOKENS.layout.appHeader} sticky top-0`}>
-      {/* Left Zone: Scene Title + Live Beat Count + Quiet Diagnostic Jump */}
+      {/* Left Zone: Calm File Menu + Scene Title + Live Beat Count + Quiet Diagnostic Jump */}
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-        <div className="inline-grid min-w-0 max-w-[260px] items-center">
-          <span
-            aria-hidden="true"
-            className="invisible col-start-1 row-start-1 whitespace-pre truncate px-1.5 py-1 font-serif text-sm font-bold tracking-tight"
-          >
+        <FileMenuDropdown
+          isOpen={openMenu === 'file'}
+          onToggle={() => setOpenMenu((prev) => (prev === 'file' ? null : 'file'))}
+          onClose={() => setOpenMenu(null)}
+          onNewBlank={onNewBlank}
+          onImportFile={onImportFile}
+          onDownloadCanonical={onDownloadCanonical}
+          onDownloadTagless={onDownloadTagless}
+          onDownloadJsonEnvelope={onDownloadJsonEnvelope}
+          onBackupAll={onBackupAll}
+          onRestoreBackup={onRestoreBackup}
+          onBrowseLibrary={onOpenLibrary}
+        />
+
+        <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
+
+        {readOnly ? (
+          <span className="min-w-0 max-w-[240px] truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
             {title || APP_META.untitledScene}
           </span>
-          <input
-            type="text"
-            data-native-undo="true"
-            value={title}
-            onChange={(e) => onTitleChange(e.target.value)}
-            aria-label={UI_LABELS.topBar.sceneTitleAria}
-            placeholder={APP_META.untitledScene}
-            className="col-start-1 row-start-1 min-w-[4ch] w-full truncate rounded-md bg-transparent px-1.5 py-1 font-serif text-sm font-bold tracking-tight text-text-main hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
-          />
-        </div>
+        ) : (
+          <div className="inline-grid min-w-0 max-w-[240px] items-center">
+            <span
+              aria-hidden="true"
+              className="invisible col-start-1 row-start-1 whitespace-pre truncate px-1.5 py-1 font-serif text-sm font-bold tracking-tight"
+            >
+              {title || APP_META.untitledScene}
+            </span>
+            <input
+              type="text"
+              data-native-undo="true"
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              aria-label={UI_LABELS.topBar.sceneTitleAria}
+              placeholder={APP_META.untitledScene}
+              className="col-start-1 row-start-1 min-w-[4ch] w-full truncate rounded-md bg-transparent px-1.5 py-1 font-serif text-sm font-bold tracking-tight text-text-main hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
+            />
+          </div>
+        )}
 
         <div className="hidden sm:flex items-center gap-2 text-xs text-text-faint whitespace-nowrap shrink-0">
           <span aria-hidden="true">·</span>
@@ -191,7 +224,7 @@ export function TopSlateBar({
         </div>
       </div>
 
-      {/* Right Zone: Quiet Undo/Redo, Optional Debug Inspector, Presets, Settings, Copy */}
+      {/* Right Zone: Quiet Undo/Redo, Optional Debug Inspector, Library, Settings, Copy */}
       <div className="flex flex-1 items-center justify-end gap-1.5 pl-2">
         <div
           role="group"
@@ -200,7 +233,7 @@ export function TopSlateBar({
         >
           <button
             type="button"
-            disabled={!canUndo}
+            disabled={readOnly || !canUndo}
             onMouseDown={(e) => e.preventDefault()}
             onClick={onUndo}
             title={UI_LABELS.topBar.undoTitle}
@@ -211,7 +244,7 @@ export function TopSlateBar({
           </button>
           <button
             type="button"
-            disabled={!canRedo}
+            disabled={readOnly || !canRedo}
             onMouseDown={(e) => e.preventDefault()}
             onClick={onRedo}
             title={UI_LABELS.topBar.redoTitle}
@@ -240,74 +273,22 @@ export function TopSlateBar({
           </button>
         )}
 
-        {/* Presets Menu */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setOpenMenu((prev) => (prev === 'presets' ? null : 'presets'))}
-            aria-expanded={openMenu === 'presets'}
-            className={
-              openMenu === 'presets' ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill
-            }
-          >
-            <BookOpen className="h-3.5 w-3.5 text-text-muted" />
-            <span className="hidden sm:inline">{UI_LABELS.topBar.presetsButton}</span>
-            <ChevronDown className="h-3 w-3 text-text-faint" />
-          </button>
+        {/* Quiet Library Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setOpenMenu(null);
+            onOpenLibrary();
+          }}
+          aria-label={UI_LABELS.topBar.libraryAria}
+          aria-expanded={isLibraryOpen}
+          className={isLibraryOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
+        >
+          <BookOpen className="h-3.5 w-3.5 text-text-muted" />
+          <span className="hidden sm:inline">{UI_LABELS.topBar.libraryButton}</span>
+        </button>
 
-          {openMenu === 'presets' && (
-            <div className={UI_TOKENS.dropdown.menuWide}>
-              <div className={UI_TOKENS.dropdown.header}>
-                <span className={UI_TOKENS.dropdown.headerText}>
-                  {UI_LABELS.topBar.presetsHeader}
-                </span>
-              </div>
-              <div className="py-1">
-                {presets.map((preset) => {
-                  const isActive = preset.id === activePresetId;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectPreset(preset);
-                        setOpenMenu(null);
-                      }}
-                      className={`${
-                        isActive ? UI_TOKENS.dropdown.itemActive : UI_TOKENS.dropdown.item
-                      } flex-col items-start gap-0.5 py-2`}
-                    >
-                      <div className="flex w-full items-center justify-between gap-2">
-                        <span className="truncate">{preset.title}</span>
-                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-text-main" />}
-                      </div>
-                      <span className="font-mono text-[10px] text-text-faint">
-                        {preset.topology}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="py-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onNewBlank();
-                    setOpenMenu(null);
-                  }}
-                  className={UI_TOKENS.dropdown.item}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <FilePlus2 className="h-3.5 w-3.5 text-text-muted" />
-                    <span>{UI_LABELS.topBar.newBlankScript}</span>
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Settings Popover (Text Size, Clause Underlines, Theme) */}
+        {/* Settings Popover (Text Size, Clause Underlines, Theme, Supervisor Rules) */}
         <SettingsPopover
           settings={settings}
           onUpdateSettings={onUpdateSettings}

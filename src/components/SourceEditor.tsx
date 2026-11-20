@@ -6,12 +6,14 @@ import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
 interface SourceEditorProps {
   rawText: string;
   aestheticTokens: AestheticToken[];
+  readOnly?: boolean;
   onChange: (nextRawText: string) => void;
 }
 
 export const SourceEditor = memo(function SourceEditor({
   rawText,
   aestheticTokens,
+  readOnly = false,
   onChange,
 }: SourceEditorProps) {
   const lineCount = rawText.length === 0 ? 0 : rawText.split('\n').length;
@@ -34,6 +36,7 @@ export const SourceEditor = memo(function SourceEditor({
           onChange={onChange}
           mode="source"
           aestheticTokens={aestheticTokens}
+          readOnly={readOnly}
           minHeightClass="min-h-[540px]"
           ariaLabel={UI_LABELS.source.ariaLabel}
           placeholder={UI_LABELS.source.placeholder}

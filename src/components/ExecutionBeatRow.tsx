@@ -28,6 +28,7 @@ interface ExecutionBeatRowProps {
   aestheticTokens: AestheticToken[];
   diagnostics: LintDiagnostic[];
   historyRevision: number;
+  readOnly?: boolean;
   collapsed: boolean;
   onToggleCollapse: (beatIndex: number) => void;
   autoFocusEdit?: boolean;
@@ -65,6 +66,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   aestheticTokens,
   diagnostics,
   historyRevision,
+  readOnly = false,
   collapsed,
   onToggleCollapse,
   autoFocusEdit = false,
@@ -201,6 +203,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   const isBeatFocused = focusedStepIndex !== null || pendingAfterIndex !== null;
 
   const openPendingStepAfter = (afterIndex: number) => {
+    if (readOnly) return;
     setFocusedStepIndex(null);
     setPendingAfterIndex(afterIndex);
     setPendingDraft('');
@@ -208,6 +211,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   };
 
   const handleStepFocus = (index: number, raw: string) => {
+    if (readOnly) return;
     setPendingAfterIndex(null);
     setPendingDraft('');
     if (focusedStepIndex !== index) {
@@ -217,6 +221,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   };
 
   const handleDeleteStep = (stepIdx: number) => {
+    if (readOnly) return;
     const subStateRaws = beat.subStates.map((s) => s.raw);
     const activeEl =
       focusedStepIndex !== null
@@ -249,6 +254,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   };
 
   const handleStepChange = (index: number, nextValue: string) => {
+    if (readOnly) return;
     // Strip accidental raw newlines inside a single Sub-State step
     const singleLine = nextValue.replace(/\r?\n/g, ' ');
 
@@ -281,6 +287,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   };
 
   const handleStepBlur = (index: number) => {
+    if (readOnly) return;
     const trimmed = activeDraft.trim();
     if (focusedStepIndex === index) {
       setFocusedStepIndex(null);
@@ -293,6 +300,13 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   };
 
   const handleStepKeyDown = (index: number, event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (readOnly) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+      return;
+    }
     const el = event.currentTarget;
     const caretStart = el.selectionStart ?? 0;
     const caretEnd = el.selectionEnd ?? 0;
@@ -415,7 +429,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
 
   const isDragging = Boolean(drag?.isDragging);
   const isAnyDragging = Boolean(drag?.isAnyDragging);
-  const handleProps = drag ? drag.getHandleProps(isBeatFocused && !collapsed) : null;
+  const handleProps = !readOnly && drag ? drag.getHandleProps(isBeatFocused && !collapsed) : null;
 
   const connectsFromPrevious = Boolean(cameraLink?.connectsFromPrevious) && !isAnyDragging;
   const showConnectsToNext = connectsToNext && !isAnyDragging;
@@ -556,18 +570,20 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                   {UI_LABELS.execution.stepsCount(subStates.length)}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteBeat(beat.index);
-                }}
-                title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
-                aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
-                className="rounded-md p-1 text-text-faint opacity-0 group-hover/beat:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteBeat(beat.index);
+                  }}
+                  title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+                  aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+                  className="rounded-md p-1 text-text-faint opacity-0 group-hover/beat:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-red-500 transition-opacity cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -582,33 +598,35 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
           }`}
         >
           {/* Compact Hover Actions (Add Step + Delete Beat — zero idle vertical footprint) */}
-          <div className="absolute right-2 top-1.5 z-10 flex items-center gap-0.5 opacity-0 group-hover/beat:opacity-100 focus-within:opacity-100 transition-opacity">
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                openPendingStepAfter(Math.max(0, subStates.length - 1));
-              }}
-              title={UI_LABELS.execution.addStep}
-              aria-label={UI_LABELS.execution.addStep}
-              className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDeleteBeat(beat.index)}
-              title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
-              aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
-              className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-red-500 transition-colors cursor-pointer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="absolute right-2 top-1.5 z-10 flex items-center gap-0.5 opacity-0 group-hover/beat:opacity-100 focus-within:opacity-100 transition-opacity">
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  openPendingStepAfter(Math.max(0, subStates.length - 1));
+                }}
+                title={UI_LABELS.execution.addStep}
+                aria-label={UI_LABELS.execution.addStep}
+                className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeleteBeat(beat.index)}
+                title={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+                aria-label={UI_LABELS.execution.deleteBeatTitle(beat.index)}
+                className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-red-500 transition-colors cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Step 1 — Lead Sub-State (always formatted, directly editable) + Per-Macro-State Collapse Trigger */}
           {leadNode && (
-            <div className="relative flex items-start gap-1.5 pr-12">
+            <div className={`relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-12'}`}>
               <button
                 type="button"
                 onClick={handleToggleCollapse}
@@ -625,6 +643,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                   <LiveHighlightedEditor
                     ref={registerStepRef(0)}
                     value={focusedStepIndex === 0 ? activeDraft : leadNode.raw}
+                    readOnly={readOnly}
                     onChange={(val) => handleStepChange(0, val)}
                     mode="substate"
                     aestheticTokens={aestheticTokens}
@@ -657,7 +676,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                 const stepIdx = offset + 1;
                 return (
                   <div key={`step-${stepIdx}`} className="space-y-0.5">
-                    <div className="group/step relative flex items-start gap-1.5 pr-5">
+                    <div className={`group/step relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-5'}`}>
                       <span
                         aria-hidden="true"
                         className="auteur-tok-arrow mt-[1px] select-none text-[11px] font-bold opacity-85 shrink-0"
@@ -668,6 +687,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                         <LiveHighlightedEditor
                           ref={registerStepRef(stepIdx)}
                           value={focusedStepIndex === stepIdx ? activeDraft : sub.raw}
+                          readOnly={readOnly}
                           onChange={(val) => handleStepChange(stepIdx, val)}
                           mode="substate"
                           aestheticTokens={aestheticTokens}
@@ -678,19 +698,21 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                           onKeyDown={(e) => handleStepKeyDown(stepIdx, e)}
                         />
                       </div>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleDeleteStep(stepIdx)}
-                        title={UI_LABELS.execution.removeStepTitle}
-                        aria-label={UI_LABELS.execution.removeStepAria(stepIdx + 1, beat.index)}
-                        className="absolute right-0 top-0.5 rounded p-0.5 text-text-faint opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => handleDeleteStep(stepIdx)}
+                          title={UI_LABELS.execution.removeStepTitle}
+                          aria-label={UI_LABELS.execution.removeStepAria(stepIdx + 1, beat.index)}
+                          className="absolute right-0 top-0.5 rounded p-0.5 text-text-faint opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
 
-                    {pendingAfterIndex === stepIdx && renderPendingRow()}
+                    {pendingAfterIndex === stepIdx && !readOnly && renderPendingRow()}
                   </div>
                 );
               })}
@@ -698,7 +720,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
           )}
 
           {/* Focused-only step append + chaining hint (zero layout height when resting) */}
-          {isBeatFocused && (
+          {isBeatFocused && !readOnly && (
             <div className="mt-1.5 ml-5 flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border-subtle/80">
               <button
                 type="button"

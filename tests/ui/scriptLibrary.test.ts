@@ -39,6 +39,15 @@ import {
   type LegacyLocalStorageAdapter,
   type ScriptRecord,
 } from '../../src/ui/scriptLibraryDb.ts';
+import {
+  buildLibraryRows,
+  countExecutionBeatsFast,
+  createCopyTitle,
+  formatRelativeUpdatedTime,
+  LIBRARY_PAGE_SIZE,
+  paginateLibraryRows,
+  stepLibrarySelectionIndex,
+} from '../../src/ui/scriptLibraryView.ts';
 
 function createMemoryLegacyStorage(initial?: {
   script?: string | null;
@@ -604,3 +613,76 @@ describe('Full-Library Backup Codec & Smart Non-Destructive Merge', () => {
     ]);
   });
 });
+
+describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
+  it('counts execution beats accurately without full AST parsing across canonical and alias headers', () => {
+    for (const example of BUNDLED_EXAMPLES) {
+      const parsedCount = parseAuteurScript(example.content).execution?.beats.length ?? 0;
+      expect(countExecutionBeatsFast(example.content)).toBe(parsedCount);
+    }
+
+    expect(
+      countExecutionBeatsFast('[INTENT]\nNo execution yet.\n\n[TIMELINE]\n\n[CAM 01] MS\n   \n[CAM 02] CU\n')
+    ).toBe(2);
+    expect(countExecutionBeatsFast('[INTENT]\nStaging only.')).toBe(0);
+    expect(countExecutionBeatsFast('')).toBe(0);
+  });
+
+  it('formats compact relative updated timestamps deterministically with injected clock', () => {
+    const now = Date.UTC(2026, 10, 19, 15, 0, 0); // Nov 19, 2026 15:00 UTC
+    expect(formatRelativeUpdatedTime(now - 10_000, now)).toBe('just now');
+    expect(formatRelativeUpdatedTime(now - 5 * 60_000, now)).toBe('5m ago');
+    expect(formatRelativeUpdatedTime(now - 3 * 3600_000, now)).toBe('3h ago');
+    expect(formatRelativeUpdatedTime(now - 2 * 86400_000, now)).toBe('2d ago');
+
+    const sameYearDate = Date.UTC(2026, 2, 14, 12, 0, 0);
+    expect(formatRelativeUpdatedTime(sameYearDate, now)).toMatch(/^Mar 1[34]$/);
+
+    const priorYearDate = Date.UTC(2024, 5, 10, 12, 0, 0);
+    expect(formatRelativeUpdatedTime(priorYearDate, now)).toMatch(/^Jun (9|10), 2024$/);
+
+    expect(formatRelativeUpdatedTime(0, now)).toBe('');
+  });
+
+  it('filters tabs and search queries cleanly and paginates 1,200+ scripts smoothly', () => {
+    const customScripts: ScriptRecord[] = Array.from({length: 1205}, (_, idx) => ({
+      id: `script-${idx}`,
+      title: idx === 777 ? 'Midnight Harbor Oner' : `Scene Draft #${idx + 1}`,
+      rawText: '[INTENT]\nDraft.\n\n[EXECUTION]\n[CAM 01] MS',
+      createdAt: 1000 + idx,
+      updatedAt: 10000 - idx,
+    }));
+
+    const allRows = buildLibraryRows(customScripts, BUNDLED_EXAMPLES, 'all', '');
+    expect(allRows).toHaveLength(1205 + BUNDLED_EXAMPLES.length);
+    expect(allRows[0].kind).toBe('custom');
+    expect(allRows[allRows.length - 1].kind).toBe('example');
+
+    const firstPage = paginateLibraryRows(allRows, LIBRARY_PAGE_SIZE);
+    expect(firstPage.visible).toHaveLength(LIBRARY_PAGE_SIZE);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.remainingCount).toBe(allRows.length - LIBRARY_PAGE_SIZE);
+
+    const customOnly = buildLibraryRows(customScripts, BUNDLED_EXAMPLES, 'custom', 'midnight harbor');
+    expect(customOnly).toHaveLength(1);
+    expect(customOnly[0].id).toBe('script-777');
+
+    const examplesByTopology = buildLibraryRows(customScripts, BUNDLED_EXAMPLES, 'examples', 'montage');
+    expect(examplesByTopology.map((r) => r.id)).toEqual(['heist-montage']);
+  });
+
+  it('generates clean non-colliding copy/fork titles and steps keyboard selection with wrap-around', () => {
+    const existing = new Set(['Harbor Scene', 'Harbor Scene (Copy)', 'harbor scene (copy 2)']);
+    expect(createCopyTitle('Fresh Scene', existing, 'Copy')).toBe('Fresh Scene');
+    expect(createCopyTitle('Harbor Scene', existing, 'Copy')).toBe('Harbor Scene (Copy 3)');
+    expect(createCopyTitle('Harbor Scene', existing, 'Fork')).toBe('Harbor Scene (Fork)');
+
+    expect(stepLibrarySelectionIndex(0, 1, 3)).toBe(1);
+    expect(stepLibrarySelectionIndex(2, 1, 3)).toBe(0);
+    expect(stepLibrarySelectionIndex(0, -1, 3)).toBe(2);
+    expect(stepLibrarySelectionIndex(-1, 1, 3)).toBe(0);
+    expect(stepLibrarySelectionIndex(-1, -1, 3)).toBe(2);
+    expect(stepLibrarySelectionIndex(0, 1, 0)).toBe(-1);
+  });
+});
+

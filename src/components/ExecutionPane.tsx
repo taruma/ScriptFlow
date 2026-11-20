@@ -29,6 +29,7 @@ interface ExecutionPaneProps {
   aestheticTokens: AestheticToken[];
   diagnosticsByBeatIndex: Map<number, LintDiagnostic[]>;
   historyRevision: number;
+  readOnly?: boolean;
   onUpdateSubState: (
     beatIndex: number,
     subStateIndex: number,
@@ -80,6 +81,7 @@ export const ExecutionPane = memo(function ExecutionPane({
   aestheticTokens,
   diagnosticsByBeatIndex,
   historyRevision,
+  readOnly = false,
   onUpdateSubState,
   onInsertSubState,
   onDeleteSubState,
@@ -207,6 +209,7 @@ export const ExecutionPane = memo(function ExecutionPane({
               heightClass={isCutBefore ? 'h-5' : 'h-2'}
               subtleHairline
               quiet={binding.isAnyDragging}
+              readOnly={readOnly}
               cutLabel={
                 isCutBefore
                   ? link?.transition === 'RECALL'
@@ -235,6 +238,7 @@ export const ExecutionPane = memo(function ExecutionPane({
             aestheticTokens={aestheticTokens}
             diagnostics={diagnosticsByBeatIndex.get(beat.index) ?? EMPTY_DIAGNOSTICS}
             historyRevision={historyRevision}
+            readOnly={readOnly}
             collapsed={collapsedIndices.has(idx)}
             onToggleCollapse={toggleSingleBeat}
             autoFocusEdit={autoFocusBeatIndex === beat.index}
@@ -244,7 +248,7 @@ export const ExecutionPane = memo(function ExecutionPane({
             onDeleteSubState={onDeleteSubState}
             onMergeSubState={onMergeSubState}
             onDeleteBeat={handleDeleteBeat}
-            drag={binding}
+            drag={readOnly ? undefined : binding}
           />
         </>
       );
@@ -254,6 +258,7 @@ export const ExecutionPane = memo(function ExecutionPane({
       aestheticTokens,
       diagnosticsByBeatIndex,
       historyRevision,
+      readOnly,
       collapsedIndices,
       toggleSingleBeat,
       autoFocusBeatIndex,
@@ -357,7 +362,7 @@ export const ExecutionPane = memo(function ExecutionPane({
         }`}
       >
         {/* Surgical insert before Beat 1 */}
-        {beats.length > 0 && (
+        {beats.length > 0 && !readOnly && (
           <HoverInsertSeam
             gridClass={EXECUTION_GRID}
             leftGutter={null}
@@ -371,6 +376,7 @@ export const ExecutionPane = memo(function ExecutionPane({
         <SortableList
           items={beats}
           scopeId="execution"
+          disabled={readOnly}
           onReorder={handleReorder}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
@@ -379,24 +385,26 @@ export const ExecutionPane = memo(function ExecutionPane({
         />
 
         {/* Quiet bottom Add Beat action */}
-        <div className={`mt-2.5 grid ${EXECUTION_GRID} items-center gap-1.5`}>
-          <div />
-          <button
-            type="button"
-            onClick={() => handleInsertBeatAt(beats.length)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-main py-2 text-xs font-medium text-text-muted hover:border-text-faint hover:bg-surface hover:text-text-main transition-colors cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>{UI_LABELS.document.addBeat}</span>
-          </button>
-          <div />
-        </div>
+        {!readOnly && (
+          <div className={`mt-2.5 grid ${EXECUTION_GRID} items-center gap-1.5`}>
+            <div />
+            <button
+              type="button"
+              onClick={() => handleInsertBeatAt(beats.length)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-main py-2 text-xs font-medium text-text-muted hover:border-text-faint hover:bg-surface hover:text-text-main transition-colors cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>{UI_LABELS.document.addBeat}</span>
+            </button>
+            <div />
+          </div>
+        )}
 
-        {/* Subtle Paste-and-Hydrate hint */}
+        {/* Subtle Paste-and-Hydrate / Read-Only hint */}
         <footer className={`mt-8 grid ${EXECUTION_GRID} items-center gap-1.5`}>
           <div />
           <p className="text-center text-[11px] text-text-faint">
-            {UI_LABELS.document.footerHint}
+            {readOnly ? UI_LABELS.document.footerHintReadOnly : UI_LABELS.document.footerHint}
           </p>
           <div />
         </footer>

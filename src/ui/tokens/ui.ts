@@ -29,6 +29,8 @@ export const UI_TOKENS = {
 
   dropdown: {
     menu: 'absolute top-full left-0 mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main divide-y divide-border-subtle',
+    menuLeftWide:
+      'absolute top-full left-0 mt-2 w-60 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main divide-y divide-border-subtle',
     menuRight:
       'absolute top-full right-0 mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main divide-y divide-border-subtle',
     menuWide:

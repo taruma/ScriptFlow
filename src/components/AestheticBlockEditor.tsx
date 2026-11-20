@@ -29,6 +29,7 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
   rawBody,
   aestheticTokens,
   historyRevision = 0,
+  readOnly = false,
   autoFocus = false,
   onClearAutoFocus,
   onCommit,
@@ -85,6 +86,7 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
   });
 
   const commitRows = (nextRows: AestheticRow[], options?: StagingBlockCommitOptions) => {
+    if (readOnly) return;
     setRows(nextRows);
     const serialized = serializeAestheticRows(nextRows);
     lastCommittedRef.current = serialized;
@@ -104,6 +106,7 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
     }
     setIsContainerFocused(false);
     onFocusChange(false);
+    if (readOnly) return;
 
     // Strip trailing empty rows cleanly on blur
     const trimmedRows = [...rows];
@@ -217,6 +220,13 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
   };
 
   const handleKeyInputKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (readOnly) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+      return;
+    }
     const row = rows[index];
     if (row.type !== 'kv') return;
 
@@ -277,6 +287,13 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
   };
 
   const handleValueKeyDown = (index: number, event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (readOnly) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+      return;
+    }
     const el = event.currentTarget;
     const caretStart = el.selectionStart ?? 0;
     const caretEnd = el.selectionEnd ?? 0;
@@ -340,7 +357,7 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
       {rows.map((row, idx) => (
         <div
           key={idx}
-          className={`group/kv relative pr-5 ${idx === 0 ? 'pb-1.5' : idx === rows.length - 1 ? 'pt-1.5' : 'py-1.5'}`}
+          className={`group/kv relative ${readOnly ? '' : 'pr-5'} ${idx === 0 ? 'pb-1.5' : idx === rows.length - 1 ? 'pt-1.5' : 'py-1.5'}`}
         >
           {row.type === 'kv' ? (
             <div className="grid grid-cols-[88px_minmax(0,1fr)] sm:grid-cols-[100px_minmax(0,1fr)] items-start gap-2.5">
@@ -352,11 +369,14 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
                     else keyRefs.current.delete(idx);
                   }}
                   type="text"
+                  readOnly={readOnly}
                   value={row.key}
-                  onChange={(e) => handleKeyChange(idx, e.target.value)}
+                  onChange={(e) => {
+                    if (!readOnly) handleKeyChange(idx, e.target.value);
+                  }}
                   onKeyDown={(e) => handleKeyInputKeyDown(idx, e)}
                   aria-label={UI_LABELS.staging.aestheticKeyAria(idx)}
-                  placeholder={UI_LABELS.staging.aestheticKeyPlaceholder}
+                  placeholder={readOnly ? undefined : UI_LABELS.staging.aestheticKeyPlaceholder}
                   spellCheck={false}
                   className="w-full m-0 p-0 border-0 bg-transparent font-script auteur-script-size leading-[1.44] font-semibold text-text-main placeholder-text-placeholder outline-none"
                 />
@@ -370,6 +390,7 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
                     else valueRefs.current.delete(idx);
                   }}
                   value={row.value}
+                  readOnly={readOnly}
                   onChange={(val) => handleValueChange(idx, val)}
                   mode="aestheticValue"
                   aestheticTokens={aestheticTokens}
@@ -387,6 +408,7 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
                 else valueRefs.current.delete(idx);
               }}
               value={row.raw}
+              readOnly={readOnly}
               onChange={(val) => handleValueChange(idx, val)}
               mode="aestheticValue"
               aestheticTokens={aestheticTokens}
@@ -397,25 +419,27 @@ export const AestheticBlockEditor = memo(function AestheticBlockEditor({
           )}
 
           {/* Quiet hover delete button per row */}
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              deleteRowAt(idx);
-            }}
-            title={UI_LABELS.staging.removeAestheticKeyTitle}
-            aria-label={UI_LABELS.staging.removeAestheticKeyTitle}
-            className={`absolute right-0 ${
-              idx === 0 ? 'top-0' : 'top-1.5'
-            } rounded p-0.5 text-text-faint opacity-0 group-hover/kv:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer`}
-          >
-            <X className="h-3 w-3" />
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                deleteRowAt(idx);
+              }}
+              title={UI_LABELS.staging.removeAestheticKeyTitle}
+              aria-label={UI_LABELS.staging.removeAestheticKeyTitle}
+              className={`absolute right-0 ${
+                idx === 0 ? 'top-0' : 'top-1.5'
+              } rounded p-0.5 text-text-faint opacity-0 group-hover/kv:opacity-100 hover:bg-surface-muted hover:text-text-main transition-opacity cursor-pointer`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
       ))}
 
       {/* Focused-only Add Key button (zero idle vertical footprint) */}
-      {isContainerFocused && (
+      {isContainerFocused && !readOnly && (
         <div className="pt-1.5">
           <button
             type="button"
