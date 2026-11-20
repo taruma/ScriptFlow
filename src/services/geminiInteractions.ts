@@ -2,16 +2,22 @@ import {GoogleGenAI} from '@google/genai';
 import type {LintRuleOverrides} from '../core/index.ts';
 import type {GeminiModelId, ReasoningLevel} from '../ui/aiSettings.ts';
 import {
+  assistantModeToFocus,
+  composeAgentContext,
+  type AssistantFocus,
+  type CustomAuteurSkill,
+  type SkillOverride,
+} from './auteurKnowledge.ts';
+import {
+  buildToolDeclarationsForContext,
   executeScriptToolCall,
-  getSystemInstructionForMode,
-  getToolDeclarationsForMode,
   type AssistantMode,
   type GeminiFunctionToolDeclaration,
   type ScriptToolExecutionResult,
   type StagedSuggestion,
 } from './scriptTools.ts';
 
-export const MAX_AGENT_TOOL_ROUNDS = 5;
+export const MAX_AGENT_TOOL_ROUNDS = 8;
 
 export type GeminiErrorCode =
   | 'missing_api_key'
@@ -64,6 +70,9 @@ export interface AgentTurnTrace {
   model: GeminiModelId;
   reasoningLevel: ReasoningLevel;
   mode: AssistantMode;
+  focus: AssistantFocus;
+  activeSkillIds: string[];
+  loadedSkillIds: string[];
   startedAt: string;
   durationMs: number;
   initialPreviousInteractionId: string | null;
@@ -102,6 +111,7 @@ export interface AgentStreamCallbacks {
   onToolCallStart?: (call: {callId: string; name: string; arguments: Record<string, unknown>}) => void;
   onToolCallResult?: (trace: AgentToolCallTrace) => void;
   onSuggestionStaged?: (suggestion: StagedSuggestion) => void;
+  onSkillLoaded?: (event: {id: string; name: string; source: 'passive' | 'pinned' | 'tool'}) => void;
 }
 
 export interface InteractionsClientLike {
@@ -139,10 +149,15 @@ export interface RunAgentTurnOptions {
   model: GeminiModelId;
   reasoningLevel: ReasoningLevel;
   mode: AssistantMode;
+  focus?: AssistantFocus;
   prompt: string;
   rawText: string;
   ruleOverrides?: LintRuleOverrides;
   previousInteractionId?: string;
+  previousSnapshotHash?: string;
+  foundationalCraftOverride?: string;
+  skillOverrides?: Record<string, SkillOverride>;
+  customSkills?: readonly CustomAuteurSkill[];
   signal?: AbortSignal;
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;
@@ -555,10 +570,11 @@ async function consumeInteractionStream(
 }
 
 /**
- * Streams a multi-turn Gemini Interactions API agent turn with mode-scoped local script tools.
- * Re-specifies `tools`, `system_instruction`, and `generation_config` on every call per the
- * Interactions API contract, chains `previous_interaction_id`, executes `function_call` steps
- * locally, and loops `function_result` payloads back up to `maxToolRounds` (default 5).
+ * Streams a multi-turn Gemini Interactions API agent turn with intent-aware local script tools.
+ * Composes Live Editor State, active/available skills, and dynamic tool schemas via
+ * `composeAgentContext`, re-specifies `tools`, `system_instruction`, and `generation_config`
+ * on every call per the Interactions API contract, chains `previous_interaction_id`, executes
+ * `function_call` steps locally, and loops `function_result` payloads back up to `maxToolRounds` (default 8).
  */
 export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<RunAgentTurnResult> {
   const getNow = options.now ?? Date.now;
@@ -566,10 +582,13 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const startedAt = new Date(turnStartMs).toISOString();
   const initialPreviousInteractionId = options.previousInteractionId ?? null;
   const apiKey = options.apiKey.trim();
+  const focus: AssistantFocus = options.focus ?? assistantModeToFocus(options.mode);
 
   let currentInteractionId: string | undefined = options.previousInteractionId;
   let toolRounds = 0;
   let hitToolRoundLimit = false;
+  let activeSkillIds: string[] = [];
+  const loadedSkillIds: string[] = [];
   const rounds: AgentRoundTrace[] = [];
 
   const buildTurnTrace = (error?: AgentTraceError): AgentTurnTrace => {
@@ -578,6 +597,9 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
       model: options.model,
       reasoningLevel: options.reasoningLevel,
       mode: options.mode,
+      focus,
+      activeSkillIds: [...activeSkillIds],
+      loadedSkillIds: [...loadedSkillIds],
       startedAt,
       durationMs: Math.max(0, getNow() - turnStartMs),
       initialPreviousInteractionId,
@@ -610,9 +632,28 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   );
   const clientFactory = options.createClient ?? defaultCreateClient;
   const client = clientFactory(apiKey);
-  const tools: GeminiFunctionToolDeclaration[] = getToolDeclarationsForMode(options.mode);
+  const composedContext = composeAgentContext({
+    focus,
+    rawText: options.rawText,
+    ruleOverrides: options.ruleOverrides,
+    previousSnapshotHash: options.previousSnapshotHash,
+    foundationalCraftOverride: options.foundationalCraftOverride,
+    skillOverrides: options.skillOverrides,
+    customSkills: options.customSkills,
+  });
+
+  activeSkillIds = composedContext.activeSkills.map((skill) => skill.id);
+  for (const skill of composedContext.activeSkills) {
+    options.callbacks?.onSkillLoaded?.({
+      id: skill.id,
+      name: skill.name,
+      source: skill.reason === 'pinned' ? 'pinned' : 'passive',
+    });
+  }
+
+  const tools: GeminiFunctionToolDeclaration[] = buildToolDeclarationsForContext(composedContext);
   const toolNames = tools.map((tool) => tool.name);
-  const systemInstruction = getSystemInstructionForMode(options.mode);
+  const systemInstruction = composedContext.systemInstruction;
 
   let nextInput: unknown = options.prompt;
   let accumulatedText = '';
@@ -770,10 +811,17 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
             mode: options.mode,
             rawText: options.rawText,
             ruleOverrides: options.ruleOverrides,
+            composedContext,
             createSuggestionId: options.createSuggestionId,
             onStageSuggestion: (suggestion) => {
               stagedSuggestions.push(suggestion);
               options.callbacks?.onSuggestionStaged?.(suggestion);
+            },
+            onSkillLoaded: (event) => {
+              if (!loadedSkillIds.includes(event.id)) {
+                loadedSkillIds.push(event.id);
+              }
+              options.callbacks?.onSkillLoaded?.(event);
             },
           }
         );

@@ -6,7 +6,7 @@ import {
   getAuteurJsonSchemas,
   LensSliceSpecSchema,
   normalizeLineEndings,
-  sliceAuteurScript,
+  sliceAuteurEnvelope,
   toAuteurEnvelope,
   validateAuteurReview,
   type AuditLens,
@@ -21,17 +21,22 @@ import {
   type PatchError,
   type SceneTopology,
 } from '../core/index.ts';
+import {
+  assistantModeToFocus,
+  composeAgentContext,
+  getLensAuditChecklist,
+  type AssistantFocus,
+  type AssistantMode,
+  type ComposedAgentContext,
+  type ResolvedAuteurSkill,
+  type ScriptToolName,
+} from './auteurKnowledge.ts';
 
-export type AssistantMode = 'refine' | 'check' | 'draft';
+export type {AssistantFocus, AssistantMode, ScriptToolName};
 
-export type ScriptToolName =
-  | 'get_script_overview'
-  | 'inspect_lens_slice'
-  | 'propose_script_patch'
-  | 'propose_script_draft'
-  | 'report_audit_review';
+type StaticScriptToolName = Exclude<ScriptToolName, 'load_auteur_skill'>;
 
-export const MODE_TOOL_NAMES: Record<AssistantMode, readonly ScriptToolName[]> = {
+export const MODE_TOOL_NAMES: Record<AssistantMode, readonly StaticScriptToolName[]> = {
   refine: ['get_script_overview', 'inspect_lens_slice', 'propose_script_patch'],
   check: ['get_script_overview', 'inspect_lens_slice', 'report_audit_review'],
   draft: ['get_script_overview', 'propose_script_draft'],
@@ -273,8 +278,11 @@ export interface ScriptToolContext {
   mode: AssistantMode;
   rawText: string;
   ruleOverrides?: LintRuleOverrides;
+  composedContext?: ComposedAgentContext;
+  allowedTools?: readonly ScriptToolName[];
   createSuggestionId?: () => string;
   onStageSuggestion?: (suggestion: StagedSuggestion) => void;
+  onSkillLoaded?: (event: {id: string; name: string; source: 'tool'}) => void;
 }
 
 export interface ToolCallInput {
@@ -376,7 +384,10 @@ export function sanitizeJsonSchemaForTool(value: unknown): unknown {
   return sanitized;
 }
 
-function buildToolDeclarationsMap(): Record<ScriptToolName, GeminiFunctionToolDeclaration> {
+function buildStaticToolDeclarationsMap(): Record<
+  StaticScriptToolName,
+  GeminiFunctionToolDeclaration
+> {
   const schemas = getAuteurJsonSchemas();
   const patchSchema = sanitizeJsonSchemaForTool(schemas.patch) as Record<string, unknown>;
   const reviewSchema = sanitizeJsonSchemaForTool(schemas.review) as Record<string, unknown>;
@@ -487,20 +498,71 @@ function buildToolDeclarationsMap(): Record<ScriptToolName, GeminiFunctionToolDe
   };
 }
 
-let cachedToolDeclarations: Record<ScriptToolName, GeminiFunctionToolDeclaration> | null = null;
+let cachedStaticToolDeclarations: Record<
+  StaticScriptToolName,
+  GeminiFunctionToolDeclaration
+> | null = null;
 
-function getAllToolDeclarations(): Record<ScriptToolName, GeminiFunctionToolDeclaration> {
-  if (!cachedToolDeclarations) {
-    cachedToolDeclarations = buildToolDeclarationsMap();
+function getStaticToolDeclarations(): Record<StaticScriptToolName, GeminiFunctionToolDeclaration> {
+  if (!cachedStaticToolDeclarations) {
+    cachedStaticToolDeclarations = buildStaticToolDeclarationsMap();
   }
-  return cachedToolDeclarations;
+  return cachedStaticToolDeclarations;
+}
+
+function buildLoadAuteurSkillDeclaration(
+  availableSkills: readonly ResolvedAuteurSkill[]
+): GeminiFunctionToolDeclaration {
+  const skillIds = availableSkills.map((skill) => skill.id);
+  return {
+    type: 'function',
+    name: 'load_auteur_skill',
+    description:
+      'Loads a specialized Pure Auteur Script craft skill from the Available Skill Directory on demand for this turn. Never call for skills already injected as active.',
+    parameters: sanitizeJsonSchemaForTool({
+      type: 'object',
+      properties: {
+        skillId: {
+          type: 'string',
+          enum: skillIds,
+          description:
+            'Exact skill ID from the Available Skill Directory to load into this turn.',
+        },
+      },
+      required: ['skillId'],
+    }) as Record<string, unknown>,
+  };
 }
 
 /**
- * Returns the Gemini Interactions API function tool declarations allowed for a mode.
+ * Builds function tool declarations for a composed turn context.
+ * Heavy Zod-derived schemas stay cached; `load_auteur_skill` is generated dynamically
+ * per turn from `context.availableSkills` (including custom user skills).
+ */
+export function buildToolDeclarationsForContext(
+  context: ComposedAgentContext
+): GeminiFunctionToolDeclaration[] {
+  const staticDecls = getStaticToolDeclarations();
+  const result: GeminiFunctionToolDeclaration[] = [];
+
+  for (const name of context.allowedToolNames) {
+    if (name === 'load_auteur_skill') {
+      if (context.availableSkills.length > 0) {
+        result.push(buildLoadAuteurSkillDeclaration(context.availableSkills));
+      }
+    } else {
+      result.push(staticDecls[name]);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Returns the function tool declarations allowed for a legacy AssistantMode.
  */
 export function getToolDeclarationsForMode(mode: AssistantMode): GeminiFunctionToolDeclaration[] {
-  const all = getAllToolDeclarations();
+  const all = getStaticToolDeclarations();
   return MODE_TOOL_NAMES[mode].map((name) => all[name]);
 }
 
@@ -852,13 +914,22 @@ function runInspectLensSlice(
     }
   }
 
-  const slice = sliceAuteurScript(rawText, specOrPreset, ruleOverrides);
+  const envelope = toAuteurEnvelope(rawText, ruleOverrides);
+  const resolvedSpec: LensSliceSpec =
+    typeof specOrPreset === 'string' ? AUDIT_LENS_PRESETS[specOrPreset] : specOrPreset;
+  const slice = sliceAuteurEnvelope(envelope, resolvedSpec);
+  const resolvedPreset = slice.preset;
+  const checklist = resolvedPreset
+    ? getLensAuditChecklist(resolvedPreset, slice.sceneTopology ?? envelope.derived.sceneTopology ?? 'empty')
+    : undefined;
+
   return {
     ok: true,
     toolName: 'inspect_lens_slice',
     result: {
       ok: true,
       slice,
+      ...(checklist ? {checklist} : {}),
     },
   };
 }
@@ -1166,28 +1237,127 @@ function runReportAuditReview(
   };
 }
 
+function runLoadAuteurSkill(
+  args: Record<string, unknown>,
+  context: ScriptToolContext
+): ScriptToolExecutionResult {
+  const resolvedSkills =
+    context.composedContext?.resolvedSkills ??
+    composeAgentContext({
+      focus: assistantModeToFocus(context.mode),
+      rawText: context.rawText,
+      ruleOverrides: context.ruleOverrides,
+    }).resolvedSkills;
+
+  const availableSkills = resolvedSkills
+    .filter((skill) => skill.status === 'available')
+    .map((skill) => skill.id);
+
+  const skillId = typeof args.skillId === 'string' ? args.skillId.trim() : '';
+  if (!skillId) {
+    return {
+      ok: false,
+      toolName: 'load_auteur_skill',
+      result: {
+        ok: false,
+        error: 'Missing required "skillId" argument.',
+        availableSkills,
+        repairHint:
+          availableSkills.length > 0
+            ? `Pass a valid skillId from availableSkills: ${availableSkills.join(', ')}.`
+            : 'No additional on-demand skills are available in this turn.',
+      },
+    };
+  }
+
+  const skill = resolvedSkills.find((item) => item.id === skillId);
+  if (!skill) {
+    return {
+      ok: false,
+      toolName: 'load_auteur_skill',
+      result: {
+        ok: false,
+        error: `Unknown skill "${skillId}".`,
+        availableSkills,
+        repairHint:
+          availableSkills.length > 0
+            ? `Choose one of the available skills: ${availableSkills.join(', ')}.`
+            : 'No additional on-demand skills are available in this turn.',
+      },
+    };
+  }
+
+  if (skill.status === 'muted') {
+    return {
+      ok: false,
+      toolName: 'load_auteur_skill',
+      result: {
+        ok: false,
+        error: 'Skill is muted by the user.',
+        skillId: skill.id,
+        availableSkills,
+      },
+    };
+  }
+
+  if (skill.status === 'active') {
+    return {
+      ok: true,
+      toolName: 'load_auteur_skill',
+      result: {
+        ok: true,
+        skillId: skill.id,
+        name: skill.name,
+        alreadyActive: true,
+        note: 'This skill is already active in your system instruction.',
+      },
+    };
+  }
+
+  context.onSkillLoaded?.({
+    id: skill.id,
+    name: skill.name,
+    source: 'tool',
+  });
+
+  return {
+    ok: true,
+    toolName: 'load_auteur_skill',
+    result: {
+      ok: true,
+      skillId: skill.id,
+      name: skill.name,
+      content: skill.body,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Public Mode-Scoped Tool Dispatcher
+// Public Mode- & Context-Scoped Tool Dispatcher
 // ---------------------------------------------------------------------------
 
 /**
- * Executes a single local read-only/staging tool call strictly scoped to `context.mode`.
+ * Executes a single local read-only/staging tool call strictly scoped to the turn's
+ * allowed tools (`context.allowedTools` / `context.composedContext` / `MODE_TOOL_NAMES[context.mode]`).
  * Never mutates `context.rawText`.
  */
 export function executeScriptToolCall(
   call: ToolCallInput,
   context: ScriptToolContext
 ): ScriptToolExecutionResult {
-  const allowedTools = MODE_TOOL_NAMES[context.mode];
+  const allowedTools =
+    context.allowedTools ?? context.composedContext?.allowedToolNames ?? MODE_TOOL_NAMES[context.mode];
+  const scopeLabel = context.composedContext ? `${context.composedContext.focus} focus` : `"${context.mode}" mode`;
+
   if (!allowedTools.includes(call.name as ScriptToolName)) {
     return {
       ok: false,
       toolName: call.name,
       result: {
         ok: false,
-        error: `Tool "${call.name}" is not available in "${context.mode}" mode.`,
+        error: `Tool "${call.name}" is not available in ${scopeLabel}.`,
         allowedTools,
-        repairHint: `Use only the tools available in "${context.mode}" mode: ${allowedTools.join(', ')}.`,
+        repairHint: `Use only the tools available in ${scopeLabel}: ${allowedTools.join(', ')}.`,
       },
     };
   }
@@ -1209,5 +1379,7 @@ export function executeScriptToolCall(
       return runProposeScriptDraft(args, context, nextId);
     case 'report_audit_review':
       return runReportAuditReview(args, context, nextId);
+    case 'load_auteur_skill':
+      return runLoadAuteurSkill(args, context);
   }
 }
