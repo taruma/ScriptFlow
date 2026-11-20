@@ -493,7 +493,7 @@ export default function App() {
   const beatCount = doc.execution?.beats.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-app text-text-main flex flex-col">
+    <div className="min-h-screen lg:h-dvh lg:overflow-hidden bg-app text-text-main flex flex-col">
       <TopSlateBar
         title={sceneTitle}
         onTitleChange={handleTitleChange}
@@ -528,19 +528,13 @@ export default function App() {
         onRedo={handleRedo}
       />
 
-      <div
-        className={
-          isAiOpen
-            ? 'flex flex-1 min-h-0 lg:h-[calc(100dvh-3rem)] lg:overflow-hidden'
-            : 'flex-1'
-        }
-      >
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row lg:overflow-hidden">
         <div
-          className={
-            isAiOpen
-              ? `flex-1 min-w-0 ${viewMode === 'source' ? 'lg:overflow-y-auto auteur-pane-scroll' : ''}`
-              : 'w-full'
-          }
+          className={`flex-1 min-w-0 min-h-0 lg:h-full ${
+            viewMode === 'source'
+              ? 'lg:overflow-y-auto auteur-pane-scroll'
+              : 'lg:overflow-hidden'
+          }`}
         >
           {viewMode === 'live' ? (
             <LiveDocument

@@ -63,6 +63,7 @@ import {
   DraftSuggestionCard,
   PatchSuggestionCard,
 } from './AiSuggestionCards.tsx';
+import {MarkdownContent} from './MarkdownContent.tsx';
 
 const AiSettingsModal = lazy(() =>
   import('./AiSettingsModal.tsx').then((mod) => ({
@@ -157,9 +158,7 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
         <div className="border-t border-border-subtle px-2.5 py-2 space-y-2">
           {showThinkingSummary ? (
             thoughtSummary.trim().length > 0 ? (
-              <p className="text-[11px] leading-relaxed text-text-muted whitespace-pre-wrap break-words">
-                {thoughtSummary}
-              </p>
+              <MarkdownContent content={thoughtSummary} compact />
             ) : isStreaming ? (
               <p className="text-[11px] italic text-text-faint">{UI_LABELS.ai.reasoningRunning}</p>
             ) : null
@@ -598,11 +597,11 @@ export function AiAssistantSidebar({
       <aside
         data-ai-sidebar="true"
         aria-label={UI_LABELS.ai.sidebarAria}
-        className="fixed inset-y-0 right-0 top-12 z-50 flex w-[min(100vw,420px)] flex-col border-l border-border-main bg-surface text-text-main shadow-2xl lg:static lg:top-auto lg:z-20 lg:h-full lg:w-auto lg:shadow-none shrink-0"
+        className="fixed inset-y-0 right-0 top-12 z-50 flex w-[min(100vw,420px)] flex-col overflow-hidden border-l border-border-main bg-surface text-text-main shadow-2xl lg:static lg:top-auto lg:z-20 lg:h-full lg:min-h-0 lg:w-auto lg:shadow-none shrink-0"
       >
         <div
           style={{width: `min(100vw, ${sidebarWidth}px)`}}
-          className="relative flex h-full w-full flex-col lg:max-w-[580px] lg:min-w-[340px]"
+          className="relative flex h-full min-h-0 w-full flex-col overflow-hidden lg:max-w-[580px] lg:min-w-[340px]"
         >
           {/* Desktop drag-to-resize left edge handle */}
           <div
@@ -747,7 +746,7 @@ export function AiAssistantSidebar({
           </div>
 
           {/* Scrollable Message Stream */}
-          <div className="flex-1 overflow-y-auto auteur-pane-scroll px-3 py-3 space-y-3 bg-app/50">
+          <div className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll px-3 py-3 space-y-3 bg-app/50">
             {!hasApiKey && (
               <div className="rounded-xl border border-border-main bg-surface p-3.5 space-y-2.5 shadow-2xs">
                 <div className="flex items-start gap-2.5">
@@ -827,8 +826,8 @@ export function AiAssistantSidebar({
                     />
 
                     {msg.text.trim().length > 0 && (
-                      <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5 text-xs leading-relaxed text-text-body whitespace-pre-wrap break-words shadow-2xs">
-                        {msg.text}
+                      <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5 shadow-2xs">
+                        <MarkdownContent content={msg.text} />
                       </div>
                     )}
 

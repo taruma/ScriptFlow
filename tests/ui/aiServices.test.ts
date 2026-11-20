@@ -11,6 +11,7 @@ import {
   resolveEditorJumpTarget,
   shouldShowSettingsLinkForError,
 } from '../../src/ui/aiAssistant.ts';
+import {parseMarkdownBlocks, parseMarkdownInline} from '../../src/ui/markdown.ts';
 import {
   AI_API_KEY_STORAGE_KEY,
   AI_SETTINGS_STORAGE_KEY,
@@ -1071,5 +1072,64 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
     expect(shouldShowSettingsLinkForError('model_not_found')).toBe(true);
     expect(shouldShowSettingsLinkForError('network_error')).toBe(false);
     expect(shouldShowSettingsLinkForError('aborted')).toBe(false);
+  });
+});
+
+describe('markdown parser for AI assistant replies', () => {
+  it('parses headings, loose ordered lists with nested bullets, code blocks, and inline spans', () => {
+    const sample = [
+      'A full 5-lens audit on snapshot `d1aed335` passed with **0 errors** and **0 warnings**.',
+      '',
+      '### 5-Lens Audit Breakdown',
+      '',
+      '1. **Lens 1: Spatial & Optics — Pass**',
+      '   - `sceneTopology` (`multi_camera_coverage`) is respected across `S1`.',
+      '   - Framing stays clean for *Ray*.',
+      '',
+      '2. **Lens 2: Temporal, Pacing & Wear — Pass**',
+      '   - `MB3` (`OPENING`) is properly frozen.',
+      '',
+      '```text',
+      '[CAM 01] MS, eye level',
+      '```',
+    ].join('\n');
+
+    const blocks = parseMarkdownBlocks(sample);
+    expect(blocks.map((b) => b.type)).toEqual(['paragraph', 'heading', 'list', 'code_block']);
+
+    const heading = blocks[1];
+    expect(heading.type === 'heading' && heading.level).toBe(3);
+
+    const list = blocks[2];
+    expect(list.type).toBe('list');
+    if (list.type === 'list') {
+      expect(list.ordered).toBe(true);
+      expect(list.items).toHaveLength(2);
+      expect(list.items[0].nestedLists).toHaveLength(1);
+      expect(list.items[0].nestedLists[0].ordered).toBe(false);
+      expect(list.items[0].nestedLists[0].items).toHaveLength(2);
+      expect(list.items[1].nestedLists[0].items).toHaveLength(1);
+    }
+
+    const codeBlock = blocks[3];
+    expect(codeBlock).toEqual({
+      type: 'code_block',
+      language: 'text',
+      code: '[CAM 01] MS, eye level',
+    });
+  });
+
+  it('preserves snake_case identifiers and blocks unsafe link protocols', () => {
+    const inline = parseMarkdownInline(
+      'Check multi_camera_coverage and [docs](https://example.com) and [bad](javascript:alert(1))'
+    );
+    expect(inline.some((n) => n.type === 'em')).toBe(false);
+    expect(inline.filter((n) => n.type === 'link')).toEqual([
+      {
+        type: 'link',
+        label: [{type: 'text', text: 'docs'}],
+        href: 'https://example.com',
+      },
+    ]);
   });
 });
