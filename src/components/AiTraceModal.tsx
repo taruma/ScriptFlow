@@ -236,6 +236,15 @@ function AiTraceModalContent({
 
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+                {labels.summaryFocus}
+              </span>
+              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-continuity">
+                {UI_LABELS.ai.focusLabels[trace.focus]}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
                 {labels.summaryDuration}
               </span>
               <span className="font-mono text-[11px] text-text-body tabular-nums">
@@ -296,6 +305,32 @@ function AiTraceModalContent({
                       className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums"
                     >
                       {entry.key}: <span className="text-text-main">{entry.value}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(trace.activeSkillIds.length > 0 || trace.loadedSkillIds.length > 0) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0">
+                  {labels.summarySkills}
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {trace.activeSkillIds.map((skillId) => (
+                    <span
+                      key={`active-${skillId}`}
+                      className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-aesthetic"
+                    >
+                      {labels.skillActivePrefix}: {skillId}
+                    </span>
+                  ))}
+                  {trace.loadedSkillIds.map((skillId) => (
+                    <span
+                      key={`loaded-${skillId}`}
+                      className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-logic"
+                    >
+                      {labels.skillLoadedPrefix}: {skillId}
                     </span>
                   ))}
                 </div>

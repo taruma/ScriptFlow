@@ -31,6 +31,12 @@ export interface AiToolCallItem {
   stagedSuggestionId?: string;
 }
 
+export interface AiLoadedSkillItem {
+  id: string;
+  name: string;
+  source: 'passive' | 'pinned' | 'tool';
+}
+
 export interface AiChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -39,6 +45,7 @@ export interface AiChatMessage {
   scopeLabel?: string;
   thoughtSummary?: string;
   toolCalls?: AiToolCallItem[];
+  loadedSkills?: AiLoadedSkillItem[];
   suggestions?: StagedSuggestion[];
   dismissedSuggestionIds?: string[];
   appliedSuggestionIds?: string[];
@@ -49,6 +56,30 @@ export interface AiChatMessage {
   trace?: AgentTurnTrace;
   isStreaming?: boolean;
   hitToolRoundLimit?: boolean;
+}
+
+/**
+ * Inserts or updates a loaded skill pill for an assistant turn, deduplicating by `id`
+ * so repeated `load_auteur_skill` calls never render duplicate pills.
+ */
+export function upsertLoadedSkill(
+  list: readonly AiLoadedSkillItem[],
+  item: AiLoadedSkillItem
+): AiLoadedSkillItem[] {
+  const index = list.findIndex((existing) => existing.id === item.id);
+  if (index === -1) {
+    return [...list, item];
+  }
+  const existing = list[index];
+  const nextSource: AiLoadedSkillItem['source'] =
+    existing.source === 'tool' || item.source === 'tool' ? 'tool' : item.source;
+  const nextName = item.name.trim() || existing.name;
+  if (existing.source === nextSource && existing.name === nextName) {
+    return [...list];
+  }
+  return list.map((entry, idx) =>
+    idx === index ? {id: existing.id, name: nextName, source: nextSource} : entry
+  );
 }
 
 export type EditorJumpTarget =
@@ -251,6 +282,8 @@ export function formatToolDisplayName(toolName: string): string {
       return 'Compile draft';
     case 'report_audit_review':
       return 'Stage audit review';
+    case 'load_auteur_skill':
+      return 'Load skill';
     default:
       return toolName;
   }

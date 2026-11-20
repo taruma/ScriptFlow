@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   KeyRound,
+  Layers,
   Loader2,
   RotateCcw,
   Settings2,
@@ -29,7 +30,8 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import {toAuteurEnvelope, type AuteurDocument, type LintRuleOverrides} from '../core/index.ts';
+import type {AuteurDocument, LintRuleOverrides} from '../core/index.ts';
+import {assistantModeToFocus, composeAgentContext} from '../services/auteurKnowledge.ts';
 import {
   GeminiServiceError,
   runGeminiAgentTurn,
@@ -50,7 +52,9 @@ import {
   isSuggestionStale,
   reconcileTargetScope,
   shouldShowSettingsLinkForError,
+  upsertLoadedSkill,
   type AiChatMessage,
+  type AiLoadedSkillItem,
   type AiToolCallItem,
   type AuditQuickCheckId,
 } from '../ui/aiAssistant.ts';
@@ -59,6 +63,7 @@ import {
   REASONING_LEVEL_OPTIONS,
   useAiSettings,
 } from '../ui/aiSettings.ts';
+import {useAiSkills} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import {
@@ -80,7 +85,15 @@ const AiTraceModal = lazy(() =>
   }))
 );
 
+const AiContextInspectorModal = lazy(() =>
+  import('./AiContextInspectorModal.tsx').then((mod) => ({
+    default: mod.AiContextInspectorModal,
+  }))
+);
+
 const ASSISTANT_MODES: readonly AssistantMode[] = ['refine', 'check', 'draft'];
+const EMPTY_TOOL_CALLS: readonly AiToolCallItem[] = [];
+const EMPTY_LOADED_SKILLS: readonly AiLoadedSkillItem[] = [];
 const MIN_SIDEBAR_WIDTH = 340;
 const MAX_SIDEBAR_WIDTH = 580;
 const DEFAULT_SIDEBAR_WIDTH = 410;
@@ -107,6 +120,7 @@ interface ReasoningAccordionProps {
   hasError: boolean;
   thoughtSummary: string;
   toolCalls: readonly AiToolCallItem[];
+  loadedSkills: readonly AiLoadedSkillItem[];
   trace?: AgentTurnTrace;
   onInspectTrace: (trace: AgentTurnTrace) => void;
 }
@@ -118,6 +132,7 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
   hasError,
   thoughtSummary,
   toolCalls,
+  loadedSkills,
   trace,
   onInspectTrace,
 }: ReasoningAccordionProps) {
@@ -134,7 +149,8 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
 
   const hasVisibleThought = showThinkingSummary && thoughtSummary.trim().length > 0;
   const hasTools = toolCalls.length > 0;
-  const hasAccordionContent = isStreaming || hasVisibleThought || hasTools;
+  const hasSkills = loadedSkills.length > 0;
+  const hasAccordionContent = isStreaming || hasVisibleThought || hasTools || hasSkills;
   const canInspect = showDebugTrace && !isStreaming && Boolean(trace);
   const showTraceOnlyBar = canInspect && !hasAccordionContent && !hasError;
 
@@ -163,8 +179,13 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
               <span className="truncate">
                 {isStreaming ? UI_LABELS.ai.reasoningRunning : UI_LABELS.ai.reasoningToggleLabel}
               </span>
+              {hasSkills && (
+                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums shrink-0">
+                  {UI_LABELS.ai.reasoningSkillCount(loadedSkills.length)}
+                </span>
+              )}
               {hasTools && (
-                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums">
+                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums shrink-0">
                   {UI_LABELS.ai.reasoningToolCount(toolCalls.length)}
                 </span>
               )}
@@ -205,11 +226,34 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
               <p className="text-[11px] italic text-text-faint">{UI_LABELS.ai.reasoningRunning}</p>
             ) : null
           ) : (
-            !hasTools && (
+            !hasTools &&
+            !hasSkills && (
               <p className="text-[11px] italic text-text-faint">
                 {UI_LABELS.ai.reasoningNoSummary}
               </p>
             )
+          )}
+
+          {hasSkills && (
+            <div className="flex flex-wrap gap-1.5">
+              {loadedSkills.map((skill) => (
+                <span
+                  key={skill.id}
+                  title={skill.id}
+                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${
+                    skill.source === 'tool'
+                      ? 'auteur-phase-logic'
+                      : skill.source === 'pinned'
+                        ? 'auteur-phase-continuity'
+                        : 'auteur-phase-aesthetic'
+                  }`}
+                >
+                  <Layers className="h-2.5 w-2.5 shrink-0 opacity-80" />
+                  <span>{skill.name}</span>
+                  <span className="opacity-70">· {UI_LABELS.ai.skillSources[skill.source]}</span>
+                </span>
+              ))}
+            </div>
           )}
 
           {hasTools && (
@@ -265,27 +309,64 @@ export function AiAssistantSidebar({
     clearStoredApiKey,
   } = useAiSettings();
 
+  const {
+    skillsState,
+    customizationCount,
+    hasUpstreamUpdate,
+    setFoundationalCraft,
+    setDraftWrapperTemplate,
+    setPinMode,
+    setBodyOverride,
+    resetSkill,
+    saveCustomSkill,
+    removeCustomSkill,
+    resetAll,
+    acknowledgeUpdate,
+  } = useAiSkills();
+
   const [mode, setMode] = useState<AssistantMode>('refine');
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>('whole');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
   const [inspectedTrace, setInspectedTrace] = useState<AgentTurnTrace | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
+  const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
 
   const previousInteractionIdRef = useRef<string | undefined>(undefined);
+  const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
 
-  // Derive current snapshot hash lazily inside sidebar so closed sidebar incurs zero hashing cost
-  const currentSnapshotHash = useMemo(
-    () => toAuteurEnvelope(rawText, ruleOverrides).snapshotHash,
-    [rawText, ruleOverrides]
+  // Compose live agent context lazily inside sidebar so closed sidebar incurs zero composition cost
+  const previewComposedContext = useMemo(
+    () =>
+      composeAgentContext({
+        focus: assistantModeToFocus(mode),
+        rawText,
+        ruleOverrides,
+        previousSnapshotHash: lastTurnSnapshotHash,
+        foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
+        skillOverrides: skillsState.skillOverrides,
+        customSkills: skillsState.customSkills,
+      }),
+    [
+      mode,
+      rawText,
+      ruleOverrides,
+      lastTurnSnapshotHash,
+      skillsState.foundationalCraftOverride,
+      skillsState.skillOverrides,
+      skillsState.customSkills,
+    ]
   );
+
+  const currentSnapshotHash = previewComposedContext.editorState.snapshotHash;
 
   // Target scope options for Refine mode
   const targetOptions = useMemo(
@@ -315,6 +396,8 @@ export function AiAssistantSidebar({
     setIsRunning(false);
     setInspectedTrace(null);
     previousInteractionIdRef.current = undefined;
+    lastTurnSnapshotHashRef.current = undefined;
+    setLastTurnSnapshotHash(undefined);
     setMessages([]);
   }, []);
 
@@ -415,6 +498,8 @@ export function AiAssistantSidebar({
         ...(scopeLabel ? {scopeLabel} : {}),
       };
 
+      const turnSnapshotHash = currentSnapshotHash;
+
       const initialAssistantMessage: AiChatMessage = {
         id: assistantMessageId,
         role: 'assistant',
@@ -422,6 +507,7 @@ export function AiAssistantSidebar({
         text: '',
         thoughtSummary: '',
         toolCalls: [],
+        loadedSkills: [],
         suggestions: [],
         dismissedSuggestionIds: [],
         appliedSuggestionIds: [],
@@ -445,6 +531,10 @@ export function AiAssistantSidebar({
           rawText,
           ruleOverrides,
           previousInteractionId: previousInteractionIdRef.current,
+          previousSnapshotHash: lastTurnSnapshotHashRef.current,
+          foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
+          skillOverrides: skillsState.skillOverrides,
+          customSkills: skillsState.customSkills,
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -497,6 +587,13 @@ export function AiAssistantSidebar({
                 ),
               }));
             },
+            onSkillLoaded: (skillEvent) => {
+              if (activeRunIdRef.current !== runId) return;
+              updateAssistantMessage(assistantMessageId, (msg) => ({
+                ...msg,
+                loadedSkills: upsertLoadedSkill(msg.loadedSkills ?? [], skillEvent),
+              }));
+            },
             onSuggestionStaged: (suggestion: StagedSuggestion) => {
               if (activeRunIdRef.current !== runId) return;
               updateAssistantMessage(assistantMessageId, (msg) => ({
@@ -512,6 +609,8 @@ export function AiAssistantSidebar({
         if (result.interactionId) {
           previousInteractionIdRef.current = result.interactionId;
         }
+        lastTurnSnapshotHashRef.current = turnSnapshotHash;
+        setLastTurnSnapshotHash(turnSnapshotHash);
 
         updateAssistantMessage(assistantMessageId, (msg) => ({
           ...msg,
@@ -560,11 +659,15 @@ export function AiAssistantSidebar({
       isRunning,
       hasApiKey,
       activeTarget,
+      currentSnapshotHash,
       settings.apiKey,
       settings.model,
       settings.reasoningLevel,
       rawText,
       ruleOverrides,
+      skillsState.foundationalCraftOverride,
+      skillsState.skillOverrides,
+      skillsState.customSkills,
       updateAssistantMessage,
     ]
   );
@@ -680,6 +783,35 @@ export function AiAssistantSidebar({
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsContextOpen(true)}
+                title={UI_LABELS.ai.contextButtonTitle}
+                aria-label={UI_LABELS.ai.contextButtonAria(
+                  previewComposedContext.activeSkills.length,
+                  customizationCount
+                )}
+                className={UI_TOKENS.ai.statusChip}
+              >
+                <Layers className="h-3 w-3 text-text-faint" />
+                <span>{UI_LABELS.ai.contextButton}</span>
+                {previewComposedContext.activeSkills.length > 0 && (
+                  <span className="font-mono text-[10px] text-text-faint tabular-nums">
+                    {previewComposedContext.activeSkills.length}
+                  </span>
+                )}
+                {(customizationCount > 0 || hasUpstreamUpdate) && (
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      hasUpstreamUpdate
+                        ? 'bg-amber-500'
+                        : 'bg-[var(--phase-continuity-text)]'
+                    }`}
+                  />
+                )}
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
@@ -882,7 +1014,8 @@ export function AiAssistantSidebar({
                       showDebugTrace={settings.showDebugTrace}
                       hasError={Boolean(msg.error)}
                       thoughtSummary={msg.thoughtSummary ?? ''}
-                      toolCalls={msg.toolCalls ?? []}
+                      toolCalls={msg.toolCalls ?? EMPTY_TOOL_CALLS}
+                      loadedSkills={msg.loadedSkills ?? EMPTY_LOADED_SKILLS}
                       trace={msg.trace}
                       onInspectTrace={handleInspectTrace}
                     />
@@ -1078,6 +1211,28 @@ export function AiAssistantSidebar({
             onSetApiKey={setApiKey}
             onSetSessionOnly={setSessionOnly}
             onClearApiKey={clearStoredApiKey}
+          />
+        </Suspense>
+      )}
+
+      {isContextOpen && (
+        <Suspense fallback={null}>
+          <AiContextInspectorModal
+            isOpen={isContextOpen}
+            onClose={() => setIsContextOpen(false)}
+            composedContext={previewComposedContext}
+            skillsState={skillsState}
+            customizationCount={customizationCount}
+            hasUpstreamUpdate={hasUpstreamUpdate}
+            onSetFoundationalCraft={setFoundationalCraft}
+            onSetDraftWrapperTemplate={setDraftWrapperTemplate}
+            onSetPinMode={setPinMode}
+            onSetBodyOverride={setBodyOverride}
+            onResetSkill={resetSkill}
+            onSaveCustomSkill={saveCustomSkill}
+            onDeleteCustomSkill={removeCustomSkill}
+            onResetAll={resetAll}
+            onAcknowledgeUpdate={acknowledgeUpdate}
           />
         </Suspense>
       )}
