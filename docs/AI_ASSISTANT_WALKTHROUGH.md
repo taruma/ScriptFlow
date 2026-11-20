@@ -56,7 +56,7 @@ You send a prompt (in Auto / Draft / Refine / Audit focus)
 Click **`AI`** in the top bar (`TopSlateBar`) to open the right-side AI Canvas sidebar. When closed, the AI module is lazy-loaded and incurs zero runtime or bundle overhead. On desktop, drag the sidebar's left border to resize between `340px` and `580px`.
 
 ### Configuring Your API Key & Model
-Click the **`Model · Level`** status chip in the sidebar header (or **Open AI Settings** on the setup card) to configure:
+Click the **`Model · Level`** status chip at the bottom-right of the sidebar composer dock (or **Open AI Settings** on the setup card) to configure:
 
 | Setting | Options & Default | Notes |
 |---|---|---|
@@ -71,7 +71,7 @@ Click the **`Model · Level`** status chip in the sidebar header (or **Open AI S
 
 ## 3. Unified Focus Bar (`Auto` · `Draft` · `Refine` · `Audit`)
 
-The sidebar runs **one continuous conversation thread** anchored by a 4-way **Focus** pill at the top. You do not need to switch modes after drafting and applying a scene.
+The sidebar runs **one continuous conversation thread** anchored by a 4-tab **Focus** bar directly below the resizable prompt box at the bottom of the sidebar. You do not need to switch modes after drafting and applying a scene.
 
 ### Focus Modes & Editor-State-Aware Tool Pruning
 
@@ -99,12 +99,12 @@ To prevent unnecessary token cost and accidental whole-script overwrites, the co
 
 ---
 
-## 4. Drafting with the Collapsible `Brief / Refs` Tray
+## 4. Resizable Prompt Box & Dedicated `Scene Brief & References` Modal
 
-At the bottom of the sidebar sits a clean single-box composer (`Enter` to send, `Shift+Enter` for a newline) paired with a collapsed-by-default **`Brief`** toggle pill.
+At the bottom of the sidebar sits a **resizable prompt box** (`Enter` to send, `Shift+Enter` for a newline) that auto-grows cleanly as you type and includes a top drag-resize handle (double-click to reset to auto-grow), with the 4-tab Focus bar, Target Scope selector, **`Brief`** button, and **`Model · Level`** settings chip neatly arranged underneath.
 
-### Expanding `Brief / Refs`
-Click **`Brief`** to reveal a structured drafting tray modeled for repeatable scene briefs and future multimodal attachments:
+### Editing `Scene Brief & References` (`AiBriefModal`)
+Click **`Brief`** at the bottom-left to open the dedicated **Scene Brief & References** modal (unobstructed by the prompt box and modeled for repeatable scene briefs and future multimodal attachments):
 
 1. **Cast & References (`+ Add ref`)**:
    - Adds structured reference rows with **Handle** (auto-increments `@image1`, `@image2`, ...; editable to `@video1`, `@audio1`, `@actor1`), **Subject / Label** (e.g., `Mark` or `Clip 1 terminal frame`), and optional **Note** (e.g., `voice: @audio1`).
@@ -112,9 +112,10 @@ Click **`Brief`** to reveal a structured drafting tray modeled for repeatable sc
    - **Multimodal-Ready Data Model:** Internally backed by `ReferenceEntry` (`kind: 'text' | 'image' | 'video' | 'audio'`) so future file uploads can attach directly to the same handles without changing the script grammar.
 2. **Format & Specs**: Concise production constraints (e.g., *"short sequence, continuous handheld oner, Robert has only one line, Japanese kissaten cafe"*).
 3. **Subtext & Context**: Background directorial intent not meant to be spoken verbatim as exposition.
-4. **Tray Actions**:
-   - **`Edit template`**: Opens the **Context & Skills** inspector directly on the **Craft & Template** tab to customize the **Draft Wrapper Template**.
+4. **Modal Actions**:
+   - **`Edit template`**: Closes the Brief modal and opens the **Context & Skills** inspector directly on the **Craft & Template** tab to customize the **Draft Wrapper Template**.
    - **`Clear`**: Clears all Brief fields and reference rows.
+   - **`Done`** (or `Esc`): Closes the modal while the **`Brief`** button retains a live badge (e.g., `Brief · 2 refs`) whenever brief content is active.
 
 ### How the Draft Wrapper Template Works
 On drafting turns (**`Focus = Draft`**, or **`Focus = Auto` on an empty script**), your message is formatted through the editable **Draft Wrapper Template** (default in `src/services/auteurKnowledge.ts`):

@@ -8,6 +8,7 @@ import {
 } from '../../src/services/auteurKnowledge.ts';
 import {
   buildBriefSummaryBadge,
+  clampComposerHeight,
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
   formatDraftBriefPrompt,
@@ -16,6 +17,8 @@ import {
   getBriefReferenceHandles,
   getNextReferenceHandle,
   hasDraftBriefContent,
+  MAX_COMPOSER_HEIGHT,
+  MIN_COMPOSER_HEIGHT,
   shouldApplyDraftWrapperTemplate,
   upsertLoadedSkill,
   type DraftBriefState,
@@ -445,6 +448,16 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
     });
 
     expect(serialized).not.toMatch(/\b(seedance|kling|sora|veo|runway|pika|luma|midjourney)\b/i);
+  });
+
+  it('clamps resized composer height safely within min/max and available sidebar height', () => {
+    expect(clampComposerHeight(10)).toBe(MIN_COMPOSER_HEIGHT);
+    expect(clampComposerHeight(999)).toBe(MAX_COMPOSER_HEIGHT);
+    expect(clampComposerHeight(140.4)).toBe(140);
+    expect(clampComposerHeight(Number.NaN)).toBe(MIN_COMPOSER_HEIGHT);
+    // Short sidebar caps height at 48% of available sidebar height while respecting MIN_COMPOSER_HEIGHT
+    expect(clampComposerHeight(300, 400)).toBe(192);
+    expect(clampComposerHeight(300, 100)).toBe(MIN_COMPOSER_HEIGHT);
   });
 });
 

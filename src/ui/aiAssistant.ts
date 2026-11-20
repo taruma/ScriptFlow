@@ -526,3 +526,21 @@ export function buildBriefSummaryBadge(brief: DraftBriefState): string | undefin
   return 'Brief';
 }
 
+export const MIN_COMPOSER_HEIGHT = 56;
+export const AUTO_GROW_MAX_COMPOSER_HEIGHT = 180;
+export const MAX_COMPOSER_HEIGHT = 360;
+
+/**
+ * Clamps a requested composer textarea height within safe minimum/maximum bounds,
+ * optionally constrained by the available sidebar height so the chat stream stays usable.
+ */
+export function clampComposerHeight(requestedHeight: number, sidebarHeight?: number): number {
+  const dynamicMax =
+    typeof sidebarHeight === 'number' && Number.isFinite(sidebarHeight) && sidebarHeight > 0
+      ? Math.max(MIN_COMPOSER_HEIGHT, Math.min(MAX_COMPOSER_HEIGHT, Math.floor(sidebarHeight * 0.48)))
+      : MAX_COMPOSER_HEIGHT;
+  const safeValue = Number.isFinite(requestedHeight) ? requestedHeight : MIN_COMPOSER_HEIGHT;
+  return Math.max(MIN_COMPOSER_HEIGHT, Math.min(dynamicMax, Math.round(safeValue)));
+}
+
+

@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -22,14 +23,12 @@ import {
   KeyRound,
   Layers,
   Loader2,
-  Plus,
   RotateCcw,
   Settings2,
   ShieldAlert,
   Sparkles,
   Square,
   Terminal,
-  Trash2,
   Wrench,
   X,
 } from 'lucide-react';
@@ -47,10 +46,12 @@ import type {
 } from '../services/scriptTools.ts';
 import {
   AUDIT_QUICK_CHECKS,
+  AUTO_GROW_MAX_COMPOSER_HEIGHT,
   buildAiTargetOptions,
   buildAuditQuickPrompt,
   buildBriefSummaryBadge,
   buildScopedRefinePrompt,
+  clampComposerHeight,
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
   formatDraftBriefPrompt,
@@ -59,6 +60,7 @@ import {
   getNextReferenceHandle,
   hasDraftBriefContent,
   isSuggestionStale,
+  MIN_COMPOSER_HEIGHT,
   reconcileTargetScope,
   shouldApplyDraftWrapperTemplate,
   shouldShowSettingsLinkForError,
@@ -101,6 +103,12 @@ const AiTraceModal = lazy(() =>
 const AiContextInspectorModal = lazy(() =>
   import('./AiContextInspectorModal.tsx').then((mod) => ({
     default: mod.AiContextInspectorModal,
+  }))
+);
+
+const AiBriefModal = lazy(() =>
+  import('./AiBriefModal.tsx').then((mod) => ({
+    default: mod.AiBriefModal,
   }))
 );
 
@@ -350,12 +358,14 @@ export function AiAssistantSidebar({
   const [contextInitialTab, setContextInitialTab] = useState<ContextInspectorTabId>('preview');
   const [inspectedTrace, setInspectedTrace] = useState<AgentTurnTrace | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
+  const [manualComposerHeight, setManualComposerHeight] = useState<number | null>(null);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
 
   const previousInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
+  const sidebarRef = useRef<HTMLElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
@@ -456,6 +466,19 @@ export function AiAssistantSidebar({
     setBrief(EMPTY_DRAFT_BRIEF);
   }, []);
 
+  const handleUpdateBriefSpecs = useCallback((specs: string) => {
+    setBrief((prev) => ({...prev, specs}));
+  }, []);
+
+  const handleUpdateBriefSubtext = useCallback((subtext: string) => {
+    setBrief((prev) => ({...prev, subtext}));
+  }, []);
+
+  const handleEditBriefTemplate = useCallback(() => {
+    setIsBriefOpen(false);
+    handleOpenContext('craft');
+  }, [handleOpenContext]);
+
   const handleStopRun = useCallback(() => {
     abortControllerRef.current?.abort();
   }, []);
@@ -501,7 +524,23 @@ export function AiAssistantSidebar({
     threadEndRef.current?.scrollIntoView({behavior: 'smooth', block: 'end'});
   }, [messages.length, isRunning]);
 
-  // Subtle desktop drag-to-resize handler
+  // Auto-grow composer textarea smoothly unless the user manually dragged its height
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    if (manualComposerHeight !== null) {
+      textarea.style.height = `${manualComposerHeight}px`;
+      return;
+    }
+    textarea.style.height = 'auto';
+    const nextHeight = Math.max(
+      MIN_COMPOSER_HEIGHT,
+      Math.min(AUTO_GROW_MAX_COMPOSER_HEIGHT, textarea.scrollHeight)
+    );
+    textarea.style.height = `${nextHeight}px`;
+  }, [inputValue, manualComposerHeight, sidebarWidth]);
+
+  // Subtle desktop drag-to-resize left edge handler
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -526,6 +565,34 @@ export function AiAssistantSidebar({
       window.addEventListener('pointerup', handlePointerUp);
     },
     [sidebarWidth]
+  );
+
+  // Vertical drag-to-resize top handle for the composer prompt box
+  const handleComposerResizePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const startY = event.clientY;
+      const startHeight =
+        manualComposerHeight ?? composerRef.current?.offsetHeight ?? MIN_COMPOSER_HEIGHT;
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const delta = startY - moveEvent.clientY;
+        const nextHeight = clampComposerHeight(
+          startHeight + delta,
+          sidebarRef.current?.clientHeight
+        );
+        setManualComposerHeight(nextHeight);
+      };
+
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+      };
+
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+    },
+    [manualComposerHeight]
   );
 
   const updateAssistantMessage = useCallback(
@@ -862,6 +929,7 @@ export function AiAssistantSidebar({
       />
 
       <aside
+        ref={sidebarRef}
         data-ai-sidebar="true"
         aria-label={UI_LABELS.ai.sidebarAria}
         style={{'--ai-sidebar-width': `${sidebarWidth}px`} as CSSProperties}
@@ -918,28 +986,6 @@ export function AiAssistantSidebar({
 
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                title={UI_LABELS.ai.settingsChipTitle}
-                aria-label={UI_LABELS.ai.settingsChipAria(
-                  modelOption.shortLabel,
-                  reasoningOption.label
-                )}
-                className={UI_TOKENS.ai.statusChip}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    hasApiKey ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
-                />
-                <span>
-                  {modelOption.shortLabel} · {reasoningOption.label}
-                </span>
-                <Settings2 className="h-3 w-3 text-text-faint" />
-              </button>
-
-              <button
-                type="button"
                 onClick={handleResetChat}
                 disabled={messages.length === 0 && !isRunning}
                 title={UI_LABELS.ai.newChatTitle}
@@ -958,96 +1004,6 @@ export function AiAssistantSidebar({
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-          </div>
-
-          {/* Unified Focus Bar + Contextual Controls */}
-          <div className="border-b border-border-subtle bg-surface px-3 py-2.5 space-y-2 shrink-0">
-            <div
-              role="group"
-              aria-label={UI_LABELS.ai.focusAria}
-              className={`${UI_TOKENS.button.segmentedGroup} grid grid-cols-4 w-full`}
-            >
-              {ASSISTANT_FOCUSES.map((item) => {
-                const active = focus === item;
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setFocus(item)}
-                    className={`${
-                      active
-                        ? UI_TOKENS.button.segmentedItemActive
-                        : UI_TOKENS.button.segmentedItem
-                    } justify-center`}
-                  >
-                    <span>{UI_LABELS.ai.focusLabels[item]}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {!isEmpty && (focus === 'auto' || focus === 'refine') && (
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor="auteur-ai-target-scope"
-                  className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0"
-                >
-                  {UI_LABELS.ai.refineTargetLabel}
-                </label>
-                <select
-                  id="auteur-ai-target-scope"
-                  aria-label={UI_LABELS.ai.refineTargetAria}
-                  value={activeTarget.key}
-                  onChange={(e) => setSelectedTargetKey(e.target.value)}
-                  className="min-w-0 flex-1 truncate rounded-lg border border-border-main bg-surface-subtle px-2 py-1 font-mono text-[11px] text-text-body focus:outline-none focus:ring-1 focus:ring-border-main cursor-pointer"
-                >
-                  {targetOptions.map((opt) => (
-                    <option key={opt.key} value={opt.key}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                {focus === 'auto' && (
-                  <button
-                    type="button"
-                    disabled={isRunning}
-                    onClick={() => handleQuickAudit('all')}
-                    title={UI_LABELS.ai.quickAuditAllTitle}
-                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-1 px-2`}
-                  >
-                    <ShieldAlert className="h-3 w-3 text-text-faint" />
-                    <span>{UI_LABELS.ai.quickAuditAllButton}</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {focus === 'audit' && (
-              <div
-                role="group"
-                aria-label={UI_LABELS.ai.auditQuickGroupAria}
-                className="flex flex-wrap gap-1"
-              >
-                {AUDIT_QUICK_CHECKS.map((check) => {
-                  const label =
-                    check.id === 'all'
-                      ? UI_LABELS.ai.auditQuickAll
-                      : UI_LABELS.ai.auditQuickLensShort[check.id];
-                  return (
-                    <button
-                      key={check.id}
-                      type="button"
-                      disabled={isRunning}
-                      onClick={() => handleQuickAudit(check.id)}
-                      className={`${UI_TOKENS.ai.pillButton} text-[10px] py-0.5 px-2`}
-                    >
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           {/* Scrollable Message Stream */}
@@ -1276,160 +1232,25 @@ export function AiAssistantSidebar({
             <div ref={threadEndRef} />
           </div>
 
-          {/* Collapsible Brief / Refs Tray */}
-          {isBriefOpen && (
-            <section
-              aria-label={UI_LABELS.ai.briefTray.regionAria}
-              className="border-t border-border-main bg-surface-subtle/70 px-3 py-2.5 max-h-60 overflow-y-auto auteur-pane-scroll shrink-0 space-y-2.5"
+          {/* Bottom Composer Dock (Resizable Prompt + Focus / Scope / Brief / Model Controls) */}
+          <div className="relative border-t border-border-main bg-surface px-3 pb-2.5 pt-2 shrink-0 space-y-2">
+            {/* Drag-to-resize top handle for the prompt box */}
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={UI_LABELS.ai.composerResizeAria}
+              title={UI_LABELS.ai.composerResizeTitle}
+              onPointerDown={handleComposerResizePointerDown}
+              onDoubleClick={() => setManualComposerHeight(null)}
+              className="group absolute -top-1.5 inset-x-0 h-3 flex items-center justify-center cursor-row-resize z-10 select-none"
             >
-              {/* Cast & References */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                    {UI_LABELS.ai.briefTray.refsHeading}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddReference}
-                    aria-label={UI_LABELS.ai.briefTray.addRefAria}
-                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-0.5 px-2`}
-                  >
-                    <Plus className="h-2.5 w-2.5" />
-                    <span>{UI_LABELS.ai.briefTray.addRefButton}</span>
-                  </button>
-                </div>
+              <span
+                aria-hidden="true"
+                className="h-1 w-9 rounded-full bg-border-main/90 group-hover:bg-text-faint/70 transition-colors"
+              />
+            </div>
 
-                {brief.references.length === 0 ? (
-                  <p className="text-[11px] text-text-faint leading-snug">
-                    {UI_LABELS.ai.briefTray.emptyRefsHint}
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {brief.references.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="rounded-lg border border-border-subtle bg-surface p-1.5 space-y-1"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            data-native-undo="true"
-                            value={entry.handle}
-                            onChange={(event) =>
-                              handleUpdateReference(entry.id, {handle: event.target.value})
-                            }
-                            placeholder={UI_LABELS.ai.briefTray.handlePlaceholder}
-                            aria-label={UI_LABELS.ai.briefTray.handleAria}
-                            className="w-24 shrink-0 rounded-md border border-border-main bg-surface-subtle px-2 py-1 font-mono text-[11px] text-text-main placeholder-text-placeholder focus:bg-surface focus:outline-none focus:ring-1 focus:ring-border-main"
-                          />
-                          <input
-                            type="text"
-                            data-native-undo="true"
-                            value={entry.label}
-                            onChange={(event) =>
-                              handleUpdateReference(entry.id, {label: event.target.value})
-                            }
-                            placeholder={UI_LABELS.ai.briefTray.labelPlaceholder}
-                            aria-label={UI_LABELS.ai.briefTray.labelAria}
-                            className="min-w-0 flex-1 rounded-md border border-border-main bg-surface-subtle px-2 py-1 text-[11px] text-text-main placeholder-text-placeholder focus:bg-surface focus:outline-none focus:ring-1 focus:ring-border-main"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveReference(entry.id)}
-                            aria-label={UI_LABELS.ai.briefTray.removeRefAria}
-                            className="p-1 rounded-md text-text-faint hover:text-red-600 dark:hover:text-red-400 hover:bg-surface-subtle transition-colors cursor-pointer shrink-0"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          data-native-undo="true"
-                          value={entry.note ?? ''}
-                          onChange={(event) =>
-                            handleUpdateReference(entry.id, {note: event.target.value})
-                          }
-                          placeholder={UI_LABELS.ai.briefTray.notePlaceholder}
-                          aria-label={UI_LABELS.ai.briefTray.noteAria}
-                          className="w-full rounded-md border border-border-subtle bg-surface-subtle px-2 py-1 text-[11px] text-text-body placeholder-text-placeholder focus:bg-surface focus:border-border-main focus:outline-none"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Format & Specs */}
-              <div className="space-y-1">
-                <label
-                  htmlFor="auteur-ai-brief-specs"
-                  className="block text-[10px] font-semibold uppercase tracking-wider text-text-faint"
-                >
-                  {UI_LABELS.ai.briefTray.specsLabel}
-                </label>
-                <textarea
-                  id="auteur-ai-brief-specs"
-                  rows={2}
-                  data-native-undo="true"
-                  value={brief.specs}
-                  onChange={(event) =>
-                    setBrief((prev) => ({...prev, specs: event.target.value}))
-                  }
-                  placeholder={UI_LABELS.ai.briefTray.specsPlaceholder}
-                  aria-label={UI_LABELS.ai.briefTray.specsAria}
-                  className="w-full resize-none rounded-lg border border-border-main bg-surface px-2.5 py-1.5 text-[11px] leading-snug text-text-main placeholder-text-placeholder focus:outline-none focus:ring-1 focus:ring-border-main auteur-pane-scroll"
-                />
-              </div>
-
-              {/* Subtext & Context */}
-              <div className="space-y-1">
-                <label
-                  htmlFor="auteur-ai-brief-subtext"
-                  className="block text-[10px] font-semibold uppercase tracking-wider text-text-faint"
-                >
-                  {UI_LABELS.ai.briefTray.subtextLabel}
-                </label>
-                <textarea
-                  id="auteur-ai-brief-subtext"
-                  rows={2}
-                  data-native-undo="true"
-                  value={brief.subtext}
-                  onChange={(event) =>
-                    setBrief((prev) => ({...prev, subtext: event.target.value}))
-                  }
-                  placeholder={UI_LABELS.ai.briefTray.subtextPlaceholder}
-                  aria-label={UI_LABELS.ai.briefTray.subtextAria}
-                  className="w-full resize-none rounded-lg border border-border-main bg-surface px-2.5 py-1.5 text-[11px] leading-snug text-text-main placeholder-text-placeholder focus:outline-none focus:ring-1 focus:ring-border-main auteur-pane-scroll"
-                />
-              </div>
-
-              {/* Brief Tray Footer */}
-              <div className="flex items-center justify-between gap-2 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => handleOpenContext('craft')}
-                  title={UI_LABELS.ai.briefTray.editTemplateTitle}
-                  className="text-[11px] font-medium text-text-muted hover:text-text-main underline underline-offset-2 transition-colors cursor-pointer"
-                >
-                  {UI_LABELS.ai.briefTray.editTemplateButton}
-                </button>
-
-                {briefHasContent && (
-                  <button
-                    type="button"
-                    onClick={handleClearBrief}
-                    aria-label={UI_LABELS.ai.briefTray.clearAria}
-                    className="text-[11px] font-medium text-text-faint hover:text-text-main transition-colors cursor-pointer"
-                  >
-                    {UI_LABELS.ai.briefTray.clearButton}
-                  </button>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Composer Footer */}
-          <div className="border-t border-border-main bg-surface p-3 shrink-0 space-y-1.5">
+            {/* Resizable Prompt Box */}
             <div className="flex items-end gap-2 rounded-xl border border-border-main bg-surface-subtle px-2.5 py-2 focus-within:bg-surface focus-within:ring-1 focus-within:ring-border-main transition-colors">
               <textarea
                 ref={composerRef}
@@ -1440,7 +1261,7 @@ export function AiAssistantSidebar({
                 onKeyDown={handleComposerKeyDown}
                 placeholder={focusMeta.placeholder}
                 aria-label={UI_LABELS.ai.composerAria}
-                className="max-h-36 min-h-[42px] flex-1 resize-none bg-transparent text-xs leading-relaxed text-text-main placeholder-text-placeholder outline-none auteur-pane-scroll"
+                className="min-h-[56px] flex-1 resize-none overflow-y-auto bg-transparent text-xs leading-relaxed text-text-main placeholder-text-placeholder outline-none auteur-pane-scroll"
               />
 
               {isRunning ? (
@@ -1460,7 +1281,7 @@ export function AiAssistantSidebar({
                   disabled={inputValue.trim().length === 0}
                   onClick={handleComposerSend}
                   aria-label={UI_LABELS.ai.sendAria}
-                  title={UI_LABELS.ai.sendButton}
+                  title={`${UI_LABELS.ai.sendButton} (${UI_LABELS.ai.composerHint})`}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-btn-primary-bg text-btn-primary-text hover:bg-btn-primary-hover transition-colors disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer shrink-0"
                 >
                   <ArrowUp className="h-3.5 w-3.5" />
@@ -1468,30 +1289,157 @@ export function AiAssistantSidebar({
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-2 px-0.5 text-[10px] text-text-faint">
-              <div className="flex items-center gap-2 min-w-0">
-                <button
-                  type="button"
-                  aria-expanded={isBriefOpen}
-                  aria-label={UI_LABELS.ai.briefToggleAria(isBriefOpen, briefHasContent)}
-                  title={UI_LABELS.ai.briefToggleTitle}
-                  onClick={() => setIsBriefOpen((prev) => !prev)}
-                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-medium text-[10px] transition-colors cursor-pointer shrink-0 ${
-                    isBriefOpen || briefHasContent
-                      ? 'auteur-phase-aesthetic'
-                      : 'border-border-subtle bg-surface-subtle text-text-muted hover:text-text-main hover:border-border-main'
-                  }`}
+            {/* 4-Tab Focus Bar (Auto | Draft | Refine | Audit) */}
+            <div
+              role="group"
+              aria-label={UI_LABELS.ai.focusAria}
+              className={`${UI_TOKENS.button.segmentedGroup} grid grid-cols-4 w-full`}
+            >
+              {ASSISTANT_FOCUSES.map((item) => {
+                const active = focus === item;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFocus(item)}
+                    className={`${
+                      active
+                        ? UI_TOKENS.button.segmentedItemActive
+                        : UI_TOKENS.button.segmentedItem
+                    } justify-center`}
+                  >
+                    <span>{UI_LABELS.ai.focusLabels[item]}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Contextual Scope / Quick Audit Controls */}
+            {!isEmpty && (focus === 'auto' || focus === 'refine') && (
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="auteur-ai-target-scope"
+                  className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0"
                 >
-                  <FileText className="h-2.5 w-2.5" />
-                  <span>{briefSummaryLabel ?? UI_LABELS.ai.briefToggle}</span>
-                </button>
-                <span className="truncate">{UI_LABELS.ai.composerHint}</span>
+                  {UI_LABELS.ai.refineTargetLabel}
+                </label>
+                <select
+                  id="auteur-ai-target-scope"
+                  aria-label={UI_LABELS.ai.refineTargetAria}
+                  value={activeTarget.key}
+                  onChange={(e) => setSelectedTargetKey(e.target.value)}
+                  className="min-w-0 flex-1 truncate rounded-lg border border-border-main bg-surface-subtle px-2 py-1 font-mono text-[11px] text-text-body focus:outline-none focus:ring-1 focus:ring-border-main cursor-pointer"
+                >
+                  {targetOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {focus === 'auto' && (
+                  <button
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => handleQuickAudit('all')}
+                    title={UI_LABELS.ai.quickAuditAllTitle}
+                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-1 px-2`}
+                  >
+                    <ShieldAlert className="h-3 w-3 text-text-faint" />
+                    <span>{UI_LABELS.ai.quickAuditAllButton}</span>
+                  </button>
+                )}
               </div>
-              <span className="font-mono shrink-0">{UI_LABELS.ai.focusLabels[focus]}</span>
+            )}
+
+            {focus === 'audit' && (
+              <div
+                role="group"
+                aria-label={UI_LABELS.ai.auditQuickGroupAria}
+                className="flex flex-wrap gap-1"
+              >
+                {AUDIT_QUICK_CHECKS.map((check) => {
+                  const label =
+                    check.id === 'all'
+                      ? UI_LABELS.ai.auditQuickAll
+                      : UI_LABELS.ai.auditQuickLensShort[check.id];
+                  return (
+                    <button
+                      key={check.id}
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => handleQuickAudit(check.id)}
+                      className={`${UI_TOKENS.ai.pillButton} text-[10px] py-0.5 px-2`}
+                    >
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Bottom Utility Row: Brief Modal Trigger + Model Settings Chip */}
+            <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border-subtle">
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={isBriefOpen}
+                aria-label={UI_LABELS.ai.briefToggleAria(isBriefOpen, briefHasContent)}
+                title={UI_LABELS.ai.briefToggleTitle}
+                onClick={() => setIsBriefOpen(true)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors cursor-pointer shrink-0 ${
+                  isBriefOpen || briefHasContent
+                    ? 'auteur-phase-aesthetic'
+                    : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
+                }`}
+              >
+                <FileText className="h-3 w-3" />
+                <span>{briefSummaryLabel ?? UI_LABELS.ai.briefToggle}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                title={UI_LABELS.ai.settingsChipTitle}
+                aria-label={UI_LABELS.ai.settingsChipAria(
+                  modelOption.shortLabel,
+                  reasoningOption.label
+                )}
+                className={`${UI_TOKENS.ai.statusChip} min-w-0`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    hasApiKey ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+                <span className="truncate">
+                  {modelOption.shortLabel} · {reasoningOption.label}
+                </span>
+                <Settings2 className="h-3 w-3 shrink-0 text-text-faint" />
+              </button>
             </div>
           </div>
         </div>
       </aside>
+
+      {isBriefOpen && (
+        <Suspense fallback={null}>
+          <AiBriefModal
+            isOpen={isBriefOpen}
+            brief={brief}
+            briefHasContent={briefHasContent}
+            onClose={() => setIsBriefOpen(false)}
+            onAddReference={handleAddReference}
+            onUpdateReference={handleUpdateReference}
+            onRemoveReference={handleRemoveReference}
+            onUpdateSpecs={handleUpdateBriefSpecs}
+            onUpdateSubtext={handleUpdateBriefSubtext}
+            onClearBrief={handleClearBrief}
+            onEditTemplate={handleEditBriefTemplate}
+          />
+        </Suspense>
+      )}
 
       {isSettingsOpen && (
         <Suspense fallback={null}>

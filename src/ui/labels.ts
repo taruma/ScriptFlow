@@ -504,7 +504,7 @@ export const UI_LABELS = {
           'Ask for camera tightening, sharper blocking, dialogue polish, or lookbook updates. Edits are staged with a diff before applying.',
       },
       audit: {
-        placeholder: 'Ask for a custom Script Supervisor check or click a lens above...',
+        placeholder: 'Ask for a custom Script Supervisor check or click a lens below...',
         emptyTitle: 'Script Supervisor audit',
         emptyDesc:
           'Run a full 5-lens audit or focus on a single lens to surface clickable issues and dry-run fixes.',
@@ -526,7 +526,7 @@ export const UI_LABELS = {
       },
       check: {
         label: 'Check',
-        placeholder: 'Ask for a custom Script Supervisor check or click a lens above...',
+        placeholder: 'Ask for a custom Script Supervisor check or click a lens below...',
         emptyTitle: 'Script Supervisor audit',
         emptyDesc:
           'Run a full 5-lens audit or focus on a single lens to surface clickable issues and dry-run fixes.',
@@ -554,10 +554,15 @@ export const UI_LABELS = {
       lens5_blocks_grammar: 'Lens 5 · Grammar',
     } as const,
     briefToggle: 'Brief',
-    briefToggleTitle: 'Toggle collapsible Brief & References tray for structured drafting',
+    briefToggleTitle: 'Open Scene Brief & References for structured drafting',
     briefToggleAria: (isOpen: boolean, hasContent: boolean) =>
-      `${isOpen ? 'Hide' : 'Show'} Brief & References tray${hasContent ? ' (populated)' : ''}`,
+      `${isOpen ? 'Close' : 'Open'} Scene Brief & References${hasContent ? ' (populated)' : ''}`,
     briefTray: {
+      dialogAria: 'Scene Brief & References',
+      title: 'Scene Brief & References',
+      subtitle: 'Optional cast handles, format specs, and subtext applied on drafting turns.',
+      closeAria: 'Close Scene Brief & References',
+      doneButton: 'Done',
       regionAria: 'Scene brief and references',
       refsHeading: 'Cast & References',
       addRefButton: 'Add ref',
@@ -586,6 +591,8 @@ export const UI_LABELS = {
       'Your key is stored only in this browser and sent directly to the Gemini API. Nothing is routed through a third-party server.',
     missingKeyCta: 'Open AI Settings',
     composerAria: 'Message the AI Script Assistant',
+    composerResizeAria: 'Resize prompt box height',
+    composerResizeTitle: 'Drag to resize prompt box · double-click to reset',
     sendButton: 'Send',
     sendAria: 'Send message',
     stopButton: 'Stop',
