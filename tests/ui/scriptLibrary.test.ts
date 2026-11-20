@@ -91,8 +91,11 @@ describe('File-Based Bundled Example Catalog (src/data/examples/)', () => {
     expect(BUNDLED_EXAMPLES).toHaveLength(4);
     expect(SCRIPT_PRESETS).toHaveLength(4);
     expect(DEFAULT_PRESET).toEqual(SCRIPT_PRESETS[0]);
-    expect(BLANK_SCRIPT_TEMPLATE).toContain('[INTENT]');
-    expect(BLANK_SCRIPT_TEMPLATE).toContain('[EXECUTION]');
+    expect(BLANK_SCRIPT_TEMPLATE).toBe('');
+    const blankDoc = parseAuteurScript(BLANK_SCRIPT_TEMPLATE);
+    expect(blankDoc.stagingBlocks).toHaveLength(0);
+    expect(blankDoc.execution).toBeNull();
+    expect(lintDocument(blankDoc, extractMetadata(blankDoc))).toEqual([]);
 
     expect(SCRIPT_PRESETS.map((p) => p.id)).toEqual([
       'interrogation-coverage',

@@ -13,6 +13,14 @@ export function readSavedScript(): string | null {
   }
 }
 
+export function readSavedScriptRaw(): string | null {
+  try {
+    return window.localStorage.getItem(SCRIPT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function writeSavedScript(rawText: string): void {
   try {
     window.localStorage.setItem(SCRIPT_STORAGE_KEY, rawText);

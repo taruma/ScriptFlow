@@ -48,6 +48,7 @@ import {
   mirrorActiveScriptToLocalStorage,
   readActiveScriptId,
   readSavedScript,
+  readSavedScriptRaw,
   readSavedTitle,
 } from './scriptStorage.ts';
 
@@ -71,8 +72,8 @@ function resolveInitialEditorState(): InitialEditorState {
       };
     }
 
-    const savedScript = readSavedScript();
-    if (savedScript) {
+    const savedScript = readSavedScriptRaw();
+    if (savedScript !== null) {
       return {
         activeScript: {kind: 'custom', id: savedActiveId},
         rawText: savedScript,

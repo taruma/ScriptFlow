@@ -160,7 +160,8 @@ export const UI_LABELS = {
     phase1Title: 'Phase 1 — Staging',
     phase2Title: 'Phase 2 — Execution',
     stagingBlockCount: (count: number) => `S0 · ${count} ${count === 1 ? 'block' : 'blocks'}`,
-    noStagingBlocks: 'No staging blocks in this script yet. Switch to Source to add [INTENT], [LOGIC], [AESTHETIC], or [OPENING].',
+    noStagingBlocks:
+      'No staging blocks yet. Add a macro-block below, paste a script, or draft with AI.',
     expandAll: 'Expand all',
     collapseAll: 'Collapse all',
     noBeatsYet: 'No beats yet',
