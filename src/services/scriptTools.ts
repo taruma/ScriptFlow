@@ -306,26 +306,79 @@ const UNSUPPORTED_TOOL_SCHEMA_KEYS = new Set([
   'maxContains',
 ]);
 
-function sanitizeJsonSchemaForTool(value: unknown): unknown {
+function hasRefReference(value: unknown): boolean {
   if (Array.isArray(value)) {
-    return value.map(sanitizeJsonSchemaForTool);
+    return value.some(hasRefReference);
   }
   if (!value || typeof value !== 'object') {
-    return value;
+    return false;
+  }
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (key === '$ref' && typeof entry === 'string') {
+      return true;
+    }
+    if (hasRefReference(entry)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function sanitizeJsonSchemaForTool(value: unknown): unknown {
+  const hoistedDefs: Record<string, unknown> = {};
+
+  const walk = (node: unknown): unknown => {
+    if (Array.isArray(node)) {
+      return node.map(walk);
+    }
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+
+    const record = node as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    const hasConst = Object.prototype.hasOwnProperty.call(record, 'const');
+
+    for (const [key, entry] of Object.entries(record)) {
+      if (UNSUPPORTED_TOOL_SCHEMA_KEYS.has(key)) continue;
+      if (key === 'const') continue;
+      if (key === '$defs') {
+        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          for (const [defKey, defValue] of Object.entries(entry as Record<string, unknown>)) {
+            hoistedDefs[defKey] = walk(defValue);
+          }
+        }
+        continue;
+      }
+      result[key] = walk(entry);
+    }
+
+    if (hasConst) {
+      const constVal = record.const;
+      result.type = constVal === null ? 'null' : typeof constVal;
+      result.enum = [constVal];
+    }
+
+    return result;
+  };
+
+  const sanitized = walk(value);
+  if (
+    sanitized &&
+    typeof sanitized === 'object' &&
+    !Array.isArray(sanitized) &&
+    Object.keys(hoistedDefs).length > 0 &&
+    hasRefReference(sanitized)
+  ) {
+    (sanitized as Record<string, unknown>).$defs = hoistedDefs;
   }
 
-  const result: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (UNSUPPORTED_TOOL_SCHEMA_KEYS.has(key)) continue;
-    result[key] = sanitizeJsonSchemaForTool(entry);
-  }
-  return result;
+  return sanitized;
 }
 
 function buildToolDeclarationsMap(): Record<ScriptToolName, GeminiFunctionToolDeclaration> {
   const schemas = getAuteurJsonSchemas();
   const patchSchema = sanitizeJsonSchemaForTool(schemas.patch) as Record<string, unknown>;
-  const draftSchema = sanitizeJsonSchemaForTool(schemas.draft) as Record<string, unknown>;
   const reviewSchema = sanitizeJsonSchemaForTool(schemas.review) as Record<string, unknown>;
   const lensPresetIds = Object.keys(AUDIT_LENS_PRESETS) as AuteurLensPresetId[];
 
@@ -408,7 +461,7 @@ function buildToolDeclarationsMap(): Record<ScriptToolName, GeminiFunctionToolDe
       name: 'propose_script_draft',
       description:
         'Validates and compiles a full AuteurScriptDraft JSON into canonical v0.4.0 plain text and stages a reviewable DraftSuggestion without overwriting the editor.',
-      parameters: {
+      parameters: sanitizeJsonSchemaForTool({
         type: 'object',
         properties: {
           title: {
@@ -419,10 +472,10 @@ function buildToolDeclarationsMap(): Record<ScriptToolName, GeminiFunctionToolDe
             type: 'string',
             description: 'One-sentence summary of the drafted scene and topology.',
           },
-          draft: draftSchema,
+          draft: schemas.draft,
         },
         required: ['draft'],
-      },
+      }) as Record<string, unknown>,
     },
     report_audit_review: {
       type: 'function',
@@ -908,8 +961,40 @@ function runProposeScriptDraft(
     };
   }
 
-  const baseEnvelope = toAuteurEnvelope(context.rawText, context.ruleOverrides);
   const diagCounts = countBySeverity(compiled.diagnostics);
+  if (diagCounts.errors > 0) {
+    const errorHints = compiled.diagnostics
+      .filter((d) => d.severity === 'error')
+      .map((d) => `[${d.ruleId} at ${d.targetId}] ${d.repairHint}`);
+
+    return {
+      ok: false,
+      toolName: 'propose_script_draft',
+      result: {
+        ok: false,
+        staged: false,
+        diagnosticsSummary: {
+          total: compiled.diagnostics.length,
+          errors: diagCounts.errors,
+          warnings: diagCounts.warnings,
+        },
+        diagnostics: compiled.diagnostics.map((d) => ({
+          ruleId: d.ruleId,
+          lens: d.lens,
+          severity: d.severity,
+          targetId: d.targetId,
+          message: d.message,
+          repairHint: d.repairHint,
+        })),
+        repairHint:
+          errorHints.length > 0
+            ? `${errorHints.join(' ')} Repair these Script Supervisor errors and call propose_script_draft again.`
+            : 'Fix the deterministic Script Supervisor lint errors in the draft and call propose_script_draft again.',
+      },
+    };
+  }
+
+  const baseEnvelope = toAuteurEnvelope(context.rawText, context.ruleOverrides);
   const diff = buildLineDiff(context.rawText, compiled.rawText);
   const beatCount = compiled.ir.executionMacroBlock?.macroStates.length ?? 0;
 
@@ -961,12 +1046,6 @@ function runProposeScriptDraft(
         message: d.message,
         repairHint: d.repairHint,
       })),
-      ...(suggestion.errorCount > 0
-        ? {
-            repairHint:
-              'The draft compiled and staged, but has Script Supervisor lint errors. Consider repairing those diagnostics and calling propose_script_draft again.',
-          }
-        : {}),
     },
   };
 }

@@ -1,6 +1,16 @@
 import {describe, expect, it} from 'vitest';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
-import {toAuteurEnvelope} from '../../src/core/index.ts';
+import {parseAuteurScript, toAuteurEnvelope} from '../../src/core/index.ts';
+import {
+  AUDIT_QUICK_CHECKS,
+  buildAiTargetOptions,
+  buildAuditQuickPrompt,
+  buildScopedRefinePrompt,
+  isSuggestionStale,
+  reconcileTargetScope,
+  resolveEditorJumpTarget,
+  shouldShowSettingsLinkForError,
+} from '../../src/ui/aiAssistant.ts';
 import {
   AI_API_KEY_STORAGE_KEY,
   AI_SETTINGS_STORAGE_KEY,
@@ -23,6 +33,7 @@ import {
   getSystemInstructionForMode,
   getToolDeclarationsForMode,
   MODE_TOOL_NAMES,
+  sanitizeJsonSchemaForTool,
   type AuditReviewSuggestion,
   type DraftSuggestion,
   type PatchSuggestion,
@@ -804,5 +815,261 @@ describe('geminiInteractions streaming agent client', () => {
     expect(classifyGeminiError(new TypeError('Failed to fetch')).code).toBe('network_error');
     const existing = new GeminiServiceError('missing_api_key', 'Missing key');
     expect(classifyGeminiError(existing)).toBe(existing);
+  });
+
+  it('inserts \\n\\n boundaries between multi-round thought summaries and assistant text in both callbacks and output', async () => {
+    const roundStreams: InteractionStreamEventLike[][] = [
+      // Round 1: emits thought + text + tool call
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-r1', status: 'in_progress'}},
+        {
+          event_type: 'step.delta',
+          index: 0,
+          delta: {type: 'thought_summary', content: {type: 'text', text: 'Inspecting overview.'}},
+        },
+        {
+          event_type: 'step.delta',
+          index: 1,
+          delta: {type: 'text', text: 'Checking your script.'},
+        },
+        {
+          event_type: 'step.start',
+          index: 2,
+          step: {
+            type: 'function_call',
+            id: 'call-overview',
+            name: 'get_script_overview',
+            arguments: {},
+          },
+        },
+        {event_type: 'step.stop', index: 2},
+        {event_type: 'interaction.completed', interaction: {id: 'int-r1', status: 'requires_action'}},
+      ],
+      // Round 2: emits another thought + multi-chunk final text
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-r2', status: 'in_progress'}},
+        {
+          event_type: 'step.delta',
+          index: 0,
+          delta: {type: 'thought_summary', content: {type: 'text', text: 'Overview looks clean.'}},
+        },
+        {
+          event_type: 'step.delta',
+          index: 1,
+          delta: {type: 'text', text: 'Everything '},
+        },
+        {
+          event_type: 'step.delta',
+          index: 1,
+          delta: {type: 'text', text: 'is ready.'},
+        },
+        {event_type: 'interaction.completed', interaction: {id: 'int-r2', status: 'completed'}},
+      ],
+    ];
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async () => asAsyncStream(roundStreams.shift() ?? []),
+      },
+    };
+
+    const streamedThoughts: string[] = [];
+    const streamedTexts: string[] = [];
+
+    const result = await runGeminiAgentTurn({
+      apiKey: 'AIza-valid-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'refine',
+      prompt: 'Review overview.',
+      rawText: SAMPLE_SCRIPT,
+      createClient: () => fakeClient,
+      callbacks: {
+        onThoughtSummaryDelta: (delta) => streamedThoughts.push(delta),
+        onTextDelta: (delta) => streamedTexts.push(delta),
+      },
+    });
+
+    expect(result.thoughtSummary).toBe('Inspecting overview.\n\nOverview looks clean.');
+    expect(streamedThoughts.join('')).toBe('Inspecting overview.\n\nOverview looks clean.');
+    expect(result.text).toBe('Checking your script.\n\nEverything is ready.');
+    expect(streamedTexts.join('')).toBe('Checking your script.\n\nEverything is ready.');
+  });
+});
+
+describe('Phase 3A hardening: JSON Schema sanitization & lint-gated draft staging', () => {
+  it('normalizes const keywords into type+enum and strips/hoists nested $defs across all tool schemas', () => {
+    for (const mode of ['refine', 'check', 'draft'] as const) {
+      for (const decl of getToolDeclarationsForMode(mode)) {
+        const serialized = JSON.stringify(decl.parameters);
+        expect(serialized).not.toContain('"const":');
+
+        // Verify no nested $defs anywhere below root
+        const visit = (node: unknown, isRoot: boolean) => {
+          if (Array.isArray(node)) {
+            node.forEach((child) => visit(child, false));
+          } else if (node && typeof node === 'object') {
+            const rec = node as Record<string, unknown>;
+            if (!isRoot) {
+              expect(rec).not.toHaveProperty('$defs');
+            }
+            for (const [k, v] of Object.entries(rec)) {
+              if (k === '$defs' && isRoot) continue;
+              visit(v, false);
+            }
+          }
+        };
+        visit(decl.parameters, true);
+      }
+    }
+
+    // Direct test: const normalization + nested $defs hoisting when referenced vs stripping when unreferenced
+    const withRef = sanitizeJsonSchemaForTool({
+      type: 'object',
+      properties: {
+        kind: {const: 'camera'},
+        count: {const: 3},
+        flag: {const: true},
+        nested: {
+          type: 'object',
+          $defs: {
+            Inner: {type: 'object', properties: {tag: {const: 'ACT'}}},
+          },
+          properties: {
+            item: {$ref: '#/$defs/Inner'},
+          },
+        },
+      },
+    }) as Record<string, unknown>;
+
+    const props = withRef.properties as Record<string, Record<string, unknown>>;
+    expect(props.kind).toEqual({type: 'string', enum: ['camera']});
+    expect(props.count).toEqual({type: 'number', enum: [3]});
+    expect(props.flag).toEqual({type: 'boolean', enum: [true]});
+    expect(props.nested).not.toHaveProperty('$defs');
+    expect(withRef.$defs).toEqual({
+      Inner: {type: 'object', properties: {tag: {type: 'string', enum: ['ACT']}}},
+    });
+
+    const withoutRef = sanitizeJsonSchemaForTool({
+      type: 'object',
+      properties: {
+        nested: {
+          type: 'object',
+          $defs: {Unused: {type: 'string'}},
+          properties: {a: {type: 'string'}},
+        },
+      },
+    }) as Record<string, unknown>;
+    expect(withoutRef).not.toHaveProperty('$defs');
+  });
+
+  it('rejects and withholds staging in propose_script_draft when deterministic lint errors exist', () => {
+    const staged: StagedSuggestion[] = [];
+
+    const lintBrokenDraft = executeScriptToolCall(
+      {
+        name: 'propose_script_draft',
+        arguments: {
+          title: 'Broken Blocking Draft',
+          draft: {
+            stagingMacroBlocks: [
+              {
+                header: 'OPENING',
+                format: 'prose',
+                body: '[ACT] Mara walks stage-left into frame.',
+              },
+            ],
+            executionMacroBlock: {
+              header: 'EXECUTION',
+              macroStates: [
+                {
+                  subStates: [
+                    {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS eye level'},
+                    {dimension: 'action', subStateTag: 'ACT', content: 'Mara crosses stage-left'},
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {
+        mode: 'draft',
+        rawText: '',
+        onStageSuggestion: (s) => staged.push(s),
+      }
+    );
+
+    expect(lintBrokenDraft.ok).toBe(false);
+    expect(lintBrokenDraft.stagedSuggestion).toBeUndefined();
+    expect(staged).toHaveLength(0);
+    expect(lintBrokenDraft.result.staged).toBe(false);
+    expect(
+      (lintBrokenDraft.result.diagnosticsSummary as {errors: number}).errors
+    ).toBeGreaterThan(0);
+    expect(typeof lintBrokenDraft.result.repairHint).toBe('string');
+  });
+});
+
+describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
+  it('builds Refine target options, reconciles removed targets, and scopes prompts cleanly', () => {
+    const doc = parseAuteurScript(SAMPLE_SCRIPT);
+    const options = buildAiTargetOptions(doc);
+
+    expect(options[0]).toEqual({kind: 'whole', key: 'whole', label: 'Whole Script'});
+    const mb0 = options.find((o) => o.key === 'MB0');
+    const s1 = options.find((o) => o.key === 'S1');
+    expect(mb0?.kind).toBe('macro_block');
+    expect(s1?.kind).toBe('macro_state');
+
+    expect(reconcileTargetScope('S999', options).key).toBe('whole');
+    expect(reconcileTargetScope('S1', options).key).toBe('S1');
+
+    expect(buildScopedRefinePrompt('Tighten pacing.', options[0])).toBe('Tighten pacing.');
+    expect(buildScopedRefinePrompt('Clarify tone.', mb0!)).toContain('Staging Macro-Block MB0');
+    expect(buildScopedRefinePrompt('Sharpen blocking.', s1!)).toContain('Execution Beat S1');
+  });
+
+  it('resolves MB#, MB#.#, S#, S#.#, and header names to editor jump targets and checks staleness', () => {
+    const doc = parseAuteurScript(SAMPLE_SCRIPT);
+
+    expect(resolveEditorJumpTarget('MB0', doc)).toEqual({
+      phase: 'staging',
+      blockIndex: 0,
+      domId: 'staging-block-0',
+    });
+    expect(resolveEditorJumpTarget('MB1.2', doc)).toEqual({
+      phase: 'staging',
+      blockIndex: 1,
+      domId: 'staging-block-1',
+    });
+    expect(resolveEditorJumpTarget('S1', doc)).toEqual({
+      phase: 'execution',
+      beatIndex: 1,
+      domId: 'execution-beat-1',
+    });
+    expect(resolveEditorJumpTarget('S2.1', doc)).toEqual({
+      phase: 'execution',
+      beatIndex: 2,
+      domId: 'execution-beat-2',
+    });
+    expect(resolveEditorJumpTarget('[OPENING]', doc)?.phase).toBe('staging');
+    expect(resolveEditorJumpTarget('S999', doc)).toBeNull();
+    expect(resolveEditorJumpTarget('MB999', doc)).toBeNull();
+
+    expect(isSuggestionStale('abc123', 'abc123')).toBe(false);
+    expect(isSuggestionStale('abc123', 'def456')).toBe(true);
+
+    expect(AUDIT_QUICK_CHECKS).toHaveLength(6);
+    for (const check of AUDIT_QUICK_CHECKS) {
+      expect(buildAuditQuickPrompt(check.id)).toContain('report_audit_review');
+    }
+
+    expect(shouldShowSettingsLinkForError('missing_api_key')).toBe(true);
+    expect(shouldShowSettingsLinkForError('invalid_api_key')).toBe(true);
+    expect(shouldShowSettingsLinkForError('model_not_found')).toBe(true);
+    expect(shouldShowSettingsLinkForError('network_error')).toBe(false);
+    expect(shouldShowSettingsLinkForError('aborted')).toBe(false);
   });
 });

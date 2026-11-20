@@ -76,7 +76,26 @@ export const UI_TOKENS = {
       'w-full pl-9 pr-8 py-2 bg-surface-muted hover:bg-surface-subtle focus:bg-surface text-xs text-text-body placeholder-text-placeholder rounded-xl border border-transparent focus:border-border-main shadow-inner focus:shadow-none transition-all outline-none',
     numberBox:
       'w-full bg-surface border border-border-main text-text-main rounded-xl px-2 py-1.5 text-xs font-mono focus:outline-none',
+    field:
+      'w-full bg-surface-subtle hover:bg-surface focus:bg-surface border border-border-main text-text-main placeholder-text-placeholder rounded-xl px-3 py-2 text-xs transition-colors outline-none focus:ring-1 focus:ring-border-main',
     label: 'text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint ml-1',
     labelMini: 'text-[10px] font-semibold uppercase tracking-wider text-text-faint',
+  },
+
+  ai: {
+    sidebarDesktop:
+      'relative flex flex-col h-full bg-surface border-l border-border-main text-text-main shrink-0 min-w-0',
+    sidebarHeader:
+      'flex items-center justify-between gap-2 px-3.5 h-10 border-b border-border-subtle bg-surface-subtle shrink-0',
+    statusChip:
+      'inline-flex items-center gap-1.5 rounded-lg border border-border-main bg-surface px-2 py-1 text-[11px] font-medium text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer whitespace-nowrap shrink-0',
+    suggestionCard:
+      'rounded-xl border border-border-main bg-surface-subtle overflow-hidden shadow-2xs',
+    suggestionHeader:
+      'flex items-start justify-between gap-2 px-3 py-2.5 border-b border-border-subtle bg-surface',
+    pillButton:
+      'inline-flex items-center gap-1 rounded-lg border border-border-main bg-surface px-2 py-1 text-[11px] font-medium text-text-muted hover:bg-surface-subtle hover:text-text-main transition-colors cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-45 disabled:cursor-not-allowed',
+    diffContainer:
+      'rounded-lg border border-border-subtle bg-app font-mono text-[11px] leading-relaxed overflow-x-auto max-h-60 overflow-y-auto auteur-pane-scroll',
   },
 } as const;

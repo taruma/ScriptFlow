@@ -519,16 +519,49 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         options.signal ? {signal: options.signal} : undefined
       );
 
-      const outcome = await consumeInteractionStream(stream, options.callbacks, options.signal);
+      const hasPriorText = accumulatedText.length > 0;
+      const hasPriorThought = accumulatedThought.length > 0;
+      let insertedTextBoundary = false;
+      let insertedThoughtBoundary = false;
+
+      const roundCallbacks: AgentStreamCallbacks | undefined = options.callbacks
+        ? {
+            ...options.callbacks,
+            onTextDelta: options.callbacks.onTextDelta
+              ? (deltaText: string) => {
+                  if (hasPriorText && !insertedTextBoundary) {
+                    insertedTextBoundary = true;
+                    options.callbacks?.onTextDelta?.(`\n\n${deltaText}`);
+                  } else {
+                    options.callbacks?.onTextDelta?.(deltaText);
+                  }
+                }
+              : undefined,
+            onThoughtSummaryDelta: options.callbacks.onThoughtSummaryDelta
+              ? (deltaText: string) => {
+                  if (hasPriorThought && !insertedThoughtBoundary) {
+                    insertedThoughtBoundary = true;
+                    options.callbacks?.onThoughtSummaryDelta?.(`\n\n${deltaText}`);
+                  } else {
+                    options.callbacks?.onThoughtSummaryDelta?.(deltaText);
+                  }
+                }
+              : undefined,
+          }
+        : undefined;
+
+      const outcome = await consumeInteractionStream(stream, roundCallbacks, options.signal);
 
       if (outcome.interactionId) {
         currentInteractionId = outcome.interactionId;
       }
       if (outcome.text.length > 0) {
-        accumulatedText += outcome.text;
+        accumulatedText = hasPriorText ? `${accumulatedText}\n\n${outcome.text}` : outcome.text;
       }
       if (outcome.thoughtSummary.length > 0) {
-        accumulatedThought += outcome.thoughtSummary;
+        accumulatedThought = hasPriorThought
+          ? `${accumulatedThought}\n\n${outcome.thoughtSummary}`
+          : outcome.thoughtSummary;
       }
 
       if (outcome.functionCalls.length === 0) {

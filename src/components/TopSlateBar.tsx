@@ -11,6 +11,7 @@ import {
   Eye,
   GitFork,
   Redo2,
+  Sparkles,
   Undo2,
 } from 'lucide-react';
 import type {LintDiagnostic} from '../core/types.ts';
@@ -48,6 +49,8 @@ interface TopSlateBarProps {
   copiedKind: 'plain' | 'tagless' | null;
   onOpenDebug?: () => void;
   isDebugOpen?: boolean;
+  onToggleAi?: () => void;
+  isAiOpen?: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -82,6 +85,8 @@ export function TopSlateBar({
   copiedKind,
   onOpenDebug,
   isDebugOpen = false,
+  onToggleAi,
+  isAiOpen = false,
   canUndo,
   canRedo,
   onUndo,
@@ -313,6 +318,24 @@ export function TopSlateBar({
           <BookOpen className="h-3.5 w-3.5 text-text-muted" />
           <span className="hidden sm:inline">{UI_LABELS.topBar.libraryButton}</span>
         </button>
+
+        {/* Quiet AI Assistant Sidebar Toggle */}
+        {onToggleAi && (
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenu(null);
+              onToggleAi();
+            }}
+            title={UI_LABELS.topBar.aiTitle}
+            aria-label={UI_LABELS.topBar.aiAria}
+            aria-expanded={isAiOpen}
+            className={isAiOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[var(--phase-continuity-text)]" />
+            <span>{UI_LABELS.topBar.aiButton}</span>
+          </button>
+        )}
 
         {/* Settings Popover (Text Size, Clause Underlines, Theme, Supervisor Rules) */}
         <SettingsPopover

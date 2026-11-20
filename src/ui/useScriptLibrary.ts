@@ -149,6 +149,10 @@ export interface UseScriptLibraryResult {
   handleOpenExample: (example: BundledExample) => Promise<void>;
   handleForkExample: (example: BundledExample) => Promise<void>;
   handleForkCurrentExample: () => void;
+  handleForkCurrentExampleWithContent: (
+    nextRawText: string,
+    options?: {title?: string; toastMessage?: string}
+  ) => Promise<boolean>;
   handleNewBlank: () => Promise<void>;
   handleDuplicateScript: (record: ScriptRecord) => Promise<void>;
   handleRenameScript: (record: ScriptRecord, nextTitle: string) => Promise<void>;
@@ -496,6 +500,66 @@ export function useScriptLibrary({
     void handleForkExample(example);
   }, [handleForkExample]);
 
+  const handleForkCurrentExampleWithContent = useCallback(
+    async (
+      nextRawText: string,
+      options?: {title?: string; toastMessage?: string}
+    ): Promise<boolean> => {
+      const current = activeScriptRef.current;
+      if (current.kind !== 'example') return false;
+      await persistCurrentCustomIfDirty();
+
+      const example = getBundledExampleById(current.id) ?? DEFAULT_PRESET;
+      const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
+      const requestedTitle = options?.title?.trim();
+      const title = requestedTitle
+        ? existingTitles.has(requestedTitle)
+          ? createCopyTitle(requestedTitle, existingTitles, 'Copy')
+          : requestedTitle
+        : createCopyTitle(example.title, existingTitles, 'Fork');
+
+      const now = Date.now();
+      const forked: ScriptRecord = {
+        id: createScriptId('script'),
+        title,
+        rawText: nextRawText,
+        createdAt: now,
+        updatedAt: now,
+        forkedFromId: example.id,
+      };
+      const saved = await scriptLibraryDb.put(forked);
+      setCustomScripts((prev) => upsertSortedScript(prev, saved));
+
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+
+      const nextRef: ActiveScriptRef = {kind: 'custom', id: saved.id};
+      activeScriptRef.current = nextRef;
+      rawTextRef.current = saved.rawText;
+      sceneTitleRef.current = saved.title;
+      lastSavedSnapshotRef.current = {
+        id: saved.id,
+        rawText: saved.rawText,
+        title: saved.title,
+      };
+
+      setActiveScript(nextRef);
+      setSceneTitle(saved.title);
+      setHistory(() =>
+        commitDocumentHistory(createDocumentHistory(example.content), saved.rawText, {
+          mode: 'checkpoint',
+          timestamp: null,
+        })
+      );
+      mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title);
+      onToast(options?.toastMessage ?? UI_LABELS.toasts.aiForkedAndApplied(saved.title));
+      return true;
+    },
+    [persistCurrentCustomIfDirty, onToast]
+  );
+
   const handleNewBlank = useCallback(async () => {
     await persistCurrentCustomIfDirty();
     const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
@@ -765,6 +829,7 @@ export function useScriptLibrary({
     handleOpenExample,
     handleForkExample,
     handleForkCurrentExample,
+    handleForkCurrentExampleWithContent,
     handleNewBlank,
     handleDuplicateScript,
     handleRenameScript,

@@ -25,10 +25,12 @@ import {SourceEditor} from './components/SourceEditor.tsx';
 import type {StagingBlockCommitOptions} from './components/stagingBlockRegistry.ts';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
 import {BUNDLED_EXAMPLES} from './data/examples/index.ts';
+import type {DraftSuggestion, PatchSuggestion} from './services/scriptTools.ts';
+import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
 import {copyTextToClipboard} from './ui/clipboard.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
 import {matchHistoryShortcut} from './ui/historyShortcuts.ts';
-import {UI_LABELS} from './ui/labels.ts';
+import {APP_META, UI_LABELS} from './ui/labels.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
 import {useScriptLibrary} from './ui/useScriptLibrary.ts';
 import {useStableValue} from './ui/useStableValue.ts';
@@ -42,6 +44,12 @@ const JsonIrDebugDrawer = lazy(() =>
 const ScriptLibraryModal = lazy(() =>
   import('./components/ScriptLibraryModal.tsx').then((mod) => ({
     default: mod.ScriptLibraryModal,
+  }))
+);
+
+const AiAssistantSidebar = lazy(() =>
+  import('./components/AiAssistantSidebar.tsx').then((mod) => ({
+    default: mod.AiAssistantSidebar,
   }))
 );
 
@@ -69,6 +77,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   const handleSwitchToLive = useCallback(() => {
@@ -99,6 +108,20 @@ export default function App() {
     handleRedo,
     breakCoalescing,
   } = library;
+
+  const [aiScriptSessionKey, setAiScriptSessionKey] = useState<string>(
+    () => `${activeScript.kind}:${activeScript.id}`
+  );
+  const skipNextAiResetRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const nextKey = `${activeScript.kind}:${activeScript.id}`;
+    if (skipNextAiResetRef.current) {
+      skipNextAiResetRef.current = false;
+      return;
+    }
+    setAiScriptSessionKey(nextKey);
+  }, [activeScript.kind, activeScript.id]);
 
   const handleViewModeChange = useCallback(
     (mode: ViewMode) => {
@@ -144,7 +167,14 @@ export default function App() {
       const pasted = event.clipboardData?.getData('text/plain');
       if (!pasted || pasted.trim().length === 0) return;
 
+      const targetEl = event.target instanceof Element ? event.target : null;
       const active = document.activeElement;
+      if (
+        (active instanceof Element && active.closest('[data-ai-sidebar="true"]')) ||
+        (targetEl && targetEl.closest('[data-ai-sidebar="true"]'))
+      ) {
+        return;
+      }
       const inEditable = isEditableElement(active);
       const inWritableEditable = isWritableEditableElement(active);
       const hasMultiBlockScript = isMultiBlockAuteurScript(pasted);
@@ -403,6 +433,63 @@ export default function App() {
     });
   }, [diagnostics, viewMode]);
 
+  const handleJumpToAiTarget = useCallback(
+    (targetId: string) => {
+      const resolved = resolveEditorJumpTarget(targetId, docRef.current);
+      if (!resolved) return;
+      if (viewMode !== 'live') {
+        setViewMode('live');
+      }
+
+      requestAnimationFrame(() => {
+        const el = document.getElementById(resolved.domId);
+        if (!el) return;
+        el.scrollIntoView({behavior: 'smooth', block: 'center'});
+        el.classList.add('ring-2', 'ring-[var(--tok-continuity)]', 'rounded-lg');
+        window.setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-[var(--tok-continuity)]', 'rounded-lg');
+        }, 1200);
+      });
+    },
+    [viewMode]
+  );
+
+  const handleApplyAiPatchSuggestion = useCallback(
+    async (suggestion: PatchSuggestion, kind: 'patch' | 'fix'): Promise<boolean> => {
+      if (isReadOnly) {
+        skipNextAiResetRef.current = true;
+        return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText);
+      }
+      commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
+      setToastMessage(
+        kind === 'fix' ? UI_LABELS.toasts.aiFixApplied : UI_LABELS.toasts.aiPatchApplied
+      );
+      return true;
+    },
+    [isReadOnly, library, commitRawText]
+  );
+
+  const handleApplyAiDraftSuggestion = useCallback(
+    async (suggestion: DraftSuggestion): Promise<boolean> => {
+      if (isReadOnly) {
+        skipNextAiResetRef.current = true;
+        return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText, {
+          title: suggestion.title,
+        });
+      }
+      commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
+      if (
+        suggestion.title &&
+        (sceneTitle.trim() === '' || sceneTitle.startsWith(APP_META.untitledScene))
+      ) {
+        handleTitleChange(suggestion.title);
+      }
+      setToastMessage(UI_LABELS.toasts.aiDraftApplied);
+      return true;
+    },
+    [isReadOnly, library, commitRawText, sceneTitle, handleTitleChange]
+  );
+
   const beatCount = doc.execution?.beats.length ?? 0;
 
   return (
@@ -433,39 +520,71 @@ export default function App() {
         copiedKind={copiedKind}
         onOpenDebug={() => setIsDebugOpen(true)}
         isDebugOpen={isDebugOpen}
+        onToggleAi={() => setIsAiOpen((prev) => !prev)}
+        isAiOpen={isAiOpen}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={handleUndo}
         onRedo={handleRedo}
       />
 
-      <div className="flex-1">
-        {viewMode === 'live' ? (
-          <LiveDocument
-            doc={doc}
-            metadata={metadata}
-            diagnostics={diagnostics}
-            historyRevision={history.revision}
-            readOnly={isReadOnly}
-            onUpdateStaging={handleUpdateStaging}
-            onInsertStaging={handleInsertStaging}
-            onDeleteStaging={handleRequestDeleteStaging}
-            onReorderStaging={handleReorderStaging}
-            onUpdateSubState={handleUpdateSubState}
-            onInsertSubState={handleInsertSubState}
-            onDeleteSubState={handleDeleteSubState}
-            onMergeSubState={handleMergeSubState}
-            onInsertBeat={handleInsertBeat}
-            onDeleteBeat={handleRequestDeleteBeat}
-            onReorderBeats={handleReorderBeats}
-          />
-        ) : (
-          <SourceEditor
-            rawText={rawText}
-            aestheticTokens={stableAestheticTokens}
-            readOnly={isReadOnly}
-            onChange={handleUpdateSource}
-          />
+      <div
+        className={
+          isAiOpen
+            ? 'flex flex-1 min-h-0 lg:h-[calc(100dvh-3rem)] lg:overflow-hidden'
+            : 'flex-1'
+        }
+      >
+        <div
+          className={
+            isAiOpen
+              ? `flex-1 min-w-0 ${viewMode === 'source' ? 'lg:overflow-y-auto auteur-pane-scroll' : ''}`
+              : 'w-full'
+          }
+        >
+          {viewMode === 'live' ? (
+            <LiveDocument
+              doc={doc}
+              metadata={metadata}
+              diagnostics={diagnostics}
+              historyRevision={history.revision}
+              readOnly={isReadOnly}
+              onUpdateStaging={handleUpdateStaging}
+              onInsertStaging={handleInsertStaging}
+              onDeleteStaging={handleRequestDeleteStaging}
+              onReorderStaging={handleReorderStaging}
+              onUpdateSubState={handleUpdateSubState}
+              onInsertSubState={handleInsertSubState}
+              onDeleteSubState={handleDeleteSubState}
+              onMergeSubState={handleMergeSubState}
+              onInsertBeat={handleInsertBeat}
+              onDeleteBeat={handleRequestDeleteBeat}
+              onReorderBeats={handleReorderBeats}
+            />
+          ) : (
+            <SourceEditor
+              rawText={rawText}
+              aestheticTokens={stableAestheticTokens}
+              readOnly={isReadOnly}
+              onChange={handleUpdateSource}
+            />
+          )}
+        </div>
+
+        {isAiOpen && (
+          <Suspense fallback={null}>
+            <AiAssistantSidebar
+              scriptSessionKey={aiScriptSessionKey}
+              rawText={rawText}
+              doc={doc}
+              readOnly={isReadOnly}
+              ruleOverrides={settings.lintRuleOverrides}
+              onClose={() => setIsAiOpen(false)}
+              onApplyPatchSuggestion={handleApplyAiPatchSuggestion}
+              onApplyDraftSuggestion={handleApplyAiDraftSuggestion}
+              onJumpToTarget={handleJumpToAiTarget}
+            />
+          </Suspense>
         )}
       </div>
 
