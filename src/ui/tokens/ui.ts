@@ -12,7 +12,7 @@ export const UI_TOKENS = {
     overlay:
       'fixed inset-0 z-[110] flex items-center justify-center p-4 bg-overlay-bg backdrop-blur-sm',
     overlayHeavy:
-      'fixed inset-0 z-[100] flex items-center justify-center p-4 bg-overlay-heavy backdrop-blur-sm',
+      'fixed inset-0 z-[100] flex items-center justify-center p-4 bg-overlay-heavy',
     containerSm:
       'bg-surface w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden border border-border-main text-text-main',
     containerMd:

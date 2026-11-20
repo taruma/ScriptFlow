@@ -94,6 +94,7 @@ function ScriptLibraryModalContent({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const shouldScrollSelectedIntoViewRef = useRef<boolean>(false);
 
   const filteredRows = useMemo(
     () => buildLibraryRows(customScripts, examples, filterTab, query),
@@ -139,13 +140,15 @@ function ScriptLibraryModalContent({
     }
   }, [filteredRows.length, selectedIndex]);
 
-  // Keep selected row visible inside the scroll container
+  // Keep keyboard-selected row visible inside the scroll container (skip forced reflow on mount/hover)
   useEffect(() => {
     if (selectedIndex < 0) return;
     if (selectedIndex >= visibleLimit) {
       setVisibleLimit(Math.ceil((selectedIndex + 1) / LIBRARY_PAGE_SIZE) * LIBRARY_PAGE_SIZE);
       return;
     }
+    if (!shouldScrollSelectedIntoViewRef.current) return;
+    shouldScrollSelectedIntoViewRef.current = false;
     const rowEl = rowRefs.current.get(selectedIndex);
     rowEl?.scrollIntoView({block: 'nearest'});
   }, [selectedIndex, visibleLimit]);
@@ -196,12 +199,14 @@ function ScriptLibraryModalContent({
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
+        shouldScrollSelectedIntoViewRef.current = true;
         setSelectedIndex((prev) => stepLibrarySelectionIndex(prev, 1, filteredRows.length));
         return;
       }
 
       if (event.key === 'ArrowUp') {
         event.preventDefault();
+        shouldScrollSelectedIntoViewRef.current = true;
         setSelectedIndex((prev) => stepLibrarySelectionIndex(prev, -1, filteredRows.length));
         return;
       }

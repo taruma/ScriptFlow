@@ -21,6 +21,7 @@ import {
 } from './core/index.ts';
 import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDialog.tsx';
 import {LiveDocument} from './components/LiveDocument.tsx';
+import {ScriptLibraryModal} from './components/ScriptLibraryModal.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import type {StagingBlockCommitOptions} from './components/stagingBlockRegistry.ts';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
@@ -38,12 +39,6 @@ import {useStableValue} from './ui/useStableValue.ts';
 const JsonIrDebugDrawer = lazy(() =>
   import('./components/debug/JsonIrDebugDrawer.tsx').then((mod) => ({
     default: mod.JsonIrDebugDrawer,
-  }))
-);
-
-const ScriptLibraryModal = lazy(() =>
-  import('./components/ScriptLibraryModal.tsx').then((mod) => ({
-    default: mod.ScriptLibraryModal,
   }))
 );
 
@@ -603,27 +598,25 @@ export default function App() {
       />
 
       {isLibraryOpen && (
-        <Suspense fallback={null}>
-          <ScriptLibraryModal
-            isOpen={isLibraryOpen}
-            onClose={() => setIsLibraryOpen(false)}
-            customScripts={customScripts}
-            examples={BUNDLED_EXAMPLES}
-            activeScript={activeScript}
-            isConfirmDialogOpen={confirmRequest !== null}
-            onOpenCustomScript={(record) => void library.handleOpenCustomScript(record)}
-            onOpenExample={(example) => void library.handleOpenExample(example)}
-            onForkExample={(example) => void library.handleForkExample(example)}
-            onNewBlank={() => void library.handleNewBlank()}
-            onImportFile={library.handleTriggerImportFile}
-            onDuplicateScript={(record) => void library.handleDuplicateScript(record)}
-            onRenameScript={(record, nextTitle) =>
-              void library.handleRenameScript(record, nextTitle)
-            }
-            onExportScriptTxt={(record) => void library.handleExportScriptTxt(record)}
-            onRequestDeleteScript={library.handleRequestDeleteScript}
-          />
-        </Suspense>
+        <ScriptLibraryModal
+          isOpen={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          customScripts={customScripts}
+          examples={BUNDLED_EXAMPLES}
+          activeScript={activeScript}
+          isConfirmDialogOpen={confirmRequest !== null}
+          onOpenCustomScript={(record) => void library.handleOpenCustomScript(record)}
+          onOpenExample={(example) => void library.handleOpenExample(example)}
+          onForkExample={(example) => void library.handleForkExample(example)}
+          onNewBlank={() => void library.handleNewBlank()}
+          onImportFile={library.handleTriggerImportFile}
+          onDuplicateScript={(record) => void library.handleDuplicateScript(record)}
+          onRenameScript={(record, nextTitle) =>
+            void library.handleRenameScript(record, nextTitle)
+          }
+          onExportScriptTxt={(record) => void library.handleExportScriptTxt(record)}
+          onRequestDeleteScript={library.handleRequestDeleteScript}
+        />
       )}
 
       {isDebugOpen && (
