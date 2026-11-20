@@ -107,6 +107,7 @@ const AiContextInspectorModal = lazy(() =>
 const ASSISTANT_FOCUSES: readonly AssistantFocus[] = ['auto', 'draft', 'refine', 'audit'];
 const EMPTY_TOOL_CALLS: readonly AiToolCallItem[] = [];
 const EMPTY_LOADED_SKILLS: readonly AiLoadedSkillItem[] = [];
+const EMPTY_REFERENCE_HANDLES: readonly string[] = [];
 const MIN_SIDEBAR_WIDTH = 340;
 const MAX_SIDEBAR_WIDTH = 580;
 const DEFAULT_SIDEBAR_WIDTH = 410;
@@ -359,7 +360,12 @@ export function AiAssistantSidebar({
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
 
+  const isScriptEmpty =
+    rawText.trim().length === 0 ||
+    (doc.stagingBlocks.length === 0 && (doc.execution?.beats.length ?? 0) === 0);
+  const isDraftingContext = shouldApplyDraftWrapperTemplate({focus, isEmpty: isScriptEmpty});
   const referenceHandles = useMemo(() => getBriefReferenceHandles(brief), [brief]);
+  const activeReferenceHandles = isDraftingContext ? referenceHandles : EMPTY_REFERENCE_HANDLES;
   const briefHasContent = useMemo(() => hasDraftBriefContent(brief), [brief]);
   const briefSummaryLabel = useMemo(() => buildBriefSummaryBadge(brief), [brief]);
 
@@ -374,7 +380,7 @@ export function AiAssistantSidebar({
         foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
         skillOverrides: skillsState.skillOverrides,
         customSkills: skillsState.customSkills,
-        referenceHandles,
+        referenceHandles: activeReferenceHandles,
       }),
     [
       focus,
@@ -384,7 +390,7 @@ export function AiAssistantSidebar({
       skillsState.foundationalCraftOverride,
       skillsState.skillOverrides,
       skillsState.customSkills,
-      referenceHandles,
+      activeReferenceHandles,
     ]
   );
 
@@ -546,13 +552,13 @@ export function AiAssistantSidebar({
         return;
       }
 
-      const useDraftWrapper =
-        !options?.displayText &&
-        shouldApplyDraftWrapperTemplate({
-          focus: activeFocus,
-          isEmpty,
-          brief,
-        });
+      const isDraftingTurn = shouldApplyDraftWrapperTemplate({
+        focus: activeFocus,
+        isEmpty,
+      });
+
+      const useDraftWrapper = !options?.displayText && isDraftingTurn;
+      const turnReferenceHandles = isDraftingTurn ? referenceHandles : EMPTY_REFERENCE_HANDLES;
 
       const useTargetScope =
         !options?.displayText &&
@@ -622,7 +628,7 @@ export function AiAssistantSidebar({
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
-          referenceHandles,
+          referenceHandles: turnReferenceHandles,
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -833,6 +839,7 @@ export function AiAssistantSidebar({
       const ok = await onApplyDraftSuggestion(suggestion);
       if (ok) {
         markSuggestionApplied(messageId, suggestion.id);
+        setIsBriefOpen(false);
       }
     },
     [onApplyDraftSuggestion, markSuggestionApplied]

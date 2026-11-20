@@ -364,28 +364,14 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
     );
   });
 
-  it('determines when to apply the Draft Wrapper Template across focuses and brief states', () => {
-    const populatedBrief: DraftBriefState = {
-      references: [],
-      specs: 'Continuous oner',
-      subtext: '',
-    };
-
-    expect(
-      shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: true, brief: EMPTY_DRAFT_BRIEF})
-    ).toBe(true);
-    expect(
-      shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: false, brief: EMPTY_DRAFT_BRIEF})
-    ).toBe(false);
-    expect(
-      shouldApplyDraftWrapperTemplate({focus: 'draft', isEmpty: false, brief: EMPTY_DRAFT_BRIEF})
-    ).toBe(true);
-    expect(
-      shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: false, brief: EMPTY_DRAFT_BRIEF})
-    ).toBe(false);
-    expect(
-      shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: false, brief: populatedBrief})
-    ).toBe(true);
+  it('determines when to apply the Draft Wrapper Template strictly on drafting turns so leftover Brief content never hijacks Refine/Audit', () => {
+    expect(shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: true})).toBe(true);
+    expect(shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: false})).toBe(false);
+    expect(shouldApplyDraftWrapperTemplate({focus: 'draft', isEmpty: true})).toBe(true);
+    expect(shouldApplyDraftWrapperTemplate({focus: 'draft', isEmpty: false})).toBe(true);
+    expect(shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: false})).toBe(false);
+    expect(shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: true})).toBe(false);
+    expect(shouldApplyDraftWrapperTemplate({focus: 'audit', isEmpty: false})).toBe(false);
   });
 
   it('interpolates Draft Wrapper Template cleanly, omits empty optional lines, and preserves idea fallback', () => {

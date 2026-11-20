@@ -452,13 +452,8 @@ export function formatReferenceEntriesForPrompt(references: readonly ReferenceEn
 export function shouldApplyDraftWrapperTemplate(options: {
   focus: AssistantFocus;
   isEmpty: boolean;
-  brief: DraftBriefState;
 }): boolean {
-  return (
-    hasDraftBriefContent(options.brief) ||
-    options.focus === 'draft' ||
-    (options.focus === 'auto' && options.isEmpty)
-  );
+  return options.focus === 'draft' || (options.focus === 'auto' && options.isEmpty);
 }
 
 const BRIEF_PLACEHOLDER_REGEX = /\{\{\s*(idea|cast|specs|subtext)\s*\}\}/g;
