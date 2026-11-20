@@ -1,5 +1,5 @@
 import type {AuditLens, AuteurDocument, AuteurLensPresetId, SceneTopology} from '../core/index.ts';
-import type {GeminiErrorCode} from '../services/geminiInteractions.ts';
+import type {AgentTurnTrace, GeminiErrorCode} from '../services/geminiInteractions.ts';
 import type {AssistantMode, StagedSuggestion} from '../services/scriptTools.ts';
 
 export type AiTargetScope =
@@ -46,6 +46,7 @@ export interface AiChatMessage {
     code: GeminiErrorCode;
     message: string;
   };
+  trace?: AgentTurnTrace;
   isStreaming?: boolean;
   hitToolRoundLimit?: boolean;
 }

@@ -74,6 +74,7 @@ export interface AiSettings {
   apiKey: string;
   sessionOnly: boolean;
   showThinkingSummary: boolean;
+  showDebugTrace: boolean;
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -82,6 +83,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   apiKey: '',
   sessionOnly: false,
   showThinkingSummary: true,
+  showDebugTrace: false,
 };
 
 export interface KeyValueStorageLike {
@@ -181,6 +183,7 @@ interface PersistedAiPrefs {
   reasoningLevel: ReasoningLevel;
   sessionOnly: boolean;
   showThinkingSummary: boolean;
+  showDebugTrace: boolean;
 }
 
 function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
@@ -190,6 +193,7 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
       reasoningLevel: DEFAULT_AI_SETTINGS.reasoningLevel,
       sessionOnly: DEFAULT_AI_SETTINGS.sessionOnly,
       showThinkingSummary: DEFAULT_AI_SETTINGS.showThinkingSummary,
+      showDebugTrace: DEFAULT_AI_SETTINGS.showDebugTrace,
     };
   }
   const record = input as Record<string, unknown>;
@@ -206,6 +210,10 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
       typeof record.showThinkingSummary === 'boolean'
         ? record.showThinkingSummary
         : DEFAULT_AI_SETTINGS.showThinkingSummary,
+    showDebugTrace:
+      typeof record.showDebugTrace === 'boolean'
+        ? record.showDebugTrace
+        : DEFAULT_AI_SETTINGS.showDebugTrace,
   };
 }
 
@@ -232,6 +240,7 @@ export function loadStoredAiSettings(adapters?: AiSettingsStorageAdapters): AiSe
     reasoningLevel: DEFAULT_AI_SETTINGS.reasoningLevel,
     sessionOnly: DEFAULT_AI_SETTINGS.sessionOnly,
     showThinkingSummary: DEFAULT_AI_SETTINGS.showThinkingSummary,
+    showDebugTrace: DEFAULT_AI_SETTINGS.showDebugTrace,
   };
 
   const rawPrefs = safeGet(local, AI_SETTINGS_STORAGE_KEY);
@@ -269,6 +278,7 @@ export function saveStoredAiSettings(
     reasoningLevel: normalized.reasoningLevel,
     sessionOnly: normalized.sessionOnly,
     showThinkingSummary: normalized.showThinkingSummary,
+    showDebugTrace: normalized.showDebugTrace,
   };
 
   safeSet(local, AI_SETTINGS_STORAGE_KEY, JSON.stringify(prefs));

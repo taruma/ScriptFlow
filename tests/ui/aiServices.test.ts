@@ -89,6 +89,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
       apiKey: '',
       sessionOnly: false,
       showThinkingSummary: true,
+      showDebugTrace: false,
     });
   });
 
@@ -104,11 +105,13 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
         apiKey: '  AIza-test-key-123  ',
         sessionOnly: false,
         showThinkingSummary: false,
+        showDebugTrace: true,
       },
       adapters
     );
 
     expect(saved.apiKey).toBe('AIza-test-key-123');
+    expect(saved.showDebugTrace).toBe(true);
     expect(hasConfiguredApiKey(saved)).toBe(true);
     expect(local.getItem(AI_API_KEY_STORAGE_KEY)).toBe('AIza-test-key-123');
     expect(session.getItem(AI_API_KEY_STORAGE_KEY)).toBeNull();
@@ -155,6 +158,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
         apiKey: '  secret ',
         sessionOnly: 'yes',
         showThinkingSummary: 123,
+        showDebugTrace: 'true',
       })
     ).toEqual({
       model: 'gemini-4-hydrogen',
@@ -162,7 +166,19 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
       apiKey: 'secret',
       sessionOnly: false,
       showThinkingSummary: true,
+      showDebugTrace: false,
     });
+
+    expect(
+      sanitizeAiSettings({
+        model: 'gemini-4-carbon',
+        reasoningLevel: 'high',
+        apiKey: '',
+        sessionOnly: true,
+        showThinkingSummary: false,
+        showDebugTrace: true,
+      }).showDebugTrace
+    ).toBe(true);
 
     local.setItem(AI_SETTINGS_STORAGE_KEY, '{broken json');
     expect(loadStoredAiSettings(adapters)).toEqual(DEFAULT_AI_SETTINGS);
@@ -895,6 +911,260 @@ describe('geminiInteractions streaming agent client', () => {
     expect(streamedThoughts.join('')).toBe('Inspecting overview.\n\nOverview looks clean.');
     expect(result.text).toBe('Checking your script.\n\nEverything is ready.');
     expect(streamedTexts.join('')).toBe('Checking your script.\n\nEverything is ready.');
+  });
+
+  it('captures a sanitized multi-round AgentTurnTrace with usage, requests, tool loops, and never leaks apiKey', async () => {
+    const secretKey = 'AIza-super-secret-trace-key-999';
+    const rawScript = [
+      '[INTENT]',
+      'Create a corridor beat with @image1 as Nadia.',
+      '',
+      '[OPENING]',
+      'MS eye level. Frame-left, Nadia stands facing screen-right.',
+      '',
+      '[EXECUTION]',
+      '[CAM 01] MS eye level -> [ACT] Nadia opens the door -> <latch click>',
+    ].join('\n');
+    const snapshotHash = toAuteurEnvelope(rawScript).snapshotHash;
+
+    let clockMs = Date.parse('2026-11-20T10:00:00.000Z');
+    const tickNow = () => {
+      clockMs += 25;
+      return clockMs;
+    };
+
+    const roundStreams: InteractionStreamEventLike[][] = [
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-t1', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-bad',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: snapshotHash,
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.1',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Nadia crosses stage-left quickly',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'interaction.completed',
+          interaction: {
+            id: 'int-t1',
+            status: 'requires_action',
+            usage: {total_input_tokens: 120, total_output_tokens: 45, total_tokens: 165},
+          },
+        },
+      ],
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-t2', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-fixed',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: snapshotHash,
+              summary: 'Shift Nadia frame-right',
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.1',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Nadia crosses frame-right quickly',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'interaction.completed',
+          interaction: {
+            id: 'int-t2',
+            status: 'requires_action',
+            usage: {total_input_tokens: 210, total_output_tokens: 60, total_tokens: 270},
+          },
+        },
+      ],
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-t3', status: 'in_progress'}},
+        {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Repaired and staged.'}},
+        {
+          event_type: 'interaction.completed',
+          interaction: {
+            id: 'int-t3',
+            status: 'completed',
+            usage: {total_input_tokens: 250, total_output_tokens: 20, total_tokens: 270},
+          },
+        },
+      ],
+    ];
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async () => asAsyncStream(roundStreams.shift() ?? []),
+      },
+    };
+
+    const result = await runGeminiAgentTurn({
+      apiKey: secretKey,
+      model: 'gemini-4-argon',
+      reasoningLevel: 'high',
+      mode: 'refine',
+      prompt: 'Have Nadia cross the room.',
+      rawText: rawScript,
+      previousInteractionId: 'int-prev-0',
+      createSuggestionId: () => 'sugg-trace-1',
+      now: tickNow,
+      createClient: () => fakeClient,
+    });
+
+    const {trace} = result;
+    expect(trace.model).toBe('gemini-4-argon');
+    expect(trace.reasoningLevel).toBe('high');
+    expect(trace.mode).toBe('refine');
+    expect(trace.startedAt).toBe('2026-11-20T10:00:00.025Z');
+    expect(trace.durationMs).toBeGreaterThan(0);
+    expect(trace.initialPreviousInteractionId).toBe('int-prev-0');
+    expect(trace.finalInteractionId).toBe('int-t3');
+    expect(trace.toolRounds).toBe(2);
+    expect(trace.hitToolRoundLimit).toBe(false);
+    expect(trace.error).toBeUndefined();
+    expect(trace.usage).toEqual({
+      total_input_tokens: 580,
+      total_output_tokens: 125,
+      total_tokens: 705,
+    });
+
+    expect(trace.rounds).toHaveLength(3);
+    expect(trace.rounds[0].roundIndex).toBe(1);
+    expect(trace.rounds[0].interactionId).toBe('int-t1');
+    expect(trace.rounds[0].status).toBe('requires_action');
+    expect(trace.rounds[0].request.previous_interaction_id).toBe('int-prev-0');
+    expect(trace.rounds[0].request.toolNames).toEqual(MODE_TOOL_NAMES.refine);
+    expect(trace.rounds[0].request.input).toBe('Have Nadia cross the room.');
+    expect(trace.rounds[0].toolCalls).toHaveLength(1);
+    expect(trace.rounds[0].toolCalls[0].ok).toBe(false);
+    expect(typeof trace.rounds[0].toolCalls[0].result.repairHint).toBe('string');
+
+    expect(trace.rounds[1].roundIndex).toBe(2);
+    expect(trace.rounds[1].request.previous_interaction_id).toBe('int-t1');
+    expect(trace.rounds[1].toolCalls).toHaveLength(1);
+    expect(trace.rounds[1].toolCalls[0].ok).toBe(true);
+    expect(trace.rounds[1].toolCalls[0].stagedSuggestionId).toBe('sugg-trace-1');
+
+    expect(trace.rounds[2].roundIndex).toBe(3);
+    expect(trace.rounds[2].request.previous_interaction_id).toBe('int-t2');
+    expect(trace.rounds[2].status).toBe('completed');
+    expect(trace.rounds[2].toolCalls).toHaveLength(0);
+
+    const serialized = JSON.stringify(trace);
+    expect(serialized).not.toContain(secretKey);
+    expect(serialized).not.toContain('apiKey');
+  });
+
+  it('attaches partial sanitized trace to GeminiServiceError on mid-turn failures and redacts apiKey', async () => {
+    const secretKey = 'AIza-secret-error-key-42';
+    let callCount = 0;
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return asAsyncStream([
+              {event_type: 'interaction.created', interaction: {id: 'int-ok-1', status: 'in_progress'}},
+              {
+                event_type: 'step.start',
+                index: 0,
+                step: {
+                  type: 'function_call',
+                  id: 'call-overview',
+                  name: 'get_script_overview',
+                  arguments: {},
+                },
+              },
+              {event_type: 'step.stop', index: 0},
+              {
+                event_type: 'interaction.completed',
+                interaction: {
+                  id: 'int-ok-1',
+                  status: 'requires_action',
+                  usage: {total_input_tokens: 90, total_output_tokens: 15, total_tokens: 105},
+                },
+              },
+            ]);
+          }
+          const upstreamErr = Object.assign(
+            new Error(`Upstream gateway failed for key ${secretKey}`),
+            {status: 503}
+          );
+          throw upstreamErr;
+        },
+      },
+    };
+
+    let caught: unknown;
+    try {
+      await runGeminiAgentTurn({
+        apiKey: secretKey,
+        model: 'gemini-4-carbon',
+        reasoningLevel: 'medium',
+        mode: 'check',
+        prompt: 'Audit this scene.',
+        rawText: SAMPLE_SCRIPT,
+        createClient: () => fakeClient,
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(GeminiServiceError);
+    const serviceErr = caught as GeminiServiceError;
+    expect(serviceErr.code).toBe('api_error');
+    expect(serviceErr.status).toBe(503);
+    expect(serviceErr.trace).toBeDefined();
+
+    const trace = serviceErr.trace!;
+    expect(trace.model).toBe('gemini-4-carbon');
+    expect(trace.mode).toBe('check');
+    expect(trace.toolRounds).toBe(1);
+    expect(trace.finalInteractionId).toBe('int-ok-1');
+    expect(trace.usage).toEqual({total_input_tokens: 90, total_output_tokens: 15, total_tokens: 105});
+    expect(trace.error).toEqual({
+      code: 'api_error',
+      status: 503,
+      message: 'Upstream gateway failed for key [REDACTED]',
+    });
+    expect(trace.rounds).toHaveLength(2);
+    expect(trace.rounds[0].status).toBe('requires_action');
+    expect(trace.rounds[0].toolCalls).toHaveLength(1);
+    expect(trace.rounds[0].toolCalls[0].ok).toBe(true);
+    expect(trace.rounds[1].status).toBe('error');
+    expect(trace.rounds[1].request.previous_interaction_id).toBe('int-ok-1');
+
+    const serialized = JSON.stringify(trace);
+    expect(serialized).not.toContain(secretKey);
+    expect(serialized).not.toContain('apiKey');
   });
 });
 

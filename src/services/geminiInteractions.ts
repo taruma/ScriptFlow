@@ -22,18 +22,10 @@ export type GeminiErrorCode =
   | 'aborted'
   | 'api_error';
 
-export class GeminiServiceError extends Error {
-  readonly code: GeminiErrorCode;
-  readonly status?: number;
-  readonly causeError?: unknown;
-
-  constructor(code: GeminiErrorCode, message: string, options?: {status?: number; cause?: unknown}) {
-    super(message);
-    this.name = 'GeminiServiceError';
-    this.code = code;
-    this.status = options?.status;
-    this.causeError = options?.cause;
-  }
+export interface AgentTraceError {
+  code: GeminiErrorCode;
+  status?: number;
+  message: string;
 }
 
 export interface AgentToolCallTrace {
@@ -43,6 +35,64 @@ export interface AgentToolCallTrace {
   ok: boolean;
   result: Record<string, unknown>;
   stagedSuggestionId?: string;
+}
+
+export interface AgentRoundRequestTrace {
+  model: GeminiModelId;
+  previous_interaction_id: string | null;
+  generation_config: {
+    thinking_level: ReasoningLevel;
+    thinking_summaries: 'auto';
+  };
+  toolNames: string[];
+  systemInstruction: string;
+  input: unknown;
+}
+
+export interface AgentRoundTrace {
+  /** 1-based round number within this turn. */
+  roundIndex: number;
+  durationMs: number;
+  interactionId: string | null;
+  status: string | null;
+  usage?: Record<string, unknown>;
+  request: AgentRoundRequestTrace;
+  toolCalls: AgentToolCallTrace[];
+}
+
+export interface AgentTurnTrace {
+  model: GeminiModelId;
+  reasoningLevel: ReasoningLevel;
+  mode: AssistantMode;
+  startedAt: string;
+  durationMs: number;
+  initialPreviousInteractionId: string | null;
+  finalInteractionId: string | null;
+  toolRounds: number;
+  hitToolRoundLimit: boolean;
+  usage?: Record<string, unknown>;
+  error?: AgentTraceError;
+  rounds: AgentRoundTrace[];
+}
+
+export class GeminiServiceError extends Error {
+  readonly code: GeminiErrorCode;
+  readonly status?: number;
+  readonly causeError?: unknown;
+  readonly trace?: AgentTurnTrace;
+
+  constructor(
+    code: GeminiErrorCode,
+    message: string,
+    options?: {status?: number; cause?: unknown; trace?: AgentTurnTrace}
+  ) {
+    super(message);
+    this.name = 'GeminiServiceError';
+    this.code = code;
+    this.status = options?.status;
+    this.causeError = options?.cause;
+    this.trace = options?.trace;
+  }
 }
 
 export interface AgentStreamCallbacks {
@@ -97,6 +147,8 @@ export interface RunAgentTurnOptions {
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;
   createSuggestionId?: () => string;
+  /** Optional clock DI hook for deterministic trace timing in tests; defaults to `Date.now`. */
+  now?: () => number;
   /** Optional DI hook for tests; defaults to `new GoogleGenAI({ apiKey })`. */
   createClient?: (apiKey: string) => InteractionsClientLike;
 }
@@ -109,6 +161,7 @@ export interface RunAgentTurnResult {
   hitToolRoundLimit: boolean;
   toolTraces: AgentToolCallTrace[];
   stagedSuggestions: StagedSuggestion[];
+  trace: AgentTurnTrace;
 }
 
 interface PendingFunctionCall {
@@ -296,8 +349,37 @@ function extractModelOutputTextFromSteps(steps: Array<Record<string, unknown>> |
   return combined;
 }
 
+function redactSecret(text: string, secret: string): string {
+  if (!secret || !text.includes(secret)) return text;
+  return text.split(secret).join('[REDACTED]');
+}
+
+function aggregateRoundUsage(rounds: readonly AgentRoundTrace[]): Record<string, unknown> | undefined {
+  const usages = rounds
+    .map((round) => round.usage)
+    .filter((u): u is Record<string, unknown> => Boolean(u && typeof u === 'object'));
+
+  if (usages.length === 0) return undefined;
+  if (usages.length === 1) return {...usages[0]};
+
+  const aggregated: Record<string, unknown> = {};
+  for (const usage of usages) {
+    for (const [key, value] of Object.entries(usage)) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const prev = aggregated[key];
+        aggregated[key] = typeof prev === 'number' ? prev + value : value;
+      } else {
+        aggregated[key] = value;
+      }
+    }
+  }
+  return aggregated;
+}
+
 interface RoundStreamOutcome {
   interactionId: string | null;
+  status: string | null;
+  usage?: Record<string, unknown>;
   text: string;
   thoughtSummary: string;
   functionCalls: PendingFunctionCall[];
@@ -309,6 +391,8 @@ async function consumeInteractionStream(
   signal: AbortSignal | undefined
 ): Promise<RoundStreamOutcome> {
   let interactionId: string | null = null;
+  let status: string | null = null;
+  let usage: Record<string, unknown> | undefined;
   let streamedText = '';
   let streamedThought = '';
   const activeCallsByIndex = new Map<number, TrackedStreamingFunctionCall>();
@@ -332,6 +416,9 @@ async function consumeInteractionStream(
         if (typeof event.interaction?.id === 'string' && event.interaction.id.length > 0) {
           interactionId = event.interaction.id;
           callbacks?.onInteractionId?.(interactionId);
+        }
+        if (typeof event.interaction?.status === 'string' && event.interaction.status.length > 0) {
+          status = event.interaction.status;
         }
         break;
       }
@@ -408,6 +495,16 @@ async function consumeInteractionStream(
           interactionId = event.interaction.id;
           callbacks?.onInteractionId?.(interactionId);
         }
+        if (typeof event.interaction?.status === 'string' && event.interaction.status.length > 0) {
+          status = event.interaction.status;
+        }
+        if (
+          event.interaction?.usage &&
+          typeof event.interaction.usage === 'object' &&
+          !Array.isArray(event.interaction.usage)
+        ) {
+          usage = {...event.interaction.usage};
+        }
         completedSteps = event.interaction?.steps;
         break;
       }
@@ -449,6 +546,8 @@ async function consumeInteractionStream(
 
   return {
     interactionId,
+    status,
+    ...(usage ? {usage} : {}),
     text: streamedText,
     thoughtSummary: streamedThought,
     functionCalls: collectedCalls,
@@ -462,16 +561,47 @@ async function consumeInteractionStream(
  * locally, and loops `function_result` payloads back up to `maxToolRounds` (default 5).
  */
 export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<RunAgentTurnResult> {
+  const getNow = options.now ?? Date.now;
+  const turnStartMs = getNow();
+  const startedAt = new Date(turnStartMs).toISOString();
+  const initialPreviousInteractionId = options.previousInteractionId ?? null;
   const apiKey = options.apiKey.trim();
+
+  let currentInteractionId: string | undefined = options.previousInteractionId;
+  let toolRounds = 0;
+  let hitToolRoundLimit = false;
+  const rounds: AgentRoundTrace[] = [];
+
+  const buildTurnTrace = (error?: AgentTraceError): AgentTurnTrace => {
+    const usage = aggregateRoundUsage(rounds);
+    return {
+      model: options.model,
+      reasoningLevel: options.reasoningLevel,
+      mode: options.mode,
+      startedAt,
+      durationMs: Math.max(0, getNow() - turnStartMs),
+      initialPreviousInteractionId,
+      finalInteractionId: currentInteractionId ?? null,
+      toolRounds,
+      hitToolRoundLimit,
+      ...(usage ? {usage} : {}),
+      ...(error ? {error} : {}),
+      rounds,
+    };
+  };
+
   if (apiKey.length === 0) {
-    throw new GeminiServiceError(
-      'missing_api_key',
-      'Add your Gemini API key in AI Settings to run the script assistant.'
-    );
+    const message = 'Add your Gemini API key in AI Settings to run the script assistant.';
+    throw new GeminiServiceError('missing_api_key', message, {
+      trace: buildTurnTrace({code: 'missing_api_key', message}),
+    });
   }
 
   if (options.signal?.aborted) {
-    throw new GeminiServiceError('aborted', 'Request cancelled.');
+    const message = 'Request cancelled.';
+    throw new GeminiServiceError('aborted', message, {
+      trace: buildTurnTrace({code: 'aborted', message}),
+    });
   }
 
   const maxToolRounds = Math.max(
@@ -481,16 +611,16 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const clientFactory = options.createClient ?? defaultCreateClient;
   const client = clientFactory(apiKey);
   const tools: GeminiFunctionToolDeclaration[] = getToolDeclarationsForMode(options.mode);
+  const toolNames = tools.map((tool) => tool.name);
   const systemInstruction = getSystemInstructionForMode(options.mode);
 
-  let currentInteractionId: string | undefined = options.previousInteractionId;
   let nextInput: unknown = options.prompt;
   let accumulatedText = '';
   let accumulatedThought = '';
-  let toolRounds = 0;
-  let hitToolRoundLimit = false;
   const toolTraces: AgentToolCallTrace[] = [];
   const stagedSuggestions: StagedSuggestion[] = [];
+  let activeRound: AgentRoundTrace | null = null;
+  let activeRoundStartMs = 0;
 
   try {
     while (true) {
@@ -498,15 +628,37 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         throw new GeminiServiceError('aborted', 'Request cancelled.');
       }
 
+      const generationConfig = {
+        thinking_level: options.reasoningLevel,
+        thinking_summaries: 'auto' as const,
+      };
+
+      const roundRequest: AgentRoundRequestTrace = {
+        model: options.model,
+        previous_interaction_id: currentInteractionId ?? null,
+        generation_config: generationConfig,
+        toolNames: [...toolNames],
+        systemInstruction,
+        input: nextInput,
+      };
+
+      activeRoundStartMs = getNow();
+      activeRound = {
+        roundIndex: rounds.length + 1,
+        durationMs: 0,
+        interactionId: null,
+        status: 'in_progress',
+        request: roundRequest,
+        toolCalls: [],
+      };
+      rounds.push(activeRound);
+
       const requestParams: Record<string, unknown> = {
         model: options.model,
         input: nextInput,
         system_instruction: systemInstruction,
         tools,
-        generation_config: {
-          thinking_level: options.reasoningLevel,
-          thinking_summaries: 'auto',
-        },
+        generation_config: generationConfig,
         stream: true,
       };
 
@@ -524,37 +676,48 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
       let insertedTextBoundary = false;
       let insertedThoughtBoundary = false;
 
-      const roundCallbacks: AgentStreamCallbacks | undefined = options.callbacks
-        ? {
-            ...options.callbacks,
-            onTextDelta: options.callbacks.onTextDelta
-              ? (deltaText: string) => {
-                  if (hasPriorText && !insertedTextBoundary) {
-                    insertedTextBoundary = true;
-                    options.callbacks?.onTextDelta?.(`\n\n${deltaText}`);
-                  } else {
-                    options.callbacks?.onTextDelta?.(deltaText);
-                  }
-                }
-              : undefined,
-            onThoughtSummaryDelta: options.callbacks.onThoughtSummaryDelta
-              ? (deltaText: string) => {
-                  if (hasPriorThought && !insertedThoughtBoundary) {
-                    insertedThoughtBoundary = true;
-                    options.callbacks?.onThoughtSummaryDelta?.(`\n\n${deltaText}`);
-                  } else {
-                    options.callbacks?.onThoughtSummaryDelta?.(deltaText);
-                  }
-                }
-              : undefined,
+      const roundCallbacks: AgentStreamCallbacks = {
+        ...options.callbacks,
+        onInteractionId: (interactionId: string) => {
+          currentInteractionId = interactionId;
+          if (activeRound) {
+            activeRound.interactionId = interactionId;
           }
-        : undefined;
+          options.callbacks?.onInteractionId?.(interactionId);
+        },
+        onTextDelta: options.callbacks?.onTextDelta
+          ? (deltaText: string) => {
+              if (hasPriorText && !insertedTextBoundary) {
+                insertedTextBoundary = true;
+                options.callbacks?.onTextDelta?.(`\n\n${deltaText}`);
+              } else {
+                options.callbacks?.onTextDelta?.(deltaText);
+              }
+            }
+          : undefined,
+        onThoughtSummaryDelta: options.callbacks?.onThoughtSummaryDelta
+          ? (deltaText: string) => {
+              if (hasPriorThought && !insertedThoughtBoundary) {
+                insertedThoughtBoundary = true;
+                options.callbacks?.onThoughtSummaryDelta?.(`\n\n${deltaText}`);
+              } else {
+                options.callbacks?.onThoughtSummaryDelta?.(deltaText);
+              }
+            }
+          : undefined,
+      };
 
       const outcome = await consumeInteractionStream(stream, roundCallbacks, options.signal);
 
       if (outcome.interactionId) {
         currentInteractionId = outcome.interactionId;
+        activeRound.interactionId = outcome.interactionId;
       }
+      activeRound.status = outcome.status ?? 'completed';
+      if (outcome.usage) {
+        activeRound.usage = outcome.usage;
+      }
+
       if (outcome.text.length > 0) {
         accumulatedText = hasPriorText ? `${accumulatedText}\n\n${outcome.text}` : outcome.text;
       }
@@ -565,11 +728,15 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
       }
 
       if (outcome.functionCalls.length === 0) {
+        activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
+        activeRound = null;
         break;
       }
 
       if (toolRounds >= maxToolRounds) {
         hitToolRoundLimit = true;
+        activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
+        activeRound = null;
         break;
       }
 
@@ -620,6 +787,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
           ...(execResult.stagedSuggestion ? {stagedSuggestionId: execResult.stagedSuggestion.id} : {}),
         };
         toolTraces.push(trace);
+        activeRound.toolCalls.push(trace);
         options.callbacks?.onToolCallResult?.(trace);
 
         functionResultSteps.push({
@@ -631,6 +799,8 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         });
       }
 
+      activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
+      activeRound = null;
       nextInput = functionResultSteps;
     }
 
@@ -642,8 +812,25 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
       hitToolRoundLimit,
       toolTraces,
       stagedSuggestions,
+      trace: buildTurnTrace(),
     };
   } catch (err) {
-    throw classifyGeminiError(err, options.signal);
+    const classified = classifyGeminiError(err, options.signal);
+    if (activeRound) {
+      activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
+      activeRound.status = classified.code === 'aborted' ? 'aborted' : 'error';
+      activeRound = null;
+    }
+    const safeMessage = redactSecret(classified.message, apiKey);
+    const traceError: AgentTraceError = {
+      code: classified.code,
+      ...(classified.status !== undefined ? {status: classified.status} : {}),
+      message: safeMessage,
+    };
+    throw new GeminiServiceError(classified.code, safeMessage, {
+      status: classified.status,
+      cause: classified.causeError,
+      trace: buildTurnTrace(traceError),
+    });
   }
 }

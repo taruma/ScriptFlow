@@ -25,6 +25,7 @@ import {
   ShieldAlert,
   Sparkles,
   Square,
+  Terminal,
   Wrench,
   X,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ import {toAuteurEnvelope, type AuteurDocument, type LintRuleOverrides} from '../
 import {
   GeminiServiceError,
   runGeminiAgentTurn,
+  type AgentTurnTrace,
 } from '../services/geminiInteractions.ts';
 import type {
   AssistantMode,
@@ -72,6 +74,12 @@ const AiSettingsModal = lazy(() =>
   }))
 );
 
+const AiTraceModal = lazy(() =>
+  import('./AiTraceModal.tsx').then((mod) => ({
+    default: mod.AiTraceModal,
+  }))
+);
+
 const ASSISTANT_MODES: readonly AssistantMode[] = ['refine', 'check', 'draft'];
 const MIN_SIDEBAR_WIDTH = 340;
 const MAX_SIDEBAR_WIDTH = 580;
@@ -95,15 +103,23 @@ export interface AiAssistantSidebarProps {
 interface ReasoningAccordionProps {
   isStreaming: boolean;
   showThinkingSummary: boolean;
+  showDebugTrace: boolean;
+  hasError: boolean;
   thoughtSummary: string;
   toolCalls: readonly AiToolCallItem[];
+  trace?: AgentTurnTrace;
+  onInspectTrace: (trace: AgentTurnTrace) => void;
 }
 
 const ReasoningAccordion = memo(function ReasoningAccordion({
   isStreaming,
   showThinkingSummary,
+  showDebugTrace,
+  hasError,
   thoughtSummary,
   toolCalls,
+  trace,
+  onInspectTrace,
 }: ReasoningAccordionProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const wasStreamingRef = useRef(isStreaming);
@@ -118,42 +134,67 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
 
   const hasVisibleThought = showThinkingSummary && thoughtSummary.trim().length > 0;
   const hasTools = toolCalls.length > 0;
+  const hasAccordionContent = isStreaming || hasVisibleThought || hasTools;
+  const canInspect = showDebugTrace && !isStreaming && Boolean(trace);
+  const showTraceOnlyBar = canInspect && !hasAccordionContent && !hasError;
 
-  if (!isStreaming && !hasVisibleThought && !hasTools) {
+  if (!hasAccordionContent && !showTraceOnlyBar) {
     return null;
   }
 
-  const isOpen = userOverride !== null ? userOverride : isStreaming;
+  const isOpen = hasAccordionContent && (userOverride !== null ? userOverride : isStreaming);
 
   return (
     <div className="rounded-xl border border-border-subtle bg-surface-subtle overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setUserOverride(!isOpen)}
-        aria-expanded={isOpen}
-        className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-medium text-text-muted hover:bg-surface-hover/50 hover:text-text-main transition-colors cursor-pointer"
-      >
-        <div className="flex items-center gap-1.5 min-w-0">
-          {isStreaming ? (
-            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--phase-logic-text)]" />
-          ) : (
-            <Brain className="h-3 w-3 shrink-0 text-text-faint" />
-          )}
-          <span className="truncate">
-            {isStreaming ? UI_LABELS.ai.reasoningRunning : UI_LABELS.ai.reasoningToggleLabel}
-          </span>
-          {hasTools && (
-            <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums">
-              {UI_LABELS.ai.reasoningToolCount(toolCalls.length)}
-            </span>
-          )}
-        </div>
-        {isOpen ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+      <div className="flex items-center justify-between gap-1">
+        {hasAccordionContent ? (
+          <button
+            type="button"
+            onClick={() => setUserOverride(!isOpen)}
+            aria-expanded={isOpen}
+            className="flex flex-1 min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-medium text-text-muted hover:bg-surface-hover/50 hover:text-text-main transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              {isStreaming ? (
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--phase-logic-text)]" />
+              ) : (
+                <Brain className="h-3 w-3 shrink-0 text-text-faint" />
+              )}
+              <span className="truncate">
+                {isStreaming ? UI_LABELS.ai.reasoningRunning : UI_LABELS.ai.reasoningToggleLabel}
+              </span>
+              {hasTools && (
+                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums">
+                  {UI_LABELS.ai.reasoningToolCount(toolCalls.length)}
+                </span>
+              )}
+            </div>
+            {isOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+            )}
+          </button>
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+          <div className="flex flex-1 min-w-0 items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-text-faint">
+            <Brain className="h-3 w-3 shrink-0" />
+            <span className="truncate">{UI_LABELS.ai.reasoningToggleLabel}</span>
+          </div>
         )}
-      </button>
+
+        {canInspect && trace && (
+          <button
+            type="button"
+            onClick={() => onInspectTrace(trace)}
+            title={UI_LABELS.ai.inspectTraceTitle}
+            aria-label={UI_LABELS.ai.inspectTraceAria}
+            className="mr-1.5 inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer shrink-0"
+          >
+            <Terminal className="h-2.5 w-2.5 text-text-faint" />
+            <span>{UI_LABELS.ai.inspectTraceButton}</span>
+          </button>
+        )}
+      </div>
 
       {isOpen && (
         <div className="border-t border-border-subtle px-2.5 py-2 space-y-2">
@@ -230,6 +271,7 @@ export function AiAssistantSidebar({
   const [inputValue, setInputValue] = useState<string>('');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [inspectedTrace, setInspectedTrace] = useState<AgentTurnTrace | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
 
   const previousInteractionIdRef = useRef<string | undefined>(undefined);
@@ -271,8 +313,13 @@ export function AiAssistantSidebar({
       abortControllerRef.current = null;
     }
     setIsRunning(false);
+    setInspectedTrace(null);
     previousInteractionIdRef.current = undefined;
     setMessages([]);
+  }, []);
+
+  const handleInspectTrace = useCallback((trace: AgentTurnTrace) => {
+    setInspectedTrace(trace);
   }, []);
 
   // Reset in-memory chat & interaction chain automatically when switching scripts
@@ -472,6 +519,7 @@ export function AiAssistantSidebar({
           thoughtSummary: result.thoughtSummary || msg.thoughtSummary,
           isStreaming: false,
           hitToolRoundLimit: result.hitToolRoundLimit,
+          trace: result.trace,
         }));
       } catch (err) {
         if (activeRunIdRef.current !== runId) return;
@@ -498,6 +546,7 @@ export function AiAssistantSidebar({
             code: serviceErr.code,
             message: serviceErr.message,
           },
+          ...(serviceErr.trace ? {trace: serviceErr.trace} : {}),
         }));
       } finally {
         if (activeRunIdRef.current === runId) {
@@ -830,8 +879,12 @@ export function AiAssistantSidebar({
                     <ReasoningAccordion
                       isStreaming={Boolean(msg.isStreaming)}
                       showThinkingSummary={settings.showThinkingSummary}
+                      showDebugTrace={settings.showDebugTrace}
+                      hasError={Boolean(msg.error)}
                       thoughtSummary={msg.thoughtSummary ?? ''}
                       toolCalls={msg.toolCalls ?? []}
+                      trace={msg.trace}
+                      onInspectTrace={handleInspectTrace}
                     />
 
                     {msg.text.trim().length > 0 && (
@@ -899,10 +952,24 @@ export function AiAssistantSidebar({
                       (msg.error.code === 'aborted' ? (
                         <div
                           role="status"
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5 text-[11px] text-text-muted"
+                          className="inline-flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5 text-[11px] text-text-muted"
                         >
-                          <Square className="h-2.5 w-2.5 fill-current text-text-faint" />
-                          <span>{UI_LABELS.ai.stoppedNote}</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Square className="h-2.5 w-2.5 fill-current text-text-faint" />
+                            <span>{UI_LABELS.ai.stoppedNote}</span>
+                          </span>
+                          {settings.showDebugTrace && msg.trace && (
+                            <button
+                              type="button"
+                              onClick={() => handleInspectTrace(msg.trace!)}
+                              title={UI_LABELS.ai.inspectTraceTitle}
+                              aria-label={UI_LABELS.ai.inspectTraceAria}
+                              className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
+                            >
+                              <Terminal className="h-2.5 w-2.5 text-text-faint" />
+                              <span>{UI_LABELS.ai.inspectTraceButton}</span>
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div
@@ -916,16 +983,31 @@ export function AiAssistantSidebar({
                               <p className="text-[11px] opacity-85">{UI_LABELS.ai.retryHint}</p>
                             </div>
                           </div>
-                          {shouldShowSettingsLinkForError(msg.error.code) && (
-                            <div>
-                              <button
-                                type="button"
-                                onClick={() => setIsSettingsOpen(true)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-main hover:bg-surface-subtle transition-colors cursor-pointer"
-                              >
-                                <Settings2 className="h-3 w-3" />
-                                <span>{UI_LABELS.ai.openSettingsAction}</span>
-                              </button>
+                          {(shouldShowSettingsLinkForError(msg.error.code) ||
+                            (settings.showDebugTrace && Boolean(msg.trace))) && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {shouldShowSettingsLinkForError(msg.error.code) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setIsSettingsOpen(true)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-main hover:bg-surface-subtle transition-colors cursor-pointer"
+                                >
+                                  <Settings2 className="h-3 w-3" />
+                                  <span>{UI_LABELS.ai.openSettingsAction}</span>
+                                </button>
+                              )}
+                              {settings.showDebugTrace && msg.trace && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleInspectTrace(msg.trace!)}
+                                  title={UI_LABELS.ai.inspectTraceTitle}
+                                  aria-label={UI_LABELS.ai.inspectTraceAria}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2 py-1 font-mono text-[10px] font-medium text-text-main hover:bg-surface-subtle transition-colors cursor-pointer"
+                                >
+                                  <Terminal className="h-3 w-3 text-text-muted" />
+                                  <span>{UI_LABELS.ai.inspectTraceButton}</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -996,6 +1078,16 @@ export function AiAssistantSidebar({
             onSetApiKey={setApiKey}
             onSetSessionOnly={setSessionOnly}
             onClearApiKey={clearStoredApiKey}
+          />
+        </Suspense>
+      )}
+
+      {inspectedTrace && (
+        <Suspense fallback={null}>
+          <AiTraceModal
+            isOpen={true}
+            trace={inspectedTrace}
+            onClose={() => setInspectedTrace(null)}
           />
         </Suspense>
       )}

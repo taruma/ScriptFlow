@@ -299,36 +299,67 @@ function AiSettingsModalContent({
             </div>
           </section>
 
-          {/* Section 4: Show reasoning summary toggle */}
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2.5">
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-text-main">
-                {labels.thinkingSummaryLabel}
+          {/* Section 4: Display & Debugging Toggles */}
+          <div className="space-y-2">
+            {/* Show reasoning summary toggle */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-text-main">
+                  {labels.thinkingSummaryLabel}
+                </div>
+                <div className="text-[11px] text-text-muted">{labels.thinkingSummaryDesc}</div>
               </div>
-              <div className="text-[11px] text-text-muted">{labels.thinkingSummaryDesc}</div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={settings.showThinkingSummary}
-              aria-label={labels.thinkingSummaryAria}
-              onClick={() =>
-                onUpdateSettings({showThinkingSummary: !settings.showThinkingSummary})
-              }
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
-                settings.showThinkingSummary
-                  ? 'border-btn-primary-bg bg-btn-primary-bg'
-                  : 'border-border-main bg-surface-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.showThinkingSummary}
+                aria-label={labels.thinkingSummaryAria}
+                onClick={() =>
+                  onUpdateSettings({showThinkingSummary: !settings.showThinkingSummary})
+                }
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
                   settings.showThinkingSummary
-                    ? 'translate-x-4 bg-btn-primary-text'
-                    : 'translate-x-0.5 bg-text-muted'
+                    ? 'border-btn-primary-bg bg-btn-primary-bg'
+                    : 'border-border-main bg-surface-muted'
                 }`}
-              />
-            </button>
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
+                    settings.showThinkingSummary
+                      ? 'translate-x-4 bg-btn-primary-text'
+                      : 'translate-x-0.5 bg-text-muted'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Show Debug Trace toggle */}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-text-main">{labels.debugTraceLabel}</div>
+                <div className="text-[11px] text-text-muted">{labels.debugTraceDesc}</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.showDebugTrace}
+                aria-label={labels.debugTraceAria}
+                onClick={() => onUpdateSettings({showDebugTrace: !settings.showDebugTrace})}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
+                  settings.showDebugTrace
+                    ? 'border-btn-primary-bg bg-btn-primary-bg'
+                    : 'border-border-main bg-surface-muted'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
+                    settings.showDebugTrace
+                      ? 'translate-x-4 bg-btn-primary-text'
+                      : 'translate-x-0.5 bg-text-muted'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
 
