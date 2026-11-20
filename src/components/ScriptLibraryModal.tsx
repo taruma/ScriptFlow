@@ -29,15 +29,13 @@ import {
   LIBRARY_PAGE_SIZE,
   paginateLibraryRows,
   stepLibrarySelectionIndex,
+  type ActiveScriptRef,
   type LibraryFilterTab,
   type LibraryRowItem,
 } from '../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 
-export interface ActiveScriptRef {
-  kind: 'custom' | 'example';
-  id: string;
-}
+export type {ActiveScriptRef};
 
 export interface ScriptLibraryModalProps {
   isOpen: boolean;

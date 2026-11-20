@@ -12,7 +12,7 @@ import {
   type SubStateIR,
   type TokenMappingIR,
 } from './irSchemas.ts';
-import type {CameraTransitionKind} from './types.ts';
+import type {CameraTransitionKind, LintRuleOverrides} from './types.ts';
 
 export interface ResolvedCameraContext {
   subStateTag: 'CAM';
@@ -243,9 +243,10 @@ export function sliceAuteurEnvelope(
  */
 export function sliceAuteurScript(
   rawText: string,
-  specOrPreset: LensSliceSpec | AuteurLensPresetId
+  specOrPreset: LensSliceSpec | AuteurLensPresetId,
+  ruleOverrides?: LintRuleOverrides
 ): AuteurLensSlice {
-  const envelope = toAuteurEnvelope(rawText);
+  const envelope = toAuteurEnvelope(rawText, ruleOverrides);
   const spec = typeof specOrPreset === 'string' ? AUDIT_LENS_PRESETS[specOrPreset] : specOrPreset;
   return sliceAuteurEnvelope(envelope, spec);
 }

@@ -116,11 +116,7 @@ export const LiveDocument = memo(function LiveDocument({
   );
 
   return (
-    <main
-      className={`w-full ${
-        readOnly ? 'lg:h-[calc(100dvh-5.25rem)]' : 'lg:h-[calc(100dvh-3rem)]'
-      } lg:overflow-hidden`}
-    >
+    <main className="w-full lg:h-[calc(100dvh-3rem)] lg:overflow-hidden">
       <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <StagingPane
           stagingBlocks={stagingBlocks}

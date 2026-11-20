@@ -361,4 +361,74 @@ Loose line after blank brackets.
       expect(result.ok).toBe(false);
     }
   });
+
+  it('respects optional ruleOverrides in toAuteurEnvelope and compileAuteurDraft', () => {
+    const scriptWithWarningAndError = `[INTENT]
+Create a tense standoff.
+
+[LOGIC]
+Maintain 180-degree axis. No subtitles appear on screen.
+
+[OPENING]
+MS on Miller seated frame-left facing screen-right.
+
+[EXECUTION]
+[CAM 01] MS on Miller -> [ACT] Miller steps stage-left -> Miller says (low) {Hold still.}`;
+
+    // Default severities: viewport-coordinate-purity='error', macro-state-resolution='warning'
+    const defaultEnv = toAuteurEnvelope(scriptWithWarningAndError);
+    expect(defaultEnv.derived.diagnostics.find((d) => d.ruleId === 'viewport-coordinate-purity')?.severity).toBe(
+      'error'
+    );
+    expect(defaultEnv.derived.diagnostics.find((d) => d.ruleId === 'macro-state-resolution')?.severity).toBe(
+      'warning'
+    );
+
+    // Custom overrides: silence viewport-coordinate-purity & elevate macro-state-resolution to 'error'
+    const overriddenEnv = toAuteurEnvelope(scriptWithWarningAndError, {
+      'viewport-coordinate-purity': 'off',
+      'macro-state-resolution': 'error',
+    });
+    expect(overriddenEnv.derived.diagnostics).toHaveLength(1);
+    expect(overriddenEnv.derived.diagnostics[0]).toMatchObject({
+      ruleId: 'macro-state-resolution',
+      severity: 'error',
+    });
+
+    // compileAuteurDraft forwards ruleOverrides identically
+    const draft = {
+      stagingMacroBlocks: [
+        {header: 'INTENT', format: 'prose', body: 'Short exchange.'},
+        {header: 'LOGIC', format: 'prose', body: 'No subtitles appear on screen.'},
+        {header: 'OPENING', format: 'prose', body: 'MS on Ada.'},
+      ],
+      executionMacroBlock: {
+        header: 'EXECUTION',
+        macroStates: [
+          {
+            subStates: [
+              {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS on Ada'},
+              {dimension: 'dialogue', speaker: 'Ada', line: 'Wait.'},
+            ],
+          },
+        ],
+      },
+    };
+
+    const elevatedDraft = compileAuteurDraft(draft, {'macro-state-resolution': 'error'});
+    expect(elevatedDraft.ok).toBe(true);
+    if (elevatedDraft.ok) {
+      expect(elevatedDraft.diagnostics[0]).toMatchObject({
+        ruleId: 'macro-state-resolution',
+        severity: 'error',
+      });
+    }
+
+    const mutedDraft = compileAuteurDraft(draft, {'macro-state-resolution': 'off'});
+    expect(mutedDraft.ok).toBe(true);
+    if (mutedDraft.ok) {
+      expect(mutedDraft.diagnostics).toHaveLength(0);
+    }
+  });
 });
+

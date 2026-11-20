@@ -9,6 +9,7 @@ import {
   Code2,
   Copy,
   Eye,
+  GitFork,
   Redo2,
   Undo2,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ interface TopSlateBarProps {
   title: string;
   onTitleChange: (nextTitle: string) => void;
   readOnly?: boolean;
+  onForkExample?: () => void;
   beatCount: number;
   diagnostics: LintDiagnostic[];
   onJumpToFirstDiagnostic: () => void;
@@ -58,6 +60,7 @@ export function TopSlateBar({
   title,
   onTitleChange,
   readOnly = false,
+  onForkExample,
   beatCount,
   diagnostics,
   onJumpToFirstDiagnostic,
@@ -131,9 +134,17 @@ export function TopSlateBar({
         <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
 
         {readOnly ? (
-          <span className="min-w-0 max-w-[240px] truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
-            {title || APP_META.untitledScene}
-          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 max-w-[240px] truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
+              {title || APP_META.untitledScene}
+            </span>
+            <span
+              title={UI_LABELS.topBar.exampleBadgeTitle}
+              className="auteur-phase-logic inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide"
+            >
+              {UI_LABELS.topBar.exampleBadge}
+            </span>
+          </div>
         ) : (
           <div className="inline-grid min-w-0 max-w-[240px] items-center">
             <span
@@ -226,34 +237,49 @@ export function TopSlateBar({
 
       {/* Right Zone: Quiet Undo/Redo, Optional Debug Inspector, Library, Settings, Copy */}
       <div className="flex flex-1 items-center justify-end gap-1.5 pl-2">
-        <div
-          role="group"
-          aria-label={UI_LABELS.topBar.historyGroupAria}
-          className="inline-flex items-center gap-0.5 shrink-0"
-        >
+        {readOnly && onForkExample ? (
           <button
             type="button"
-            disabled={readOnly || !canUndo}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={onUndo}
-            title={UI_LABELS.topBar.undoTitle}
-            aria-label={UI_LABELS.topBar.undoAria}
-            className={UI_TOKENS.button.iconGhost}
+            onClick={() => {
+              setOpenMenu(null);
+              onForkExample();
+            }}
+            title={UI_LABELS.topBar.forkToEditTitle}
+            className={UI_TOKENS.button.forkPill}
           >
-            <Undo2 className="h-3.5 w-3.5" />
+            <GitFork className="h-3.5 w-3.5 text-[var(--phase-logic-text)]" />
+            <span>{UI_LABELS.topBar.forkToEditButton}</span>
           </button>
-          <button
-            type="button"
-            disabled={readOnly || !canRedo}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={onRedo}
-            title={UI_LABELS.topBar.redoTitle}
-            aria-label={UI_LABELS.topBar.redoAria}
-            className={UI_TOKENS.button.iconGhost}
+        ) : (
+          <div
+            role="group"
+            aria-label={UI_LABELS.topBar.historyGroupAria}
+            className="inline-flex items-center gap-0.5 shrink-0"
           >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+            <button
+              type="button"
+              disabled={readOnly || !canUndo}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onUndo}
+              title={UI_LABELS.topBar.undoTitle}
+              aria-label={UI_LABELS.topBar.undoAria}
+              className={UI_TOKENS.button.iconGhost}
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={readOnly || !canRedo}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onRedo}
+              title={UI_LABELS.topBar.redoTitle}
+              aria-label={UI_LABELS.topBar.redoAria}
+              className={UI_TOKENS.button.iconGhost}
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-border-main shrink-0" />
 

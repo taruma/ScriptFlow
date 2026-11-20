@@ -366,4 +366,62 @@ MS on Miller seated frame-left facing screen-right.
     }
     expect(res.nextRawText).toContain('[AESTHETIC]\nMedium: 16mm grainy\nWardrobe:\n  : stray colon note');
   });
+
+  it('respects options.ruleOverrides during pre/post-patch linting and rejectOnNewErrors gating', () => {
+    // 1. Default: adding trailing dialogue only triggers a warning, so rejectOnNewErrors allows it
+    const trailingDialoguePatch = {
+      ops: [
+        {
+          op: 'insert_sub_state' as const,
+          macroStateId: 'S1',
+          afterSubStateId: 'S1.4',
+          subState: {dimension: 'dialogue' as const, speaker: 'Miller', line: 'Not another word.'},
+        },
+      ],
+    };
+
+    const defaultRes = applyAuteurPatch(INTERROGATION, trailingDialoguePatch, {
+      rejectOnNewErrors: true,
+    });
+    expect(defaultRes.ok).toBe(true);
+    expect(defaultRes.introducedWarnings.some((d) => d.ruleId === 'macro-state-resolution')).toBe(
+      true
+    );
+
+    // 2. Promoting macro-state-resolution to 'error' causes rejectOnNewErrors to block the same patch
+    const strictRes = applyAuteurPatch(INTERROGATION, trailingDialoguePatch, {
+      rejectOnNewErrors: true,
+      ruleOverrides: {'macro-state-resolution': 'error'},
+    });
+    expect(strictRes.ok).toBe(false);
+    expect(strictRes.introducedErrors).toHaveLength(1);
+    expect(strictRes.introducedErrors[0].ruleId).toBe('macro-state-resolution');
+    expect(strictRes.errors[0].code).toBe('LINT_ERROR_INTRODUCED');
+
+    // 3. Disabling viewport-coordinate-purity allows a patch with 'stage-left' under rejectOnNewErrors
+    const relaxedRes = applyAuteurPatch(
+      INTERROGATION,
+      {
+        ops: [
+          {
+            op: 'replace_sub_state',
+            subStateId: 'S1.2',
+            subState: {
+              dimension: 'action',
+              subStateTag: 'ACT',
+              content: 'Miller enters stage-left with the folder',
+            },
+          },
+        ],
+      },
+      {
+        rejectOnNewErrors: true,
+        ruleOverrides: {'viewport-coordinate-purity': 'off'},
+      }
+    );
+    expect(relaxedRes.ok).toBe(true);
+    expect(relaxedRes.introducedErrors).toHaveLength(0);
+    expect(relaxedRes.diagnosticsAfter).toHaveLength(0);
+  });
 });
+

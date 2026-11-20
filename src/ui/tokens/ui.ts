@@ -57,6 +57,8 @@ export const UI_TOKENS = {
       'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-surface-subtle text-text-body hover:text-text-main rounded-xl text-xs font-medium transition-colors active:scale-95 border border-border-main shadow-2xs cursor-pointer whitespace-nowrap shrink-0',
     filePillActive:
       'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-muted text-text-main rounded-xl text-xs font-medium transition-colors active:scale-95 border border-border-main shadow-inner cursor-pointer whitespace-nowrap shrink-0',
+    forkPill:
+      'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-surface-subtle hover:bg-surface-hover text-text-main border border-border-main shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0',
     segmentedGroup:
       'flex items-center bg-surface-muted p-0.5 rounded-xl border border-border-main shadow-2xs shrink-0',
     segmentedItem:

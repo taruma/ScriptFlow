@@ -10,6 +10,7 @@ import {
   normalizeLineEndings,
   toAuteurEnvelope,
   type AuteurEnvelope,
+  type LintRuleOverrides,
   type ValidationIssue,
 } from '../core/index.ts';
 import {
@@ -181,8 +182,12 @@ export function buildTaglessTxtExport(title: string, rawText: string): BuiltFile
   };
 }
 
-export function buildJsonEnvelopeExport(title: string, rawText: string): BuiltJsonEnvelopeExport {
-  const envelope = toAuteurEnvelope(rawText);
+export function buildJsonEnvelopeExport(
+  title: string,
+  rawText: string,
+  ruleOverrides?: LintRuleOverrides
+): BuiltJsonEnvelopeExport {
+  const envelope = toAuteurEnvelope(rawText, ruleOverrides);
   return {
     filename: `${slugifyFilename(title)}.json`,
     mimeType: 'application/json;charset=utf-8',

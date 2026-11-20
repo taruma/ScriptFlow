@@ -154,7 +154,7 @@ Discriminated on `dimension`, deterministically compiled via `renderSubState()`:
 
 ## 4. Read-Only Derived Envelope (`AuteurEnvelope`)
 
-Built via `toAuteurEnvelope(rawText)`. Wraps the mutable `document` with read-only intelligence computed deterministically from `extractor.ts` and `linter.ts`:
+Built via `toAuteurEnvelope(rawText, ruleOverrides?)`. Wraps the mutable `document` with read-only intelligence computed deterministically from `extractor.ts` and `linter.ts` (honoring any per-rule `LintRuleOverrides` severities when provided):
 
 - **`snapshotHash`**: Pure FNV-1a 32-bit hex digest of normalized `rawText` used for optimistic concurrency control during patching.
 - **`derived.referenceBindings`**: Extracted `@ref as Name (voice: @audio)` entries linked to `sourceMacroBlockId` (`MB#`) and `sourceMacroBlock`.
@@ -187,8 +187,8 @@ Use `AuteurScriptDraftSchema` (exported via `getAuteurJsonSchemas().draft`), whe
 import { compileAuteurDraft, getAuteurJsonSchemas } from '../src/core/index.ts';
 
 const { draft: draftJsonSchema } = getAuteurJsonSchemas();
-// Pass draftJsonSchema to any structured-output generator, then compile:
-const result = compileAuteurDraft(untrustedJsonFromModel);
+// Pass draftJsonSchema to any structured-output generator, then compile (optionally passing ruleOverrides):
+const result = compileAuteurDraft(untrustedJsonFromModel, ruleOverrides);
 
 if (result.ok) {
   // result.rawText      -> Canonical v0.4.0 plain text
@@ -230,6 +230,7 @@ import { applyAuteurPatch } from '../src/core/index.ts';
 
 const res = applyAuteurPatch(rawText, patchFromModel, {
   rejectOnNewErrors: true,
+  ruleOverrides, // Optional per-rule Script Supervisor severity overrides
 });
 
 // res.ok                   -> boolean
@@ -243,7 +244,7 @@ const res = applyAuteurPatch(rawText, patchFromModel, {
 
 ### 5.3 Evaluate — Composable Dimension Slicer & Review Validator
 
-`sliceAuteurEnvelope(envelope, spec)` and `sliceAuteurScript(rawText, specOrPreset)` extract minimal, low-noise JSON projections tailored to any craft dimension while preserving original `S#` and `S#.#` IDs so evaluator findings can target exact nodes.
+`sliceAuteurEnvelope(envelope, spec)` and `sliceAuteurScript(rawText, specOrPreset, ruleOverrides?)` extract minimal, low-noise JSON projections tailored to any craft dimension while preserving original `S#` and `S#.#` IDs so evaluator findings can target exact nodes.
 
 #### Example: Isolate `[ACT]` Only Against Resolved `[CAM]` Framing
 

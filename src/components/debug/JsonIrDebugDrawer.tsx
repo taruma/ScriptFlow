@@ -26,6 +26,7 @@ import {
   type AuteurLensPresetId,
   type CompileDraftResult,
   type LensSliceSpec,
+  type LintRuleOverrides,
   type PatchApplyResult,
   type SubStateDimension,
 } from '../../core/index.ts';
@@ -38,6 +39,7 @@ export interface JsonIrDebugDrawerProps {
   onClose: () => void;
   rawText: string;
   readOnly?: boolean;
+  ruleOverrides?: LintRuleOverrides;
   onCommitRawText: (nextRawText: string, toastMessage?: string) => void;
 }
 
@@ -143,6 +145,7 @@ export function JsonIrDebugDrawer({
   onClose,
   rawText,
   readOnly = false,
+  ruleOverrides,
   onCommitRawText,
 }: JsonIrDebugDrawerProps) {
   if (!isOpen) return null;
@@ -152,6 +155,7 @@ export function JsonIrDebugDrawer({
       onClose={onClose}
       rawText={rawText}
       readOnly={readOnly}
+      ruleOverrides={ruleOverrides}
       onCommitRawText={onCommitRawText}
     />
   );
@@ -161,6 +165,7 @@ function JsonIrDebugDrawerContent({
   onClose,
   rawText,
   readOnly = false,
+  ruleOverrides,
   onCommitRawText,
 }: Omit<JsonIrDebugDrawerProps, 'isOpen'>) {
   const [activeTab, setActiveTab] = useState<DebugTab>('envelope');
@@ -211,7 +216,10 @@ function JsonIrDebugDrawerContent({
   }, [copiedId]);
 
   // Pure core derivations (only computed while inspector is open)
-  const envelope = useMemo(() => toAuteurEnvelope(rawText), [rawText]);
+  const envelope = useMemo(
+    () => toAuteurEnvelope(rawText, ruleOverrides),
+    [rawText, ruleOverrides]
+  );
   const roundTripExact = useMemo(
     () => fromAuteurIR(envelope.document) === exportPlainText(rawText),
     [envelope.document, rawText]
@@ -412,14 +420,14 @@ function JsonIrDebugDrawerContent({
         return;
       }
 
-      const result = applyAuteurPatch(rawText, parsed, {rejectOnNewErrors});
+      const result = applyAuteurPatch(rawText, parsed, {rejectOnNewErrors, ruleOverrides});
       setPatchResult(result);
 
       if (commit && !readOnly && result.ok) {
         onCommitRawText(result.nextRawText, UI_LABELS.debug.patch.committedToast);
       }
     },
-    [patchText, rawText, rejectOnNewErrors, readOnly, onCommitRawText]
+    [patchText, rawText, rejectOnNewErrors, ruleOverrides, readOnly, onCommitRawText]
   );
 
   const runDraftCompile = useCallback(
@@ -436,14 +444,14 @@ function JsonIrDebugDrawerContent({
         return;
       }
 
-      const result = compileAuteurDraft(parsed);
+      const result = compileAuteurDraft(parsed, ruleOverrides);
       setDraftResult(result);
 
       if (applyToEditor && !readOnly && result.ok) {
         onCommitRawText(result.rawText, UI_LABELS.debug.draft.appliedToast);
       }
     },
-    [draftText, readOnly, onCommitRawText]
+    [draftText, ruleOverrides, readOnly, onCommitRawText]
   );
 
   const loadCurrentAsDraft = useCallback(() => {

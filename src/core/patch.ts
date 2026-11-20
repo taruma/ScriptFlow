@@ -15,10 +15,13 @@ import {
   type SubStateIR,
 } from './irSchemas.ts';
 import {classifyMacroBlock, normalizeLineEndings} from './parser.ts';
+import type {LintRuleOverrides} from './types.ts';
 
 export interface ApplyPatchOptions {
   /** When true, rejects patches that introduce new severity='error' Script Supervisor diagnostics */
   rejectOnNewErrors?: boolean;
+  /** Optional per-rule Script Supervisor severity overrides applied during pre- and post-patch linting */
+  ruleOverrides?: LintRuleOverrides;
 }
 
 export interface PatchError {
@@ -704,7 +707,7 @@ export function applyAuteurPatch(
   patchInput: AuteurPatch | unknown,
   options?: ApplyPatchOptions
 ): PatchApplyResult {
-  const beforeEnvelope = toAuteurEnvelope(rawText);
+  const beforeEnvelope = toAuteurEnvelope(rawText, options?.ruleOverrides);
   const diagnosticsBefore = beforeEnvelope.derived.diagnostics;
 
   const parsed = AuteurPatchSchema.safeParse(patchInput);
@@ -770,7 +773,7 @@ export function applyAuteurPatch(
 
   const afterToOriginTargetId = buildAfterToOriginTargetMap(working);
   const candidateRawText = fromAuteurIR(working);
-  const nextEnvelope = toAuteurEnvelope(candidateRawText);
+  const nextEnvelope = toAuteurEnvelope(candidateRawText, options?.ruleOverrides);
   const diagnosticsAfter = nextEnvelope.derived.diagnostics;
 
   const {introduced, resolved: resolvedDiagnostics} = diffDiagnostics(

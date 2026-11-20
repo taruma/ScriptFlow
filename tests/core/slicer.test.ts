@@ -135,4 +135,40 @@ Location: dim interrogation room -> LOC01; unused rooftop -> LOC02
     expect(applied.ok).toBe(true);
     expect(applied.nextRawText).toContain('presses both palms firmly onto the manila folder');
   });
+
+  it('threads optional ruleOverrides through sliceAuteurScript diagnostics', () => {
+    const scriptEndingOnDialogue = `[INTENT]
+Create a quiet scene.
+
+[LOGIC]
+Maintain 180-degree axis. No subtitles appear on screen.
+
+[OPENING]
+MS on Miller frame-left facing screen-right.
+
+[EXECUTION]
+[CAM 01] MS on Miller -> Miller says (quiet) {Listen closely.}`;
+
+    const defaultLens4 = sliceAuteurScript(scriptEndingOnDialogue, 'lens4_acoustics_voice');
+    expect(defaultLens4.diagnostics).toHaveLength(1);
+    expect(defaultLens4.diagnostics?.[0]).toMatchObject({
+      ruleId: 'macro-state-resolution',
+      severity: 'warning',
+    });
+
+    const strictLens4 = sliceAuteurScript(scriptEndingOnDialogue, 'lens4_acoustics_voice', {
+      'macro-state-resolution': 'error',
+    });
+    expect(strictLens4.diagnostics).toHaveLength(1);
+    expect(strictLens4.diagnostics?.[0]).toMatchObject({
+      ruleId: 'macro-state-resolution',
+      severity: 'error',
+    });
+
+    const mutedLens5 = sliceAuteurScript(scriptEndingOnDialogue, 'lens5_blocks_grammar', {
+      'macro-state-resolution': 'off',
+    });
+    expect(mutedLens5.diagnostics).toEqual([]);
+  });
 });
+

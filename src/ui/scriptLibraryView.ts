@@ -1,6 +1,11 @@
 import type {BundledExample} from '../data/examples/index.ts';
 import type {ScriptRecord} from './scriptLibraryDb.ts';
 
+export interface ActiveScriptRef {
+  kind: 'custom' | 'example';
+  id: string;
+}
+
 export type LibraryFilterTab = 'all' | 'custom' | 'examples';
 
 export type LibraryRowItem =

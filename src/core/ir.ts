@@ -28,7 +28,13 @@ import {
 } from './aesthetic.ts';
 import {lintDocument} from './linter.ts';
 import {classifyMacroBlock, normalizeLineEndings, parseAuteurScript} from './parser.ts';
-import type {AuteurDocument, ExtractedMetadata, LintDiagnostic, SubStateNode} from './types.ts';
+import type {
+  AuteurDocument,
+  ExtractedMetadata,
+  LintDiagnostic,
+  LintRuleOverrides,
+  SubStateNode,
+} from './types.ts';
 
 function sanitizeSingleLine(value: string): string {
   return normalizeLineEndings(value)
@@ -516,10 +522,13 @@ function buildDerivedContext(
 /**
  * Builds the full read-only AI Envelope (addressed AuteurScriptIR + derived continuity & diagnostics).
  */
-export function toAuteurEnvelope(rawText: string): AuteurEnvelope {
+export function toAuteurEnvelope(
+  rawText: string,
+  ruleOverrides?: LintRuleOverrides
+): AuteurEnvelope {
   const doc = parseAuteurScript(rawText);
   const metadata = extractMetadata(doc);
-  const diagnostics = lintDocument(doc, metadata);
+  const diagnostics = lintDocument(doc, metadata, ruleOverrides);
   const ir = documentToIR(doc);
   const derived = buildDerivedContext(doc, ir, metadata, diagnostics);
 
@@ -552,7 +561,10 @@ export type CompileDraftResult =
  * Validates an untrusted JSON draft (e.g. from full-draft generation) via Zod,
  * compiles it deterministically into canonical v0.4.0 plain text, and runs the Script Supervisor linter.
  */
-export function compileAuteurDraft(draftInput: unknown): CompileDraftResult {
+export function compileAuteurDraft(
+  draftInput: unknown,
+  ruleOverrides?: LintRuleOverrides
+): CompileDraftResult {
   const parsed = AuteurScriptDraftSchema.safeParse(draftInput);
   if (!parsed.success) {
     return {
@@ -585,7 +597,7 @@ export function compileAuteurDraft(draftInput: unknown): CompileDraftResult {
   };
 
   const rawText = fromAuteurIR(normalizedDraft);
-  const envelope = toAuteurEnvelope(rawText);
+  const envelope = toAuteurEnvelope(rawText, ruleOverrides);
 
   return {
     ok: true,

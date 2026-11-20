@@ -1,3 +1,4 @@
+import type {LintRuleOverrides} from '../core/index.ts';
 import {
   buildCanonicalTxtExport,
   buildJsonEnvelopeExport,
@@ -81,8 +82,12 @@ export function downloadTaglessTxt(title: string, rawText: string): boolean {
   return triggerTextFileDownload(file.filename, file.content, file.mimeType);
 }
 
-export function downloadJsonEnvelope(title: string, rawText: string): boolean {
-  const file = buildJsonEnvelopeExport(title, rawText);
+export function downloadJsonEnvelope(
+  title: string,
+  rawText: string,
+  ruleOverrides?: LintRuleOverrides
+): boolean {
+  const file = buildJsonEnvelopeExport(title, rawText, ruleOverrides);
   return triggerTextFileDownload(file.filename, file.content, file.mimeType);
 }
 
