@@ -471,12 +471,45 @@ export const UI_LABELS = {
       customCount > 0
         ? `Context & Skills: ${activeCount} active skills, ${customCount} ${customCount === 1 ? 'customization' : 'customizations'}`
         : `Context & Skills: ${activeCount} active skills`,
+    focusAria: 'Assistant focus',
     focusLabels: {
       auto: 'Auto',
       draft: 'Draft',
       refine: 'Refine',
       audit: 'Audit',
     } as const,
+    focuses: {
+      autoEmpty: {
+        placeholder: 'Describe your scene idea, or open Brief below to add cast refs and specs...',
+        emptyTitle: 'Draft a Pure Auteur Script',
+        emptyDesc:
+          'Describe the premise, cast, and look—or open Brief below for @ref handles, specs, and subtext. Drafts compile with live lint checks before applying.',
+      },
+      autoActive: {
+        placeholder: 'Ask to refine beats, audit continuity, draft a fresh scene, or discuss craft...',
+        emptyTitle: 'Unified Auteur Assistant',
+        emptyDesc:
+          'Ask for targeted edits, run a Script Supervisor audit, draft from a brief, or discuss camera and blocking. Every script change is staged with a diff before applying.',
+      },
+      draft: {
+        placeholder: 'Describe the scene premise, characters, look, and camera topology...',
+        emptyTitle: 'Draft a new scene',
+        emptyDesc:
+          'Provide a scene idea and optional Brief / Refs to compile a lint-checked v0.4.0 script ready to preview and apply.',
+      },
+      refine: {
+        placeholder: 'Describe a targeted edit, rewrite, or continuity fix...',
+        emptyTitle: 'Targeted script refinement',
+        emptyDesc:
+          'Ask for camera tightening, sharper blocking, dialogue polish, or lookbook updates. Edits are staged with a diff before applying.',
+      },
+      audit: {
+        placeholder: 'Ask for a custom Script Supervisor check or click a lens above...',
+        emptyTitle: 'Script Supervisor audit',
+        emptyDesc:
+          'Run a full 5-lens audit or focus on a single lens to surface clickable issues and dry-run fixes.',
+      },
+    },
     skillSources: {
       passive: 'Auto',
       pinned: 'Pinned',
@@ -509,6 +542,8 @@ export const UI_LABELS = {
     refineTargetLabel: 'Scope',
     refineTargetAria: 'Target scope for refinement',
     refineWholeScript: 'Whole Script',
+    quickAuditAllButton: 'Audit All',
+    quickAuditAllTitle: 'Run a full 5-lens Script Supervisor audit without leaving Auto focus',
     auditQuickGroupAria: 'Quick Script Supervisor audit lenses',
     auditQuickAll: 'All Lenses',
     auditQuickLensShort: {
@@ -518,6 +553,34 @@ export const UI_LABELS = {
       lens4_acoustics_voice: 'Lens 4 · Acoustics',
       lens5_blocks_grammar: 'Lens 5 · Grammar',
     } as const,
+    briefToggle: 'Brief',
+    briefToggleTitle: 'Toggle collapsible Brief & References tray for structured drafting',
+    briefToggleAria: (isOpen: boolean, hasContent: boolean) =>
+      `${isOpen ? 'Hide' : 'Show'} Brief & References tray${hasContent ? ' (populated)' : ''}`,
+    briefTray: {
+      regionAria: 'Scene brief and references',
+      refsHeading: 'Cast & References',
+      addRefButton: 'Add ref',
+      addRefAria: 'Add a cast or media reference handle',
+      emptyRefsHint: 'Bind handles like @image1 or @video1 to auto-load matching skills.',
+      handlePlaceholder: '@image1',
+      handleAria: 'Reference handle',
+      labelPlaceholder: 'Subject (e.g. Mark)',
+      labelAria: 'Reference subject label',
+      notePlaceholder: 'Optional note (e.g. voice: @audio1)',
+      noteAria: 'Reference note',
+      removeRefAria: 'Remove reference',
+      specsLabel: 'Format & Specs',
+      specsPlaceholder: 'Camera topology, beat cadence, dialogue or acoustic constraints...',
+      specsAria: 'Format and specifications',
+      subtextLabel: 'Subtext & Context',
+      subtextPlaceholder: 'Unspoken tension, backstory, or emotional arc not spoken verbatim...',
+      subtextAria: 'Subtext and context',
+      editTemplateButton: 'Edit template',
+      editTemplateTitle: 'Edit the Draft Wrapper Template in Context & Skills',
+      clearButton: 'Clear',
+      clearAria: 'Clear all brief and reference fields',
+    },
     missingKeyTitle: 'Bring your own Gemini API key',
     missingKeyDesc:
       'Your key is stored only in this browser and sent directly to the Gemini API. Nothing is routed through a third-party server.',

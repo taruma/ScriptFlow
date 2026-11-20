@@ -18,27 +18,29 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  FileText,
   KeyRound,
   Layers,
   Loader2,
+  Plus,
   RotateCcw,
   Settings2,
   ShieldAlert,
   Sparkles,
   Square,
   Terminal,
+  Trash2,
   Wrench,
   X,
 } from 'lucide-react';
 import type {AuteurDocument, LintRuleOverrides} from '../core/index.ts';
-import {assistantModeToFocus, composeAgentContext} from '../services/auteurKnowledge.ts';
+import {composeAgentContext, type AssistantFocus} from '../services/auteurKnowledge.ts';
 import {
   GeminiServiceError,
   runGeminiAgentTurn,
   type AgentTurnTrace,
 } from '../services/geminiInteractions.ts';
 import type {
-  AssistantMode,
   DraftSuggestion,
   PatchSuggestion,
   StagedSuggestion,
@@ -47,16 +49,26 @@ import {
   AUDIT_QUICK_CHECKS,
   buildAiTargetOptions,
   buildAuditQuickPrompt,
+  buildBriefSummaryBadge,
   buildScopedRefinePrompt,
+  EMPTY_DRAFT_BRIEF,
+  focusToLegacyMode,
+  formatDraftBriefPrompt,
   formatToolDisplayName,
+  getBriefReferenceHandles,
+  getNextReferenceHandle,
+  hasDraftBriefContent,
   isSuggestionStale,
   reconcileTargetScope,
+  shouldApplyDraftWrapperTemplate,
   shouldShowSettingsLinkForError,
   upsertLoadedSkill,
   type AiChatMessage,
   type AiLoadedSkillItem,
   type AiToolCallItem,
   type AuditQuickCheckId,
+  type DraftBriefState,
+  type ReferenceEntry,
 } from '../ui/aiAssistant.ts';
 import {
   getGeminiModelOption,
@@ -66,6 +78,7 @@ import {
 import {useAiSkills} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import type {ContextInspectorTabId} from './AiContextInspectorModal.tsx';
 import {
   AuditReviewSuggestionCard,
   DraftSuggestionCard,
@@ -91,7 +104,7 @@ const AiContextInspectorModal = lazy(() =>
   }))
 );
 
-const ASSISTANT_MODES: readonly AssistantMode[] = ['refine', 'check', 'draft'];
+const ASSISTANT_FOCUSES: readonly AssistantFocus[] = ['auto', 'draft', 'refine', 'audit'];
 const EMPTY_TOOL_CALLS: readonly AiToolCallItem[] = [];
 const EMPTY_LOADED_SKILLS: readonly AiLoadedSkillItem[] = [];
 const MIN_SIDEBAR_WIDTH = 340;
@@ -324,13 +337,16 @@ export function AiAssistantSidebar({
     acknowledgeUpdate,
   } = useAiSkills();
 
-  const [mode, setMode] = useState<AssistantMode>('refine');
+  const [focus, setFocus] = useState<AssistantFocus>('auto');
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>('whole');
+  const [brief, setBrief] = useState<DraftBriefState>(EMPTY_DRAFT_BRIEF);
+  const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
+  const [contextInitialTab, setContextInitialTab] = useState<ContextInspectorTabId>('preview');
   const [inspectedTrace, setInspectedTrace] = useState<AgentTurnTrace | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
@@ -343,32 +359,39 @@ export function AiAssistantSidebar({
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
 
+  const referenceHandles = useMemo(() => getBriefReferenceHandles(brief), [brief]);
+  const briefHasContent = useMemo(() => hasDraftBriefContent(brief), [brief]);
+  const briefSummaryLabel = useMemo(() => buildBriefSummaryBadge(brief), [brief]);
+
   // Compose live agent context lazily inside sidebar so closed sidebar incurs zero composition cost
   const previewComposedContext = useMemo(
     () =>
       composeAgentContext({
-        focus: assistantModeToFocus(mode),
+        focus,
         rawText,
         ruleOverrides,
         previousSnapshotHash: lastTurnSnapshotHash,
         foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
         skillOverrides: skillsState.skillOverrides,
         customSkills: skillsState.customSkills,
+        referenceHandles,
       }),
     [
-      mode,
+      focus,
       rawText,
       ruleOverrides,
       lastTurnSnapshotHash,
       skillsState.foundationalCraftOverride,
       skillsState.skillOverrides,
       skillsState.customSkills,
+      referenceHandles,
     ]
   );
 
+  const isEmpty = previewComposedContext.editorState.isEmpty;
   const currentSnapshotHash = previewComposedContext.editorState.snapshotHash;
 
-  // Target scope options for Refine mode
+  // Target scope options for Refine / Auto modes on non-empty scripts
   const targetOptions = useMemo(
     () => buildAiTargetOptions(doc, UI_LABELS.ai.refineWholeScript),
     [doc]
@@ -382,6 +405,50 @@ export function AiAssistantSidebar({
   const reasoningOption =
     REASONING_LEVEL_OPTIONS.find((r) => r.id === settings.reasoningLevel) ??
     REASONING_LEVEL_OPTIONS[1];
+
+  const handleOpenContext = useCallback((tab: ContextInspectorTabId = 'preview') => {
+    setContextInitialTab(tab);
+    setIsContextOpen(true);
+  }, []);
+
+  const handleAddReference = useCallback(() => {
+    setBrief((prev) => ({
+      ...prev,
+      references: [
+        ...prev.references,
+        {
+          id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          handle: getNextReferenceHandle(prev.references),
+          kind: 'text',
+          label: '',
+          note: '',
+        },
+      ],
+    }));
+  }, []);
+
+  const handleUpdateReference = useCallback(
+    (refId: string, patch: Partial<Pick<ReferenceEntry, 'handle' | 'label' | 'note'>>) => {
+      setBrief((prev) => ({
+        ...prev,
+        references: prev.references.map((entry) =>
+          entry.id === refId ? {...entry, ...patch} : entry
+        ),
+      }));
+    },
+    []
+  );
+
+  const handleRemoveReference = useCallback((refId: string) => {
+    setBrief((prev) => ({
+      ...prev,
+      references: prev.references.filter((entry) => entry.id !== refId),
+    }));
+  }, []);
+
+  const handleClearBrief = useCallback(() => {
+    setBrief(EMPTY_DRAFT_BRIEF);
+  }, []);
 
   const handleStopRun = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -405,12 +472,14 @@ export function AiAssistantSidebar({
     setInspectedTrace(trace);
   }, []);
 
-  // Reset in-memory chat & interaction chain automatically when switching scripts
+  // Reset in-memory chat, interaction chain, and brief tray automatically when switching scripts
   useEffect(() => {
     if (lastSessionKeyRef.current !== scriptSessionKey) {
       lastSessionKeyRef.current = scriptSessionKey;
       handleResetChat();
       setSelectedTargetKey('whole');
+      setBrief(EMPTY_DRAFT_BRIEF);
+      setIsBriefOpen(false);
     }
   }, [scriptSessionKey, handleResetChat]);
 
@@ -465,9 +534,10 @@ export function AiAssistantSidebar({
   const submitPrompt = useCallback(
     async (
       rawUserPrompt: string,
-      options?: {overrideMode?: AssistantMode; displayText?: string; scopeLabel?: string}
+      options?: {overrideFocus?: AssistantFocus; displayText?: string; scopeLabel?: string}
     ) => {
-      const activeMode = options?.overrideMode ?? mode;
+      const activeFocus = options?.overrideFocus ?? focus;
+      const legacyMode = focusToLegacyMode(activeFocus, isEmpty);
       const trimmed = rawUserPrompt.trim();
       if (!trimmed || isRunning) return;
 
@@ -476,16 +546,29 @@ export function AiAssistantSidebar({
         return;
       }
 
-      const effectivePrompt =
-        activeMode === 'refine' && !options?.displayText
+      const useDraftWrapper =
+        !options?.displayText &&
+        shouldApplyDraftWrapperTemplate({
+          focus: activeFocus,
+          isEmpty,
+          brief,
+        });
+
+      const useTargetScope =
+        !options?.displayText &&
+        !useDraftWrapper &&
+        !isEmpty &&
+        (activeFocus === 'auto' || activeFocus === 'refine') &&
+        activeTarget.kind !== 'whole';
+
+      const effectivePrompt = useDraftWrapper
+        ? formatDraftBriefPrompt(trimmed, brief, skillsState.draftWrapperTemplateOverride)
+        : useTargetScope
           ? buildScopedRefinePrompt(trimmed, activeTarget)
           : trimmed;
 
-      const scopeLabel =
-        options?.scopeLabel ??
-        (activeMode === 'refine' && activeTarget.kind !== 'whole'
-          ? activeTarget.label
-          : undefined);
+      const scopeLabel = options?.scopeLabel ?? (useTargetScope ? activeTarget.label : undefined);
+      const briefSummary = useDraftWrapper ? buildBriefSummaryBadge(brief) : undefined;
 
       const userMessageId = `msg-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       const assistantMessageId = `msg-a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -493,9 +576,11 @@ export function AiAssistantSidebar({
       const userMessage: AiChatMessage = {
         id: userMessageId,
         role: 'user',
-        mode: activeMode,
+        mode: legacyMode,
+        focus: activeFocus,
         text: options?.displayText ?? trimmed,
         ...(scopeLabel ? {scopeLabel} : {}),
+        ...(briefSummary ? {briefSummary} : {}),
       };
 
       const turnSnapshotHash = currentSnapshotHash;
@@ -503,7 +588,8 @@ export function AiAssistantSidebar({
       const initialAssistantMessage: AiChatMessage = {
         id: assistantMessageId,
         role: 'assistant',
-        mode: activeMode,
+        mode: legacyMode,
+        focus: activeFocus,
         text: '',
         thoughtSummary: '',
         toolCalls: [],
@@ -526,7 +612,8 @@ export function AiAssistantSidebar({
           apiKey: settings.apiKey,
           model: settings.model,
           reasoningLevel: settings.reasoningLevel,
-          mode: activeMode,
+          mode: legacyMode,
+          focus: activeFocus,
           prompt: effectivePrompt,
           rawText,
           ruleOverrides,
@@ -535,6 +622,7 @@ export function AiAssistantSidebar({
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
+          referenceHandles,
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -655,7 +743,10 @@ export function AiAssistantSidebar({
       }
     },
     [
-      mode,
+      focus,
+      isEmpty,
+      brief,
+      referenceHandles,
       isRunning,
       hasApiKey,
       activeTarget,
@@ -666,6 +757,7 @@ export function AiAssistantSidebar({
       rawText,
       ruleOverrides,
       skillsState.foundationalCraftOverride,
+      skillsState.draftWrapperTemplateOverride,
       skillsState.skillOverrides,
       skillsState.customSkills,
       updateAssistantMessage,
@@ -696,7 +788,7 @@ export function AiAssistantSidebar({
           ? UI_LABELS.ai.auditQuickAll
           : UI_LABELS.ai.auditQuickLensShort[checkId];
       void submitPrompt(buildAuditQuickPrompt(checkId), {
-        overrideMode: 'check',
+        overrideFocus: 'audit',
         displayText: `Audit: ${displayLabel}`,
       });
     },
@@ -746,7 +838,12 @@ export function AiAssistantSidebar({
     [onApplyDraftSuggestion, markSuggestionApplied]
   );
 
-  const modeMeta = UI_LABELS.ai.modes[mode];
+  const focusMeta =
+    focus === 'auto'
+      ? isEmpty
+        ? UI_LABELS.ai.focuses.autoEmpty
+        : UI_LABELS.ai.focuses.autoActive
+      : UI_LABELS.ai.focuses[focus];
 
   return (
     <>
@@ -785,7 +882,7 @@ export function AiAssistantSidebar({
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
-                onClick={() => setIsContextOpen(true)}
+                onClick={() => handleOpenContext('preview')}
                 title={UI_LABELS.ai.contextButtonTitle}
                 aria-label={UI_LABELS.ai.contextButtonAria(
                   previewComposedContext.activeSkills.length,
@@ -856,35 +953,34 @@ export function AiAssistantSidebar({
             </div>
           </div>
 
-          {/* Mode Switcher + Mode-Specific Context Bar */}
+          {/* Unified Focus Bar + Contextual Controls */}
           <div className="border-b border-border-subtle bg-surface px-3 py-2.5 space-y-2 shrink-0">
             <div
-              role="tablist"
-              aria-label={UI_LABELS.ai.modesAria}
-              className={`${UI_TOKENS.button.segmentedGroup} grid grid-cols-3 w-full`}
+              role="group"
+              aria-label={UI_LABELS.ai.focusAria}
+              className={`${UI_TOKENS.button.segmentedGroup} grid grid-cols-4 w-full`}
             >
-              {ASSISTANT_MODES.map((m) => {
-                const active = mode === m;
+              {ASSISTANT_FOCUSES.map((item) => {
+                const active = focus === item;
                 return (
                   <button
-                    key={m}
+                    key={item}
                     type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setMode(m)}
+                    aria-pressed={active}
+                    onClick={() => setFocus(item)}
                     className={`${
                       active
                         ? UI_TOKENS.button.segmentedItemActive
                         : UI_TOKENS.button.segmentedItem
                     } justify-center`}
                   >
-                    <span>{UI_LABELS.ai.modes[m].label}</span>
+                    <span>{UI_LABELS.ai.focusLabels[item]}</span>
                   </button>
                 );
               })}
             </div>
 
-            {mode === 'refine' && (
+            {!isEmpty && (focus === 'auto' || focus === 'refine') && (
               <div className="flex items-center gap-2">
                 <label
                   htmlFor="auteur-ai-target-scope"
@@ -905,10 +1001,22 @@ export function AiAssistantSidebar({
                     </option>
                   ))}
                 </select>
+                {focus === 'auto' && (
+                  <button
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => handleQuickAudit('all')}
+                    title={UI_LABELS.ai.quickAuditAllTitle}
+                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-1 px-2`}
+                  >
+                    <ShieldAlert className="h-3 w-3 text-text-faint" />
+                    <span>{UI_LABELS.ai.quickAuditAllButton}</span>
+                  </button>
+                )}
               </div>
             )}
 
-            {mode === 'check' && (
+            {focus === 'audit' && (
               <div
                 role="group"
                 aria-label={UI_LABELS.ai.auditQuickGroupAria}
@@ -971,19 +1079,19 @@ export function AiAssistantSidebar({
             {messages.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border-main bg-surface/60 px-4 py-5 text-center space-y-1.5">
                 <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-main bg-surface text-text-muted mx-auto">
-                  {mode === 'refine' ? (
+                  {focus === 'refine' ? (
                     <Wrench className="h-4 w-4" />
-                  ) : mode === 'check' ? (
+                  ) : focus === 'audit' ? (
                     <ShieldAlert className="h-4 w-4" />
                   ) : (
                     <Sparkles className="h-4 w-4" />
                   )}
                 </div>
                 <h3 className="font-serif text-xs font-bold text-text-main">
-                  {modeMeta.emptyTitle}
+                  {focusMeta.emptyTitle}
                 </h3>
                 <p className="text-[11px] leading-relaxed text-text-muted max-w-[300px] mx-auto">
-                  {modeMeta.emptyDesc}
+                  {focusMeta.emptyDesc}
                 </p>
               </div>
             ) : (
@@ -992,9 +1100,18 @@ export function AiAssistantSidebar({
                   return (
                     <div key={msg.id} className="flex justify-end">
                       <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-border-main bg-surface px-3 py-2 text-xs text-text-main shadow-2xs space-y-1">
-                        {msg.scopeLabel && (
-                          <div className="font-mono text-[10px] text-text-faint truncate">
-                            {msg.scopeLabel}
+                        {(msg.scopeLabel || msg.briefSummary) && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {msg.scopeLabel && (
+                              <span className="font-mono text-[10px] text-text-faint truncate">
+                                {msg.scopeLabel}
+                              </span>
+                            )}
+                            {msg.briefSummary && (
+                              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-aesthetic">
+                                {msg.briefSummary}
+                              </span>
+                            )}
                           </div>
                         )}
                         <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
@@ -1152,6 +1269,158 @@ export function AiAssistantSidebar({
             <div ref={threadEndRef} />
           </div>
 
+          {/* Collapsible Brief / Refs Tray */}
+          {isBriefOpen && (
+            <section
+              aria-label={UI_LABELS.ai.briefTray.regionAria}
+              className="border-t border-border-main bg-surface-subtle/70 px-3 py-2.5 max-h-60 overflow-y-auto auteur-pane-scroll shrink-0 space-y-2.5"
+            >
+              {/* Cast & References */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+                    {UI_LABELS.ai.briefTray.refsHeading}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddReference}
+                    aria-label={UI_LABELS.ai.briefTray.addRefAria}
+                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-0.5 px-2`}
+                  >
+                    <Plus className="h-2.5 w-2.5" />
+                    <span>{UI_LABELS.ai.briefTray.addRefButton}</span>
+                  </button>
+                </div>
+
+                {brief.references.length === 0 ? (
+                  <p className="text-[11px] text-text-faint leading-snug">
+                    {UI_LABELS.ai.briefTray.emptyRefsHint}
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {brief.references.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-lg border border-border-subtle bg-surface p-1.5 space-y-1"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            data-native-undo="true"
+                            value={entry.handle}
+                            onChange={(event) =>
+                              handleUpdateReference(entry.id, {handle: event.target.value})
+                            }
+                            placeholder={UI_LABELS.ai.briefTray.handlePlaceholder}
+                            aria-label={UI_LABELS.ai.briefTray.handleAria}
+                            className="w-24 shrink-0 rounded-md border border-border-main bg-surface-subtle px-2 py-1 font-mono text-[11px] text-text-main placeholder-text-placeholder focus:bg-surface focus:outline-none focus:ring-1 focus:ring-border-main"
+                          />
+                          <input
+                            type="text"
+                            data-native-undo="true"
+                            value={entry.label}
+                            onChange={(event) =>
+                              handleUpdateReference(entry.id, {label: event.target.value})
+                            }
+                            placeholder={UI_LABELS.ai.briefTray.labelPlaceholder}
+                            aria-label={UI_LABELS.ai.briefTray.labelAria}
+                            className="min-w-0 flex-1 rounded-md border border-border-main bg-surface-subtle px-2 py-1 text-[11px] text-text-main placeholder-text-placeholder focus:bg-surface focus:outline-none focus:ring-1 focus:ring-border-main"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveReference(entry.id)}
+                            aria-label={UI_LABELS.ai.briefTray.removeRefAria}
+                            className="p-1 rounded-md text-text-faint hover:text-red-600 dark:hover:text-red-400 hover:bg-surface-subtle transition-colors cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          data-native-undo="true"
+                          value={entry.note ?? ''}
+                          onChange={(event) =>
+                            handleUpdateReference(entry.id, {note: event.target.value})
+                          }
+                          placeholder={UI_LABELS.ai.briefTray.notePlaceholder}
+                          aria-label={UI_LABELS.ai.briefTray.noteAria}
+                          className="w-full rounded-md border border-border-subtle bg-surface-subtle px-2 py-1 text-[11px] text-text-body placeholder-text-placeholder focus:bg-surface focus:border-border-main focus:outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Format & Specs */}
+              <div className="space-y-1">
+                <label
+                  htmlFor="auteur-ai-brief-specs"
+                  className="block text-[10px] font-semibold uppercase tracking-wider text-text-faint"
+                >
+                  {UI_LABELS.ai.briefTray.specsLabel}
+                </label>
+                <textarea
+                  id="auteur-ai-brief-specs"
+                  rows={2}
+                  data-native-undo="true"
+                  value={brief.specs}
+                  onChange={(event) =>
+                    setBrief((prev) => ({...prev, specs: event.target.value}))
+                  }
+                  placeholder={UI_LABELS.ai.briefTray.specsPlaceholder}
+                  aria-label={UI_LABELS.ai.briefTray.specsAria}
+                  className="w-full resize-none rounded-lg border border-border-main bg-surface px-2.5 py-1.5 text-[11px] leading-snug text-text-main placeholder-text-placeholder focus:outline-none focus:ring-1 focus:ring-border-main auteur-pane-scroll"
+                />
+              </div>
+
+              {/* Subtext & Context */}
+              <div className="space-y-1">
+                <label
+                  htmlFor="auteur-ai-brief-subtext"
+                  className="block text-[10px] font-semibold uppercase tracking-wider text-text-faint"
+                >
+                  {UI_LABELS.ai.briefTray.subtextLabel}
+                </label>
+                <textarea
+                  id="auteur-ai-brief-subtext"
+                  rows={2}
+                  data-native-undo="true"
+                  value={brief.subtext}
+                  onChange={(event) =>
+                    setBrief((prev) => ({...prev, subtext: event.target.value}))
+                  }
+                  placeholder={UI_LABELS.ai.briefTray.subtextPlaceholder}
+                  aria-label={UI_LABELS.ai.briefTray.subtextAria}
+                  className="w-full resize-none rounded-lg border border-border-main bg-surface px-2.5 py-1.5 text-[11px] leading-snug text-text-main placeholder-text-placeholder focus:outline-none focus:ring-1 focus:ring-border-main auteur-pane-scroll"
+                />
+              </div>
+
+              {/* Brief Tray Footer */}
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => handleOpenContext('craft')}
+                  title={UI_LABELS.ai.briefTray.editTemplateTitle}
+                  className="text-[11px] font-medium text-text-muted hover:text-text-main underline underline-offset-2 transition-colors cursor-pointer"
+                >
+                  {UI_LABELS.ai.briefTray.editTemplateButton}
+                </button>
+
+                {briefHasContent && (
+                  <button
+                    type="button"
+                    onClick={handleClearBrief}
+                    aria-label={UI_LABELS.ai.briefTray.clearAria}
+                    className="text-[11px] font-medium text-text-faint hover:text-text-main transition-colors cursor-pointer"
+                  >
+                    {UI_LABELS.ai.briefTray.clearButton}
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
           {/* Composer Footer */}
           <div className="border-t border-border-main bg-surface p-3 shrink-0 space-y-1.5">
             <div className="flex items-end gap-2 rounded-xl border border-border-main bg-surface-subtle px-2.5 py-2 focus-within:bg-surface focus-within:ring-1 focus-within:ring-border-main transition-colors">
@@ -1162,7 +1431,7 @@ export function AiAssistantSidebar({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleComposerKeyDown}
-                placeholder={modeMeta.placeholder}
+                placeholder={focusMeta.placeholder}
                 aria-label={UI_LABELS.ai.composerAria}
                 className="max-h-36 min-h-[42px] flex-1 resize-none bg-transparent text-xs leading-relaxed text-text-main placeholder-text-placeholder outline-none auteur-pane-scroll"
               />
@@ -1192,9 +1461,26 @@ export function AiAssistantSidebar({
               )}
             </div>
 
-            <div className="flex items-center justify-between px-0.5 text-[10px] text-text-faint">
-              <span>{UI_LABELS.ai.composerHint}</span>
-              <span className="font-mono">{UI_LABELS.ai.modes[mode].label}</span>
+            <div className="flex items-center justify-between gap-2 px-0.5 text-[10px] text-text-faint">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  type="button"
+                  aria-expanded={isBriefOpen}
+                  aria-label={UI_LABELS.ai.briefToggleAria(isBriefOpen, briefHasContent)}
+                  title={UI_LABELS.ai.briefToggleTitle}
+                  onClick={() => setIsBriefOpen((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-medium text-[10px] transition-colors cursor-pointer shrink-0 ${
+                    isBriefOpen || briefHasContent
+                      ? 'auteur-phase-aesthetic'
+                      : 'border-border-subtle bg-surface-subtle text-text-muted hover:text-text-main hover:border-border-main'
+                  }`}
+                >
+                  <FileText className="h-2.5 w-2.5" />
+                  <span>{briefSummaryLabel ?? UI_LABELS.ai.briefToggle}</span>
+                </button>
+                <span className="truncate">{UI_LABELS.ai.composerHint}</span>
+              </div>
+              <span className="font-mono shrink-0">{UI_LABELS.ai.focusLabels[focus]}</span>
             </div>
           </div>
         </div>
@@ -1220,6 +1506,7 @@ export function AiAssistantSidebar({
           <AiContextInspectorModal
             isOpen={isContextOpen}
             onClose={() => setIsContextOpen(false)}
+            initialTab={contextInitialTab}
             composedContext={previewComposedContext}
             skillsState={skillsState}
             customizationCount={customizationCount}

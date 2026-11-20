@@ -6,7 +6,21 @@ import {
   DEFAULT_DRAFT_WRAPPER_TEMPLATE,
   DEFAULT_FOUNDATIONAL_CRAFT,
 } from '../../src/services/auteurKnowledge.ts';
-import {formatToolDisplayName, upsertLoadedSkill} from '../../src/ui/aiAssistant.ts';
+import {
+  buildBriefSummaryBadge,
+  EMPTY_DRAFT_BRIEF,
+  focusToLegacyMode,
+  formatDraftBriefPrompt,
+  formatReferenceEntriesForPrompt,
+  formatToolDisplayName,
+  getBriefReferenceHandles,
+  getNextReferenceHandle,
+  hasDraftBriefContent,
+  shouldApplyDraftWrapperTemplate,
+  upsertLoadedSkill,
+  type DraftBriefState,
+} from '../../src/ui/aiAssistant.ts';
+import {UI_LABELS} from '../../src/ui/labels.ts';
 import type {KeyValueStorageLike} from '../../src/ui/aiSettings.ts';
 import {
   acknowledgeUpstreamKnowledgeUpdate,
@@ -315,3 +329,136 @@ describe('aiAssistant Phase 2 skill helpers', () => {
     expect(withSecond).toHaveLength(2);
   });
 });
+
+describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers', () => {
+  it('maps AssistantFocus to legacy AssistantMode accurately for empty and non-empty scripts', () => {
+    expect(focusToLegacyMode('draft', false)).toBe('draft');
+    expect(focusToLegacyMode('audit', false)).toBe('check');
+    expect(focusToLegacyMode('refine', false)).toBe('refine');
+    expect(focusToLegacyMode('auto', true)).toBe('draft');
+    expect(focusToLegacyMode('auto', false)).toBe('refine');
+  });
+
+  it('extracts normalized reference handles, formats reference lines, and computes next @imageN handle', () => {
+    const brief: DraftBriefState = {
+      references: [
+        {id: 'r1', handle: 'image1', kind: 'text', label: 'Mark', note: 'voice: @audio1'},
+        {id: 'r2', handle: '@video1', kind: 'text', label: 'Clip 1 terminal frame'},
+        {id: 'r3', handle: '   ', kind: 'text', label: '', note: ''},
+      ],
+      specs: '',
+      subtext: '',
+    };
+
+    expect(hasDraftBriefContent(EMPTY_DRAFT_BRIEF)).toBe(false);
+    expect(hasDraftBriefContent(brief)).toBe(true);
+    expect(getBriefReferenceHandles(brief)).toEqual(['@image1', '@audio1', '@video1']);
+    expect(getNextReferenceHandle(brief.references)).toBe('@image2');
+    expect(formatReferenceEntriesForPrompt(brief.references)).toBe(
+      '@image1 as Mark (voice: @audio1)\n@video1: Clip 1 terminal frame'
+    );
+    expect(buildBriefSummaryBadge(EMPTY_DRAFT_BRIEF)).toBeUndefined();
+    expect(buildBriefSummaryBadge(brief)).toBe('Brief · 2 refs');
+    expect(buildBriefSummaryBadge({references: [], specs: '1-take oner', subtext: ''})).toBe(
+      'Brief'
+    );
+  });
+
+  it('determines when to apply the Draft Wrapper Template across focuses and brief states', () => {
+    const populatedBrief: DraftBriefState = {
+      references: [],
+      specs: 'Continuous oner',
+      subtext: '',
+    };
+
+    expect(
+      shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: true, brief: EMPTY_DRAFT_BRIEF})
+    ).toBe(true);
+    expect(
+      shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: false, brief: EMPTY_DRAFT_BRIEF})
+    ).toBe(false);
+    expect(
+      shouldApplyDraftWrapperTemplate({focus: 'draft', isEmpty: false, brief: EMPTY_DRAFT_BRIEF})
+    ).toBe(true);
+    expect(
+      shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: false, brief: EMPTY_DRAFT_BRIEF})
+    ).toBe(false);
+    expect(
+      shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: false, brief: populatedBrief})
+    ).toBe(true);
+  });
+
+  it('interpolates Draft Wrapper Template cleanly, omits empty optional lines, and preserves idea fallback', () => {
+    // Empty optional brief fields omit Cast/Specs/Subtext lines completely
+    const minimalPrompt = formatDraftBriefPrompt('A tense elevator standoff.', EMPTY_DRAFT_BRIEF);
+    expect(minimalPrompt).toContain('Scene Idea: A tense elevator standoff.');
+    expect(minimalPrompt).not.toContain('Cast & References:');
+    expect(minimalPrompt).not.toContain('Format & Specs:');
+    expect(minimalPrompt).not.toContain('Subtext & Tone:');
+
+    // Populated brief fills all placeholders cleanly
+    const richBrief: DraftBriefState = {
+      references: [{id: 'r1', handle: '@image1', kind: 'text', label: 'Elena', note: 'voice: @audio1'}],
+      specs: 'Handheld 35mm oner, no music',
+      subtext: 'She knows he hid the key',
+    };
+    const fullPrompt = formatDraftBriefPrompt('Confrontation in the lobby.', richBrief);
+    expect(fullPrompt).toContain('Scene Idea: Confrontation in the lobby.');
+    expect(fullPrompt).toContain('Cast & References: @image1 as Elena (voice: @audio1)');
+    expect(fullPrompt).toContain('Format & Specs: Handheld 35mm oner, no music');
+    expect(fullPrompt).toContain('Subtext & Tone: She knows he hid the key');
+
+    // Custom template override works and falls back to appending idea if {{idea}} is omitted
+    const customWithoutIdea = formatDraftBriefPrompt(
+      'Rooftop rain pursuit.',
+      {references: [], specs: 'Continuous oner', subtext: ''},
+      'Director Specs: {{specs}}\nHidden Tension: {{subtext}}'
+    );
+    expect(customWithoutIdea).toContain('Director Specs: Continuous oner');
+    expect(customWithoutIdea).not.toContain('Hidden Tension:');
+    expect(customWithoutIdea.endsWith('Rooftop rain pursuit.')).toBe(true);
+  });
+
+  it('passively activates video_continuation and character_reference from referenceHandles on an empty script while respecting muted overrides', () => {
+    const composed = composeAgentContext({
+      focus: 'auto',
+      rawText: '',
+      referenceHandles: ['@video1', '@image1'],
+    });
+
+    const activeIds = composed.activeSkills.map((s) => s.id);
+    expect(activeIds).toContain('draft_craft');
+    expect(activeIds).toContain('video_continuation');
+    expect(activeIds).toContain('character_reference');
+
+    // Muted override must suppress passive activation even when handle is declared
+    const muted = composeAgentContext({
+      focus: 'auto',
+      rawText: '',
+      referenceHandles: ['@video1', '@image1'],
+      skillOverrides: {
+        video_continuation: {pinMode: 'muted'},
+      },
+    });
+    expect(muted.activeSkills.map((s) => s.id)).not.toContain('video_continuation');
+    expect(muted.mutedSkills.map((s) => s.id)).toContain('video_continuation');
+    expect(muted.activeSkills.map((s) => s.id)).toContain('character_reference');
+  });
+
+  it('keeps Phase 2/3 craft prompts and UI labels 100% platform- and model-agnostic', () => {
+    const serialized = JSON.stringify({
+      defaultTemplate: DEFAULT_DRAFT_WRAPPER_TEMPLATE,
+      focuses: UI_LABELS.ai.focuses,
+      briefTray: UI_LABELS.ai.briefTray,
+      contextInspector: {
+        title: UI_LABELS.ai.contextInspector.title,
+        subtitle: UI_LABELS.ai.contextInspector.subtitle,
+        foundationalCraftDesc: UI_LABELS.ai.contextInspector.foundationalCraftDesc,
+        draftTemplateDesc: UI_LABELS.ai.contextInspector.draftTemplateDesc,
+      },
+    });
+
+    expect(serialized).not.toMatch(/\b(seedance|kling|sora|veo|runway|pika|luma|midjourney)\b/i);
+  });
+});
+

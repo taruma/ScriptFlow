@@ -1,4 +1,8 @@
 import type {AuditLens, AuteurDocument, AuteurLensPresetId, SceneTopology} from '../core/index.ts';
+import {
+  DEFAULT_DRAFT_WRAPPER_TEMPLATE,
+  type AssistantFocus,
+} from '../services/auteurKnowledge.ts';
 import type {AgentTurnTrace, GeminiErrorCode} from '../services/geminiInteractions.ts';
 import type {AssistantMode, StagedSuggestion} from '../services/scriptTools.ts';
 
@@ -37,12 +41,36 @@ export interface AiLoadedSkillItem {
   source: 'passive' | 'pinned' | 'tool';
 }
 
+export type ReferenceKind = 'text' | 'image' | 'video' | 'audio';
+
+export interface ReferenceEntry {
+  id: string;
+  handle: string;
+  kind: ReferenceKind;
+  label: string;
+  note?: string;
+}
+
+export interface DraftBriefState {
+  references: ReferenceEntry[];
+  specs: string;
+  subtext: string;
+}
+
+export const EMPTY_DRAFT_BRIEF: DraftBriefState = {
+  references: [],
+  specs: '',
+  subtext: '',
+};
+
 export interface AiChatMessage {
   id: string;
   role: 'user' | 'assistant';
   mode: AssistantMode;
+  focus: AssistantFocus;
   text: string;
   scopeLabel?: string;
+  briefSummary?: string;
   thoughtSummary?: string;
   toolCalls?: AiToolCallItem[];
   loadedSkills?: AiLoadedSkillItem[];
@@ -292,3 +320,214 @@ export function formatToolDisplayName(toolName: string): string {
 export function shouldShowSettingsLinkForError(code: GeminiErrorCode): boolean {
   return code === 'missing_api_key' || code === 'invalid_api_key' || code === 'model_not_found';
 }
+
+// ---------------------------------------------------------------------------
+// Unified Focus & Collapsible Brief / Refs Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps the unified AssistantFocus back to a legacy AssistantMode so trace payloads
+ * and backwards-compatible consumers always receive a valid mode value.
+ */
+export function focusToLegacyMode(focus: AssistantFocus, isEmpty: boolean): AssistantMode {
+  switch (focus) {
+    case 'draft':
+      return 'draft';
+    case 'audit':
+      return 'check';
+    case 'refine':
+      return 'refine';
+    case 'auto':
+      return isEmpty ? 'draft' : 'refine';
+  }
+}
+
+function normalizeHandleToken(rawHandle: string): string {
+  const trimmed = rawHandle.trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
+}
+
+function isNonEmptyReference(entry: ReferenceEntry): boolean {
+  return (
+    entry.handle.trim().length > 0 ||
+    entry.label.trim().length > 0 ||
+    (entry.note?.trim().length ?? 0) > 0
+  );
+}
+
+export function hasDraftBriefContent(brief: DraftBriefState): boolean {
+  return (
+    brief.specs.trim().length > 0 ||
+    brief.subtext.trim().length > 0 ||
+    brief.references.some(isNonEmptyReference)
+  );
+}
+
+/**
+ * Extracts normalized `@handle` references from the Brief / Refs tray (including
+ * explicit `@...` tokens in notes such as `voice: @audio1`) for passive skill activation.
+ */
+export function getBriefReferenceHandles(brief: DraftBriefState): string[] {
+  const seen = new Set<string>();
+  const handles: string[] = [];
+
+  const pushHandle = (raw: string) => {
+    const normalized = normalizeHandleToken(raw);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    handles.push(normalized);
+  };
+
+  for (const entry of brief.references) {
+    if (entry.handle.trim().length > 0) {
+      pushHandle(entry.handle);
+    }
+    if (entry.note && entry.note.trim().length > 0) {
+      const noteMatches = entry.note.match(/@[a-zA-Z0-9_-]+/g);
+      if (noteMatches) {
+        for (const match of noteMatches) {
+          pushHandle(match);
+        }
+      }
+    }
+  }
+
+  return handles;
+}
+
+/**
+ * Suggests the next sequential `@imageN` handle when adding a new ReferenceEntry row.
+ */
+export function getNextReferenceHandle(references: readonly ReferenceEntry[]): string {
+  let maxIndex = 0;
+  for (const entry of references) {
+    const match = entry.handle.trim().match(/^@?image(\d+)$/i);
+    if (match) {
+      const num = Number.parseInt(match[1], 10);
+      if (Number.isFinite(num) && num > maxIndex) {
+        maxIndex = num;
+      }
+    }
+  }
+  return `@image${maxIndex + 1}`;
+}
+
+/**
+ * Formats non-empty ReferenceEntry rows into clean prompt lines such as
+ * `@image1 as Mark (voice: @audio1)` or `@video1: Clip 1 terminal frame`.
+ */
+export function formatReferenceEntriesForPrompt(references: readonly ReferenceEntry[]): string {
+  const lines: string[] = [];
+
+  for (const entry of references) {
+    const handle = normalizeHandleToken(entry.handle);
+    const label = entry.label.trim();
+    const note = entry.note?.trim() ?? '';
+    if (!handle && !label && !note) continue;
+
+    let base = '';
+    if (handle && label) {
+      base = /^@video/i.test(handle) ? `${handle}: ${label}` : `${handle} as ${label}`;
+    } else if (handle) {
+      base = handle;
+    } else if (label) {
+      base = label;
+    }
+
+    if (base && note) {
+      lines.push(`${base} (${note})`);
+    } else if (base) {
+      lines.push(base);
+    } else if (note) {
+      lines.push(note);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+export function shouldApplyDraftWrapperTemplate(options: {
+  focus: AssistantFocus;
+  isEmpty: boolean;
+  brief: DraftBriefState;
+}): boolean {
+  return (
+    hasDraftBriefContent(options.brief) ||
+    options.focus === 'draft' ||
+    (options.focus === 'auto' && options.isEmpty)
+  );
+}
+
+const BRIEF_PLACEHOLDER_REGEX = /\{\{\s*(idea|cast|specs|subtext)\s*\}\}/g;
+
+/**
+ * Interpolates the editable Draft Wrapper Template with the user's idea and optional
+ * Brief / Refs fields, cleanly omitting lines whose optional placeholders resolve empty
+ * and guaranteeing the user's idea is never silently dropped if a custom template omits `{{idea}}`.
+ */
+export function formatDraftBriefPrompt(
+  idea: string,
+  brief: DraftBriefState,
+  templateOverride?: string | null
+): string {
+  const trimmedIdea = idea.trim();
+  const template = templateOverride?.trim() || DEFAULT_DRAFT_WRAPPER_TEMPLATE;
+
+  const values: Record<'idea' | 'cast' | 'specs' | 'subtext', string> = {
+    idea: trimmedIdea,
+    cast: formatReferenceEntriesForPrompt(brief.references),
+    specs: brief.specs.trim(),
+    subtext: brief.subtext.trim(),
+  };
+
+  let templateContainedIdea = false;
+  const outputLines: string[] = [];
+
+  for (const line of template.split(/\r?\n/)) {
+    const matches = Array.from(line.matchAll(BRIEF_PLACEHOLDER_REGEX));
+    if (matches.length === 0) {
+      outputLines.push(line);
+      continue;
+    }
+
+    const keys = matches.map((m) => m[1] as keyof typeof values);
+    if (keys.includes('idea')) {
+      templateContainedIdea = true;
+    }
+
+    // Omit lines where every placeholder on the line resolved to empty
+    const allEmpty = keys.every((key) => values[key].length === 0);
+    if (allEmpty) {
+      continue;
+    }
+
+    const substituted = line.replace(BRIEF_PLACEHOLDER_REGEX, (_, key: keyof typeof values) => {
+      return values[key];
+    });
+    outputLines.push(substituted);
+  }
+
+  let assembled = outputLines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!templateContainedIdea && trimmedIdea.length > 0) {
+    assembled = assembled.length > 0 ? `${assembled}\n\n${trimmedIdea}` : trimmedIdea;
+  }
+
+  return assembled;
+}
+
+export function buildBriefSummaryBadge(brief: DraftBriefState): string | undefined {
+  if (!hasDraftBriefContent(brief)) return undefined;
+  const refCount = brief.references.filter(isNonEmptyReference).length;
+  if (refCount > 0) {
+    return `Brief · ${refCount} ${refCount === 1 ? 'ref' : 'refs'}`;
+  }
+  return 'Brief';
+}
+

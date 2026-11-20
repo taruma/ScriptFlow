@@ -143,6 +143,7 @@ export interface ComposeAgentContextOptions {
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
+  referenceHandles?: readonly string[];
 }
 
 export interface ComposedAgentContext {
@@ -715,6 +716,13 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   const seenSkillIds = new Set<string>();
   const resolvedSkills: ResolvedAuteurSkill[] = [];
   const includeMontageExample = derived.sceneTopology === 'discontinuous_montage';
+  const normalizedRefHandles = (options.referenceHandles ?? [])
+    .map((handle) => handle.trim())
+    .filter((handle) => handle.length > 0);
+  const hasVideoReferenceHandle = normalizedRefHandles.some((handle) => /^@?video/i.test(handle));
+  const hasCharacterReferenceHandle = normalizedRefHandles.some((handle) =>
+    /^@?(image|actor|audio)/i.test(handle)
+  );
 
   const resolveSkillEntry = (entry: {
     id: string;
@@ -746,7 +754,11 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     } else if (entry.builtIn && id === 'draft_craft' && (isEmpty || options.focus === 'draft')) {
       status = 'active';
       reason = 'passive_empty_or_draft';
-    } else if (entry.builtIn && id === 'video_continuation' && derived.hasContinuationContext) {
+    } else if (
+      entry.builtIn &&
+      id === 'video_continuation' &&
+      (derived.hasContinuationContext || hasVideoReferenceHandle)
+    ) {
       status = 'active';
       reason = 'passive_continuation';
     } else if (entry.builtIn && id === 'token_mapping' && derived.tokenMappings.length > 0) {
@@ -755,7 +767,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     } else if (
       entry.builtIn &&
       id === 'character_reference' &&
-      derived.referenceBindings.length > 0
+      (derived.referenceBindings.length > 0 || hasCharacterReferenceHandle)
     ) {
       status = 'active';
       reason = 'passive_character_reference';

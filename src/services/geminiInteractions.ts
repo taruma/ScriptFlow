@@ -158,6 +158,7 @@ export interface RunAgentTurnOptions {
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
+  referenceHandles?: readonly string[];
   signal?: AbortSignal;
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;
@@ -640,6 +641,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     foundationalCraftOverride: options.foundationalCraftOverride,
     skillOverrides: options.skillOverrides,
     customSkills: options.customSkills,
+    referenceHandles: options.referenceHandles,
   });
 
   activeSkillIds = composedContext.activeSkills.map((skill) => skill.id);

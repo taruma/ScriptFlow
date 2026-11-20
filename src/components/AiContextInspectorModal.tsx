@@ -34,13 +34,14 @@ import {UI_LABELS} from '../ui/labels.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import {ConfirmDialog, type ConfirmDialogRequest} from './ConfirmDialog.tsx';
 
-type InspectorTabId = 'preview' | 'craft' | 'skills';
+export type ContextInspectorTabId = 'preview' | 'craft' | 'skills';
 
 const PIN_MODES: readonly SkillPinMode[] = ['auto', 'pinned', 'muted'];
 
 export interface AiContextInspectorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: ContextInspectorTabId;
   composedContext: ComposedAgentContext;
   skillsState: AiSkillsState;
   customizationCount: number;
@@ -96,6 +97,7 @@ function getSkillStatusBadge(skill: ResolvedAuteurSkill): {
 export function AiContextInspectorModal({
   isOpen,
   onClose,
+  initialTab = 'preview',
   composedContext,
   skillsState,
   customizationCount,
@@ -110,7 +112,7 @@ export function AiContextInspectorModal({
   onResetAll,
   onAcknowledgeUpdate,
 }: AiContextInspectorModalProps) {
-  const [activeTab, setActiveTab] = useState<InspectorTabId>('preview');
+  const [activeTab, setActiveTab] = useState<ContextInspectorTabId>(initialTab);
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
   const [expandedSkillIds, setExpandedSkillIds] = useState<Record<string, boolean>>({});
   const [customForm, setCustomForm] = useState<CustomSkillFormState | null>(null);
@@ -119,6 +121,13 @@ export function AiContextInspectorModal({
 
   const copyTimeoutRef = useRef<number | null>(null);
   const labels = UI_LABELS.ai.contextInspector;
+
+  // Sync active tab whenever the modal opens with a requested initialTab
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   // Close on Escape unless nested ConfirmDialog is open
   useEffect(() => {

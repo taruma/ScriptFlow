@@ -98,7 +98,8 @@ function AiTraceModalContent({
   const reasoningOption =
     REASONING_LEVEL_OPTIONS.find((r) => r.id === trace.reasoningLevel) ??
     REASONING_LEVEL_OPTIONS[1];
-  const modeLabel = UI_LABELS.ai.modes[trace.mode].label;
+  const focusLabel = UI_LABELS.ai.focusLabels[trace.focus] ?? trace.focus;
+  const modeLabel = UI_LABELS.ai.modes[trace.mode]?.label ?? trace.mode;
 
   const interactionChain = useMemo(() => buildInteractionChain(trace), [trace]);
   const usageEntries = useMemo(() => formatUsageEntries(trace.usage), [trace.usage]);
@@ -229,18 +230,18 @@ function AiTraceModalContent({
 
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                {labels.summaryMode}
+                {labels.summaryFocus}
               </span>
-              <span className="font-mono text-[11px] text-text-body">{modeLabel}</span>
+              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-continuity">
+                {focusLabel}
+              </span>
             </div>
 
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                {labels.summaryFocus}
+                {labels.summaryMode}
               </span>
-              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-continuity">
-                {UI_LABELS.ai.focusLabels[trace.focus]}
-              </span>
+              <span className="font-mono text-[11px] text-text-body">{modeLabel}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
