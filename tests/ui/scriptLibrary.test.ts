@@ -41,8 +41,10 @@ import {
 } from '../../src/ui/scriptLibraryDb.ts';
 import {
   buildLibraryRows,
+  collectLibraryFacets,
   countExecutionBeatsFast,
   createCopyTitle,
+  extractLibraryScriptPreview,
   formatRelativeUpdatedTime,
   LIBRARY_PAGE_SIZE,
   paginateLibraryRows,
@@ -686,6 +688,101 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
     expect(stepLibrarySelectionIndex(-1, 1, 3)).toBe(0);
     expect(stepLibrarySelectionIndex(-1, -1, 3)).toBe(2);
     expect(stepLibrarySelectionIndex(0, 1, 0)).toBe(-1);
+  });
+
+  it('supports full-text body search with excerpts, folder/tag facets, pinned-first sorting, and editorial preview extraction', async () => {
+    const store = createScriptLibraryStore({
+      indexedDB: null,
+      fallbackStorageKey: null,
+    });
+
+    await store.bulkPut([
+      {
+        id: 'alpha',
+        title: 'Zeta Rooftop',
+        rawText: '[INTENT]\nTense standoff in rain.\n\n[EXECUTION]\n[CAM 01] MS\n[CAM 02] CU -> Detective whispers {drop the briefcase}',
+        createdAt: 1000,
+        updatedAt: 2000,
+        pinned: true,
+        folder: 'Pilot Episode',
+        tags: ['Noir', 'Action', 'noir'],
+      },
+      {
+        id: 'beta',
+        title: 'Alpha Diner',
+        rawText: '[INTENT]\nQuiet morning coffee.\n\n[EXECUTION]\n[CAM 01] WS\n[CAM 02] MS\n[CAM 03] CU',
+        createdAt: 1000,
+        updatedAt: 5000,
+        folder: 'Pilot Episode',
+        tags: ['dialogue'],
+      },
+      {
+        id: 'gamma',
+        title: 'Harbor Chase',
+        rawText: '[INTENT]\nBoat escape.\n\n[EXECUTION]\n[CAM 01] WS',
+        createdAt: 1000,
+        updatedAt: 4000,
+        folder: 'Episode 2',
+        tags: ['action'],
+      },
+    ]);
+
+    const loaded = await store.list();
+    // Tags are normalized & deduplicated, and backup preserves pinned/folder/tags
+    const alpha = loaded.find((r) => r.id === 'alpha')!;
+    expect(alpha.pinned).toBe(true);
+    expect(alpha.folder).toBe('Pilot Episode');
+    expect(alpha.tags).toEqual(['noir', 'action']);
+
+    const backup = createLibraryBackup(loaded, {exportedAt: '2026-11-21T00:00:00.000Z'});
+    const parsedBackup = parseLibraryBackup(JSON.stringify(backup));
+    expect(parsedBackup.ok).toBe(true);
+    if (parsedBackup.ok) {
+      const restoredAlpha = parsedBackup.backup.scripts.find((r) => r.id === 'alpha');
+      expect(restoredAlpha?.pinned).toBe(true);
+      expect(restoredAlpha?.folder).toBe('Pilot Episode');
+      expect(restoredAlpha?.tags).toEqual(['noir', 'action']);
+    }
+
+    // Facet collection
+    const facets = collectLibraryFacets(loaded);
+    expect(facets.folders).toEqual(['Episode 2', 'Pilot Episode']);
+    expect(facets.tags).toEqual(['action', 'dialogue', 'noir']);
+    expect(facets.pinnedCount).toBe(1);
+
+    // Pinned floats first across all sort modes
+    const byRecent = buildLibraryRows(loaded, [], 'custom', '', {sortBy: 'recent'});
+    expect(byRecent.map((r) => r.id)).toEqual(['alpha', 'beta', 'gamma']);
+
+    const byTitle = buildLibraryRows(loaded, [], 'custom', '', {sortBy: 'title'});
+    expect(byTitle.map((r) => r.id)).toEqual(['alpha', 'beta', 'gamma']);
+
+    const byBeats = buildLibraryRows(loaded, [], 'custom', '', {sortBy: 'beats'});
+    expect(byBeats.map((r) => r.id)).toEqual(['alpha', 'beta', 'gamma']);
+
+    // Folder & tag filtering
+    const ep2Only = buildLibraryRows(loaded, BUNDLED_EXAMPLES, 'all', '', {folder: 'Episode 2'});
+    expect(ep2Only.map((r) => r.id)).toEqual(['gamma']);
+
+    const actionTagged = buildLibraryRows(loaded, BUNDLED_EXAMPLES, 'all', '', {tag: 'action'});
+    expect(actionTagged.map((r) => r.id)).toEqual(['alpha', 'gamma']);
+
+    // Full-text body search returns matchSnippet
+    const bodyMatch = buildLibraryRows(loaded, [], 'custom', 'briefcase');
+    expect(bodyMatch.map((r) => r.id)).toEqual(['alpha']);
+    expect(bodyMatch[0].matchSnippet).toContain('briefcase');
+
+    // Editorial preview extraction
+    const preview = extractLibraryScriptPreview(BUNDLED_EXAMPLES[0].content, 2);
+    expect(preview.stagingBlocks.length).toBeGreaterThan(0);
+    expect(preview.leadSummary.length).toBeGreaterThan(0);
+    expect(preview.previewBeats).toHaveLength(2);
+    expect(preview.remainingBeatCount).toBe(preview.beatCount - 2);
+
+    // Bulk delete removes multiple records cleanly
+    await store.bulkDelete(['alpha', 'gamma']);
+    const afterBulkDelete = await store.list();
+    expect(afterBulkDelete.map((r) => r.id)).toEqual(['beta']);
   });
 });
 

@@ -24,6 +24,9 @@ export interface ScriptRecord {
   createdAt: number;
   updatedAt: number;
   forkedFromId?: string;
+  pinned?: boolean;
+  folder?: string;
+  tags?: string[];
 }
 
 export interface LegacyLocalStorageAdapter {
@@ -69,6 +72,7 @@ export interface ScriptLibraryStore {
   put(record: ScriptRecord): Promise<ScriptRecord>;
   bulkPut(records: readonly ScriptRecord[]): Promise<ScriptRecord[]>;
   delete(id: string): Promise<void>;
+  bulkDelete(ids: readonly string[]): Promise<void>;
   migrateFromLegacyLocalStorage(options?: LegacyMigrationOptions): Promise<LegacyMigrationResult>;
 }
 
@@ -105,6 +109,20 @@ export function createScriptId(prefix = 'script'): string {
   return `${cleanPrefix}-${timePart}-${randPart}`;
 }
 
+export function normalizeScriptTags(tags?: readonly string[]): string[] {
+  if (!Array.isArray(tags) || tags.length === 0) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of tags) {
+    if (typeof raw !== 'string') continue;
+    const clean = raw.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (clean.length === 0 || seen.has(clean)) continue;
+    seen.add(clean);
+    normalized.push(clean);
+  }
+  return normalized;
+}
+
 export function sanitizeScriptRecord(record: ScriptRecord): ScriptRecord {
   const id = record.id.trim();
   const title = record.title.trim() || 'Untitled Scene';
@@ -127,6 +145,22 @@ export function sanitizeScriptRecord(record: ScriptRecord): ScriptRecord {
 
   if (typeof record.forkedFromId === 'string' && record.forkedFromId.trim().length > 0) {
     sanitized.forkedFromId = record.forkedFromId.trim();
+  }
+
+  if (record.pinned === true) {
+    sanitized.pinned = true;
+  }
+
+  if (typeof record.folder === 'string') {
+    const cleanFolder = record.folder.trim().replace(/\s+/g, ' ');
+    if (cleanFolder.length > 0) {
+      sanitized.folder = cleanFolder;
+    }
+  }
+
+  const cleanTags = normalizeScriptTags(record.tags);
+  if (cleanTags.length > 0) {
+    sanitized.tags = cleanTags;
   }
 
   return sanitized;
@@ -294,6 +328,21 @@ function idbDelete(db: IDBDatabase, id: string): Promise<void> {
   });
 }
 
+function idbBulkDelete(db: IDBDatabase, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_LIBRARY_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(SCRIPT_LIBRARY_STORE_NAME);
+    for (const id of ids) {
+      store.delete(id);
+    }
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to delete script records.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Script bulk delete transaction aborted.'));
+  });
+}
+
 /**
  * Creates a lightweight, zero-dependency IndexedDB script library store with
  * automatic graceful fallback when IndexedDB is unavailable or restricted.
@@ -432,6 +481,20 @@ export function createScriptLibraryStore(
         (db) => idbDelete(db, cleanId),
         (map) => {
           map.delete(cleanId);
+          persistFallbackMap(fallbackStorageKey, map);
+        }
+      );
+    },
+
+    async bulkDelete(ids: readonly string[]): Promise<void> {
+      const cleanIds = Array.from(new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0)));
+      if (cleanIds.length === 0) return;
+      return runWithFallback(
+        (db) => idbBulkDelete(db, cleanIds),
+        (map) => {
+          for (const id of cleanIds) {
+            map.delete(id);
+          }
           persistFallbackMap(fallbackStorageKey, map);
         }
       );

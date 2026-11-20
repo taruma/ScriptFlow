@@ -157,8 +157,18 @@ export interface UseScriptLibraryResult {
   handleNewBlank: () => Promise<void>;
   handleDuplicateScript: (record: ScriptRecord) => Promise<void>;
   handleRenameScript: (record: ScriptRecord, nextTitle: string) => Promise<void>;
+  handleTogglePinScript: (record: ScriptRecord) => Promise<void>;
+  handleUpdateScriptMetadata: (
+    record: ScriptRecord,
+    patch: {folder?: string | null; tags?: string[]}
+  ) => Promise<void>;
   handleExportScriptTxt: (record: ScriptRecord) => Promise<void>;
+  handleBulkExportScripts: (records: readonly ScriptRecord[]) => Promise<void>;
   handleRequestDeleteScript: (record: ScriptRecord) => void;
+  handleRequestBulkDeleteScripts: (
+    records: readonly ScriptRecord[],
+    onDeleted?: () => void
+  ) => void;
   handleDownloadCanonical: () => void;
   handleDownloadTagless: () => void;
   handleDownloadJsonEnvelope: () => void;
@@ -308,6 +318,9 @@ export function useScriptLibrary({
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       ...(existing?.forkedFromId ? {forkedFromId: existing.forkedFromId} : {}),
+      ...(existing?.pinned ? {pinned: true} : {}),
+      ...(existing?.folder ? {folder: existing.folder} : {}),
+      ...(existing?.tags && existing.tags.length > 0 ? {tags: existing.tags} : {}),
     };
 
     lastSavedSnapshotRef.current = {
@@ -593,6 +606,8 @@ export function useScriptLibrary({
         createdAt: now,
         updatedAt: now,
         forkedFromId: source.id,
+        ...(source.folder ? {folder: source.folder} : {}),
+        ...(source.tags && source.tags.length > 0 ? {tags: source.tags} : {}),
       };
       const saved = await scriptLibraryDb.put(duplicated);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
@@ -643,6 +658,34 @@ export function useScriptLibrary({
     [onToast]
   );
 
+  const handleTogglePinScript = useCallback(async (record: ScriptRecord) => {
+    const latest = customScriptsRef.current.find((item) => item.id === record.id) ?? record;
+    const updated: ScriptRecord = {
+      ...latest,
+      pinned: !latest.pinned,
+    };
+    const saved = await scriptLibraryDb.put(updated);
+    setCustomScripts((prev) => upsertSortedScript(prev, saved));
+  }, []);
+
+  const handleUpdateScriptMetadata = useCallback(
+    async (record: ScriptRecord, patch: {folder?: string | null; tags?: string[]}) => {
+      const latest = customScriptsRef.current.find((item) => item.id === record.id) ?? record;
+      const nextFolder =
+        patch.folder !== undefined ? (patch.folder?.trim() || undefined) : latest.folder;
+      const nextTags = patch.tags !== undefined ? patch.tags : latest.tags;
+
+      const updated: ScriptRecord = {
+        ...latest,
+        folder: nextFolder,
+        tags: nextTags,
+      };
+      const saved = await scriptLibraryDb.put(updated);
+      setCustomScripts((prev) => upsertSortedScript(prev, saved));
+    },
+    []
+  );
+
   const handleExportScriptTxt = useCallback(async (record: ScriptRecord) => {
     if (activeScriptRef.current.kind === 'custom' && activeScriptRef.current.id === record.id) {
       downloadCanonicalTxt(sceneTitleRef.current, rawTextRef.current);
@@ -651,6 +694,69 @@ export function useScriptLibrary({
     const latest = (await scriptLibraryDb.get(record.id)) ?? record;
     downloadCanonicalTxt(latest.title, latest.rawText);
   }, []);
+
+  const handleBulkExportScripts = useCallback(
+    async (records: readonly ScriptRecord[]) => {
+      if (records.length === 0) return;
+      await persistCurrentCustomIfDirty();
+      const ids = new Set(records.map((r) => r.id));
+      const latestAll = await scriptLibraryDb.list();
+      const toExport = latestAll.filter((r) => ids.has(r.id));
+      if (toExport.length === 0) return;
+      downloadLibraryBackup(toExport, {
+        activeScriptId:
+          activeScriptRef.current.kind === 'custom' && ids.has(activeScriptRef.current.id)
+            ? activeScriptRef.current.id
+            : null,
+      });
+      onToast(UI_LABELS.toasts.exportedSelectedScripts(toExport.length));
+    },
+    [persistCurrentCustomIfDirty, onToast]
+  );
+
+  const handleRequestBulkDeleteScripts = useCallback(
+    (records: readonly ScriptRecord[], onDeleted?: () => void) => {
+      if (records.length === 0) return;
+      const ids = records.map((r) => r.id);
+      const idSet = new Set(ids);
+
+      onRequestConfirm({
+        title: UI_LABELS.confirm.deleteMultipleScriptsTitle(ids.length),
+        description: UI_LABELS.confirm.deleteMultipleScriptsDesc,
+        confirmLabel: UI_LABELS.confirm.delete,
+        cancelLabel: UI_LABELS.confirm.cancel,
+        tone: 'danger',
+        onConfirm: () => {
+          void (async () => {
+            const wasActiveDeleted =
+              activeScriptRef.current.kind === 'custom' && idSet.has(activeScriptRef.current.id);
+
+            if (wasActiveDeleted && saveTimerRef.current !== null) {
+              window.clearTimeout(saveTimerRef.current);
+              saveTimerRef.current = null;
+            }
+
+            await scriptLibraryDb.bulkDelete(ids);
+            const remaining = customScriptsRef.current.filter((item) => !idSet.has(item.id));
+            setCustomScripts(remaining);
+            customScriptsRef.current = remaining;
+
+            if (wasActiveDeleted) {
+              if (remaining.length > 0) {
+                activateCustomScript(remaining[0]);
+              } else {
+                activateExample(DEFAULT_PRESET);
+              }
+            }
+
+            onDeleted?.();
+            onToast(UI_LABELS.toasts.deletedMultipleScripts(ids.length));
+          })();
+        },
+      });
+    },
+    [onRequestConfirm, activateCustomScript, activateExample, onToast]
+  );
 
   const handleRequestDeleteScript = useCallback(
     (record: ScriptRecord) => {
@@ -834,8 +940,12 @@ export function useScriptLibrary({
     handleNewBlank,
     handleDuplicateScript,
     handleRenameScript,
+    handleTogglePinScript,
+    handleUpdateScriptMetadata,
     handleExportScriptTxt,
+    handleBulkExportScripts,
     handleRequestDeleteScript,
+    handleRequestBulkDeleteScripts,
     handleDownloadCanonical,
     handleDownloadTagless,
     handleDownloadJsonEnvelope,

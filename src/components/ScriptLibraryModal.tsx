@@ -4,26 +4,28 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import {
+  ArrowUpDown,
   BookOpen,
   Check,
-  CopyPlus,
+  CheckSquare,
   Download,
   FilePlus2,
-  GitFork,
-  Pencil,
+  Folder,
+  Pin,
   Search,
+  Square,
   Trash2,
   Upload,
   X,
 } from 'lucide-react';
 import type {BundledExample} from '../data/examples/index.ts';
-import {APP_META, UI_LABELS} from '../ui/labels.ts';
+import {UI_LABELS} from '../ui/labels.ts';
 import type {ScriptRecord} from '../ui/scriptLibraryDb.ts';
 import {
   buildLibraryRows,
+  collectLibraryFacets,
   countExecutionBeatsFast,
   formatRelativeUpdatedTime,
   LIBRARY_PAGE_SIZE,
@@ -32,8 +34,10 @@ import {
   type ActiveScriptRef,
   type LibraryFilterTab,
   type LibraryRowItem,
+  type LibrarySortBy,
 } from '../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {LibraryPreviewPane} from './LibraryPreviewPane.tsx';
 
 export type {ActiveScriptRef};
 
@@ -51,16 +55,28 @@ export interface ScriptLibraryModalProps {
   onImportFile: () => void;
   onDuplicateScript: (record: ScriptRecord) => void;
   onRenameScript: (record: ScriptRecord, nextTitle: string) => void;
+  onTogglePinScript: (record: ScriptRecord) => void;
+  onUpdateScriptMetadata: (
+    record: ScriptRecord,
+    patch: {folder?: string | null; tags?: string[]}
+  ) => void;
   onExportScriptTxt: (record: ScriptRecord) => void;
+  onBulkExportScripts: (records: readonly ScriptRecord[]) => void;
   onRequestDeleteScript: (record: ScriptRecord) => void;
+  onRequestBulkDeleteScripts: (records: readonly ScriptRecord[], onDeleted?: () => void) => void;
 }
 
 const FILTER_TABS: readonly LibraryFilterTab[] = ['all', 'custom', 'examples'];
+const SORT_OPTIONS: readonly LibrarySortBy[] = ['recent', 'title', 'beats'];
+
+function getRowKey(row: Pick<LibraryRowItem, 'kind' | 'id'>): string {
+  return `${row.kind}:${row.id}`;
+}
 
 /**
- * Single-column searchable Script Library modal.
- * Paginates visible rows and computes lightweight beat counts strictly for visible items
- * so searching and keyboard navigation stay instant at 1,000+ scripts.
+ * Editorial two-pane Script Library modal:
+ * - Left pane: full-text search, filter tabs, sort, quiet folder/tag facets, paginated rows, and opt-in bulk selection
+ * - Right pane: live read-only structured/source preview, pin toggle, inline rename, and folder/tag organization
  */
 export function ScriptLibraryModal(props: ScriptLibraryModalProps) {
   if (!props.isOpen) return null;
@@ -80,25 +96,53 @@ function ScriptLibraryModalContent({
   onImportFile,
   onDuplicateScript,
   onRenameScript,
+  onTogglePinScript,
+  onUpdateScriptMetadata,
   onExportScriptTxt,
+  onBulkExportScripts,
   onRequestDeleteScript,
+  onRequestBulkDeleteScripts,
 }: Omit<ScriptLibraryModalProps, 'isOpen'>) {
   const [filterTab, setFilterTab] = useState<LibraryFilterTab>('all');
+  const [sortBy, setSortBy] = useState<LibrarySortBy>('recent');
   const [query, setQuery] = useState<string>('');
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [visibleLimit, setVisibleLimit] = useState<number>(LIBRARY_PAGE_SIZE);
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState<string>('');
+  const [selectedKey, setSelectedKey] = useState<string | null>(
+    () => `${activeScript.kind}:${activeScript.id}`
+  );
+  const [isBulkMode, setIsBulkMode] = useState<boolean>(false);
+  const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [openedAt] = useState<number>(() => Date.now());
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const renameInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const shouldScrollSelectedIntoViewRef = useRef<boolean>(false);
 
+  const facets = useMemo(() => collectLibraryFacets(customScripts), [customScripts]);
+
+  // Clear stale folder/tag filters if the last script with that facet was removed or edited
+  useEffect(() => {
+    if (
+      activeFolder &&
+      !facets.folders.some((f) => f.toLowerCase() === activeFolder.toLowerCase())
+    ) {
+      setActiveFolder(null);
+    }
+    if (activeTag && !facets.tags.includes(activeTag.toLowerCase())) {
+      setActiveTag(null);
+    }
+  }, [facets, activeFolder, activeTag]);
+
   const filteredRows = useMemo(
-    () => buildLibraryRows(customScripts, examples, filterTab, query),
-    [customScripts, examples, filterTab, query]
+    () =>
+      buildLibraryRows(customScripts, examples, filterTab, query, {
+        sortBy,
+        folder: activeFolder,
+        tag: activeTag,
+      }),
+    [customScripts, examples, filterTab, query, sortBy, activeFolder, activeTag]
   );
 
   const paginated = useMemo(
@@ -106,41 +150,33 @@ function ScriptLibraryModalContent({
     [filteredRows, visibleLimit]
   );
 
-  // Compute fast beat counts strictly for the currently visible page slice (never off-screen rows)
   const visibleBeatCounts = useMemo(
     () => paginated.visible.map((row) => countExecutionBeatsFast(row.rawText)),
     [paginated.visible]
   );
+
+  const selectedIndex = useMemo(() => {
+    if (filteredRows.length === 0) return -1;
+    if (selectedKey) {
+      const idx = filteredRows.findIndex((row) => getRowKey(row) === selectedKey);
+      if (idx !== -1) return idx;
+    }
+    return 0;
+  }, [filteredRows, selectedKey]);
+
+  const selectedRow = selectedIndex >= 0 ? (filteredRows[selectedIndex] ?? null) : null;
 
   // Focus search input on open
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
 
-  // Focus inline rename input whenever rename begins
-  useEffect(() => {
-    if (!renamingId) return;
-    renameInputRef.current?.focus();
-    renameInputRef.current?.select();
-  }, [renamingId]);
-
-  // Reset pagination and clamp selection when filter or search query changes
+  // Reset pagination when filters/search/sort change
   useEffect(() => {
     setVisibleLimit(LIBRARY_PAGE_SIZE);
-    setSelectedIndex(0);
-  }, [filterTab, query]);
+  }, [filterTab, query, sortBy, activeFolder, activeTag]);
 
-  useEffect(() => {
-    if (filteredRows.length === 0) {
-      setSelectedIndex(-1);
-    } else if (selectedIndex >= filteredRows.length) {
-      setSelectedIndex(filteredRows.length - 1);
-    } else if (selectedIndex < 0) {
-      setSelectedIndex(0);
-    }
-  }, [filteredRows.length, selectedIndex]);
-
-  // Keep keyboard-selected row visible inside the scroll container (skip forced reflow on mount/hover)
+  // Keep keyboard-selected row visible inside the scroll container (never on mount or hover)
   useEffect(() => {
     if (selectedIndex < 0) return;
     if (selectedIndex >= visibleLimit) {
@@ -152,6 +188,19 @@ function ScriptLibraryModalContent({
     const rowEl = rowRefs.current.get(selectedIndex);
     rowEl?.scrollIntoView({block: 'nearest'});
   }, [selectedIndex, visibleLimit]);
+
+  // Prune checked IDs if customScripts change (e.g. after delete)
+  useEffect(() => {
+    if (checkedIds.size === 0) return;
+    const validIds = new Set(customScripts.map((s) => s.id));
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of checkedIds) {
+      if (validIds.has(id)) next.add(id);
+      else changed = true;
+    }
+    if (changed) setCheckedIds(next);
+  }, [customScripts, checkedIds]);
 
   const handleOpenRow = useCallback(
     (row: LibraryRowItem) => {
@@ -165,15 +214,34 @@ function ScriptLibraryModalContent({
     [onOpenCustomScript, onOpenExample, onClose]
   );
 
-  const handleCommitRename = useCallback(
-    (record: ScriptRecord) => {
-      const cleaned = renameDraft.trim();
-      setRenamingId(null);
-      if (cleaned.length > 0 && cleaned !== record.title) {
-        onRenameScript(record, cleaned);
-      }
+  const handleForkAndClose = useCallback(
+    (example: BundledExample) => {
+      onForkExample(example);
+      onClose();
     },
-    [renameDraft, onRenameScript]
+    [onForkExample, onClose]
+  );
+
+  const toggleCheckedId = useCallback((id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const visibleCustomRecords = useMemo(
+    () =>
+      filteredRows
+        .filter((r): r is Extract<LibraryRowItem, {kind: 'custom'}> => r.kind === 'custom')
+        .map((r) => r.record),
+    [filteredRows]
+  );
+
+  const selectedBulkRecords = useMemo(
+    () => customScripts.filter((record) => checkedIds.has(record.id)),
+    [customScripts, checkedIds]
   );
 
   // Keyboard navigation (↑ / ↓ / Enter / Esc) while modal is active and ConfirmDialog is closed
@@ -183,41 +251,52 @@ function ScriptLibraryModalContent({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
 
-      if (renamingId !== null) {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          setRenamingId(null);
-        }
-        return;
-      }
+      const activeEl = document.activeElement;
+      const isInSearch = activeEl === searchInputRef.current;
+      const isInOtherInput =
+        !isInSearch &&
+        activeEl instanceof HTMLElement &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.tagName === 'SELECT');
 
       if (event.key === 'Escape') {
+        if (isInOtherInput) return;
         event.preventDefault();
+        if (isBulkMode) {
+          setIsBulkMode(false);
+          setCheckedIds(new Set());
+          return;
+        }
         onClose();
         return;
       }
 
+      if (isInOtherInput) return;
+
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         shouldScrollSelectedIntoViewRef.current = true;
-        setSelectedIndex((prev) => stepLibrarySelectionIndex(prev, 1, filteredRows.length));
+        const nextIdx = stepLibrarySelectionIndex(selectedIndex, 1, filteredRows.length);
+        const nextRow = nextIdx >= 0 ? filteredRows[nextIdx] : null;
+        if (nextRow) setSelectedKey(getRowKey(nextRow));
         return;
       }
 
       if (event.key === 'ArrowUp') {
         event.preventDefault();
         shouldScrollSelectedIntoViewRef.current = true;
-        setSelectedIndex((prev) => stepLibrarySelectionIndex(prev, -1, filteredRows.length));
+        const nextIdx = stepLibrarySelectionIndex(selectedIndex, -1, filteredRows.length);
+        const nextRow = nextIdx >= 0 ? filteredRows[nextIdx] : null;
+        if (nextRow) setSelectedKey(getRowKey(nextRow));
         return;
       }
 
       if (event.key === 'Enter') {
-        // Let explicit action buttons handle their own Enter press when focused
-        const activeTag = document.activeElement?.tagName.toLowerCase();
+        const activeTag = activeEl?.tagName.toLowerCase();
         if (activeTag === 'button') return;
 
-        const selectedRow = selectedIndex >= 0 ? filteredRows[selectedIndex] : null;
-        if (selectedRow) {
+        if (selectedRow && !isBulkMode) {
           event.preventDefault();
           handleOpenRow(selectedRow);
         }
@@ -226,22 +305,15 @@ function ScriptLibraryModalContent({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isConfirmDialogOpen, renamingId, filteredRows, selectedIndex, handleOpenRow, onClose]);
-
-  const handleRenameInputKeyDown = (
-    record: ScriptRecord,
-    event: ReactKeyboardEvent<HTMLInputElement>
-  ) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      event.stopPropagation();
-      handleCommitRename(record);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      setRenamingId(null);
-    }
-  };
+  }, [
+    isConfirmDialogOpen,
+    isBulkMode,
+    filteredRows,
+    selectedIndex,
+    selectedRow,
+    handleOpenRow,
+    onClose,
+  ]);
 
   const tabCounts: Record<LibraryFilterTab, number> = {
     all: customScripts.length + examples.length,
@@ -249,8 +321,11 @@ function ScriptLibraryModalContent({
     examples: examples.length,
   };
 
+  const hasFacetFilters = activeFolder !== null || activeTag !== null;
+  const hasFacets = facets.folders.length > 0 || facets.tags.length > 0;
+
   const emptyMessage =
-    query.trim().length > 0
+    query.trim().length > 0 || hasFacetFilters
       ? UI_LABELS.library.emptySearch
       : filterTab === 'custom'
         ? UI_LABELS.library.emptyCustom
@@ -268,8 +343,8 @@ function ScriptLibraryModalContent({
       }}
       className={UI_TOKENS.modal.overlayHeavy}
     >
-      <div className="bg-surface w-full max-w-[580px] max-h-[82vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-border-main text-text-main">
-        {/* Header */}
+      <div className="bg-surface w-full max-w-[980px] h-[82vh] max-h-[760px] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-border-main text-text-main">
+        {/* Top Modal Header */}
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle bg-surface-subtle shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <BookOpen className="h-4 w-4 text-text-muted shrink-0" />
@@ -312,276 +387,432 @@ function ScriptLibraryModalContent({
           </div>
         </div>
 
-        {/* Search & Filter Tabs */}
-        <div className="px-4 py-3 border-b border-border-subtle space-y-2.5 shrink-0">
-          <div className="relative">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-faint"
-            />
-            <input
-              ref={searchInputRef}
-              type="text"
-              data-native-undo="true"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={UI_LABELS.library.searchPlaceholder}
-              aria-label={UI_LABELS.library.searchAria}
-              className={UI_TOKENS.input.search}
-            />
-            {query.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery('');
-                  searchInputRef.current?.focus();
-                }}
-                aria-label={UI_LABELS.library.clearSearchAria}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
-              >
-                <X className="h-3 w-3" />
-              </button>
+        {/* Two-Pane Body */}
+        <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+          {/* Left Pane: Search, Filters, Facets & Script List */}
+          <div className="flex flex-col w-full md:w-[43%] md:min-w-[330px] md:max-w-[420px] min-h-0 flex-1 md:flex-none border-b md:border-b-0 md:border-r border-border-main bg-surface">
+            {/* Search & Controls */}
+            <div className="px-3.5 py-3 border-b border-border-subtle space-y-2.5 shrink-0">
+              <div className="relative">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-faint"
+                />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  data-native-undo="true"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={UI_LABELS.library.searchPlaceholder}
+                  aria-label={UI_LABELS.library.searchAria}
+                  className={UI_TOKENS.input.search}
+                />
+                {query.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery('');
+                      searchInputRef.current?.focus();
+                    }}
+                    aria-label={UI_LABELS.library.clearSearchAria}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Tabs + Sort + Bulk Select */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div
+                  role="tablist"
+                  aria-label={UI_LABELS.library.tabsAria}
+                  className="inline-flex items-center bg-surface-muted p-0.5 rounded-xl border border-border-main"
+                >
+                  {FILTER_TABS.map((tab) => {
+                    const isSelectedTab = filterTab === tab;
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        role="tab"
+                        aria-selected={isSelectedTab}
+                        onClick={() => setFilterTab(tab)}
+                        className={
+                          isSelectedTab
+                            ? 'flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface text-text-main shadow-xs transition-colors cursor-pointer whitespace-nowrap'
+                            : 'flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface/60 transition-colors cursor-pointer whitespace-nowrap'
+                        }
+                      >
+                        <span>{UI_LABELS.library.tabs[tab]}</span>
+                        <span className="font-mono text-[10px] text-text-faint tabular-nums">
+                          {tabCounts[tab]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <label className="inline-flex items-center gap-1 rounded-lg border border-border-main bg-surface px-2 py-1 text-[11px] text-text-muted hover:bg-surface-subtle transition-colors cursor-pointer">
+                    <ArrowUpDown className="h-3 w-3 text-text-faint shrink-0" />
+                    <select
+                      aria-label={UI_LABELS.library.sortAria}
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as LibrarySortBy)}
+                      className="bg-transparent text-[11px] font-medium text-text-body focus:outline-none cursor-pointer"
+                    >
+                      {SORT_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt} className="bg-surface text-text-main">
+                          {UI_LABELS.library.sortOptions[opt]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {customScripts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBulkMode((prev) => {
+                          if (prev) setCheckedIds(new Set());
+                          return !prev;
+                        });
+                      }}
+                      aria-label={UI_LABELS.library.selectModeAria}
+                      aria-pressed={isBulkMode}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                        isBulkMode
+                          ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
+                          : 'border-border-main bg-surface text-text-muted hover:bg-surface-subtle hover:text-text-main'
+                      }`}
+                    >
+                      <CheckSquare className="h-3 w-3" />
+                      <span>
+                        {isBulkMode
+                          ? UI_LABELS.library.selectModeDone
+                          : UI_LABELS.library.selectModeButton}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Quiet Folder & Tag Filter Strip (only shown when folders/tags exist) */}
+              {hasFacets && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  {facets.folders.map((folder) => {
+                    const isOn = activeFolder?.toLowerCase() === folder.toLowerCase();
+                    return (
+                      <button
+                        key={`folder:${folder}`}
+                        type="button"
+                        aria-label={UI_LABELS.library.folderFilterAria(folder)}
+                        aria-pressed={isOn}
+                        onClick={() => setActiveFolder(isOn ? null : folder)}
+                        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium transition-colors cursor-pointer ${
+                          isOn
+                            ? 'border-text-main bg-text-main text-surface'
+                            : 'border-border-main bg-surface-subtle text-text-muted hover:text-text-main'
+                        }`}
+                      >
+                        <Folder className="h-2.5 w-2.5" />
+                        <span className="truncate max-w-[110px]">{folder}</span>
+                      </button>
+                    );
+                  })}
+
+                  {facets.tags.map((tag) => {
+                    const isOn = activeTag === tag;
+                    return (
+                      <button
+                        key={`tag:${tag}`}
+                        type="button"
+                        aria-label={UI_LABELS.library.tagFilterAria(tag)}
+                        aria-pressed={isOn}
+                        onClick={() => setActiveTag(isOn ? null : tag)}
+                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors cursor-pointer ${
+                          isOn
+                            ? 'border-text-main bg-text-main text-surface'
+                            : 'border-border-subtle bg-surface-subtle text-text-faint hover:border-border-main hover:text-text-main'
+                        }`}
+                      >
+                        #{tag}
+                      </button>
+                    );
+                  })}
+
+                  {hasFacetFilters && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveFolder(null);
+                        setActiveTag(null);
+                      }}
+                      className="text-[10.5px] text-text-faint hover:text-text-main underline underline-offset-2 cursor-pointer ml-0.5"
+                    >
+                      {UI_LABELS.library.facetsClearFilters}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Scrollable Script List */}
+            <div
+              role="listbox"
+              aria-label={UI_LABELS.library.title}
+              className="auteur-pane-scroll flex-1 min-h-0 overflow-y-auto divide-y divide-border-subtle/70"
+            >
+              {paginated.visible.length === 0 ? (
+                <div className="px-6 py-12 text-center text-xs leading-relaxed text-text-faint">
+                  {emptyMessage}
+                </div>
+              ) : (
+                <>
+                  {paginated.visible.map((row, index) => {
+                    const rowKey = getRowKey(row);
+                    const isSelected = index === selectedIndex;
+                    const isActive = activeScript.kind === row.kind && activeScript.id === row.id;
+                    const beatCount = visibleBeatCounts[index] ?? 0;
+                    const isChecked = row.kind === 'custom' && checkedIds.has(row.id);
+
+                    return (
+                      <div
+                        key={rowKey}
+                        ref={(el) => {
+                          if (el) rowRefs.current.set(index, el);
+                          else rowRefs.current.delete(index);
+                        }}
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => {
+                          if (isBulkMode && row.kind === 'custom') {
+                            toggleCheckedId(row.id);
+                            setSelectedKey(rowKey);
+                            return;
+                          }
+                          setSelectedKey(rowKey);
+                          if (
+                            typeof window !== 'undefined' &&
+                            window.matchMedia('(max-width: 767px)').matches
+                          ) {
+                            handleOpenRow(row);
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (!isBulkMode) {
+                            handleOpenRow(row);
+                          }
+                        }}
+                        className={`flex items-start gap-2.5 px-3.5 py-2.5 transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-surface-subtle'
+                            : 'bg-surface hover:bg-surface-subtle/60'
+                        }`}
+                      >
+                        {isBulkMode && (
+                          <button
+                            type="button"
+                            disabled={row.kind !== 'custom'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (row.kind === 'custom') toggleCheckedId(row.id);
+                            }}
+                            aria-label={UI_LABELS.library.selectRowAria(row.title)}
+                            className={`mt-0.5 shrink-0 ${
+                              row.kind !== 'custom'
+                                ? 'opacity-25 cursor-not-allowed'
+                                : 'text-text-muted hover:text-text-main cursor-pointer'
+                            }`}
+                          >
+                            {isChecked ? (
+                              <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text">
+                                <Check className="h-3 w-3" />
+                              </span>
+                            ) : (
+                              <Square className="h-4 w-4" />
+                            )}
+                          </button>
+                        )}
+
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {row.kind === 'custom' && row.pinned && (
+                              <Pin
+                                aria-label={UI_LABELS.library.pinnedBadge}
+                                className="h-3 w-3 text-text-muted shrink-0"
+                              />
+                            )}
+                            <span className="truncate font-serif text-[13px] font-bold tracking-tight text-text-main">
+                              {row.title}
+                            </span>
+                            {isActive && (
+                              <span className="inline-flex shrink-0 items-center rounded border border-border-main bg-surface-muted px-1.5 py-px font-mono text-[9px] font-semibold uppercase tracking-wide text-text-muted">
+                                {UI_LABELS.library.activeBadge}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-text-faint tabular-nums">
+                            {row.kind === 'example' ? (
+                              <>
+                                <span className="auteur-phase-logic inline-flex items-center rounded border px-1 py-px text-[9px] font-semibold">
+                                  {UI_LABELS.library.exampleBadge}
+                                </span>
+                                <span className="truncate">{row.topology}</span>
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                  {beatCount} {UI_LABELS.topBar.beatUnit(beatCount)}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span>
+                                  {beatCount} {UI_LABELS.topBar.beatUnit(beatCount)}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span>{formatRelativeUpdatedTime(row.updatedAt, openedAt)}</span>
+                                {row.folder && (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="inline-flex items-center gap-0.5 text-text-muted truncate max-w-[110px]">
+                                      <Folder className="h-2.5 w-2.5 shrink-0" />
+                                      <span className="truncate">{row.folder}</span>
+                                    </span>
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {row.kind === 'custom' && row.tags && row.tags.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              {row.tags.slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded border border-border-subtle bg-surface-subtle px-1 py-px font-mono text-[9.5px] text-text-faint"
+                                >
+                                  #{tag}
+                                </span>
+                              ))}
+                              {row.tags.length > 3 && (
+                                <span className="font-mono text-[9.5px] text-text-faint">
+                                  +{row.tags.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {row.matchSnippet && (
+                            <p className="truncate font-script text-[11px] italic text-text-muted">
+                              “{row.matchSnippet}”
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {paginated.hasMore && (
+                    <div className="px-4 py-2.5 bg-surface text-center">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleLimit((prev) => prev + LIBRARY_PAGE_SIZE)}
+                        className={UI_TOKENS.button.secondary}
+                      >
+                        {UI_LABELS.library.showMore(paginated.remainingCount)}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Left Footer: Bulk Action Bar OR Quiet Count */}
+            {isBulkMode ? (
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2 border-t border-border-subtle bg-surface-subtle text-[11px] shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono font-semibold text-text-main tabular-nums">
+                    {UI_LABELS.library.selectedCount(selectedBulkRecords.length)}
+                  </span>
+                  {visibleCustomRecords.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedBulkRecords.length === visibleCustomRecords.length) {
+                          setCheckedIds(new Set());
+                        } else {
+                          setCheckedIds(new Set(visibleCustomRecords.map((r) => r.id)));
+                        }
+                      }}
+                      className="text-text-muted hover:text-text-main underline underline-offset-2 cursor-pointer"
+                    >
+                      {selectedBulkRecords.length === visibleCustomRecords.length
+                        ? UI_LABELS.library.clearSelection
+                        : UI_LABELS.library.selectAllVisible}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    disabled={selectedBulkRecords.length === 0}
+                    onClick={() => onBulkExportScripts(selectedBulkRecords)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border-main bg-surface px-2 py-1 text-[11px] font-medium text-text-body hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <Download className="h-3 w-3" />
+                    <span>{UI_LABELS.library.bulkExportButton}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedBulkRecords.length === 0}
+                    onClick={() =>
+                      onRequestBulkDeleteScripts(selectedBulkRecords, () => {
+                        setCheckedIds(new Set());
+                        setIsBulkMode(false);
+                      })
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg bg-red-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>{UI_LABELS.library.bulkDeleteButton}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2 border-t border-border-subtle bg-surface-subtle text-[10.5px] font-mono text-text-faint shrink-0">
+                <span className="tabular-nums">
+                  {UI_LABELS.library.resultsCount(paginated.visible.length, filteredRows.length)}
+                </span>
+                <span className="hidden sm:inline">{UI_LABELS.library.keyboardHint}</span>
+              </div>
             )}
           </div>
 
-          <div
-            role="tablist"
-            aria-label={UI_LABELS.library.tabsAria}
-            className="inline-flex items-center bg-surface-muted p-0.5 rounded-xl border border-border-main"
-          >
-            {FILTER_TABS.map((tab) => {
-              const isSelected = filterTab === tab;
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  onClick={() => setFilterTab(tab)}
-                  className={
-                    isSelected
-                      ? UI_TOKENS.button.segmentedItemActive
-                      : UI_TOKENS.button.segmentedItem
-                  }
-                >
-                  <span>{UI_LABELS.library.tabs[tab]}</span>
-                  <span className="font-mono text-[10px] text-text-faint tabular-nums">
-                    {tabCounts[tab]}
-                  </span>
-                </button>
-              );
-            })}
+          {/* Right Pane: Editorial Preview & Organization */}
+          <div className="hidden md:flex flex-1 min-w-0 min-h-0 flex-col">
+            <LibraryPreviewPane
+              row={selectedRow}
+              isActive={
+                selectedRow !== null &&
+                activeScript.kind === selectedRow.kind &&
+                activeScript.id === selectedRow.id
+              }
+              openedAt={openedAt}
+              existingFolders={facets.folders}
+              onOpen={handleOpenRow}
+              onForkExample={handleForkAndClose}
+              onTogglePin={onTogglePinScript}
+              onRename={onRenameScript}
+              onUpdateMetadata={onUpdateScriptMetadata}
+              onDuplicate={onDuplicateScript}
+              onExportTxt={onExportScriptTxt}
+              onRequestDelete={onRequestDeleteScript}
+            />
           </div>
-        </div>
-
-        {/* Single-Column Scrollable List */}
-        <div
-          role="listbox"
-          aria-label={UI_LABELS.library.title}
-          className="auteur-pane-scroll flex-1 min-h-0 overflow-y-auto divide-y divide-border-subtle/70"
-        >
-          {paginated.visible.length === 0 ? (
-            <div className="px-6 py-12 text-center text-xs leading-relaxed text-text-faint">
-              {emptyMessage}
-            </div>
-          ) : (
-            <>
-              {paginated.visible.map((row, index) => {
-                const isSelected = index === selectedIndex;
-                const isActive = activeScript.kind === row.kind && activeScript.id === row.id;
-                const isRenaming = row.kind === 'custom' && renamingId === row.id;
-                const beatCount = visibleBeatCounts[index] ?? 0;
-
-                return (
-                  <div
-                    key={`${row.kind}:${row.id}`}
-                    ref={(el) => {
-                      if (el) rowRefs.current.set(index, el);
-                      else rowRefs.current.delete(index);
-                    }}
-                    role="option"
-                    aria-selected={isSelected}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                    onClick={() => {
-                      if (!isRenaming) {
-                        handleOpenRow(row);
-                      }
-                    }}
-                    className={`group/librow flex items-center justify-between gap-3 px-4 py-2.5 transition-colors cursor-pointer ${
-                      isSelected ? 'bg-surface-subtle' : 'bg-surface hover:bg-surface-subtle/60'
-                    }`}
-                  >
-                    {/* Left: Title + Compact Metadata */}
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      {isRenaming && row.kind === 'custom' ? (
-                        <div
-                          className="flex items-center gap-1.5"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            ref={renameInputRef}
-                            type="text"
-                            data-native-undo="true"
-                            value={renameDraft}
-                            onChange={(e) => setRenameDraft(e.target.value)}
-                            onKeyDown={(e) => handleRenameInputKeyDown(row.record, e)}
-                            onBlur={() => handleCommitRename(row.record)}
-                            aria-label={UI_LABELS.library.renameInputAria}
-                            placeholder={APP_META.untitledScene}
-                            className="min-w-0 flex-1 rounded-md border border-border-main bg-surface px-2 py-0.5 font-serif text-[13px] font-bold text-text-main focus:outline-none focus:ring-1 focus:ring-text-muted"
-                          />
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              handleCommitRename(row.record);
-                            }}
-                            aria-label={UI_LABELS.library.saveRenameAria}
-                            className="rounded-md p-1 text-text-muted hover:bg-surface-muted hover:text-text-main cursor-pointer"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setRenamingId(null);
-                            }}
-                            aria-label={UI_LABELS.library.cancelRenameAria}
-                            className="rounded-md p-1 text-text-faint hover:bg-surface-muted hover:text-text-main cursor-pointer"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="truncate font-serif text-[13.5px] font-bold tracking-tight text-text-main">
-                            {row.title}
-                          </span>
-                          {isActive && (
-                            <span className="inline-flex shrink-0 items-center rounded border border-border-main bg-surface-muted px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-wide text-text-muted">
-                              {UI_LABELS.library.activeBadge}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10.5px] text-text-faint tabular-nums">
-                        {row.kind === 'example' ? (
-                          <>
-                            <span className="auteur-phase-logic inline-flex items-center rounded border px-1.5 py-px text-[9.5px] font-semibold">
-                              {UI_LABELS.library.exampleBadge}
-                            </span>
-                            <span className="truncate">{row.topology}</span>
-                            <span aria-hidden="true">·</span>
-                            <span>
-                              {beatCount} {UI_LABELS.topBar.beatUnit(beatCount)}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span>
-                              {beatCount} {UI_LABELS.topBar.beatUnit(beatCount)}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span>{formatRelativeUpdatedTime(row.updatedAt, openedAt)}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right: Inline Row Actions */}
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className={`flex items-center gap-0.5 shrink-0 transition-opacity ${
-                        isSelected
-                          ? 'opacity-100'
-                          : 'opacity-80 sm:opacity-0 sm:group-hover/librow:opacity-100 sm:focus-within:opacity-100'
-                      }`}
-                    >
-                      {row.kind === 'example' ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onForkExample(row.example);
-                            onClose();
-                          }}
-                          title={UI_LABELS.library.forkAria(row.title)}
-                          aria-label={UI_LABELS.library.forkAria(row.title)}
-                          className={UI_TOKENS.button.actionPill}
-                        >
-                          <GitFork className="h-3 w-3 text-text-muted" />
-                          <span>{UI_LABELS.library.forkAction}</span>
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => onDuplicateScript(row.record)}
-                            title={UI_LABELS.library.duplicateAction}
-                            aria-label={UI_LABELS.library.duplicateAria(row.title)}
-                            className={UI_TOKENS.button.iconGhost}
-                          >
-                            <CopyPlus className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRenamingId(row.id);
-                              setRenameDraft(row.title);
-                            }}
-                            title={UI_LABELS.library.renameAction}
-                            aria-label={UI_LABELS.library.renameAria(row.title)}
-                            className={UI_TOKENS.button.iconGhost}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onExportScriptTxt(row.record)}
-                            title={UI_LABELS.library.exportTxtAction}
-                            aria-label={UI_LABELS.library.exportTxtAria(row.title)}
-                            className={UI_TOKENS.button.iconGhost}
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onRequestDeleteScript(row.record)}
-                            title={UI_LABELS.library.deleteAction}
-                            aria-label={UI_LABELS.library.deleteAria(row.title)}
-                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-text-muted hover:text-red-500 hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer shrink-0"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {paginated.hasMore && (
-                <div className="px-4 py-2.5 bg-surface text-center">
-                  <button
-                    type="button"
-                    onClick={() => setVisibleLimit((prev) => prev + LIBRARY_PAGE_SIZE)}
-                    className={UI_TOKENS.button.secondary}
-                  >
-                    {UI_LABELS.library.showMore(paginated.remainingCount)}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Quiet Footer */}
-        <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border-subtle bg-surface-subtle text-[10.5px] font-mono text-text-faint shrink-0">
-          <span className="tabular-nums">
-            {UI_LABELS.library.resultsCount(paginated.visible.length, filteredRows.length)}
-          </span>
-          <span className="hidden sm:inline">{UI_LABELS.library.keyboardHint}</span>
         </div>
       </div>
     </div>

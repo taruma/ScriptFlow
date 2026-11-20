@@ -614,8 +614,14 @@ export default function App() {
           onRenameScript={(record, nextTitle) =>
             void library.handleRenameScript(record, nextTitle)
           }
+          onTogglePinScript={(record) => void library.handleTogglePinScript(record)}
+          onUpdateScriptMetadata={(record, patch) =>
+            void library.handleUpdateScriptMetadata(record, patch)
+          }
           onExportScriptTxt={(record) => void library.handleExportScriptTxt(record)}
+          onBulkExportScripts={(records) => void library.handleBulkExportScripts(records)}
           onRequestDeleteScript={library.handleRequestDeleteScript}
+          onRequestBulkDeleteScripts={library.handleRequestBulkDeleteScripts}
         />
       )}
 
