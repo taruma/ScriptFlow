@@ -125,10 +125,16 @@ export const AiQuickScanIndicator = memo(function AiQuickScanIndicator({
                     <div className="text-[10px] text-text-faint">
                       {qsLabels.lensLabels[item.lens]}
                     </div>
-                    {item.deterministicMessage && (
+                    {item.deterministicMessage ? (
                       <p className="text-[11px] text-text-muted leading-snug">
                         {item.deterministicMessage}
                       </p>
+                    ) : (
+                      item.instructions && (
+                        <p className="text-[10.5px] text-text-muted leading-snug">
+                          {item.instructions}
+                        </p>
+                      )
                     )}
                   </div>
                 );

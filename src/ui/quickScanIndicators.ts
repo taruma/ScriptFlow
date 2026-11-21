@@ -11,6 +11,8 @@ export interface LiveBeatQuickScanIndicator {
   probability: number;
   confidence: number;
   source: 'decision_api' | 'deterministic';
+  instructions?: string;
+  trueDescription?: string;
   deterministicMessage?: string;
 }
 
@@ -42,6 +44,8 @@ export function buildLiveQuickScanIndicators(
         probability: item.probability,
         confidence: item.confidence,
         source: item.source,
+        ...(item.instructions ? {instructions: item.instructions} : {}),
+        ...(item.trueDescription ? {trueDescription: item.trueDescription} : {}),
         ...(item.deterministicMessage ? {deterministicMessage: item.deterministicMessage} : {}),
       }));
 

@@ -416,57 +416,118 @@ function FindingRow({
   item: QuickScanFindingItem;
   onJumpToTarget: (targetId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const qsLabels = UI_LABELS.ai.quickScan;
   const pct = Math.round(item.probability * 100);
   const isJumpable = item.beatIndex !== undefined || /^MB\d+/i.test(item.targetId);
+  const hasDetail = Boolean(
+    item.instructions || item.trueDescription || item.deterministicMessage
+  );
 
   return (
-    <div className="flex items-center justify-between gap-2 text-[11px] py-0.5">
-      <div className="flex items-center gap-1.5 min-w-0">
-        {isJumpable ? (
-          <button
-            type="button"
-            onClick={() => onJumpToTarget(item.targetId)}
-            title={UI_LABELS.ai.suggestions.jumpToTargetTitle(item.targetId)}
-            className="shrink-0 rounded border border-border-main bg-surface px-1 py-0.5 font-mono text-[9px] font-semibold text-text-main hover:bg-surface-muted cursor-pointer"
-          >
-            {item.targetId}
-          </button>
-        ) : (
-          <span className="shrink-0 rounded border border-border-subtle bg-surface-subtle px-1 py-0.5 font-mono text-[9px] text-text-faint">
-            {item.targetId}
-          </span>
-        )}
-        <span
-          className={`truncate ${
-            item.status === 'clean' ? 'text-text-muted' : 'font-medium text-text-main'
-          }`}
-          title={item.deterministicMessage ?? item.ruleLabel}
-        >
-          {item.ruleLabel}
-        </span>
+    <div className="py-0.5">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {isJumpable ? (
+            <button
+              type="button"
+              onClick={() => onJumpToTarget(item.targetId)}
+              title={UI_LABELS.ai.suggestions.jumpToTargetTitle(item.targetId)}
+              className="shrink-0 rounded border border-border-main bg-surface px-1 py-0.5 font-mono text-[9px] font-semibold text-text-main hover:bg-surface-muted cursor-pointer"
+            >
+              {item.targetId}
+            </button>
+          ) : (
+            <span className="shrink-0 rounded border border-border-subtle bg-surface-subtle px-1 py-0.5 font-mono text-[9px] text-text-faint">
+              {item.targetId}
+            </span>
+          )}
+          {hasDetail ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              aria-expanded={expanded}
+              aria-label={
+                expanded
+                  ? qsLabels.collapseFindingAria(item.ruleLabel)
+                  : qsLabels.expandFindingAria(item.ruleLabel)
+              }
+              title={item.instructions ?? item.deterministicMessage ?? item.ruleLabel}
+              className="flex items-center gap-1 min-w-0 text-left group/finding cursor-pointer"
+            >
+              <span
+                className={`truncate group-hover/finding:underline decoration-border-main underline-offset-2 ${
+                  item.status === 'clean' ? 'text-text-muted' : 'font-medium text-text-main'
+                }`}
+              >
+                {item.ruleLabel}
+              </span>
+              {expanded ? (
+                <ChevronDown className="h-2.5 w-2.5 shrink-0 text-text-faint" />
+              ) : (
+                <ChevronRight className="h-2.5 w-2.5 shrink-0 text-text-faint opacity-55 group-hover/finding:opacity-100" />
+              )}
+            </button>
+          ) : (
+            <span
+              className={`truncate ${
+                item.status === 'clean' ? 'text-text-muted' : 'font-medium text-text-main'
+              }`}
+              title={item.ruleLabel}
+            >
+              {item.ruleLabel}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+          {item.source === 'deterministic' ? (
+            <span className="rounded border border-border-main bg-surface px-1 py-0.5 text-[9px] text-text-muted">
+              {qsLabels.deterministicBadge}
+            </span>
+          ) : (
+            <span
+              className={`tabular-nums ${
+                item.status === 'flagged'
+                  ? 'text-red-600 dark:text-red-400 font-semibold'
+                  : item.status === 'borderline'
+                    ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                    : 'text-text-faint'
+              }`}
+              title={`P(issue) = ${pct}% · confidence = ${Math.round(item.confidence * 100)}%`}
+            >
+              {pct}%
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
-        {item.source === 'deterministic' ? (
-          <span className="rounded border border-border-main bg-surface px-1 py-0.5 text-[9px] text-text-muted">
-            {qsLabels.deterministicBadge}
-          </span>
-        ) : (
-          <span
-            className={`tabular-nums ${
-              item.status === 'flagged'
-                ? 'text-red-600 dark:text-red-400 font-semibold'
-                : item.status === 'borderline'
-                  ? 'text-amber-600 dark:text-amber-400 font-semibold'
-                  : 'text-text-faint'
-            }`}
-            title={`P(issue) = ${pct}% · confidence = ${Math.round(item.confidence * 100)}%`}
-          >
-            {pct}%
-          </span>
-        )}
-      </div>
+      {expanded && hasDetail && (
+        <div className="mt-1 ml-6 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 text-[10.5px] leading-snug text-text-muted space-y-1">
+          {item.deterministicMessage ? (
+            <p className="text-text-body">{item.deterministicMessage}</p>
+          ) : (
+            <>
+              {item.instructions && (
+                <p>
+                  <span className="font-semibold text-text-faint">
+                    {qsLabels.questionAskedLabel}{' '}
+                  </span>
+                  <span className="text-text-body">{item.instructions}</span>
+                </p>
+              )}
+              {item.trueDescription && (
+                <p>
+                  <span className="font-semibold text-text-faint">
+                    {qsLabels.flaggedIfLabel}{' '}
+                  </span>
+                  <span>{item.trueDescription}</span>
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

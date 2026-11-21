@@ -120,6 +120,8 @@ export interface QuickScanQuestionMeta {
   scope: QuickScanRuleScope;
   targetId: string;
   beatIndex?: number;
+  instructions: string;
+  trueDescription: string;
   escalationHint?: string;
 }
 
@@ -137,6 +139,8 @@ export interface QuickScanFindingItem {
   /** Model confidence max(p, 1 - p) in [0, 1], or 1.0 for deterministic findings. */
   confidence: number;
   source: 'decision_api' | 'deterministic';
+  instructions?: string;
+  trueDescription?: string;
   deterministicSeverity?: LintSeverity;
   deterministicMessage?: string;
   escalationHint?: string;
@@ -581,6 +585,8 @@ export function buildQuickScanPayload(options: {
         lens: rule.lens,
         scope: 'document',
         targetId: 'Document',
+        instructions: rule.instructions,
+        trueDescription: rule.trueDescription,
         ...(rule.escalationHint ? {escalationHint: rule.escalationHint} : {}),
       };
     } else {
@@ -588,11 +594,13 @@ export function buildQuickScanPayload(options: {
         if (!matchesAllPredicates(rule.when, docCtx, ms)) continue;
         const beatIndex = parseBeatIndex(ms.id);
         const key = `${ms.id}__${rule.id}`;
+        const interpolatedInstructions = interpolateStateToken(rule.instructions, ms.id);
+        const interpolatedTrueDesc = interpolateStateToken(rule.trueDescription, ms.id);
         questions[key] = {
           type: 'noul',
-          instructions: interpolateStateToken(rule.instructions, ms.id),
+          instructions: interpolatedInstructions,
           criteria: {
-            true_description: interpolateStateToken(rule.trueDescription, ms.id),
+            true_description: interpolatedTrueDesc,
             false_description: interpolateStateToken(rule.falseDescription, ms.id),
           },
         };
@@ -604,6 +612,8 @@ export function buildQuickScanPayload(options: {
           scope: 'macro_state',
           targetId: ms.id,
           ...(beatIndex !== undefined ? {beatIndex} : {}),
+          instructions: interpolatedInstructions,
+          trueDescription: interpolatedTrueDesc,
           ...(rule.escalationHint
             ? {escalationHint: interpolateStateToken(rule.escalationHint, ms.id)}
             : {}),
@@ -823,6 +833,8 @@ export async function runQuickScan(options: RunQuickScanOptions): Promise<RunQui
       probability: ans.noul,
       confidence: ans.confidence,
       source: 'decision_api',
+      instructions: meta.instructions,
+      trueDescription: meta.trueDescription,
       ...(meta.escalationHint ? {escalationHint: meta.escalationHint} : {}),
     });
   }

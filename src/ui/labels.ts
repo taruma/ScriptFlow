@@ -743,6 +743,10 @@ export const UI_LABELS = {
       lensExpandAria: (label: string) => `Show checked rules for ${label}`,
       lensCollapseAria: (label: string) => `Hide checked rules for ${label}`,
       deterministicBadge: 'Lint',
+      questionAskedLabel: 'Question:',
+      flaggedIfLabel: 'Flagged if:',
+      expandFindingAria: (label: string) => `Show question asked for ${label}`,
+      collapseFindingAria: (label: string) => `Hide question asked for ${label}`,
       suspectStatesHeading: 'Suspect Macro-States',
       jumpToStateTitle: (targetId: string, topRule: string, pct: number) =>
         `Jump to ${targetId} (${topRule} · ${pct}%)`,

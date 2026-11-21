@@ -339,6 +339,8 @@ function isBeatQuickScanIndicatorEqual(
     a.probability === b.probability &&
     a.confidence === b.confidence &&
     a.source === b.source &&
+    a.instructions === b.instructions &&
+    a.trueDescription === b.trueDescription &&
     a.deterministicMessage === b.deterministicMessage
   );
 }

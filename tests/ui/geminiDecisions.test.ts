@@ -241,6 +241,8 @@ describe('runQuickScan execution, Layer 2 merge, escalation prompt & Live Mode i
     const liveMap1 = buildLiveQuickScanIndicators(result, currentHash);
     expect(liveMap1.size).toBe(3);
     expect(liveMap1.get(2)?.[0].ruleId).toBe('state_cam_visibility');
+    expect(liveMap1.get(2)?.[0].instructions).toContain('S2');
+    expect(liveMap1.get(2)?.[0].trueDescription).toContain('S2');
 
     const liveMap2 = buildLiveQuickScanIndicators(result, currentHash);
     const stabilized = stabilizeBeatQuickScanMap(liveMap1, liveMap2);
