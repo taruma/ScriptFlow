@@ -61,6 +61,11 @@ interface LiveDocumentProps {
   ) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
+  onReorderSubState: (
+    beatIndex: number,
+    fromSubStateIndex: number,
+    toSubStateIndex: number
+  ) => void;
   onInsertBeat: (afterBeatIndex: number, starterLine: string) => void;
   onDeleteBeat: (beatIndex: number) => void;
   onReorderBeats: (fromBeatIndex: number, toBeatIndex: number) => void;
@@ -90,6 +95,7 @@ export const LiveDocument = memo(function LiveDocument({
   onInsertSubState,
   onDeleteSubState,
   onMergeSubState,
+  onReorderSubState,
   onInsertBeat,
   onDeleteBeat,
   onReorderBeats,
@@ -196,6 +202,7 @@ export const LiveDocument = memo(function LiveDocument({
           onInsertSubState={onInsertSubState}
           onDeleteSubState={onDeleteSubState}
           onMergeSubState={onMergeSubState}
+          onReorderSubState={onReorderSubState}
           onInsertBeat={onInsertBeat}
           onDeleteBeat={onDeleteBeat}
           onReorderBeats={onReorderBeats}

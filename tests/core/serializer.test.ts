@@ -13,6 +13,7 @@ import {
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
   reorderExecutionBeats,
+  reorderExecutionSubStates,
   reorderStagingBlocks,
   sanitizeStagingHeaderName,
   updateExecutionBeat,
@@ -145,6 +146,39 @@ describe('Auteur Script Serializer & Tagless Exporter', () => {
     // Delete single Sub-State
     const removed = deleteExecutionSubState(merged, 3, 2);
     expect(parseAuteurScript(removed).execution?.beats[2].subStates).toHaveLength(4);
+  });
+
+  it('reorders Sub-States inside a Macro-State losslessly without altering other Macro-Blocks or Macro-States', () => {
+    const before = parseAuteurScript(INTERROGATION);
+    const beat3Before = before.execution!.beats[2].subStates.map((s) => s.raw);
+    expect(beat3Before.length).toBeGreaterThanOrEqual(4);
+
+    // Move Sub-State 2 forward to index 3
+    const movedDown = reorderExecutionSubStates(INTERROGATION, 3, 2, 3);
+    const parsedDown = parseAuteurScript(movedDown);
+    const beat3Down = parsedDown.execution!.beats[2].subStates.map((s) => s.raw);
+    expect(beat3Down[2]).toBe(beat3Before[3]);
+    expect(beat3Down[3]).toBe(beat3Before[2]);
+    // Other Macro-States and Staging Macro-Blocks stay untouched
+    expect(parsedDown.stagingBlocks.map((b) => b.rawBody)).toEqual(
+      before.stagingBlocks.map((b) => b.rawBody)
+    );
+    expect(parsedDown.execution!.beats[0].raw).toBe(before.execution!.beats[0].raw);
+    expect(parsedDown.execution!.beats[1].raw).toBe(before.execution!.beats[1].raw);
+
+    // Move Sub-State 1 up into Lead slot 0 (free movement across 0..k)
+    const movedToLead = reorderExecutionSubStates(INTERROGATION, 3, 1, 0);
+    const beat3Lead = parseAuteurScript(movedToLead).execution!.beats[2].subStates.map((s) => s.raw);
+    expect(beat3Lead[0]).toBe(beat3Before[1]);
+    expect(beat3Lead[1]).toBe(beat3Before[0]);
+
+    // Out-of-bounds, missing beat/execution, and same-index moves are safe no-ops
+    expect(reorderExecutionSubStates(INTERROGATION, 3, 1, 1)).toBe(before.raw);
+    expect(reorderExecutionSubStates(INTERROGATION, 3, -1, 1)).toBe(before.raw);
+    expect(reorderExecutionSubStates(INTERROGATION, 3, 0, 99)).toBe(before.raw);
+    expect(reorderExecutionSubStates(INTERROGATION, 99, 0, 1)).toBe(before.raw);
+    const stagingOnly = '[INTENT]\nCreate a silent study.';
+    expect(reorderExecutionSubStates(stagingOnly, 1, 0, 1)).toBe(stagingOnly);
   });
 
   it('inserts at index 0 (before first beat) and appends [EXECUTION] when missing', () => {

@@ -7,7 +7,11 @@ import {
   updateStagingBlock,
   type LintDiagnostic,
 } from '../../src/core/index.ts';
-import {reconcileStepFocusOnDelete} from '../../src/ui/beatFocus.ts';
+import {
+  computeSubStateMoveTarget,
+  matchSubStateMoveShortcut,
+  reconcileStepFocusOnDelete,
+} from '../../src/ui/beatFocus.ts';
 import {matchHistoryShortcut} from '../../src/ui/historyShortcuts.ts';
 import {
   areLintRuleOverridesEqual,
@@ -186,6 +190,43 @@ describe('reconcileStepFocusOnDelete', () => {
       index: 1,
       caret: 7,
     });
+  });
+});
+
+describe('Sub-State keyboard move helpers', () => {
+  const base = {key: '', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false};
+
+  it('matches plain Alt+ArrowUp and Alt+ArrowDown only', () => {
+    expect(matchSubStateMoveShortcut({...base, key: 'ArrowUp', altKey: true})).toBe(-1);
+    expect(matchSubStateMoveShortcut({...base, key: 'ArrowDown', altKey: true})).toBe(1);
+
+    // Reject unmodified arrows, other keys, and extra modifiers
+    expect(matchSubStateMoveShortcut({...base, key: 'ArrowUp'})).toBeNull();
+    expect(matchSubStateMoveShortcut({...base, key: 'ArrowDown'})).toBeNull();
+    expect(matchSubStateMoveShortcut({...base, key: 'ArrowLeft', altKey: true})).toBeNull();
+    expect(
+      matchSubStateMoveShortcut({...base, key: 'ArrowUp', altKey: true, shiftKey: true})
+    ).toBeNull();
+    expect(
+      matchSubStateMoveShortcut({...base, key: 'ArrowDown', altKey: true, ctrlKey: true})
+    ).toBeNull();
+    expect(
+      matchSubStateMoveShortcut({...base, key: 'ArrowUp', altKey: true, metaKey: true})
+    ).toBeNull();
+  });
+
+  it('computes valid destination indices across 0..k and stops at boundaries', () => {
+    expect(computeSubStateMoveTarget(0, 3, -1)).toBeNull();
+    expect(computeSubStateMoveTarget(0, 3, 1)).toBe(1);
+    expect(computeSubStateMoveTarget(1, 3, -1)).toBe(0);
+    expect(computeSubStateMoveTarget(1, 3, 1)).toBe(2);
+    expect(computeSubStateMoveTarget(2, 3, -1)).toBe(1);
+    expect(computeSubStateMoveTarget(2, 3, 1)).toBeNull();
+
+    // Single Sub-State or invalid indices return null
+    expect(computeSubStateMoveTarget(0, 1, 1)).toBeNull();
+    expect(computeSubStateMoveTarget(0, 0, 1)).toBeNull();
+    expect(computeSubStateMoveTarget(-1, 3, 1)).toBeNull();
   });
 });
 

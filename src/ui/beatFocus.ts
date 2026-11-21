@@ -77,3 +77,43 @@ export function reconcileStepFocusOnDelete(
     nextFocusTarget,
   };
 }
+
+export interface SubStateShortcutKeyEvent {
+  key: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}
+
+/**
+ * Matches Alt+ArrowUp / Alt+ArrowDown (Option+ArrowUp / Option+ArrowDown on macOS)
+ * with no other modifier keys for keyboard-only Sub-State reordering.
+ */
+export function matchSubStateMoveShortcut(event: SubStateShortcutKeyEvent): -1 | 1 | null {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return null;
+  }
+  if (event.key === 'ArrowUp') return -1;
+  if (event.key === 'ArrowDown') return 1;
+  return null;
+}
+
+/**
+ * Computes the destination Sub-State index for a relative move (-1 or +1)
+ * within a Macro-State, returning null at list boundaries or when < 2 Sub-States exist.
+ */
+export function computeSubStateMoveTarget(
+  currentIndex: number,
+  subStateCount: number,
+  delta: -1 | 1
+): number | null {
+  if (subStateCount < 2 || currentIndex < 0 || currentIndex >= subStateCount) {
+    return null;
+  }
+  const targetIndex = currentIndex + delta;
+  if (targetIndex < 0 || targetIndex >= subStateCount) {
+    return null;
+  }
+  return targetIndex;
+}

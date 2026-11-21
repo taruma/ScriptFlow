@@ -41,10 +41,11 @@ The Auteur Script Editor blends **Obsidian Live Preview** with **Notion's calm s
 
 ### Phase 2 — Always-Formatted Option A Waterfall Stack
 - **Lead Sub-State & Waterfall Rail**: Sub-State 1 leads the Macro-State card and Sub-States $2 \dots k$ indent under a `2px` vertical hairline rail prefixed with `↳`. Clicking any Sub-State places the caret directly inside that formatted Sub-State without collapsing the waterfall.
-- **Live Chaining & Merging**:
+- **Live Chaining, Merging & Keyboard Reordering**:
   - Typing `-> ` (or `→ `) or pressing `Enter` inside any Sub-State immediately forks into the next indented `↳` Sub-State and moves focus there.
   - Pressing `Backspace` at column `0` of an indented `↳` Sub-State merges it cleanly back into the previous Sub-State.
   - `ArrowUp` / `ArrowDown` at Sub-State boundaries navigate smoothly across waterfall Sub-States.
+  - Pressing `Alt+↑` / `Alt+↓` (macOS `Option+↑` / `Option+↓`) inside any focused Sub-State moves that Sub-State up or down freely across `0..k` within its Macro-State as an undoable checkpoint while preserving focus and caret/selection position—keeping zero drag-handle clutter inside the waterfall rail (hinted quietly as `· Alt+↑↓ to move` in the focused-only footer whenever a Macro-State has 2+ Sub-States).
 - **Camera Continuity Rail vs. Cut Hairline**:
   - Consecutive Macro-States sharing the same numbered camera slot (`[CAM 01]` $\to$ `[CAM 01]`) link via a continuous vertical rail in the left margin with tight vertical rhythm.
   - Camera slot switches (`[CAM 01]` $\to$ `[CAM 02]`), recalls (`[CAM 01] ->`), or unnumbered `[CAM]` montage lines render a crisp dotted `cut` (or `cut · recall`) hairline between Macro-States with expanded breathing room.

@@ -55,6 +55,11 @@ interface ExecutionPaneProps {
   ) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
+  onReorderSubState: (
+    beatIndex: number,
+    fromSubStateIndex: number,
+    toSubStateIndex: number
+  ) => void;
   onInsertBeat: (afterBeatIndex: number, starterLine: string) => void;
   onDeleteBeat: (beatIndex: number) => void;
   onReorderBeats: (fromBeatIndex: number, toBeatIndex: number) => void;
@@ -99,6 +104,7 @@ export const ExecutionPane = memo(function ExecutionPane({
   onInsertSubState,
   onDeleteSubState,
   onMergeSubState,
+  onReorderSubState,
   onInsertBeat,
   onDeleteBeat,
   onReorderBeats,
@@ -274,6 +280,7 @@ export const ExecutionPane = memo(function ExecutionPane({
             onInsertSubState={onInsertSubState}
             onDeleteSubState={onDeleteSubState}
             onMergeSubState={onMergeSubState}
+            onReorderSubState={onReorderSubState}
             onDeleteBeat={handleDeleteBeat}
             drag={readOnly ? undefined : binding}
           />
@@ -297,6 +304,7 @@ export const ExecutionPane = memo(function ExecutionPane({
       onInsertSubState,
       onDeleteSubState,
       onMergeSubState,
+      onReorderSubState,
       handleDeleteBeat,
     ]
   );

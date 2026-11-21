@@ -416,6 +416,42 @@ export function mergeExecutionSubStateWithPrevious(
 }
 
 /**
+ * Reorders a Sub-State inside an Execution Macro-State (1-based beatIndex)
+ * from 0-based fromSubStateIndex to 0-based toSubStateIndex.
+ */
+export function reorderExecutionSubStates(
+  raw: string,
+  beatIndex: number,
+  fromSubStateIndex: number,
+  toSubStateIndex: number
+): string {
+  const doc = parseAuteurScript(raw);
+  if (!doc.execution) return doc.raw;
+
+  const beat = doc.execution.beats[beatIndex - 1];
+  if (!beat) return doc.raw;
+
+  const segments = splitExecutionSubStates(beat.raw);
+  const count = segments.length;
+
+  if (
+    fromSubStateIndex < 0 ||
+    fromSubStateIndex >= count ||
+    toSubStateIndex < 0 ||
+    toSubStateIndex >= count ||
+    fromSubStateIndex === toSubStateIndex
+  ) {
+    return doc.raw;
+  }
+
+  const nextSegments = [...segments];
+  const [moved] = nextSegments.splice(fromSubStateIndex, 1);
+  nextSegments.splice(toSubStateIndex, 0, moved);
+
+  return updateExecutionBeat(raw, beatIndex, nextSegments.join(' -> '));
+}
+
+/**
  * Exports canonical v0.4.0 plain text with normalized line endings and clean spacing.
  */
 export function exportPlainText(raw: string): string {

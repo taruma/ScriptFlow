@@ -15,7 +15,11 @@ import type {
   ExecutionBeat,
   LintDiagnostic,
 } from '../core/types.ts';
-import {reconcileStepFocusOnDelete} from '../ui/beatFocus.ts';
+import {
+  computeSubStateMoveTarget,
+  matchSubStateMoveShortcut,
+  reconcileStepFocusOnDelete,
+} from '../ui/beatFocus.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import type {LiveBeatPatchIndicator} from '../ui/patchIndicators.ts';
 import {EMPTY_BEAT_PATCH_INDICATORS} from '../ui/referenceStability.ts';
@@ -51,6 +55,11 @@ interface ExecutionBeatRowProps {
   ) => void;
   onDeleteSubState: (beatIndex: number, subStateIndex: number) => void;
   onMergeSubState: (beatIndex: number, subStateIndex: number) => void;
+  onReorderSubState: (
+    beatIndex: number,
+    fromSubStateIndex: number,
+    toSubStateIndex: number
+  ) => void;
   onDeleteBeat: (beatIndex: number) => void;
   drag?: SortableItemBinding;
 }
@@ -61,6 +70,7 @@ interface PendingFocusTarget {
   type: 'step' | 'pending';
   index: number;
   caret: number;
+  selectionEnd?: number;
 }
 
 export const ExecutionBeatRow = memo(function ExecutionBeatRow({
@@ -80,6 +90,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   onInsertSubState,
   onDeleteSubState,
   onMergeSubState,
+  onReorderSubState,
   onDeleteBeat,
   drag,
 }: ExecutionBeatRowProps) {
@@ -129,8 +140,10 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
     if (el) {
       nextFocusRef.current = null;
       el.focus();
-      const pos = Math.min(target.caret, el.value.length);
-      el.setSelectionRange(pos, pos);
+      const start = Math.min(target.caret, el.value.length);
+      const end =
+        target.selectionEnd !== undefined ? Math.min(target.selectionEnd, el.value.length) : start;
+      el.setSelectionRange(start, end);
     }
   });
 
@@ -321,6 +334,28 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
     if (event.key === 'Escape') {
       event.preventDefault();
       el.blur();
+      return;
+    }
+
+    // Alt+ArrowUp / Alt+ArrowDown reorders this Sub-State within the current Macro-State
+    const moveDelta = matchSubStateMoveShortcut(event);
+    if (moveDelta !== null) {
+      event.preventDefault();
+      const trimmed = currentText.trim();
+      if (trimmed.length === 0) return;
+
+      const targetIndex = computeSubStateMoveTarget(index, beat.subStates.length, moveDelta);
+      if (targetIndex === null) return;
+
+      setFocusedStepIndex(targetIndex);
+      setActiveDraft(trimmed);
+      nextFocusRef.current = {
+        type: 'step',
+        index: targetIndex,
+        caret: Math.min(caretStart, trimmed.length),
+        selectionEnd: Math.min(caretEnd, trimmed.length),
+      };
+      onReorderSubState(beat.index, index, targetIndex);
       return;
     }
 
@@ -755,6 +790,13 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                 {UI_LABELS.execution.chainHintLead}{' '}
                 <code className="font-mono">{UI_LABELS.execution.chainHintArrow}</code>{' '}
                 {UI_LABELS.execution.chainHintTail}
+                {subStates.length > 1 && (
+                  <>
+                    {' '}
+                    · <code className="font-mono">{UI_LABELS.execution.moveHintShortcut}</code>{' '}
+                    {UI_LABELS.execution.moveHintTail}
+                  </>
+                )}
               </span>
             </div>
           )}

@@ -221,6 +221,8 @@ export const UI_LABELS = {
     chainHintLead: 'Type',
     chainHintArrow: '->',
     chainHintTail: 'or press Enter to chain next Sub-State',
+    moveHintShortcut: 'Alt+↑↓',
+    moveHintTail: 'to move',
     dragReorderTitle: 'Drag to reorder Macro-State',
     stepsCount: (count: number) => `${count} ${count === 1 ? 'Sub-State' : 'Sub-States'}`,
     deleteBeatTitle: (index: number) => `Delete S${index}`,

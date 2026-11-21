@@ -15,6 +15,7 @@ import {
   mergeExecutionSubStateWithPrevious,
   parseAuteurScript,
   reorderExecutionBeats,
+  reorderExecutionSubStates,
   reorderStagingBlocks,
   updateExecutionSubState,
   updateStagingBlock,
@@ -402,6 +403,18 @@ export default function App() {
     [commitRawText]
   );
 
+  const handleReorderSubState = useCallback(
+    (beatIndex: number, fromSubStateIndex: number, toSubStateIndex: number) => {
+      commitRawText(
+        (prev) => reorderExecutionSubStates(prev, beatIndex, fromSubStateIndex, toSubStateIndex),
+        {
+          mode: 'checkpoint',
+        }
+      );
+    },
+    [commitRawText]
+  );
+
   const handleInsertBeat = useCallback(
     (afterBeatIndex: number, starterLine: string) => {
       commitRawText((prev) => insertExecutionBeat(prev, afterBeatIndex, starterLine), {
@@ -653,6 +666,7 @@ export default function App() {
               onInsertSubState={handleInsertSubState}
               onDeleteSubState={handleDeleteSubState}
               onMergeSubState={handleMergeSubState}
+              onReorderSubState={handleReorderSubState}
               onInsertBeat={handleInsertBeat}
               onDeleteBeat={handleRequestDeleteBeat}
               onReorderBeats={handleReorderBeats}
