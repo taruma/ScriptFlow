@@ -6,11 +6,21 @@ import type {
   LintDiagnostic,
   StagingBlock,
 } from '../core/types.ts';
+import type {
+  LiveBeatPatchIndicator,
+  LiveBlockPatchIndicator,
+  LiveInsertionPatchIndicator,
+  WordDiffLine,
+  WordDiffToken,
+} from './patchIndicators.ts';
 
 /** Shared empty arrays to prevent fresh `[]` allocations from defeating React.memo. */
 export const EMPTY_DIAGNOSTICS: LintDiagnostic[] = [];
 export const EMPTY_AESTHETIC_TOKENS: AestheticToken[] = [];
 export const EMPTY_BEATS: ExecutionBeat[] = [];
+export const EMPTY_BLOCK_PATCH_INDICATORS: LiveBlockPatchIndicator[] = [];
+export const EMPTY_BEAT_PATCH_INDICATORS: LiveBeatPatchIndicator[] = [];
+export const EMPTY_INSERTION_PATCH_INDICATORS: LiveInsertionPatchIndicator[] = [];
 
 function stabilizeArray<T>(
   prev: T[],
@@ -184,4 +194,128 @@ export function stabilizeDiagnosticsMap(
   }
 
   return allSame ? prev : reconciled;
+}
+
+function areWordTokensEqual(a: readonly WordDiffToken[], b: readonly WordDiffToken[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].type !== b[i].type || a[i].text !== b[i].text) return false;
+  }
+  return true;
+}
+
+function areWordLinesEqual(a: readonly WordDiffLine[], b: readonly WordDiffLine[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (
+      a[i].kind !== b[i].kind ||
+      a[i].omittedCount !== b[i].omittedCount ||
+      !areWordTokensEqual(a[i].tokens, b[i].tokens)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isBlockPatchIndicatorEqual(
+  a: LiveBlockPatchIndicator,
+  b: LiveBlockPatchIndicator
+): boolean {
+  return (
+    a.patchId === b.patchId &&
+    a.sourceKind === b.sourceKind &&
+    a.summary === b.summary &&
+    a.lens === b.lens &&
+    a.issueMessage === b.issueMessage &&
+    a.kind === b.kind &&
+    a.blockIndex === b.blockIndex &&
+    a.header === b.header &&
+    a.afterHeader === b.afterHeader &&
+    areWordLinesEqual(a.lines, b.lines)
+  );
+}
+
+function isBeatPatchIndicatorEqual(
+  a: LiveBeatPatchIndicator,
+  b: LiveBeatPatchIndicator
+): boolean {
+  return (
+    a.patchId === b.patchId &&
+    a.sourceKind === b.sourceKind &&
+    a.summary === b.summary &&
+    a.lens === b.lens &&
+    a.issueMessage === b.issueMessage &&
+    a.kind === b.kind &&
+    a.beatIndex === b.beatIndex &&
+    a.movedToBeatIndex === b.movedToBeatIndex &&
+    areWordTokensEqual(a.tokens, b.tokens)
+  );
+}
+
+function isInsertionPatchIndicatorEqual(
+  a: LiveInsertionPatchIndicator,
+  b: LiveInsertionPatchIndicator
+): boolean {
+  return (
+    a.patchId === b.patchId &&
+    a.sourceKind === b.sourceKind &&
+    a.summary === b.summary &&
+    a.lens === b.lens &&
+    a.issueMessage === b.issueMessage &&
+    a.phase === b.phase &&
+    a.afterIndex === b.afterIndex &&
+    a.header === b.header &&
+    a.insertedBeatIndex === b.insertedBeatIndex &&
+    a.content === b.content
+  );
+}
+
+function stabilizeIndexedMap<T>(
+  prev: Map<number, T[]>,
+  next: Map<number, T[]>,
+  isEqual: (a: T, b: T) => boolean
+): Map<number, T[]> {
+  if (prev === next) return prev;
+  if (prev.size === 0 && next.size === 0) return prev;
+
+  let allSame = prev.size === next.size;
+  const reconciled = new Map<number, T[]>();
+
+  for (const [key, nextList] of next.entries()) {
+    const prevList = prev.get(key);
+    if (prevList) {
+      const stableList = stabilizeArray(prevList, nextList, isEqual);
+      reconciled.set(key, stableList);
+      if (stableList !== prevList) {
+        allSame = false;
+      }
+    } else {
+      reconciled.set(key, nextList);
+      allSame = false;
+    }
+  }
+
+  return allSame ? prev : reconciled;
+}
+
+export function stabilizeBlockPatchMap(
+  prev: Map<number, LiveBlockPatchIndicator[]>,
+  next: Map<number, LiveBlockPatchIndicator[]>
+): Map<number, LiveBlockPatchIndicator[]> {
+  return stabilizeIndexedMap(prev, next, isBlockPatchIndicatorEqual);
+}
+
+export function stabilizeBeatPatchMap(
+  prev: Map<number, LiveBeatPatchIndicator[]>,
+  next: Map<number, LiveBeatPatchIndicator[]>
+): Map<number, LiveBeatPatchIndicator[]> {
+  return stabilizeIndexedMap(prev, next, isBeatPatchIndicatorEqual);
+}
+
+export function stabilizeInsertionPatchMap(
+  prev: Map<number, LiveInsertionPatchIndicator[]>,
+  next: Map<number, LiveInsertionPatchIndicator[]>
+): Map<number, LiveInsertionPatchIndicator[]> {
+  return stabilizeIndexedMap(prev, next, isInsertionPatchIndicatorEqual);
 }

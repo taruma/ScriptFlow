@@ -560,3 +560,30 @@
 .auteur-pane-scroll::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-faint);
 }
+
+/* Quiet AI Patch Live Mode Indicators (zero layout shift across all 4 themes) */
+.auteur-ai-patch-card-modify {
+  border-color: var(--phase-logic-border);
+  box-shadow: inset 2.5px 0 0 var(--tok-continuity);
+}
+.auteur-ai-patch-card-delete {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--border-main));
+  box-shadow: inset 2.5px 0 0 #ef4444;
+}
+.auteur-word-diff-added {
+  background-color: color-mix(in srgb, #10b981 18%, transparent);
+  color: var(--phase-aesthetic-text);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.auteur-word-diff-removed {
+  background-color: color-mix(in srgb, #ef4444 16%, transparent);
+  color: #dc2626;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+[data-theme-category="dark"] .auteur-word-diff-removed {
+  color: #fca5a5;
+}

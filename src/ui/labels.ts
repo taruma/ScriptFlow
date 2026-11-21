@@ -903,4 +903,35 @@ export const UI_LABELS = {
         ms < 1 ? '< 1 ms' : `${Math.round(ms).toLocaleString()} ms`,
     },
   },
+
+  patchIndicators: {
+    triggerAria: (count: number, hasDelete: boolean) =>
+      `${count} proposed AI ${count === 1 ? 'change' : 'changes'}${hasDelete ? ' (includes deletion)' : ''} — hover to preview diff, click to pin`,
+    dialogAria: 'AI proposed change preview',
+    headerTitle: (count: number) =>
+      count === 1 ? 'AI Proposed Change' : `AI Proposed Changes (${count})`,
+    insertionHeaderTitle: (count: number) =>
+      count === 1 ? 'AI Proposed Insertion' : `AI Proposed Insertions (${count})`,
+    closeAria: 'Close AI change preview',
+    footerHint: 'Preview only · Apply or dismiss in AI Assistant',
+    kindBadges: {
+      modify: 'Modify',
+      delete: 'Delete',
+      reorder: 'Reorder',
+      insert: 'Insert',
+    } as const,
+    sourceAuditFix: 'Audit Fix',
+    sourcePatch: 'AI Patch',
+    headerRename: (from: string, to: string) => `[${from}] → [${to}]`,
+    movedToBeat: (beatIndex: number) => `Moves to S${beatIndex}`,
+    omittedLines: (count: number) =>
+      `… ${count} unchanged ${count === 1 ? 'line' : 'lines'} …`,
+    emptyBodyPlaceholder: '(empty block)',
+    insertBlockSeamLabel: (header: string, extraCount: number) =>
+      extraCount > 0 ? `AI Insert [${header}] (+${extraCount})` : `AI Insert [${header}]`,
+    insertBeatSeamLabel: (count: number) =>
+      count === 1 ? 'AI Insert Macro-State' : `AI Insert ${count} Macro-States`,
+    insertSeamAria: (label: string) => `${label} — hover to preview, click to pin`,
+    insertedBeatBadge: (beatIndex: number) => `New S${beatIndex}`,
+  },
 } as const;

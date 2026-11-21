@@ -79,6 +79,7 @@ import {
 } from '../ui/aiSettings.ts';
 import {useAiSkills} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import {collectActiveAiPatches, type ActiveAiPatchItem} from '../ui/patchIndicators.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import type {ContextInspectorTabId} from './AiContextInspectorModal.tsx';
 import {
@@ -133,6 +134,7 @@ export interface AiAssistantSidebarProps {
   ) => Promise<boolean> | boolean;
   onApplyDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean> | boolean;
   onJumpToTarget: (targetId: string) => void;
+  onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
 }
 
 interface ReasoningAccordionProps {
@@ -321,6 +323,7 @@ export function AiAssistantSidebar({
   onApplyPatchSuggestion,
   onApplyDraftSuggestion,
   onJumpToTarget,
+  onActivePatchesChange,
 }: AiAssistantSidebarProps) {
   const {
     settings,
@@ -406,6 +409,21 @@ export function AiAssistantSidebar({
 
   const isEmpty = previewComposedContext.editorState.isEmpty;
   const currentSnapshotHash = previewComposedContext.editorState.snapshotHash;
+
+  const activePatches = useMemo(
+    () => collectActiveAiPatches(messages, currentSnapshotHash),
+    [messages, currentSnapshotHash]
+  );
+
+  useEffect(() => {
+    onActivePatchesChange?.(activePatches);
+  }, [activePatches, onActivePatchesChange]);
+
+  useEffect(() => {
+    return () => {
+      onActivePatchesChange?.([]);
+    };
+  }, [onActivePatchesChange]);
 
   // Target scope options for Refine / Auto modes on non-empty scripts
   const targetOptions = useMemo(

@@ -1,5 +1,9 @@
 import {describe, expect, it} from 'vitest';
-import {applyAuteurPatch, toAuteurEnvelope} from '../../src/core/index.ts';
+import {
+  applyAuteurPatch,
+  projectAuteurPatchPreview,
+  toAuteurEnvelope,
+} from '../../src/core/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 const INTERROGATION = SCRIPT_PRESETS[0].content;
@@ -422,6 +426,153 @@ MS on Miller seated frame-left facing screen-right.
     expect(relaxedRes.ok).toBe(true);
     expect(relaxedRes.introducedErrors).toHaveLength(0);
     expect(relaxedRes.diagnosticsAfter).toHaveLength(0);
+  });
+
+  describe('projectAuteurPatchPreview', () => {
+    it('projects compound Staging and Execution ops accurately without index drift', () => {
+      const before = toAuteurEnvelope(INTERROGATION);
+      const projection = projectAuteurPatchPreview(INTERROGATION, {
+        expectedSnapshotHash: before.snapshotHash,
+        ops: [
+          {
+            op: 'set_aesthetic_entry',
+            key: 'Lighting',
+            value: 'flickering sodium vapor overhead',
+          },
+          {
+            op: 'insert_macro_block',
+            afterMacroBlockId: null,
+            macroBlock: {
+              header: 'STAGE',
+              format: 'prose',
+              body: 'Concrete box, single metal table bolted center-frame.',
+            },
+          },
+          {
+            op: 'delete_macro_state',
+            macroStateId: 'S1',
+          },
+          {
+            op: 'insert_macro_state',
+            afterMacroStateId: 'S2',
+            subStates: [
+              {dimension: 'camera', subStateTag: 'CAM', identifier: '03', content: 'CU on Park'},
+              {dimension: 'action', subStateTag: 'ACT', content: 'Park blinks once slowly'},
+            ],
+          },
+          {
+            op: 'replace_sub_state',
+            subStateId: 'S3.1',
+            subState: {
+              dimension: 'action',
+              subStateTag: 'ACT',
+              content: 'Miller slams his left palm flat on the folder',
+            },
+          },
+        ],
+      });
+
+      expect(projection).not.toBeNull();
+      // Aesthetic block (MB2) modified
+      expect(projection!.stagingChanges).toHaveLength(1);
+      expect(projection!.stagingChanges[0]).toMatchObject({
+        kind: 'modify',
+        blockIndex: 2,
+        header: 'AESTHETIC',
+      });
+      expect(projection!.stagingChanges[0].afterBody).toContain(
+        'Lighting: flickering sodium vapor overhead'
+      );
+
+      // Staging block inserted before MB0 (afterBlockIndex = -1)
+      expect(projection!.stagingInsertions).toEqual([
+        {
+          afterBlockIndex: -1,
+          header: 'STAGE',
+          body: 'Concrete box, single metal table bolted center-frame.',
+        },
+      ]);
+
+      // Execution: S1 deleted, S3 modified (retaining original beatIndex 3 despite S1 delete + S2 insert!)
+      expect(projection!.executionChanges).toHaveLength(2);
+      expect(projection!.executionChanges[0]).toMatchObject({
+        kind: 'delete',
+        beatIndex: 1,
+        macroStateId: 'S1',
+      });
+      expect(projection!.executionChanges[1]).toMatchObject({
+        kind: 'modify',
+        beatIndex: 3,
+        macroStateId: 'S3',
+      });
+      expect(projection!.executionChanges[1].afterText).toContain(
+        '[ACT] Miller slams his left palm flat on the folder'
+      );
+
+      // Inserted Macro-State anchored after original S2 (post-patch index 2 since S1 was deleted)
+      expect(projection!.executionInsertions).toEqual([
+        {
+          afterBeatIndex: 2,
+          insertedBeatIndex: 2,
+          text: '[CAM 03] CU on Park -> [ACT] Park blinks once slowly',
+        },
+      ]);
+    });
+
+    it('projects delete_macro_block, reorder_macro_states, and auto-created AESTHETIC block', () => {
+      const minimalScript = `[INTENT]\nTense standoff.\n\n[EXECUTION]\n[CAM 01] MS -> [ACT] One\n[CAM 02] CU -> [ACT] Two\n[CAM 03] WS -> [ACT] Three`;
+
+      const projection = projectAuteurPatchPreview(minimalScript, {
+        ops: [
+          {op: 'delete_macro_block', macroBlockId: 'MB0'},
+          {op: 'set_aesthetic_entry', key: 'Palette', value: 'cold steel'},
+          {op: 'reorder_macro_states', macroStateId: 'S3', afterMacroStateId: null},
+        ],
+      });
+
+      expect(projection).not.toBeNull();
+      expect(projection!.stagingChanges).toEqual([
+        {
+          kind: 'delete',
+          blockIndex: 0,
+          blockId: 'MB0',
+          header: 'INTENT',
+          beforeBody: 'Tense standoff.',
+        },
+      ]);
+      expect(projection!.stagingInsertions).toEqual([
+        {
+          afterBlockIndex: -1,
+          header: 'AESTHETIC',
+          body: 'Palette: cold steel',
+        },
+      ]);
+      expect(projection!.executionChanges).toEqual([
+        {
+          kind: 'reorder',
+          beatIndex: 3,
+          macroStateId: 'S3',
+          beforeText: '[CAM 03] WS -> [ACT] Three',
+          afterText: '[CAM 03] WS -> [ACT] Three',
+          movedToBeatIndex: 1,
+        },
+      ]);
+    });
+
+    it('returns null when snapshot hash mismatches or patch fails validation', () => {
+      expect(
+        projectAuteurPatchPreview(INTERROGATION, {
+          expectedSnapshotHash: 'stale-hash-000',
+          ops: [{op: 'delete_macro_state', macroStateId: 'S1'}],
+        })
+      ).toBeNull();
+
+      expect(
+        projectAuteurPatchPreview(INTERROGATION, {
+          ops: [{op: 'delete_macro_state', macroStateId: 'S999'}],
+        })
+      ).toBeNull();
+    });
   });
 });
 

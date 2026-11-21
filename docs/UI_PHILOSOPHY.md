@@ -53,6 +53,11 @@ The Auteur Script Editor blends **Obsidian Live Preview** with **Notion's calm s
 ### Toggleable Clause Underlines (Off by Default)
 - Enabled via **Settings → Clause underlines** (`data-clause-guides="true"` on `<html>`): comma-separated phrases receive a faint monochrome dotted underline and sentence/semicolon clauses receive a subtle solid hairline underline, while punctuation characters stay un-underlined as crisp visual breaks. Decimals (`2.39:1`), ellipses (`...`), abbreviations (`O.S.`, `Mr.`), and spoken `{dialogue}` are intentionally skipped.
 
+### Quiet Hover-to-Diff AI Patch Indicators (Preview-Only, Zero Layout Shift)
+- Whenever one or more unapplied, undismissed, non-stale AI patches (or Audit Review embedded fixes) are staged in the open AI sidebar, affected Staging Macro-Block cards (`MB#`) and Execution Macro-State rows (`S#`) display a subtle inset accent border tint (sky for modify/reorder, red for delete) and a quiet circular `AiPatchIndicator` dot stacked cleanly in the existing `24px` right margin alongside `DiagnosticDot`—preserving normal live editing and zero horizontal shift.
+- **Hover to peek, click to pin:** Hovering the indicator opens a compact preview-only popover showing the exact word-level before/after diff for that Macro-Block or Macro-State (with unchanged context lines compacted on longer Staging blocks); clicking pins the popover open (`Esc` or clicking outside closes). Apply and Dismiss remain strictly in the AI sidebar.
+- **Insertion seams:** Proposed `insert_macro_block` and `insert_macro_state` operations render a thin dashed emerald pill (`+ AI Insert ...`) at the exact insertion slot between cards/rows, revealing the proposed content on hover/pin. Indicators disappear immediately once a patch is applied, dismissed, becomes stale after a manual edit, or when the AI sidebar closes.
+
 ---
 
 ## 4. 4-Mode Shell Theme System & Semantic Palette

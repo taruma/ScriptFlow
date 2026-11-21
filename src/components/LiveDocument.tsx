@@ -6,12 +6,19 @@ import type {
   LintDiagnostic,
 } from '../core/types.ts';
 import {
+  buildLivePatchIndicators,
+  type ActiveAiPatchItem,
+} from '../ui/patchIndicators.ts';
+import {
   EMPTY_BEATS,
   stabilizeAestheticTokens,
   stabilizeBeatLinks,
+  stabilizeBeatPatchMap,
+  stabilizeBlockPatchMap,
   stabilizeCharacters,
   stabilizeDiagnosticsMap,
   stabilizeExecutionBeats,
+  stabilizeInsertionPatchMap,
   stabilizeStagingBlocks,
 } from '../ui/referenceStability.ts';
 import {useStableValue} from '../ui/useStableValue.ts';
@@ -19,10 +26,14 @@ import {ExecutionPane} from './ExecutionPane.tsx';
 import {StagingPane} from './StagingPane.tsx';
 import type {StagingBlockCommitOptions} from './stagingBlockRegistry.ts';
 
+const EMPTY_ACTIVE_PATCHES: readonly ActiveAiPatchItem[] = [];
+
 interface LiveDocumentProps {
+  rawText: string;
   doc: AuteurDocument;
   metadata: ExtractedMetadata;
   diagnostics: LintDiagnostic[];
+  activeAiPatches?: readonly ActiveAiPatchItem[];
   historyRevision: number;
   readOnly?: boolean;
   onUpdateStaging: (
@@ -59,9 +70,11 @@ interface LiveDocumentProps {
  * committed snapshot so editing one block or beat never forces unrelated cards to re-render.
  */
 export const LiveDocument = memo(function LiveDocument({
+  rawText,
   doc,
   metadata,
   diagnostics,
+  activeAiPatches = EMPTY_ACTIVE_PATCHES,
   historyRevision,
   readOnly = false,
   onUpdateStaging,
@@ -115,6 +128,27 @@ export const LiveDocument = memo(function LiveDocument({
     stabilizeDiagnosticsMap
   );
 
+  const rawPatchMaps = useMemo(
+    () => buildLivePatchIndicators(rawText, activeAiPatches),
+    [rawText, activeAiPatches]
+  );
+  const stagingPatchIndicatorsByIndex = useStableValue(
+    rawPatchMaps.stagingByBlockIndex,
+    stabilizeBlockPatchMap
+  );
+  const stagingPatchInsertionsByAfterIndex = useStableValue(
+    rawPatchMaps.stagingInsertionsByAfterIndex,
+    stabilizeInsertionPatchMap
+  );
+  const beatPatchIndicatorsByIndex = useStableValue(
+    rawPatchMaps.executionByBeatIndex,
+    stabilizeBeatPatchMap
+  );
+  const beatPatchInsertionsByAfterBeatIndex = useStableValue(
+    rawPatchMaps.executionInsertionsByAfterBeatIndex,
+    stabilizeInsertionPatchMap
+  );
+
   return (
     <main className="w-full lg:h-full lg:overflow-hidden">
       <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -123,6 +157,8 @@ export const LiveDocument = memo(function LiveDocument({
           characters={characters}
           aestheticTokens={aestheticTokens}
           diagnosticsByBlockIndex={stagingDiagnosticsByIndex}
+          patchIndicatorsByBlockIndex={stagingPatchIndicatorsByIndex}
+          patchInsertionsByAfterIndex={stagingPatchInsertionsByAfterIndex}
           historyRevision={historyRevision}
           readOnly={readOnly}
           onUpdateStaging={onUpdateStaging}
@@ -137,6 +173,8 @@ export const LiveDocument = memo(function LiveDocument({
           beatLinks={beatLinks}
           aestheticTokens={aestheticTokens}
           diagnosticsByBeatIndex={beatDiagnosticsByIndex}
+          patchIndicatorsByBeatIndex={beatPatchIndicatorsByIndex}
+          patchInsertionsByAfterBeatIndex={beatPatchInsertionsByAfterBeatIndex}
           historyRevision={historyRevision}
           readOnly={readOnly}
           onUpdateSubState={onUpdateSubState}

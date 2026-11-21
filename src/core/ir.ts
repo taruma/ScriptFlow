@@ -293,20 +293,25 @@ export function documentToIR(doc: AuteurDocument): AuteurScriptIR {
   };
 }
 
-function renderStagingBlock(block: StagingMacroBlockDraft | StagingMacroBlockIR): string {
-  const header = block.header.trim().toUpperCase();
-  let body: string;
-
+/**
+ * Deterministically renders a Staging Macro-Block's body (excluding its `[HEADER]` line).
+ */
+export function renderStagingBlockBody(block: StagingMacroBlockDraft | StagingMacroBlockIR): string {
   if (block.format === 'key_value') {
     const rows: AestheticRow[] = block.entries.map((entry) =>
       entry.key !== null && entry.key.trim().length > 0
         ? {type: 'kv', key: entry.key, value: entry.value}
         : {type: 'free', raw: entry.value}
     );
-    body = serializeAestheticRows(rows).replace(/\n+$/, '');
-  } else {
-    body = normalizeLineEndings(block.body).replace(/\n+$/, '');
+    return serializeAestheticRows(rows).replace(/\n+$/, '');
   }
+
+  return normalizeLineEndings(block.body).replace(/\n+$/, '');
+}
+
+function renderStagingBlock(block: StagingMacroBlockDraft | StagingMacroBlockIR): string {
+  const header = block.header.trim().toUpperCase();
+  const body = renderStagingBlockBody(block);
 
   return body.length > 0 ? `[${header}]\n${body}` : `[${header}]`;
 }

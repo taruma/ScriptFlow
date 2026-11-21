@@ -17,6 +17,9 @@ import type {
 } from '../core/types.ts';
 import {reconcileStepFocusOnDelete} from '../ui/beatFocus.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import type {LiveBeatPatchIndicator} from '../ui/patchIndicators.ts';
+import {EMPTY_BEAT_PATCH_INDICATORS} from '../ui/referenceStability.ts';
+import {AiPatchIndicator} from './AiPatchIndicator.tsx';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
 import type {SortableItemBinding} from './SortableList.tsx';
@@ -27,6 +30,7 @@ interface ExecutionBeatRowProps {
   connectsToNext: boolean;
   aestheticTokens: AestheticToken[];
   diagnostics: LintDiagnostic[];
+  patchIndicators?: readonly LiveBeatPatchIndicator[];
   historyRevision: number;
   readOnly?: boolean;
   collapsed: boolean;
@@ -65,6 +69,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   connectsToNext,
   aestheticTokens,
   diagnostics,
+  patchIndicators = EMPTY_BEAT_PATCH_INDICATORS,
   historyRevision,
   readOnly = false,
   collapsed,
@@ -534,7 +539,13 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
           className={`relative min-w-0 rounded-lg border px-3 py-1.5 transition-colors cursor-pointer select-none ${
             isDragging
               ? 'border-dashed border-text-muted/60 bg-surface-subtle/60'
-              : 'border-border-main bg-surface hover:border-text-faint/50 hover:bg-surface-subtle/50'
+              : patchIndicators.length > 0
+                ? `bg-surface hover:bg-surface-subtle/50 ${
+                    patchIndicators.some((item) => item.kind === 'delete')
+                      ? 'auteur-ai-patch-card-delete'
+                      : 'auteur-ai-patch-card-modify'
+                  }`
+                : 'border-border-main bg-surface hover:border-text-faint/50 hover:bg-surface-subtle/50'
           }`}
         >
           <div className="flex items-start gap-1.5">
@@ -594,7 +605,13 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
               ? 'border-dashed border-text-muted/60 bg-surface-subtle/60'
               : isBeatFocused
                 ? 'border-text-muted/60 bg-surface shadow-xs'
-                : 'border-border-main bg-surface hover:border-text-faint/50'
+                : patchIndicators.length > 0
+                  ? `bg-surface ${
+                      patchIndicators.some((item) => item.kind === 'delete')
+                        ? 'auteur-ai-patch-card-delete'
+                        : 'auteur-ai-patch-card-modify'
+                    }`
+                  : 'border-border-main bg-surface hover:border-text-faint/50'
           }`}
         >
           {/* Compact Hover Actions (Add Step + Delete Beat — zero idle vertical footprint) */}
@@ -744,8 +761,9 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
         </div>
       )}
 
-      {/* Right Margin Diagnostics (zero layout shift) */}
-      <div className="flex w-6 justify-center pt-1.5">
+      {/* Right Margin Diagnostics & Quiet AI Patch Indicator (zero layout shift) */}
+      <div className="flex w-6 flex-col items-center gap-1 pt-1.5">
+        <AiPatchIndicator phase="execution" indicators={patchIndicators} />
         <DiagnosticDot diagnostics={diagnostics} />
       </div>
     </div>

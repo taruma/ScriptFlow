@@ -32,6 +32,7 @@ import {copyTextToClipboard} from './ui/clipboard.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
 import {matchHistoryShortcut} from './ui/historyShortcuts.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
+import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
 import {useScriptLibrary} from './ui/useScriptLibrary.ts';
 import {useStableValue} from './ui/useStableValue.ts';
@@ -73,7 +74,18 @@ export default function App() {
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
+  const [activeAiPatches, setActiveAiPatches] = useState<ActiveAiPatchItem[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
+
+  const handleActiveAiPatchesChange = useCallback((next: ActiveAiPatchItem[]) => {
+    setActiveAiPatches((prev) => (prev.length === 0 && next.length === 0 ? prev : next));
+  }, []);
+
+  useEffect(() => {
+    if (!isAiOpen) {
+      setActiveAiPatches((prev) => (prev.length === 0 ? prev : []));
+    }
+  }, [isAiOpen]);
 
   const handleSwitchToLive = useCallback(() => {
     setViewMode('live');
@@ -533,9 +545,11 @@ export default function App() {
         >
           {viewMode === 'live' ? (
             <LiveDocument
+              rawText={rawText}
               doc={doc}
               metadata={metadata}
               diagnostics={diagnostics}
+              activeAiPatches={activeAiPatches}
               historyRevision={history.revision}
               readOnly={isReadOnly}
               onUpdateStaging={handleUpdateStaging}
@@ -572,6 +586,7 @@ export default function App() {
               onApplyPatchSuggestion={handleApplyAiPatchSuggestion}
               onApplyDraftSuggestion={handleApplyAiDraftSuggestion}
               onJumpToTarget={handleJumpToAiTarget}
+              onActivePatchesChange={handleActiveAiPatchesChange}
             />
           </Suspense>
         )}

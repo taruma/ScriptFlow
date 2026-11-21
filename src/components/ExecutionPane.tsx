@@ -8,7 +8,15 @@ import type {
   LintDiagnostic,
 } from '../core/types.ts';
 import {UI_LABELS} from '../ui/labels.ts';
-import {EMPTY_DIAGNOSTICS} from '../ui/referenceStability.ts';
+import type {
+  LiveBeatPatchIndicator,
+  LiveInsertionPatchIndicator,
+} from '../ui/patchIndicators.ts';
+import {
+  EMPTY_BEAT_PATCH_INDICATORS,
+  EMPTY_DIAGNOSTICS,
+  EMPTY_INSERTION_PATCH_INDICATORS,
+} from '../ui/referenceStability.ts';
 import {
   areAllIndicesCollapsed,
   deleteCollapsedIndex,
@@ -18,6 +26,7 @@ import {
   toggleAllCollapsedIndices,
   toggleCollapsedIndex,
 } from '../ui/stagingCollapse.ts';
+import {AiPatchInsertionSeam} from './AiPatchIndicator.tsx';
 import {ExecutionBeatRow} from './ExecutionBeatRow.tsx';
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
 import {SortableList, type SortableItemBinding} from './SortableList.tsx';
@@ -28,6 +37,8 @@ interface ExecutionPaneProps {
   beatLinks: BeatCameraLink[];
   aestheticTokens: AestheticToken[];
   diagnosticsByBeatIndex: Map<number, LintDiagnostic[]>;
+  patchIndicatorsByBeatIndex: Map<number, LiveBeatPatchIndicator[]>;
+  patchInsertionsByAfterBeatIndex: Map<number, LiveInsertionPatchIndicator[]>;
   historyRevision: number;
   readOnly?: boolean;
   onUpdateSubState: (
@@ -80,6 +91,8 @@ export const ExecutionPane = memo(function ExecutionPane({
   beatLinks,
   aestheticTokens,
   diagnosticsByBeatIndex,
+  patchIndicatorsByBeatIndex,
+  patchInsertionsByAfterBeatIndex,
   historyRevision,
   readOnly = false,
   onUpdateSubState,
@@ -204,31 +217,42 @@ export const ExecutionPane = memo(function ExecutionPane({
       return (
         <>
           {idx > 0 && (
-            <HoverInsertSeam
-              gridClass={EXECUTION_GRID}
-              heightClass={isCutBefore ? 'h-5' : 'h-2'}
-              subtleHairline
-              quiet={binding.isAnyDragging}
-              readOnly={readOnly}
-              cutLabel={
-                isCutBefore
-                  ? link?.transition === 'RECALL'
-                    ? UI_LABELS.document.cutRecallMarker
-                    : UI_LABELS.document.cutMarker
-                  : undefined
-              }
-              leftGutter={
-                link?.connectsFromPrevious && !binding.isAnyDragging ? (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute right-[12px] inset-y-0 w-[2px] opacity-45"
-                    style={{backgroundColor: 'var(--tok-continuity)'}}
-                  />
-                ) : null
-              }
-              buttonLabel={UI_LABELS.document.insertBeatBetween(beat.index - 1, beat.index)}
-              onClick={() => handleInsertBeatAt(beat.index - 1)}
-            />
+            <>
+              <AiPatchInsertionSeam
+                gridClass={EXECUTION_GRID}
+                hasLeftGutter
+                insertions={
+                  patchInsertionsByAfterBeatIndex.get(beat.index - 1) ??
+                  EMPTY_INSERTION_PATCH_INDICATORS
+                }
+              />
+
+              <HoverInsertSeam
+                gridClass={EXECUTION_GRID}
+                heightClass={isCutBefore ? 'h-5' : 'h-2'}
+                subtleHairline
+                quiet={binding.isAnyDragging}
+                readOnly={readOnly}
+                cutLabel={
+                  isCutBefore
+                    ? link?.transition === 'RECALL'
+                      ? UI_LABELS.document.cutRecallMarker
+                      : UI_LABELS.document.cutMarker
+                    : undefined
+                }
+                leftGutter={
+                  link?.connectsFromPrevious && !binding.isAnyDragging ? (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-[12px] inset-y-0 w-[2px] opacity-45"
+                      style={{backgroundColor: 'var(--tok-continuity)'}}
+                    />
+                  ) : null
+                }
+                buttonLabel={UI_LABELS.document.insertBeatBetween(beat.index - 1, beat.index)}
+                onClick={() => handleInsertBeatAt(beat.index - 1)}
+              />
+            </>
           )}
 
           <ExecutionBeatRow
@@ -237,6 +261,9 @@ export const ExecutionPane = memo(function ExecutionPane({
             connectsToNext={connectsToNext}
             aestheticTokens={aestheticTokens}
             diagnostics={diagnosticsByBeatIndex.get(beat.index) ?? EMPTY_DIAGNOSTICS}
+            patchIndicators={
+              patchIndicatorsByBeatIndex.get(beat.index) ?? EMPTY_BEAT_PATCH_INDICATORS
+            }
             historyRevision={historyRevision}
             readOnly={readOnly}
             collapsed={collapsedIndices.has(idx)}
@@ -257,6 +284,8 @@ export const ExecutionPane = memo(function ExecutionPane({
       beatLinks,
       aestheticTokens,
       diagnosticsByBeatIndex,
+      patchIndicatorsByBeatIndex,
+      patchInsertionsByAfterBeatIndex,
       historyRevision,
       readOnly,
       collapsedIndices,
@@ -361,6 +390,14 @@ export const ExecutionPane = memo(function ExecutionPane({
           beats.length > 0 ? 'pt-1' : 'pt-2.5'
         }`}
       >
+        <AiPatchInsertionSeam
+          gridClass={EXECUTION_GRID}
+          hasLeftGutter
+          insertions={
+            patchInsertionsByAfterBeatIndex.get(0) ?? EMPTY_INSERTION_PATCH_INDICATORS
+          }
+        />
+
         {/* Surgical insert before Beat 1 */}
         {beats.length > 0 && !readOnly && (
           <HoverInsertSeam
@@ -383,6 +420,17 @@ export const ExecutionPane = memo(function ExecutionPane({
           renderOverlay={renderOverlay}
           renderItem={renderItem}
         />
+
+        {beats.length > 0 && (
+          <AiPatchInsertionSeam
+            gridClass={EXECUTION_GRID}
+            hasLeftGutter
+            insertions={
+              patchInsertionsByAfterBeatIndex.get(beats.length) ??
+              EMPTY_INSERTION_PATCH_INDICATORS
+            }
+          />
+        )}
 
         {/* Quiet bottom Add Beat action */}
         {!readOnly && (

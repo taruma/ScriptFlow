@@ -7,6 +7,9 @@ import type {
   StagingBlock,
 } from '../core/types.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
+import type {LiveBlockPatchIndicator} from '../ui/patchIndicators.ts';
+import {EMPTY_BLOCK_PATCH_INDICATORS} from '../ui/referenceStability.ts';
+import {AiPatchIndicator} from './AiPatchIndicator.tsx';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
 import type {SortableItemBinding} from './SortableList.tsx';
@@ -28,6 +31,7 @@ interface StagingBlockCardProps {
   autoFocusEdit?: boolean;
   onClearAutoFocus?: () => void;
   diagnostics: LintDiagnostic[];
+  patchIndicators?: readonly LiveBlockPatchIndicator[];
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
   drag?: SortableItemBinding;
@@ -52,6 +56,7 @@ export const StagingBlockCard = memo(function StagingBlockCard({
   autoFocusEdit = false,
   onClearAutoFocus,
   diagnostics,
+  patchIndicators = EMPTY_BLOCK_PATCH_INDICATORS,
   characters,
   aestheticTokens,
   drag,
@@ -123,6 +128,13 @@ export const StagingBlockCard = memo(function StagingBlockCard({
 
   const isDragging = Boolean(drag?.isDragging);
   const handleProps = !readOnly && drag ? drag.getHandleProps(isFocused) : null;
+  const hasPatchIndicators = patchIndicators.length > 0;
+  const hasDeletePatch = hasPatchIndicators && patchIndicators.some((item) => item.kind === 'delete');
+  const patchCardClass = hasPatchIndicators
+    ? hasDeletePatch
+      ? 'auteur-ai-patch-card-delete'
+      : 'auteur-ai-patch-card-modify'
+    : '';
 
   const collapsedMeta = collapsed
     ? formatStagingCollapsedMeta(block, characters, aestheticTokens)
@@ -142,7 +154,9 @@ export const StagingBlockCard = memo(function StagingBlockCard({
             ? 'border-dashed border-text-muted/60 bg-surface-subtle/60'
             : isFocused
               ? 'border-text-muted/60 bg-surface shadow-xs'
-              : 'border-border-main bg-surface hover:border-text-faint/50'
+              : hasPatchIndicators
+                ? `bg-surface ${patchCardClass}`
+                : 'border-border-main bg-surface hover:border-text-faint/50'
         }`}
       >
         {/* Header Bar */}
@@ -279,8 +293,9 @@ export const StagingBlockCard = memo(function StagingBlockCard({
         )}
       </div>
 
-      {/* Right Margin Diagnostics (zero layout shift) */}
-      <div className="flex w-6 justify-center pt-1">
+      {/* Right Margin Diagnostics & Quiet AI Patch Indicator (zero layout shift) */}
+      <div className="flex w-6 flex-col items-center gap-1 pt-1">
+        <AiPatchIndicator phase="staging" indicators={patchIndicators} />
         <DiagnosticDot diagnostics={diagnostics} />
       </div>
     </section>

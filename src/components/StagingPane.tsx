@@ -7,7 +7,16 @@ import type {
   StagingBlock,
 } from '../core/types.ts';
 import {getMacroBlockMeta, UI_LABELS} from '../ui/labels.ts';
-import {EMPTY_DIAGNOSTICS, stabilizeStringArray} from '../ui/referenceStability.ts';
+import type {
+  LiveBlockPatchIndicator,
+  LiveInsertionPatchIndicator,
+} from '../ui/patchIndicators.ts';
+import {
+  EMPTY_BLOCK_PATCH_INDICATORS,
+  EMPTY_DIAGNOSTICS,
+  EMPTY_INSERTION_PATCH_INDICATORS,
+  stabilizeStringArray,
+} from '../ui/referenceStability.ts';
 import {
   areAllIndicesCollapsed,
   deleteCollapsedIndex,
@@ -19,6 +28,7 @@ import {
 } from '../ui/stagingCollapse.ts';
 import {useStableValue} from '../ui/useStableValue.ts';
 import {AddStagingBlockPicker, StagingBlockPickerPanel} from './AddStagingBlockPicker.tsx';
+import {AiPatchInsertionSeam} from './AiPatchIndicator.tsx';
 import {HoverInsertSeam} from './HoverInsertSeam.tsx';
 import {SortableList, type SortableItemBinding} from './SortableList.tsx';
 import {StagingBlockCard} from './StagingBlockCard.tsx';
@@ -32,6 +42,8 @@ interface StagingPaneProps {
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
   diagnosticsByBlockIndex: Map<number, LintDiagnostic[]>;
+  patchIndicatorsByBlockIndex: Map<number, LiveBlockPatchIndicator[]>;
+  patchInsertionsByAfterIndex: Map<number, LiveInsertionPatchIndicator[]>;
   historyRevision: number;
   readOnly?: boolean;
   onUpdateStaging: (
@@ -56,6 +68,8 @@ export const StagingPane = memo(function StagingPane({
   characters,
   aestheticTokens,
   diagnosticsByBlockIndex,
+  patchIndicatorsByBlockIndex,
+  patchInsertionsByAfterIndex,
   historyRevision,
   readOnly = false,
   onUpdateStaging,
@@ -187,6 +201,13 @@ export const StagingPane = memo(function StagingPane({
         <>
           {index > 0 && prevBlockName && (
             <>
+              <AiPatchInsertionSeam
+                gridClass={STAGING_GRID}
+                insertions={
+                  patchInsertionsByAfterIndex.get(seamSlot) ?? EMPTY_INSERTION_PATCH_INDICATORS
+                }
+              />
+
               <HoverInsertSeam
                 gridClass={STAGING_GRID}
                 buttonLabel={UI_LABELS.document.insertMacroBlockBetween(prevBlockName, block.name)}
@@ -224,6 +245,9 @@ export const StagingPane = memo(function StagingPane({
             autoFocusEdit={autoFocusBlockIndex === index}
             onClearAutoFocus={handleClearAutoFocus}
             diagnostics={diagnosticsByBlockIndex.get(index) ?? EMPTY_DIAGNOSTICS}
+            patchIndicators={
+              patchIndicatorsByBlockIndex.get(index) ?? EMPTY_BLOCK_PATCH_INDICATORS
+            }
             characters={characters}
             aestheticTokens={aestheticTokens}
             drag={readOnly ? undefined : binding}
@@ -244,6 +268,8 @@ export const StagingPane = memo(function StagingPane({
       autoFocusBlockIndex,
       handleClearAutoFocus,
       diagnosticsByBlockIndex,
+      patchIndicatorsByBlockIndex,
+      patchInsertionsByAfterIndex,
       characters,
       aestheticTokens,
     ]
@@ -334,6 +360,13 @@ export const StagingPane = memo(function StagingPane({
       >
         {stagingBlocks.length > 0 ? (
           <div>
+            <AiPatchInsertionSeam
+              gridClass={STAGING_GRID}
+              insertions={
+                patchInsertionsByAfterIndex.get(-1) ?? EMPTY_INSERTION_PATCH_INDICATORS
+              }
+            />
+
             {/* Surgical insert seam before the first Staging Macro-Block */}
             {!readOnly && (
               <>
@@ -368,13 +401,29 @@ export const StagingPane = memo(function StagingPane({
               renderOverlay={renderOverlay}
               renderItem={renderItem}
             />
+
+            <AiPatchInsertionSeam
+              gridClass={STAGING_GRID}
+              insertions={
+                patchInsertionsByAfterIndex.get(stagingBlocks.length - 1) ??
+                EMPTY_INSERTION_PATCH_INDICATORS
+              }
+            />
           </div>
         ) : (
-          <div className={`grid ${STAGING_GRID} gap-1.5`}>
-            <div className="rounded-lg border border-dashed border-border-main bg-surface/50 px-3 py-5 text-center text-xs leading-relaxed text-text-faint">
-              {UI_LABELS.document.noStagingBlocks}
+          <div className="space-y-2">
+            <AiPatchInsertionSeam
+              gridClass={STAGING_GRID}
+              insertions={
+                patchInsertionsByAfterIndex.get(-1) ?? EMPTY_INSERTION_PATCH_INDICATORS
+              }
+            />
+            <div className={`grid ${STAGING_GRID} gap-1.5`}>
+              <div className="rounded-lg border border-dashed border-border-main bg-surface/50 px-3 py-5 text-center text-xs leading-relaxed text-text-faint">
+                {UI_LABELS.document.noStagingBlocks}
+              </div>
+              <div />
             </div>
-            <div />
           </div>
         )}
 
