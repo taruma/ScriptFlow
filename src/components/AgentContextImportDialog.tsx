@@ -1,18 +1,9 @@
 import {useEffect, useMemo, useState} from 'react';
-import {
-  AlertTriangle,
-  Check,
-  FileUp,
-  FolderArchive,
-  Layers,
-  ScanSearch,
-  X,
-} from 'lucide-react';
+import {AlertTriangle, Check, FileUp, FolderArchive, X} from 'lucide-react';
 import {
   analyzeAgentContextImport,
   createDefaultImportSelection,
   summarizeAgentContextImportImpact,
-  type AgentContextImportImpact,
   type AgentContextImportMode,
   type AgentContextImportSelection,
   type AuteurAgentContextPack,
@@ -21,6 +12,16 @@ import type {AiSkillsState} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import type {QuickScanRulesState} from '../ui/quickScanRulesStore.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {
+  formatAppliedParts,
+  formatExportedDate,
+  formatRemovalParts,
+  toggleIdInList,
+} from './ai/importDialog/importDialogFormatters.ts';
+import {
+  QuickScanImportSection,
+  SkillsImportSection,
+} from './ai/importDialog/ImportSectionChecklist.tsx';
 
 export interface AgentContextImportDialogProps {
   filename: string;
@@ -35,105 +36,6 @@ export interface AgentContextImportDialogProps {
     impactSummaryText: string
   ) => void;
   onClose: () => void;
-}
-
-function toggleIdInList(list: readonly string[], id: string): string[] {
-  return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
-}
-
-function formatAppliedParts(impact: AgentContextImportImpact): string[] {
-  const parts: string[] = [];
-  if (impact.craftApplied) {
-    parts.push(impact.craftOverwritten ? 'Foundational Craft (overwrite)' : 'Foundational Craft');
-  }
-  if (impact.customSkillsAdded > 0) {
-    parts.push(
-      `+${impact.customSkillsAdded} new custom ${impact.customSkillsAdded === 1 ? 'skill' : 'skills'}`
-    );
-  }
-  if (impact.customSkillsOverwritten > 0) {
-    parts.push(
-      `${impact.customSkillsOverwritten} custom ${
-        impact.customSkillsOverwritten === 1 ? 'skill' : 'skills'
-      } overwritten`
-    );
-  }
-  if (impact.builtInSkillOverridesApplied > 0) {
-    parts.push(
-      `${impact.builtInSkillOverridesApplied} built-in skill ${
-        impact.builtInSkillOverridesApplied === 1 ? 'override' : 'overrides'
-      }`
-    );
-  }
-  if (impact.customRulesAdded > 0) {
-    parts.push(
-      `+${impact.customRulesAdded} new Quick Scan ${impact.customRulesAdded === 1 ? 'rule' : 'rules'}`
-    );
-  }
-  if (impact.customRulesOverwritten > 0) {
-    parts.push(
-      `${impact.customRulesOverwritten} custom Quick Scan ${
-        impact.customRulesOverwritten === 1 ? 'rule' : 'rules'
-      } overwritten`
-    );
-  }
-  if (impact.builtInRuleOverridesApplied > 0) {
-    parts.push(
-      `${impact.builtInRuleOverridesApplied} built-in rule ${
-        impact.builtInRuleOverridesApplied === 1 ? 'override' : 'overrides'
-      }`
-    );
-  }
-  return parts;
-}
-
-function formatRemovalParts(impact: AgentContextImportImpact): string[] {
-  const parts: string[] = [];
-  if (impact.craftCleared) {
-    parts.push('Foundational Craft edit');
-  }
-  if (impact.customSkillsRemoved > 0) {
-    parts.push(
-      `${impact.customSkillsRemoved} local custom ${
-        impact.customSkillsRemoved === 1 ? 'skill' : 'skills'
-      }`
-    );
-  }
-  if (impact.builtInSkillOverridesReset > 0) {
-    parts.push(
-      `${impact.builtInSkillOverridesReset} built-in skill ${
-        impact.builtInSkillOverridesReset === 1 ? 'override' : 'overrides'
-      }`
-    );
-  }
-  if (impact.customRulesRemoved > 0) {
-    parts.push(
-      `${impact.customRulesRemoved} local custom Quick Scan ${
-        impact.customRulesRemoved === 1 ? 'rule' : 'rules'
-      }`
-    );
-  }
-  if (impact.builtInRuleOverridesReset > 0) {
-    parts.push(
-      `${impact.builtInRuleOverridesReset} built-in Quick Scan ${
-        impact.builtInRuleOverridesReset === 1 ? 'override' : 'overrides'
-      }`
-    );
-  }
-  return parts;
-}
-
-function formatExportedDate(iso: string): string | null {
-  if (!iso.trim()) return null;
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function AgentContextImportDialog({
@@ -157,8 +59,7 @@ export function AgentContextImportDialog({
   );
   const [backupExported, setBackupExported] = useState(false);
 
-  const ctxLabels = UI_LABELS.ai.contextInspector;
-  const labels = ctxLabels.exportImport;
+  const labels = UI_LABELS.ai.contextInspector.exportImport;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -217,6 +118,61 @@ export function AgentContextImportDialog({
         ? analysis.customQuickScanRules.map((item) => item.rule.id)
         : [],
     }));
+  };
+
+  const handleToggleFoundationalCraft = (checked: boolean) => {
+    setSelection((prev) => ({
+      ...prev,
+      applySkills: checked ? true : prev.applySkills,
+      includeFoundationalCraft: checked,
+    }));
+  };
+
+  const handleToggleBuiltInSkillOverride = (id: string) => {
+    setSelection((prev) => {
+      const nextIds = toggleIdInList(prev.builtInSkillOverrideIds, id);
+      return {
+        ...prev,
+        applySkills:
+          nextIds.length > prev.builtInSkillOverrideIds.length ? true : prev.applySkills,
+        builtInSkillOverrideIds: nextIds,
+      };
+    });
+  };
+
+  const handleToggleCustomSkill = (id: string) => {
+    setSelection((prev) => {
+      const nextIds = toggleIdInList(prev.customSkillIds, id);
+      return {
+        ...prev,
+        applySkills: nextIds.length > prev.customSkillIds.length ? true : prev.applySkills,
+        customSkillIds: nextIds,
+      };
+    });
+  };
+
+  const handleToggleBuiltInRuleOverride = (id: string) => {
+    setSelection((prev) => {
+      const nextIds = toggleIdInList(prev.builtInQuickScanOverrideIds, id);
+      return {
+        ...prev,
+        applyQuickScan:
+          nextIds.length > prev.builtInQuickScanOverrideIds.length ? true : prev.applyQuickScan,
+        builtInQuickScanOverrideIds: nextIds,
+      };
+    });
+  };
+
+  const handleToggleCustomRule = (id: string) => {
+    setSelection((prev) => {
+      const nextIds = toggleIdInList(prev.customQuickScanRuleIds, id);
+      return {
+        ...prev,
+        applyQuickScan:
+          nextIds.length > prev.customQuickScanRuleIds.length ? true : prev.applyQuickScan,
+        customQuickScanRuleIds: nextIds,
+      };
+    });
   };
 
   const handleConfirm = () => {
@@ -361,457 +317,27 @@ export function AgentContextImportDialog({
 
           {/* Domain 1: Foundational Craft & Skills */}
           {analysis.hasSkillsSection && (
-            <section className="rounded-xl border border-border-subtle bg-surface-subtle/35 overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle/70 px-3.5 py-2.5">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selection.applySkills}
-                    aria-label={labels.domainSkillsToggleAria}
-                    onChange={(event) => setAllSkillsSelected(event.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                  />
-                  <Layers className="h-3.5 w-3.5 text-[var(--phase-continuity-text)]" />
-                  <span className="text-xs font-semibold text-text-main">
-                    {labels.domainSkillsTitle}
-                  </span>
-                  <span className="font-mono text-[10px] text-text-faint">
-                    ({skillsItemsTotal})
-                  </span>
-                </label>
-
-                {skillsItemsTotal > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setAllSkillsSelected(true)}
-                      className={UI_TOKENS.button.actionPill}
-                    >
-                      {labels.selectAllButton}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAllSkillsSelected(false)}
-                      className={UI_TOKENS.button.actionPill}
-                    >
-                      {labels.selectNoneButton}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`p-3.5 space-y-3 ${
-                  selection.applySkills ? '' : 'opacity-50'
-                }`}
-              >
-                {skillsItemsTotal === 0 ? (
-                  <p className="text-[11px] italic text-text-muted">
-                    {labels.domainSkillsEmptyNote}
-                  </p>
-                ) : (
-                  <>
-                    {/* Foundational Craft Override */}
-                    {analysis.foundationalCraft && (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                          {labels.groupFoundationalCraft}
-                        </div>
-                        <label className="flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 cursor-pointer hover:bg-surface-hover transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={selection.applySkills && selection.includeFoundationalCraft}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              setSelection((prev) => ({
-                                ...prev,
-                                applySkills: checked ? true : prev.applySkills,
-                                includeFoundationalCraft: checked,
-                              }));
-                            }}
-                            className="mt-0.5 h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                          />
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-xs font-medium text-text-main">
-                                {ctxLabels.foundationalCraftHeading}
-                              </span>
-                              <span className="font-mono text-[10px] text-text-faint">
-                                {ctxLabels.charsCount(analysis.foundationalCraft.charCount)}
-                              </span>
-                              <span
-                                className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
-                                  analysis.foundationalCraft.willOverwrite
-                                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                                    : 'auteur-phase-aesthetic'
-                                }`}
-                              >
-                                {analysis.foundationalCraft.willOverwrite
-                                  ? labels.badgeOverwrites
-                                  : labels.badgeNew}
-                              </span>
-                            </div>
-                            <p className="text-[11px] font-mono text-text-muted truncate">
-                              {analysis.foundationalCraft.preview}
-                            </p>
-                          </div>
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Built-in Skill Overrides */}
-                    {analysis.builtInSkillOverrides.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                          {labels.groupBuiltInSkillOverrides(analysis.builtInSkillOverrides.length)}
-                        </div>
-                        <div className="space-y-1.5">
-                          {analysis.builtInSkillOverrides.map((item) => {
-                            const checked =
-                              selection.applySkills &&
-                              selection.builtInSkillOverrideIds.includes(item.id);
-                            return (
-                              <label
-                                key={item.id}
-                                className="flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 cursor-pointer hover:bg-surface-hover transition-colors"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    setSelection((prev) => {
-                                      const nextIds = toggleIdInList(
-                                        prev.builtInSkillOverrideIds,
-                                        item.id
-                                      );
-                                      return {
-                                        ...prev,
-                                        applySkills:
-                                          nextIds.length > prev.builtInSkillOverrideIds.length
-                                            ? true
-                                            : prev.applySkills,
-                                        builtInSkillOverrideIds: nextIds,
-                                      };
-                                    })
-                                  }
-                                  className="mt-0.5 h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                                />
-                                <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5">
-                                  <span className="text-xs font-medium text-text-main">
-                                    {item.name}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-text-faint">
-                                    {item.id}
-                                  </span>
-                                  {item.pinMode && (
-                                    <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-                                      {ctxLabels.pinModes[item.pinMode]}
-                                    </span>
-                                  )}
-                                  {item.hasBodyOverride && (
-                                    <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
-                                      {labels.badgeEditedBody}
-                                    </span>
-                                  )}
-                                  {item.willOverwrite && (
-                                    <span className="rounded border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-700 dark:text-amber-300">
-                                      {labels.badgeOverwrites}
-                                    </span>
-                                  )}
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Custom Skills */}
-                    {analysis.customSkills.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                          {labels.groupCustomSkills(analysis.customSkills.length)}
-                        </div>
-                        <div className="space-y-1.5">
-                          {analysis.customSkills.map((item) => {
-                            const checked =
-                              selection.applySkills &&
-                              selection.customSkillIds.includes(item.skill.id);
-                            return (
-                              <label
-                                key={item.skill.id}
-                                className="flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 cursor-pointer hover:bg-surface-hover transition-colors"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    setSelection((prev) => {
-                                      const nextIds = toggleIdInList(
-                                        prev.customSkillIds,
-                                        item.skill.id
-                                      );
-                                      return {
-                                        ...prev,
-                                        applySkills:
-                                          nextIds.length > prev.customSkillIds.length
-                                            ? true
-                                            : prev.applySkills,
-                                        customSkillIds: nextIds,
-                                      };
-                                    })
-                                  }
-                                  className="mt-0.5 h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                                />
-                                <div className="min-w-0 flex-1 space-y-0.5">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-xs font-medium text-text-main">
-                                      {item.skill.name}
-                                    </span>
-                                    <span className="font-mono text-[10px] text-text-faint">
-                                      {item.skill.id}
-                                    </span>
-                                    {item.pinMode !== 'auto' && (
-                                      <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-                                        {ctxLabels.pinModes[item.pinMode]}
-                                      </span>
-                                    )}
-                                    <span
-                                      className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
-                                        item.willOverwrite
-                                          ? 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                                          : 'auteur-phase-aesthetic'
-                                      }`}
-                                    >
-                                      {item.willOverwrite
-                                        ? labels.badgeOverwrites
-                                        : labels.badgeNew}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-text-muted truncate">
-                                    {item.skill.triggerHint}
-                                  </p>
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </section>
+            <SkillsImportSection
+              analysis={analysis}
+              selection={selection}
+              itemsTotal={skillsItemsTotal}
+              onSetAllSelected={setAllSkillsSelected}
+              onToggleFoundationalCraft={handleToggleFoundationalCraft}
+              onToggleBuiltInSkillOverride={handleToggleBuiltInSkillOverride}
+              onToggleCustomSkill={handleToggleCustomSkill}
+            />
           )}
 
           {/* Domain 2: Quick Scan Rules */}
           {analysis.hasQuickScanSection && (
-            <section className="rounded-xl border border-border-subtle bg-surface-subtle/35 overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle/70 px-3.5 py-2.5">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={selection.applyQuickScan}
-                    aria-label={labels.domainQuickScanToggleAria}
-                    onChange={(event) => setAllQuickScanSelected(event.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                  />
-                  <ScanSearch className="h-3.5 w-3.5 text-[var(--phase-continuity-text)]" />
-                  <span className="text-xs font-semibold text-text-main">
-                    {labels.domainQuickScanTitle}
-                  </span>
-                  <span className="font-mono text-[10px] text-text-faint">
-                    ({quickScanItemsTotal})
-                  </span>
-                </label>
-
-                {quickScanItemsTotal > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setAllQuickScanSelected(true)}
-                      className={UI_TOKENS.button.actionPill}
-                    >
-                      {labels.selectAllButton}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAllQuickScanSelected(false)}
-                      className={UI_TOKENS.button.actionPill}
-                    >
-                      {labels.selectNoneButton}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`p-3.5 space-y-3 ${
-                  selection.applyQuickScan ? '' : 'opacity-50'
-                }`}
-              >
-                {quickScanItemsTotal === 0 ? (
-                  <p className="text-[11px] italic text-text-muted">
-                    {labels.domainQuickScanEmptyNote}
-                  </p>
-                ) : (
-                  <>
-                    {/* Built-in Quick Scan Rule Overrides */}
-                    {analysis.builtInQuickScanOverrides.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                          {labels.groupBuiltInRuleOverrides(
-                            analysis.builtInQuickScanOverrides.length
-                          )}
-                        </div>
-                        <div className="space-y-1.5">
-                          {analysis.builtInQuickScanOverrides.map((item) => {
-                            const checked =
-                              selection.applyQuickScan &&
-                              selection.builtInQuickScanOverrideIds.includes(item.id);
-                            return (
-                              <label
-                                key={item.id}
-                                className="flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 cursor-pointer hover:bg-surface-hover transition-colors"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    setSelection((prev) => {
-                                      const nextIds = toggleIdInList(
-                                        prev.builtInQuickScanOverrideIds,
-                                        item.id
-                                      );
-                                      return {
-                                        ...prev,
-                                        applyQuickScan:
-                                          nextIds.length > prev.builtInQuickScanOverrideIds.length
-                                            ? true
-                                            : prev.applyQuickScan,
-                                        builtInQuickScanOverrideIds: nextIds,
-                                      };
-                                    })
-                                  }
-                                  className="mt-0.5 h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                                />
-                                <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5">
-                                  <span className="text-xs font-medium text-text-main">
-                                    {item.label}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-text-faint">
-                                    {item.id}
-                                  </span>
-                                  {item.enabledOverride !== undefined && (
-                                    <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-                                      {item.enabledOverride
-                                        ? labels.badgeEnabled
-                                        : labels.badgeDisabled}
-                                    </span>
-                                  )}
-                                  {item.hasTextOverride && (
-                                    <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
-                                      {labels.badgeEditedCriteria}
-                                    </span>
-                                  )}
-                                  {item.willOverwrite && (
-                                    <span className="rounded border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-700 dark:text-amber-300">
-                                      {labels.badgeOverwrites}
-                                    </span>
-                                  )}
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Custom Quick Scan Rules */}
-                    {analysis.customQuickScanRules.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
-                          {labels.groupCustomRules(analysis.customQuickScanRules.length)}
-                        </div>
-                        <div className="space-y-1.5">
-                          {analysis.customQuickScanRules.map((item) => {
-                            const checked =
-                              selection.applyQuickScan &&
-                              selection.customQuickScanRuleIds.includes(item.rule.id);
-                            const scopeLabel =
-                              item.rule.scope === 'sub_state'
-                                ? labels.scopeShortSubState
-                                : item.rule.scope === 'macro_state'
-                                  ? labels.scopeShortMacroState
-                                  : labels.scopeShortDocument;
-                            return (
-                              <label
-                                key={item.rule.id}
-                                className="flex items-start gap-2.5 rounded-lg border border-border-subtle bg-surface px-3 py-2 cursor-pointer hover:bg-surface-hover transition-colors"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    setSelection((prev) => {
-                                      const nextIds = toggleIdInList(
-                                        prev.customQuickScanRuleIds,
-                                        item.rule.id
-                                      );
-                                      return {
-                                        ...prev,
-                                        applyQuickScan:
-                                          nextIds.length > prev.customQuickScanRuleIds.length
-                                            ? true
-                                            : prev.applyQuickScan,
-                                        customQuickScanRuleIds: nextIds,
-                                      };
-                                    })
-                                  }
-                                  className="mt-0.5 h-3.5 w-3.5 rounded border-border-main accent-[var(--phase-continuity-text)] cursor-pointer"
-                                />
-                                <div className="min-w-0 flex-1 space-y-0.5">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-xs font-medium text-text-main">
-                                      {item.rule.label}
-                                    </span>
-                                    <span className="font-mono text-[10px] text-text-faint">
-                                      {item.rule.id}
-                                    </span>
-                                    <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-                                      {scopeLabel}
-                                    </span>
-                                    {!item.enabled && (
-                                      <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-faint">
-                                        {labels.badgeDisabled}
-                                      </span>
-                                    )}
-                                    <span
-                                      className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
-                                        item.willOverwrite
-                                          ? 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                                          : 'auteur-phase-aesthetic'
-                                      }`}
-                                    >
-                                      {item.willOverwrite
-                                        ? labels.badgeOverwrites
-                                        : labels.badgeNew}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-text-muted truncate">
-                                    {item.rule.instructions}
-                                  </p>
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </section>
+            <QuickScanImportSection
+              analysis={analysis}
+              selection={selection}
+              itemsTotal={quickScanItemsTotal}
+              onSetAllSelected={setAllQuickScanSelected}
+              onToggleBuiltInRuleOverride={handleToggleBuiltInRuleOverride}
+              onToggleCustomRule={handleToggleCustomRule}
+            />
           )}
         </div>
 
