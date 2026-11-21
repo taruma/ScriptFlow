@@ -334,6 +334,8 @@ function isBeatQuickScanIndicatorEqual(
     a.ruleId === b.ruleId &&
     a.ruleLabel === b.ruleLabel &&
     a.lens === b.lens &&
+    a.scope === b.scope &&
+    a.targetId === b.targetId &&
     a.beatIndex === b.beatIndex &&
     a.status === b.status &&
     a.probability === b.probability &&

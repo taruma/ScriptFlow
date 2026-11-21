@@ -112,13 +112,13 @@
   {
     "id": "state_single_dimension",
     "lens": "lens5_blocks_grammar",
-    "scope": "macro_state",
+    "scope": "sub_state",
     "label": "Single-Dimension Sub-State Law",
-    "when": ["all"],
-    "instructions": "Does any single '->'-separated Sub-State inside {{STATE_ID}} cram multiple unrelated dimensions together (such as mixing camera movement, physical acting, spoken dialogue, or sound effects inside one unit)?",
-    "trueDescription": "One Sub-State in {{STATE_ID}} combines two or more distinct dimensions that should be split with '->' into separate [CAM], [ACT], {dialogue}, or <foley> Sub-States.",
-    "falseDescription": "Every '->'-separated Sub-State in {{STATE_ID}} directs strictly one optical, spatial, physical, or acoustic dimension.",
-    "escalationHint": "Split multi-dimension Sub-States in {{STATE_ID}} into separate '->'-chained single-dimension units."
+    "when": ["sub_is_action"],
+    "instructions": "Does Sub-State {{SUB_STATE_ID}} (inside {{STATE_ID}}) violate the Single-Dimension Law by cramming camera movement/cuts, spoken dialogue lines, or explicit foley/score cues inside an [ACT] unit?",
+    "trueDescription": "{{SUB_STATE_ID}} mixes camera motion (pan/track/cut), spoken dialogue, or dedicated sound effects into an [ACT] Sub-State instead of splitting them with '->'.",
+    "falseDescription": "{{SUB_STATE_ID}} focuses on physical acting, posture, gaze, gesture, or expression (rich multi-detail acting inside one [ACT] is valid).",
+    "escalationHint": "Split mixed camera/dialogue/sound cues out of {{SUB_STATE_ID}} into separate '->'-chained Sub-States."
   },
   {
     "id": "state_cam_visibility",
@@ -145,13 +145,13 @@
   {
     "id": "state_ambient_foley",
     "lens": "lens4_acoustics_voice",
-    "scope": "macro_state",
+    "scope": "sub_state",
     "label": "Room Tone Isolation (No Ambient Foley)",
-    "when": ["has_foley"],
-    "instructions": "Does a <sound> foley tag in {{STATE_ID}} describe continuous background room tone or ambient bed noise (such as steady hum, constant rain, or ongoing traffic) instead of a discrete physical sound event?",
-    "trueDescription": "A <...> tag in {{STATE_ID}} describes continuous ambient room tone that belongs in [AESTHETIC] Audio.",
-    "falseDescription": "Every <...> foley tag in {{STATE_ID}} is a distinct, discrete physical impact, friction, or off-screen trigger sound.",
-    "escalationHint": "Move continuous ambient room tone out of {{STATE_ID}}'s <foley> tag into [AESTHETIC] Audio."
+    "when": ["sub_is_foley"],
+    "instructions": "Does foley Sub-State {{SUB_STATE_ID}} (inside {{STATE_ID}}) describe continuous environmental room tone (such as steady rain, fluorescent hum, wind, or traffic bed) instead of a discrete physical or character sound event?",
+    "trueDescription": "{{SUB_STATE_ID}} describes continuous environmental room tone or ambient background bed noise that belongs in [AESTHETIC] Audio.",
+    "falseDescription": "{{SUB_STATE_ID}} is a discrete physical impact, friction, trigger, or diegetic character vocal/respiratory sound (cough, wheeze, gasp, footsteps, creak).",
+    "escalationHint": "Move continuous ambient room tone out of {{SUB_STATE_ID}} into [AESTHETIC] Audio."
   },
   {
     "id": "state_montage_anchor",

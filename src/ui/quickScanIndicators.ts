@@ -1,4 +1,4 @@
-import type {QuickScanRuleLens} from '../data/knowledge/index.ts';
+import type {QuickScanRuleLens, QuickScanRuleScope} from '../data/knowledge/index.ts';
 import type {QuickScanResult} from '../services/geminiDecisions.ts';
 
 export interface LiveBeatQuickScanIndicator {
@@ -6,6 +6,8 @@ export interface LiveBeatQuickScanIndicator {
   ruleId: string;
   ruleLabel: string;
   lens: QuickScanRuleLens;
+  scope: QuickScanRuleScope;
+  targetId: string;
   beatIndex: number;
   status: 'flagged' | 'borderline';
   probability: number;
@@ -39,6 +41,8 @@ export function buildLiveQuickScanIndicators(
         ruleId: item.ruleId,
         ruleLabel: item.ruleLabel,
         lens: item.lens,
+        scope: item.scope,
+        targetId: item.targetId,
         beatIndex: suspect.beatIndex,
         status: item.status === 'flagged' ? 'flagged' : 'borderline',
         probability: item.probability,

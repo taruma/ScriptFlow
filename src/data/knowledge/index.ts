@@ -5,7 +5,7 @@ import skillCatalogManifest from './skills/catalog.json';
 
 export type KnowledgeSkillCategory = 'workflow' | 'module';
 
-export type QuickScanRuleScope = 'document' | 'macro_state';
+export type QuickScanRuleScope = 'document' | 'macro_state' | 'sub_state';
 export type QuickScanRuleLens = AuteurLensPresetId | 'brief';
 export type QuickScanRulePredicate =
   | 'all'
@@ -20,7 +20,12 @@ export type QuickScanRulePredicate =
   | 'has_action_or_prop'
   | 'has_action'
   | 'has_brief_text'
-  | 'has_brief_media';
+  | 'has_brief_media'
+  | 'sub_is_action'
+  | 'sub_is_camera'
+  | 'sub_is_foley'
+  | 'sub_is_dialogue'
+  | 'sub_is_action_or_prop';
 
 export interface QuickScanRuleDefinition {
   id: string;
@@ -35,7 +40,7 @@ export interface QuickScanRuleDefinition {
   defaultEnabled?: boolean;
 }
 
-export const QUICK_SCAN_RULES_VERSION = '0.4.0-qs1';
+export const QUICK_SCAN_RULES_VERSION = '0.4.0-qs2';
 
 export const QUICK_SCAN_RULE_LENSES: readonly QuickScanRuleLens[] = [
   'lens1_spatial_optics',
@@ -49,6 +54,7 @@ export const QUICK_SCAN_RULE_LENSES: readonly QuickScanRuleLens[] = [
 export const QUICK_SCAN_RULE_SCOPES: readonly QuickScanRuleScope[] = [
   'document',
   'macro_state',
+  'sub_state',
 ] as const;
 
 export const QUICK_SCAN_RULE_PREDICATES: readonly QuickScanRulePredicate[] = [
@@ -65,6 +71,11 @@ export const QUICK_SCAN_RULE_PREDICATES: readonly QuickScanRulePredicate[] = [
   'has_action',
   'has_brief_text',
   'has_brief_media',
+  'sub_is_action',
+  'sub_is_camera',
+  'sub_is_foley',
+  'sub_is_dialogue',
+  'sub_is_action_or_prop',
 ] as const;
 
 const VALID_QUICK_SCAN_LENSES = new Set<string>(QUICK_SCAN_RULE_LENSES);

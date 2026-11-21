@@ -1054,7 +1054,7 @@ export const UI_LABELS = {
             ? `${enabled}/${total} enabled · ${custom} custom`
             : `${enabled}/${total} enabled`,
         description:
-          'Atomic binary checks run in a single Decisions API pass (gemini-decision-1). Per-Macro-State rules automatically fan out over matching S# lines using {{STATE_ID}}.',
+          'Atomic binary checks run in a single Decisions API pass (gemini-decision-1). Per-Macro-State rules fan out over S# lines ({{STATE_ID}}) and Per-Sub-State rules fan out over individual S#.# units ({{SUB_STATE_ID}}).',
         addCustomRuleButton: 'Add Custom Rule',
         formAddTitle: 'New Custom Quick Scan Rule',
         formEditTitle: 'Edit Custom Quick Scan Rule',
@@ -1066,6 +1066,7 @@ export const UI_LABELS = {
         fieldScope: 'Evaluation Scope',
         scopeDocument: 'Document (1 check)',
         scopeMacroState: 'Per Macro-State (S1..Sn)',
+        scopeSubState: 'Per Sub-State (S1.0..Sn.k)',
         fieldWhen: 'Run Condition (AST Filter)',
         whenLabels: {
           all: 'Always',
@@ -1081,10 +1082,15 @@ export const UI_LABELS = {
           has_action_or_prop: 'State has [ACT]/[PROP]',
           has_brief_text: 'Active Brief text',
           has_brief_media: 'Active Brief media',
+          sub_is_action: 'Sub-State is [ACT]',
+          sub_is_camera: 'Sub-State is [CAM]',
+          sub_is_foley: 'Sub-State is <foley>',
+          sub_is_dialogue: 'Sub-State is {dialogue}',
+          sub_is_action_or_prop: 'Sub-State is [ACT]/[PROP]',
         } as const,
         fieldInstructions: 'Binary Question (Yes = Issue)',
         fieldInstructionsPlaceholder:
-          'Does {{STATE_ID}} violate ...? (Use {{STATE_ID}} for Per Macro-State rules)',
+          'Does {{SUB_STATE_ID}} / {{STATE_ID}} violate ...?',
         fieldTrueDesc: 'Violation Criteria (True)',
         fieldTrueDescPlaceholder: 'Concrete condition that means an issue IS present...',
         fieldFalseDesc: 'Clean Criteria (False)',

@@ -255,8 +255,8 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
    - Expand any skill to read or override its instruction body (`Reset` restores built-in text).
    - Click **`+ Add Custom Skill`** to create your own reusable extension skills (`Name`, auto-slugified `snake_case` `ID` validated against built-in collisions, `Trigger Hint`, and `Instruction Body`), plus edit or delete them (destructive deletes and **Reset all defaults** confirm via `ConfirmDialog`).
 4. **Quick Scan Rules**:
-   - Browse the declarative built-in atomic rule catalog (`src/data/knowledge/quick-scan-rules.json`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc` vs `Per S#`) and AST `when` condition tags.
-   - Toggle any built-in or custom rule On/Off, expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document` or `Per Macro-State` (`{{STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
+   - Browse the declarative built-in atomic rule catalog (`src/data/knowledge/quick-scan-rules.json`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc`, `Per S#`, `Per S#.#`) and AST `when` condition tags.
+   - Toggle any built-in or custom rule On/Off, expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document`, `Per Macro-State` (`{{STATE_ID}}`), or `Per Sub-State` (`{{SUB_STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
 
 ---
 

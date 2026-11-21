@@ -382,7 +382,9 @@ export function QuickScanRulesTabPanel({
                   <option key={scope} value={scope}>
                     {scope === 'document'
                       ? qsRuleLabels.scopeDocument
-                      : qsRuleLabels.scopeMacroState}
+                      : scope === 'macro_state'
+                        ? qsRuleLabels.scopeMacroState
+                        : qsRuleLabels.scopeSubState}
                   </option>
                 ))}
               </select>
@@ -557,7 +559,11 @@ export function QuickScanRulesTabPanel({
                               {rule.label}
                             </span>
                             <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[9.5px] text-text-muted">
-                              {rule.scope === 'document' ? 'Doc' : 'Per S#'}
+                              {rule.scope === 'document'
+                                ? 'Doc'
+                                : rule.scope === 'macro_state'
+                                  ? 'Per S#'
+                                  : 'Per S#.#'}
                             </span>
                             <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[9.5px] text-text-faint">
                               {rule.builtIn ? ctxLabels.builtInBadge : ctxLabels.customBadge}

@@ -10,6 +10,7 @@ import {
   type LintSeverity,
   type MacroStateIR,
   type SceneTopology,
+  type SubStateIR,
 } from '../core/index.ts';
 import {
   BUNDLED_QUICK_SCAN_RULES,
@@ -335,8 +336,12 @@ export function resolveQuickScanRules(
   return resolved;
 }
 
-function interpolateStateToken(template: string, stateId: string): string {
-  return template.replace(/\{\{STATE_ID\}\}/g, stateId);
+function interpolateTokens(template: string, stateId: string, subStateId?: string): string {
+  let out = template.replace(/\{\{STATE_ID\}\}/g, stateId);
+  if (subStateId) {
+    out = out.replace(/\{\{SUB_STATE_ID\}\}/g, subStateId);
+  }
+  return out;
 }
 
 interface DocumentPredicateContext {
@@ -352,7 +357,8 @@ interface DocumentPredicateContext {
 function evaluatePredicate(
   predicate: QuickScanRulePredicate,
   docCtx: DocumentPredicateContext,
-  macroState?: MacroStateIR
+  macroState?: MacroStateIR,
+  subState?: SubStateIR
 ): boolean {
   switch (predicate) {
     case 'all':
@@ -388,16 +394,31 @@ function evaluatePredicate(
           sub.dimension === 'action' ||
           ('subStateTag' in sub && sub.subStateTag.trim().toUpperCase() === 'PROP')
       );
+    case 'sub_is_action':
+      return Boolean(subState && subState.dimension === 'action');
+    case 'sub_is_camera':
+      return Boolean(subState && subState.dimension === 'camera');
+    case 'sub_is_foley':
+      return Boolean(subState && subState.dimension === 'foley');
+    case 'sub_is_dialogue':
+      return Boolean(subState && subState.dimension === 'dialogue');
+    case 'sub_is_action_or_prop':
+      return Boolean(
+        subState &&
+          (subState.dimension === 'action' ||
+            ('subStateTag' in subState && subState.subStateTag.trim().toUpperCase() === 'PROP'))
+      );
   }
 }
 
 function matchesAllPredicates(
   predicates: readonly QuickScanRulePredicate[],
   docCtx: DocumentPredicateContext,
-  macroState?: MacroStateIR
+  macroState?: MacroStateIR,
+  subState?: SubStateIR
 ): boolean {
   for (const pred of predicates) {
-    if (!evaluatePredicate(pred, docCtx, macroState)) {
+    if (!evaluatePredicate(pred, docCtx, macroState, subState)) {
       return false;
     }
   }
@@ -450,6 +471,9 @@ export function buildEnrichedQuickScanText(
         ? `  /* Resolved active camera: ${cont.activeCameraIdentifier ? `[CAM ${cont.activeCameraIdentifier}] ` : ''}${cont.effectiveFraming} */`
         : '';
       lines.push(`${ms.id}: ${rawLine}${camSuffix}`);
+      for (const sub of ms.subStates) {
+        lines.push(`  ${sub.id}: ${renderSubState(sub)}`);
+      }
     }
     lines.push('');
   }
@@ -565,11 +589,12 @@ export function buildQuickScanPayload(options: {
 
   const questions: Record<string, NoulDecisionQuestionPayload> = {};
   const questionMeta: Record<string, QuickScanQuestionMeta> = {};
+  const usedQuestionKeys = new Set<string>();
 
   for (const rule of resolvedRules) {
     if (rule.scope === 'document') {
       if (!matchesAllPredicates(rule.when, docCtx)) continue;
-      const key = `doc__${rule.id}`;
+      const key = buildDecisionQuestionKey('doc', rule.id, usedQuestionKeys);
       questions[key] = {
         type: 'noul',
         instructions: rule.instructions,
@@ -589,19 +614,19 @@ export function buildQuickScanPayload(options: {
         trueDescription: rule.trueDescription,
         ...(rule.escalationHint ? {escalationHint: rule.escalationHint} : {}),
       };
-    } else {
+    } else if (rule.scope === 'macro_state') {
       for (const ms of macroStates) {
         if (!matchesAllPredicates(rule.when, docCtx, ms)) continue;
         const beatIndex = parseBeatIndex(ms.id);
-        const key = `${ms.id}__${rule.id}`;
-        const interpolatedInstructions = interpolateStateToken(rule.instructions, ms.id);
-        const interpolatedTrueDesc = interpolateStateToken(rule.trueDescription, ms.id);
+        const key = buildDecisionQuestionKey(ms.id, rule.id, usedQuestionKeys);
+        const interpolatedInstructions = interpolateTokens(rule.instructions, ms.id);
+        const interpolatedTrueDesc = interpolateTokens(rule.trueDescription, ms.id);
         questions[key] = {
           type: 'noul',
           instructions: interpolatedInstructions,
           criteria: {
             true_description: interpolatedTrueDesc,
-            false_description: interpolateStateToken(rule.falseDescription, ms.id),
+            false_description: interpolateTokens(rule.falseDescription, ms.id),
           },
         };
         questionMeta[key] = {
@@ -615,9 +640,42 @@ export function buildQuickScanPayload(options: {
           instructions: interpolatedInstructions,
           trueDescription: interpolatedTrueDesc,
           ...(rule.escalationHint
-            ? {escalationHint: interpolateStateToken(rule.escalationHint, ms.id)}
+            ? {escalationHint: interpolateTokens(rule.escalationHint, ms.id)}
             : {}),
         };
+      }
+    } else {
+      // rule.scope === 'sub_state'
+      for (const ms of macroStates) {
+        const beatIndex = parseBeatIndex(ms.id);
+        for (const sub of ms.subStates) {
+          if (!matchesAllPredicates(rule.when, docCtx, ms, sub)) continue;
+          const key = buildDecisionQuestionKey(sub.id, rule.id, usedQuestionKeys);
+          const interpolatedInstructions = interpolateTokens(rule.instructions, ms.id, sub.id);
+          const interpolatedTrueDesc = interpolateTokens(rule.trueDescription, ms.id, sub.id);
+          questions[key] = {
+            type: 'noul',
+            instructions: interpolatedInstructions,
+            criteria: {
+              true_description: interpolatedTrueDesc,
+              false_description: interpolateTokens(rule.falseDescription, ms.id, sub.id),
+            },
+          };
+          questionMeta[key] = {
+            key,
+            ruleId: rule.id,
+            ruleLabel: rule.label,
+            lens: rule.lens,
+            scope: 'sub_state',
+            targetId: sub.id,
+            ...(beatIndex !== undefined ? {beatIndex} : {}),
+            instructions: interpolatedInstructions,
+            trueDescription: interpolatedTrueDesc,
+            ...(rule.escalationHint
+              ? {escalationHint: interpolateTokens(rule.escalationHint, ms.id, sub.id)}
+              : {}),
+          };
+        }
       }
     }
   }
@@ -631,6 +689,31 @@ export function buildQuickScanPayload(options: {
     hasBriefText,
     hasBriefMedia,
   };
+}
+
+const MAX_DECISION_QUESTION_KEY_LEN = 64;
+
+/**
+ * Formats a Gemini Decisions API question key strictly conforming to `[A-Za-z0-9_-]{1,64}`
+ * (replacing `.` in Sub-State IDs like `S6.1` with `_` and deduplicating safely if truncated).
+ */
+export function buildDecisionQuestionKey(
+  prefix: string,
+  ruleId: string,
+  usedKeys: Set<string>
+): string {
+  const safePrefix = prefix.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'q';
+  const safeRule = ruleId.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'rule';
+  const raw = `${safePrefix}__${safeRule}`;
+  let candidate = raw.slice(0, MAX_DECISION_QUESTION_KEY_LEN);
+  let suffix = 2;
+  while (usedKeys.has(candidate)) {
+    const tag = `_${suffix}`;
+    candidate = `${raw.slice(0, MAX_DECISION_QUESTION_KEY_LEN - tag.length)}${tag}`;
+    suffix += 1;
+  }
+  usedKeys.add(candidate);
+  return candidate;
 }
 
 function parseBeatIndex(targetId: string): number | undefined {

@@ -113,9 +113,16 @@ export const AiQuickScanIndicator = memo(function AiQuickScanIndicator({
                 return (
                   <div key={item.key} className="px-3 py-2 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium text-text-main leading-snug">
-                        {item.ruleLabel}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {item.scope === 'sub_state' && (
+                          <span className="shrink-0 rounded border border-border-main bg-surface-subtle px-1 py-0.5 font-mono text-[9px] font-semibold text-text-main">
+                            {item.targetId}
+                          </span>
+                        )}
+                        <span className="text-[11px] font-medium text-text-main leading-snug">
+                          {item.ruleLabel}
+                        </span>
+                      </div>
                       <span
                         className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] font-semibold ${statusBadgeClass}`}
                       >

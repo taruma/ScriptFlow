@@ -48,14 +48,23 @@ describe('Quick Scan declarative rule catalog & AST matrix builder', () => {
     expect(continuousPayload.questions['doc__doc_brief_media']).toBeUndefined();
     expect(continuousPayload.questions['S1__state_montage_anchor']).toBeUndefined();
 
-    // AST foley filtering: only S3 has <foley> in interrogation-coverage
-    expect(continuousPayload.questions['S1__state_ambient_foley']).toBeUndefined();
-    expect(continuousPayload.questions['S2__state_ambient_foley']).toBeUndefined();
-    expect(continuousPayload.questions['S3__state_ambient_foley']).toBeDefined();
+    // AST foley sub-state filtering: only S3.3 is <foley> in interrogation-coverage
+    // Question keys must strictly conform to Decisions API `[A-Za-z0-9_-]{1,64}` (no dots)
+    for (const key of Object.keys(continuousPayload.questions)) {
+      expect(key).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    }
+    expect(continuousPayload.questions['S3_3__state_ambient_foley']).toBeDefined();
+    expect(continuousPayload.questionMeta['S3_3__state_ambient_foley']?.scope).toBe('sub_state');
+    expect(continuousPayload.questionMeta['S3_3__state_ambient_foley']?.targetId).toBe('S3.3');
+    expect(continuousPayload.questionMeta['S3_3__state_ambient_foley']?.beatIndex).toBe(3);
+    // Single-dimension sub-state filtering: targets [ACT] Sub-States (e.g. S1.2) and skips [CAM] (S1.0)
+    expect(continuousPayload.questions['S1_2__state_single_dimension']).toBeDefined();
+    expect(continuousPayload.questions['S1_0__state_single_dimension']).toBeUndefined();
 
-    // Resolved active camera hint should be annotated on S3's bare `[CAM 01] ->` recall line
+    // Resolved active camera hint and explicit S#.# Sub-State labels should be annotated in enriched text
     expect(typeof continuousPayload.input).toBe('string');
     expect(continuousPayload.input as string).toContain('S3: [CAM 01] ->');
+    expect(continuousPayload.input as string).toContain('S3.3: <steel table groaning');
     expect(continuousPayload.input as string).toContain('Resolved active camera:');
 
     // Montage topology should suppress continuous rules and activate montage_anchor per S#
