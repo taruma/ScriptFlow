@@ -745,6 +745,27 @@ export const UI_LABELS = {
     inspectTraceButton: 'Inspect',
     inspectTraceTitle: 'Inspect sanitized Gemini Interactions API trace for this turn',
     inspectTraceAria: 'Inspect AI debug trace for this turn',
+    cost: {
+      turnBadgeAria: (formattedUsd: string) => `Estimated turn cost ${formattedUsd}`,
+      turnTooltipTitle: 'Estimated Turn Cost',
+      turnTooltipSubtitle: (modelLabel: string, rounds: number, isPromo: boolean) => {
+        const roundText = `${rounds} ${rounds === 1 ? 'round' : 'rounds'}`;
+        return isPromo ? `${modelLabel} · ${roundText} · Promo rate` : `${modelLabel} · ${roundText}`;
+      },
+      sessionBadgeAria: (formattedUsd: string, turns: number) =>
+        `Estimated session cost ${formattedUsd} across ${turns} ${turns === 1 ? 'turn' : 'turns'}`,
+      sessionTooltipTitle: 'Session Estimated Cost',
+      sessionTooltipSubtitle: (turns: number) =>
+        `${turns} ${turns === 1 ? 'turn' : 'turns'} in this chat · resets on New Chat`,
+      rowInput: 'Input',
+      rowCached: 'Cached',
+      rowToolInput: 'Tool input',
+      rowOutput: 'Output',
+      rowThinking: 'Thinking',
+      rowTotalTokens: 'Total tokens',
+      formatTokens: (count: number) => `${Math.round(count).toLocaleString()} tok`,
+      disclaimer: 'Client-side estimate from standard Gemini API token rates.',
+    },
     hitToolLimitNote:
       'Reached the maximum tool-call rounds for this turn. Ask a follow-up to continue.',
     openSettingsAction: 'Open AI Settings',
@@ -827,8 +848,12 @@ export const UI_LABELS = {
       reasoningLabel: 'Reasoning Level',
       reasoningGroupAria: 'Reasoning level selection',
       thinkingSummaryLabel: 'Show reasoning summary',
-      thinkingSummaryDesc: 'Display streamed thought summaries inside the Reasoning & Tools accordion',
+      thinkingSummaryDesc: 'Display streamed thought summaries inside the Thinking accordion',
       thinkingSummaryAria: 'Toggle reasoning summary display',
+      estimatedCostLabel: 'Show estimated cost',
+      estimatedCostDesc:
+        'Display approximate USD token cost per turn and cumulative session total in the AI sidebar',
+      estimatedCostAria: 'Toggle estimated USD cost display',
       debugTraceLabel: 'Show Debug Trace',
       debugTraceDesc:
         'Show a quiet Inspect button on AI turns to inspect requests, tool loops, and errors',
@@ -949,6 +974,10 @@ export const UI_LABELS = {
       summaryStatus: 'Status',
       summaryInteractionChain: 'Interaction Chain',
       summaryUsage: 'Token Usage',
+      summaryEstimatedCost: 'Est. Cost',
+      costPromoBadge: 'promo',
+      costRateSummary: (inputPer1M: number, outputPer1M: number) =>
+        `$${inputPer1M}/$${outputPer1M} per 1M`,
       summaryStartedAt: 'Started',
       statusCompleted: 'Completed',
       statusRoundLimit: 'Round Limit',

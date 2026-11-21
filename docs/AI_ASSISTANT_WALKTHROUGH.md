@@ -64,7 +64,8 @@ Click the **`Model · Level`** status chip at the bottom-right of the sidebar co
 | **Session only** | Off (`localStorage`) / On (`sessionStorage`) | Toggle on to keep your key only until the browser tab closes. **Clear Key** purges both stores immediately. |
 | **Gemini 4 Model** | `Gemini 4 Hydrogen` *(default, fast)*<br>`Gemini 4 Neon` *(frontier speed)*<br>`Gemini 4 Carbon` *(strongest reasoning)* | All three share a 1M unified context window and can be switched anytime between turns. Use Hydrogen for fast everyday edits and multimodal briefs, Neon for frontier-level rewrites and coverage with fast end-to-end completion, and Carbon for complex multi-lens continuity audits or dense drafts. |
 | **Reasoning Level** | `Low` / `Medium` *(default)* / `High` | Maps directly to `generation_config.thinking_level` (`thinking_summaries: 'auto'`). |
-| **Show reasoning summary** | On *(default)* / Off | Controls whether streamed thought summaries appear inside the **Reasoning & Tools** accordion. |
+| **Show reasoning summary** | On *(default)* / Off | Controls whether streamed thought summaries appear inside the **Thinking** accordion. |
+| **Show estimated cost** | On *(default)* / Off | Displays a quiet approximate USD badge (`~$0.0042`) on completed turns and a cumulative session total to the left of the **`Model · Level`** pill below the prompt box (with hover token & USD breakdown tooltips). |
 | **Show Debug Trace** | Off *(default)* / On | Surfaces a quiet **`Inspect`** button on completed, stopped, and failed turns to open the **AI Trace Inspector** modal. |
 
 ---
@@ -267,7 +268,7 @@ Suggestion cards are inspectable immediately while streaming, while **Apply** bu
 
 ### Troubleshooting with the AI Trace Inspector (`AiTraceModal`)
 Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on any completed, stopped, or errored turn to examine:
-- **Summary Strip:** Status badge (`Completed`, `Round Limit`, `Stopped`, `Error`), Model, Reasoning Level, **`Focus`** + `Mode`, Duration, Tool Rounds, **`Skills`** (`Active` + `Loaded`), `Interaction Chain` (`previous_interaction_id` progression), and aggregated `Token Usage`.
+- **Summary Strip:** Status badge (`Completed`, `Round Limit`, `Stopped`, `Error`), Model, Reasoning Level, **`Focus`** + `Mode`, Duration, Tool Rounds, **`Skills`** (`Active` + `Loaded`), `Interaction Chain` (`previous_interaction_id` progression), aggregated `Token Usage`, and estimated USD cost breakdown (`Est. Cost` split by Input, Cached, Output, and Thinking tokens).
 - **Round-by-Round Timeline (`Round 1..N`):** Expand any round to inspect the exact `Request Sent` (`model`, `previous_interaction_id`, `generation_config`, `tools`, `input`, full `system_instruction`) and every `Tool Calls & Results` entry (arguments, `ok`/`error`, staged suggestion ID, `Repair Hint`, and full JSON result).
 - **`Copy Trace JSON`:** Copies the entire sanitized trace to clipboard. API keys and auth headers are strictly excluded and any echoed secret is redacted as `[REDACTED]`.
 

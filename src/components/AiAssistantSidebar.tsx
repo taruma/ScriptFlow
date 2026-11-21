@@ -79,6 +79,12 @@ import {
   type ReferenceEntry,
 } from '../ui/aiAssistant.ts';
 import {
+  aggregateSessionCost,
+  estimateTraceCost,
+  formatEstimatedUsd,
+  formatUsdBreakdown,
+} from '../ui/aiPricing.ts';
+import {
   getGeminiModelOption,
   REASONING_LEVEL_OPTIONS,
   useAiSettings,
@@ -151,18 +157,94 @@ export interface AiAssistantSidebarProps {
   onRegisterLivePatchActions?: (actions: AiLivePatchActionHandlers | null) => void;
 }
 
+interface HoverTooltipRow {
+  label: string;
+  secondary?: string;
+  value: string;
+}
+
 interface ActivityHoverTooltip {
   title: string;
   subtitle: string;
   badge?: string;
   detail?: string;
+  rows?: readonly HoverTooltipRow[];
+  footer?: string;
   top: number;
   left: number;
+  placeAbove: boolean;
+}
+
+function buildTooltipPosition(
+  rect: DOMRect,
+  options?: {width?: number; forceAbove?: boolean}
+): {top: number; left: number; placeAbove: boolean} {
+  const tooltipWidth = options?.width ?? 264;
+  const pad = 12;
+  const left = Math.max(pad, Math.min(rect.left, window.innerWidth - tooltipWidth - pad));
+  const placeAbove = options?.forceAbove ?? rect.top > 150;
+  const top = placeAbove ? rect.top - 8 : rect.bottom + 8;
+  return {top, left, placeAbove};
+}
+
+function HoverTooltipPortal({tooltip}: {tooltip: ActivityHoverTooltip | null}) {
+  if (!tooltip || typeof document === 'undefined') return null;
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top: `${tooltip.top}px`,
+        left: `${tooltip.left}px`,
+        transform: tooltip.placeAbove ? 'translateY(-100%)' : undefined,
+      }}
+      className="pointer-events-none z-[120] w-[264px] max-w-[calc(100vw-24px)] rounded-lg border border-border-main bg-surface px-2.5 py-2 shadow-xl text-text-main space-y-1.5"
+    >
+      <div className="space-y-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-semibold text-text-main truncate">
+            {tooltip.title}
+          </span>
+          {tooltip.badge && (
+            <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[9px] text-text-muted tabular-nums shrink-0">
+              {tooltip.badge}
+            </span>
+          )}
+        </div>
+        <div className="font-mono text-[10px] text-text-faint truncate">{tooltip.subtitle}</div>
+      </div>
+
+      {tooltip.detail && (
+        <p className="text-[11px] leading-snug text-text-body break-words">{tooltip.detail}</p>
+      )}
+
+      {tooltip.rows && tooltip.rows.length > 0 && (
+        <div className="border-t border-border-subtle pt-1.5 space-y-1 font-mono text-[10px] tabular-nums">
+          {tooltip.rows.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-2">
+              <span className="text-text-muted truncate">{row.label}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                {row.secondary && <span className="text-text-faint">{row.secondary}</span>}
+                <span className="text-text-main font-medium">{row.value}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tooltip.footer && (
+        <p className="border-t border-border-subtle pt-1 text-[10px] leading-snug text-text-faint">
+          {tooltip.footer}
+        </p>
+      )}
+    </div>,
+    document.body
+  );
 }
 
 interface ReasoningAccordionProps {
   isStreaming: boolean;
   showThinkingSummary: boolean;
+  showEstimatedCost: boolean;
   showDebugTrace: boolean;
   hasError: boolean;
   thoughtSummary: string;
@@ -175,6 +257,7 @@ interface ReasoningAccordionProps {
 const ReasoningAccordion = memo(function ReasoningAccordion({
   isStreaming,
   showThinkingSummary,
+  showEstimatedCost,
   showDebugTrace,
   hasError,
   thoughtSummary,
@@ -197,13 +280,19 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
     wasStreamingRef.current = isStreaming;
   }, [isStreaming]);
 
+  const turnCost = useMemo(
+    () => (!isStreaming && trace ? estimateTraceCost(trace) : null),
+    [isStreaming, trace]
+  );
+
   const hasVisibleThought = showThinkingSummary && thoughtSummary.trim().length > 0;
   const showThinkingCard = (showThinkingSummary && isStreaming) || hasVisibleThought;
   const hasTools = toolCalls.length > 0;
   const hasSkills = loadedSkills.length > 0;
   const hasActivity = hasTools || hasSkills;
   const canInspect = showDebugTrace && !isStreaming && Boolean(trace);
-  const showTraceOnlyBar = canInspect && !showThinkingCard && !hasActivity && !hasError;
+  const showCost = showEstimatedCost && Boolean(turnCost);
+  const showMetaOnlyBar = ((canInspect && !hasError) || showCost) && !showThinkingCard && !hasActivity;
 
   const isOpen = showThinkingCard && (userOverride !== null ? userOverride : isStreaming);
 
@@ -215,24 +304,83 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
     el.scrollTop = el.scrollHeight;
   }, [thoughtSummary.length, isOpen, isStreaming]);
 
-  if (!showThinkingCard && !hasActivity && !showTraceOnlyBar) {
+  if (!showThinkingCard && !hasActivity && !showMetaOnlyBar) {
     return null;
   }
 
   const openPillTooltip = (
     event: ReactMouseEvent<HTMLElement>,
-    content: Omit<ActivityHoverTooltip, 'top' | 'left'>
+    content: Omit<ActivityHoverTooltip, 'top' | 'left' | 'placeAbove'>
   ) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const tooltipWidth = 260;
-    const pad = 12;
-    const left = Math.max(
-      pad,
-      Math.min(rect.left, window.innerWidth - tooltipWidth - pad)
+    const pos = buildTooltipPosition(event.currentTarget.getBoundingClientRect());
+    setTooltip({...content, ...pos});
+  };
+
+  const renderCostBadge = () => {
+    if (!showCost || !turnCost || !trace) return null;
+    const costLabels = UI_LABELS.ai.cost;
+    const formattedTotal = formatEstimatedUsd(turnCost.totalCostUsd);
+    const modelLabel = getGeminiModelOption(turnCost.model).label;
+    const roundsCount = Math.max(1, trace.rounds.length);
+    const nonCachedInputOnlyCost =
+      (turnCost.usage.nonCachedInputTokens * turnCost.rates.inputPer1M) / 1_000_000;
+    const rows: HoverTooltipRow[] = [
+      {
+        label: costLabels.rowInput,
+        secondary: costLabels.formatTokens(turnCost.usage.nonCachedInputTokens),
+        value: formatUsdBreakdown(nonCachedInputOnlyCost),
+      },
+    ];
+    if (turnCost.usage.cachedTokens > 0) {
+      rows.push({
+        label: costLabels.rowCached,
+        secondary: costLabels.formatTokens(turnCost.usage.cachedTokens),
+        value: formatUsdBreakdown(turnCost.cachedCostUsd),
+      });
+    }
+    if (turnCost.usage.toolUseTokens > 0) {
+      const toolInputCost = (turnCost.usage.toolUseTokens * turnCost.rates.inputPer1M) / 1_000_000;
+      rows.push({
+        label: costLabels.rowToolInput,
+        secondary: costLabels.formatTokens(turnCost.usage.toolUseTokens),
+        value: formatUsdBreakdown(toolInputCost),
+      });
+    }
+    rows.push({
+      label: costLabels.rowOutput,
+      secondary: costLabels.formatTokens(turnCost.usage.outputTokens),
+      value: formatUsdBreakdown(turnCost.outputCostUsd),
+    });
+    if (turnCost.usage.thoughtTokens > 0) {
+      rows.push({
+        label: costLabels.rowThinking,
+        secondary: costLabels.formatTokens(turnCost.usage.thoughtTokens),
+        value: formatUsdBreakdown(turnCost.thoughtCostUsd),
+      });
+    }
+
+    return (
+      <span
+        aria-label={costLabels.turnBadgeAria(formattedTotal)}
+        onMouseEnter={(event) =>
+          openPillTooltip(event, {
+            title: costLabels.turnTooltipTitle,
+            subtitle: costLabels.turnTooltipSubtitle(
+              modelLabel,
+              roundsCount,
+              turnCost.rates.isPromoRate
+            ),
+            badge: formattedTotal,
+            rows,
+            footer: costLabels.disclaimer,
+          })
+        }
+        onMouseLeave={() => setTooltip(null)}
+        className="inline-flex items-center rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted tabular-nums hover:border-border-main hover:text-text-main transition-colors cursor-default select-none shrink-0"
+      >
+        {formattedTotal}
+      </span>
     );
-    const placeAbove = rect.top > 110;
-    const top = placeAbove ? rect.top - 8 : rect.bottom + 8;
-    setTooltip({...content, top, left});
   };
 
   const renderInspectButton = () =>
@@ -277,7 +425,12 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
               )}
             </button>
-            {canInspect && <div className="pr-1.5 shrink-0">{renderInspectButton()}</div>}
+            {(showCost || canInspect) && (
+              <div className="pr-1.5 flex items-center gap-1 shrink-0">
+                {renderCostBadge()}
+                {renderInspectButton()}
+              </div>
+            )}
           </div>
 
           {isOpen && (
@@ -301,7 +454,7 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
       )}
 
       {/* Part 2: Separated Skills & Tools Activity Strip (Always Scannable + Hover Tooltips) */}
-      {(hasActivity || showTraceOnlyBar) && (
+      {(hasActivity || showMetaOnlyBar) && (
         <div
           aria-label={UI_LABELS.ai.toolsSkillsRegionAria}
           className="flex flex-wrap items-center justify-between gap-1.5 px-0.5"
@@ -370,42 +523,17 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
             })}
           </div>
 
-          {!showThinkingCard && canInspect && renderInspectButton()}
+          {!showThinkingCard && (showCost || (canInspect && !hasError)) && (
+            <div className="flex items-center gap-1 shrink-0 ml-auto">
+              {renderCostBadge()}
+              {!hasError && renderInspectButton()}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Portal Hover Tooltip for Tool & Skill Pills */}
-      {tooltip &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            style={{
-              position: 'fixed',
-              top: `${tooltip.top}px`,
-              left: `${tooltip.left}px`,
-              transform: tooltip.top > 110 ? 'translateY(-100%)' : undefined,
-            }}
-            className="pointer-events-none z-[120] w-[260px] max-w-[calc(100vw-24px)] rounded-lg border border-border-main bg-surface px-2.5 py-2 shadow-xl text-text-main space-y-1"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-text-main truncate">
-                {tooltip.title}
-              </span>
-              {tooltip.badge && (
-                <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[9px] text-text-muted shrink-0">
-                  {tooltip.badge}
-                </span>
-              )}
-            </div>
-            <div className="font-mono text-[10px] text-text-faint truncate">{tooltip.subtitle}</div>
-            {tooltip.detail && (
-              <p className="text-[11px] leading-snug text-text-body break-words">
-                {tooltip.detail}
-              </p>
-            )}
-          </div>,
-          document.body
-        )}
+      {/* Portal Hover Tooltip for Tool, Skill & Cost Pills */}
+      <HoverTooltipPortal tooltip={tooltip} />
     </div>
   );
 });
@@ -461,6 +589,7 @@ export function AiAssistantSidebar({
   const [manualComposerHeight, setManualComposerHeight] = useState<number | null>(null);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
   const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
+  const [sessionCostTooltip, setSessionCostTooltip] = useState<ActivityHoverTooltip | null>(null);
 
   const previousInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
@@ -540,6 +669,58 @@ export function AiAssistantSidebar({
   const reasoningOption =
     REASONING_LEVEL_OPTIONS.find((r) => r.id === settings.reasoningLevel) ??
     REASONING_LEVEL_OPTIONS[1];
+
+  const sessionCost = useMemo(() => aggregateSessionCost(messages), [messages]);
+  const formattedSessionCost = formatEstimatedUsd(sessionCost.totalCostUsd);
+
+  const handleSessionCostMouseEnter = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (sessionCost.turnCount === 0) return;
+      const costLabels = UI_LABELS.ai.cost;
+      const rows: HoverTooltipRow[] = [
+        {
+          label: costLabels.rowInput,
+          secondary: costLabels.formatTokens(sessionCost.nonCachedInputTokens + sessionCost.toolUseTokens),
+          value: formatUsdBreakdown(sessionCost.inputCostUsd),
+        },
+      ];
+      if (sessionCost.cachedTokens > 0) {
+        rows.push({
+          label: costLabels.rowCached,
+          secondary: costLabels.formatTokens(sessionCost.cachedTokens),
+          value: formatUsdBreakdown(sessionCost.cachedCostUsd),
+        });
+      }
+      rows.push({
+        label: costLabels.rowOutput,
+        secondary: costLabels.formatTokens(sessionCost.outputTokens),
+        value: formatUsdBreakdown(sessionCost.outputCostUsd),
+      });
+      if (sessionCost.thoughtTokens > 0) {
+        rows.push({
+          label: costLabels.rowThinking,
+          secondary: costLabels.formatTokens(sessionCost.thoughtTokens),
+          value: formatUsdBreakdown(sessionCost.thoughtCostUsd),
+        });
+      }
+      rows.push({
+        label: costLabels.rowTotalTokens,
+        value: costLabels.formatTokens(sessionCost.totalTokens),
+      });
+      const pos = buildTooltipPosition(event.currentTarget.getBoundingClientRect(), {
+        forceAbove: true,
+      });
+      setSessionCostTooltip({
+        title: costLabels.sessionTooltipTitle,
+        subtitle: costLabels.sessionTooltipSubtitle(sessionCost.turnCount),
+        badge: formattedSessionCost,
+        rows,
+        footer: costLabels.disclaimer,
+        ...pos,
+      });
+    },
+    [sessionCost, formattedSessionCost]
+  );
 
   const handleOpenContext = useCallback((tab: ContextInspectorTabId = 'preview') => {
     setContextInitialTab(tab);
@@ -642,6 +823,7 @@ export function AiAssistantSidebar({
     }
     setIsRunning(false);
     setInspectedTrace(null);
+    setSessionCostTooltip(null);
     previousInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
     sentAttachmentFingerprintsRef.current.clear();
@@ -1353,6 +1535,7 @@ export function AiAssistantSidebar({
                     <ReasoningAccordion
                       isStreaming={Boolean(msg.isStreaming)}
                       showThinkingSummary={settings.showThinkingSummary}
+                      showEstimatedCost={settings.showEstimatedCost}
                       showDebugTrace={settings.showDebugTrace}
                       hasError={Boolean(msg.error)}
                       thoughtSummary={msg.thoughtSummary ?? ''}
@@ -1660,7 +1843,7 @@ export function AiAssistantSidebar({
               </div>
             )}
 
-            {/* Bottom Utility Row: Brief Modal Trigger + Model Settings Chip */}
+            {/* Bottom Utility Row: Brief Modal Trigger + Session Cost + Model Settings Chip */}
             <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border-subtle">
               <button
                 type="button"
@@ -1686,31 +1869,49 @@ export function AiAssistantSidebar({
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                title={UI_LABELS.ai.settingsChipTitle}
-                aria-label={UI_LABELS.ai.settingsChipAria(
-                  modelOption.shortLabel,
-                  reasoningOption.label
+              <div className="flex items-center gap-1.5 min-w-0">
+                {settings.showEstimatedCost && sessionCost.turnCount > 0 && (
+                  <span
+                    aria-label={UI_LABELS.ai.cost.sessionBadgeAria(
+                      formattedSessionCost,
+                      sessionCost.turnCount
+                    )}
+                    onMouseEnter={handleSessionCostMouseEnter}
+                    onMouseLeave={() => setSessionCostTooltip(null)}
+                    className="inline-flex items-center rounded-lg border border-border-subtle bg-surface-subtle px-2 py-1 font-mono text-[10px] font-medium text-text-muted tabular-nums hover:border-border-main hover:text-text-main transition-colors cursor-default select-none shrink-0"
+                  >
+                    {formattedSessionCost}
+                  </span>
                 )}
-                className={`${UI_TOKENS.ai.statusChip} min-w-0`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    hasApiKey ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
-                />
-                <span className="truncate">
-                  {modelOption.shortLabel} · {reasoningOption.label}
-                </span>
-                <Settings2 className="h-3 w-3 shrink-0 text-text-faint" />
-              </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  title={UI_LABELS.ai.settingsChipTitle}
+                  aria-label={UI_LABELS.ai.settingsChipAria(
+                    modelOption.shortLabel,
+                    reasoningOption.label
+                  )}
+                  className={`${UI_TOKENS.ai.statusChip} min-w-0`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      hasApiKey ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
+                  />
+                  <span className="truncate">
+                    {modelOption.shortLabel} · {reasoningOption.label}
+                  </span>
+                  <Settings2 className="h-3 w-3 shrink-0 text-text-faint" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </aside>
+
+      <HoverTooltipPortal tooltip={sessionCostTooltip} />
 
       {isBriefOpen && (
         <Suspense fallback={null}>

@@ -15,6 +15,11 @@ import type {
   AgentToolCallTrace,
   AgentTurnTrace,
 } from '../services/geminiInteractions.ts';
+import {
+  estimateTraceCost,
+  formatEstimatedUsd,
+  formatUsdBreakdown,
+} from '../ui/aiPricing.ts';
 import {getGeminiModelOption, REASONING_LEVEL_OPTIONS} from '../ui/aiSettings.ts';
 import {copyTextToClipboard} from '../ui/clipboard.ts';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -103,6 +108,7 @@ function AiTraceModalContent({
 
   const interactionChain = useMemo(() => buildInteractionChain(trace), [trace]);
   const usageEntries = useMemo(() => formatUsageEntries(trace.usage), [trace.usage]);
+  const turnCost = useMemo(() => estimateTraceCost(trace), [trace]);
   const serializedTraceJson = useMemo(() => formatJsonPretty(trace), [trace]);
 
   useEffect(() => {
@@ -308,6 +314,51 @@ function AiTraceModalContent({
                       {entry.key}: <span className="text-text-main">{entry.value}</span>
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {turnCost && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0">
+                  {labels.summaryEstimatedCost}
+                </span>
+                <span className="rounded border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] font-semibold text-text-main tabular-nums">
+                  {formatEstimatedUsd(turnCost.totalCostUsd)}
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums">
+                    {UI_LABELS.ai.cost.rowInput}:{' '}
+                    <span className="text-text-main">
+                      {formatUsdBreakdown(turnCost.inputCostUsd)}
+                    </span>
+                  </span>
+                  {turnCost.usage.cachedTokens > 0 && (
+                    <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums">
+                      {UI_LABELS.ai.cost.rowCached}:{' '}
+                      <span className="text-text-main">
+                        {formatUsdBreakdown(turnCost.cachedCostUsd)}
+                      </span>
+                    </span>
+                  )}
+                  <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums">
+                    {UI_LABELS.ai.cost.rowOutput}:{' '}
+                    <span className="text-text-main">
+                      {formatUsdBreakdown(turnCost.outputCostUsd)}
+                    </span>
+                  </span>
+                  {turnCost.usage.thoughtTokens > 0 && (
+                    <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums">
+                      {UI_LABELS.ai.cost.rowThinking}:{' '}
+                      <span className="text-text-main">
+                        {formatUsdBreakdown(turnCost.thoughtCostUsd)}
+                      </span>
+                    </span>
+                  )}
+                  <span className="font-mono text-[10px] text-text-faint">
+                    ({labels.costRateSummary(turnCost.rates.inputPer1M, turnCost.rates.outputPer1M)}
+                    {turnCost.rates.isPromoRate ? ` · ${labels.costPromoBadge}` : ''})
+                  </span>
                 </div>
               </div>
             )}

@@ -77,6 +77,7 @@ export interface AiSettings {
   apiKey: string;
   sessionOnly: boolean;
   showThinkingSummary: boolean;
+  showEstimatedCost: boolean;
   showDebugTrace: boolean;
 }
 
@@ -86,6 +87,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   apiKey: '',
   sessionOnly: false,
   showThinkingSummary: true,
+  showEstimatedCost: true,
   showDebugTrace: false,
 };
 
@@ -186,6 +188,7 @@ interface PersistedAiPrefs {
   reasoningLevel: ReasoningLevel;
   sessionOnly: boolean;
   showThinkingSummary: boolean;
+  showEstimatedCost: boolean;
   showDebugTrace: boolean;
 }
 
@@ -196,6 +199,7 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
       reasoningLevel: DEFAULT_AI_SETTINGS.reasoningLevel,
       sessionOnly: DEFAULT_AI_SETTINGS.sessionOnly,
       showThinkingSummary: DEFAULT_AI_SETTINGS.showThinkingSummary,
+      showEstimatedCost: DEFAULT_AI_SETTINGS.showEstimatedCost,
       showDebugTrace: DEFAULT_AI_SETTINGS.showDebugTrace,
     };
   }
@@ -218,6 +222,10 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
       typeof record.showThinkingSummary === 'boolean'
         ? record.showThinkingSummary
         : DEFAULT_AI_SETTINGS.showThinkingSummary,
+    showEstimatedCost:
+      typeof record.showEstimatedCost === 'boolean'
+        ? record.showEstimatedCost
+        : DEFAULT_AI_SETTINGS.showEstimatedCost,
     showDebugTrace:
       typeof record.showDebugTrace === 'boolean'
         ? record.showDebugTrace
@@ -248,6 +256,7 @@ export function loadStoredAiSettings(adapters?: AiSettingsStorageAdapters): AiSe
     reasoningLevel: DEFAULT_AI_SETTINGS.reasoningLevel,
     sessionOnly: DEFAULT_AI_SETTINGS.sessionOnly,
     showThinkingSummary: DEFAULT_AI_SETTINGS.showThinkingSummary,
+    showEstimatedCost: DEFAULT_AI_SETTINGS.showEstimatedCost,
     showDebugTrace: DEFAULT_AI_SETTINGS.showDebugTrace,
   };
 
@@ -286,6 +295,7 @@ export function saveStoredAiSettings(
     reasoningLevel: normalized.reasoningLevel,
     sessionOnly: normalized.sessionOnly,
     showThinkingSummary: normalized.showThinkingSummary,
+    showEstimatedCost: normalized.showEstimatedCost,
     showDebugTrace: normalized.showDebugTrace,
   };
 

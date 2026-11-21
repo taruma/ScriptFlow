@@ -99,6 +99,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
       apiKey: '',
       sessionOnly: false,
       showThinkingSummary: true,
+      showEstimatedCost: true,
       showDebugTrace: false,
     });
   });
@@ -115,12 +116,14 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
         apiKey: '  AIza-test-key-123  ',
         sessionOnly: false,
         showThinkingSummary: false,
+        showEstimatedCost: false,
         showDebugTrace: true,
       },
       adapters
     );
 
     expect(saved.apiKey).toBe('AIza-test-key-123');
+    expect(saved.showEstimatedCost).toBe(false);
     expect(saved.showDebugTrace).toBe(true);
     expect(hasConfiguredApiKey(saved)).toBe(true);
     expect(local.getItem(AI_API_KEY_STORAGE_KEY)).toBe('AIza-test-key-123');
@@ -168,6 +171,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
         apiKey: '  secret ',
         sessionOnly: 'yes',
         showThinkingSummary: 123,
+        showEstimatedCost: 'nope',
         showDebugTrace: 'true',
       })
     ).toEqual({
@@ -176,6 +180,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
       apiKey: 'secret',
       sessionOnly: false,
       showThinkingSummary: true,
+      showEstimatedCost: true,
       showDebugTrace: false,
     });
 
