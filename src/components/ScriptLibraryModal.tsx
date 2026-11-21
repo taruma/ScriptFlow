@@ -10,6 +10,7 @@ import {
   BookOpen,
   Check,
   CheckSquare,
+  ChevronDown,
   Download,
   FilePlus2,
   Folder,
@@ -114,9 +115,11 @@ function ScriptLibraryModalContent({
   );
   const [isBulkMode, setIsBulkMode] = useState<boolean>(false);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState<boolean>(false);
   const [openedAt] = useState<number>(() => Date.now());
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const shouldScrollSelectedIntoViewRef = useRef<boolean>(false);
 
@@ -244,6 +247,18 @@ function ScriptLibraryModalContent({
     [customScripts, checkedIds]
   );
 
+  // Close custom sort popover on outside pointer down
+  useEffect(() => {
+    if (!isSortMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isSortMenuOpen]);
+
   // Keyboard navigation (↑ / ↓ / Enter / Esc) while modal is active and ConfirmDialog is closed
   useEffect(() => {
     if (isConfirmDialogOpen) return;
@@ -261,6 +276,11 @@ function ScriptLibraryModalContent({
           activeEl.tagName === 'SELECT');
 
       if (event.key === 'Escape') {
+        if (isSortMenuOpen) {
+          event.preventDefault();
+          setIsSortMenuOpen(false);
+          return;
+        }
         if (isInOtherInput) return;
         event.preventDefault();
         if (isBulkMode) {
@@ -272,7 +292,7 @@ function ScriptLibraryModalContent({
         return;
       }
 
-      if (isInOtherInput) return;
+      if (isInOtherInput || isSortMenuOpen) return;
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -308,6 +328,7 @@ function ScriptLibraryModalContent({
   }, [
     isConfirmDialogOpen,
     isBulkMode,
+    isSortMenuOpen,
     filteredRows,
     selectedIndex,
     selectedRow,
@@ -423,80 +444,118 @@ function ScriptLibraryModalContent({
                 )}
               </div>
 
-              {/* Tabs + Sort + Bulk Select */}
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div
-                  role="tablist"
-                  aria-label={UI_LABELS.library.tabsAria}
-                  className="inline-flex items-center bg-surface-muted p-0.5 rounded-xl border border-border-main"
-                >
-                  {FILTER_TABS.map((tab) => {
-                    const isSelectedTab = filterTab === tab;
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        role="tab"
-                        aria-selected={isSelectedTab}
-                        onClick={() => setFilterTab(tab)}
-                        className={
-                          isSelectedTab
-                            ? 'flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface text-text-main shadow-xs transition-colors cursor-pointer whitespace-nowrap'
-                            : 'flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface/60 transition-colors cursor-pointer whitespace-nowrap'
-                        }
-                      >
-                        <span>{UI_LABELS.library.tabs[tab]}</span>
-                        <span className="font-mono text-[10px] text-text-faint tabular-nums">
-                          {tabCounts[tab]}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <label className="inline-flex items-center gap-1 rounded-lg border border-border-main bg-surface px-2 py-1 text-[11px] text-text-muted hover:bg-surface-subtle transition-colors cursor-pointer">
-                    <ArrowUpDown className="h-3 w-3 text-text-faint shrink-0" />
-                    <select
-                      aria-label={UI_LABELS.library.sortAria}
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as LibrarySortBy)}
-                      className="bg-transparent text-[11px] font-medium text-text-body focus:outline-none cursor-pointer"
-                    >
-                      {SORT_OPTIONS.map((opt) => (
-                        <option key={opt} value={opt} className="bg-surface text-text-main">
-                          {UI_LABELS.library.sortOptions[opt]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  {customScripts.length > 0 && (
+              {/* Row 1: Full-width Segmented Filter Tabs */}
+              <div
+                role="tablist"
+                aria-label={UI_LABELS.library.tabsAria}
+                className="grid grid-cols-3 bg-surface-muted p-0.5 rounded-xl border border-border-main"
+              >
+                {FILTER_TABS.map((tab) => {
+                  const isSelectedTab = filterTab === tab;
+                  return (
                     <button
+                      key={tab}
                       type="button"
-                      onClick={() => {
-                        setIsBulkMode((prev) => {
-                          if (prev) setCheckedIds(new Set());
-                          return !prev;
-                        });
-                      }}
-                      aria-label={UI_LABELS.library.selectModeAria}
-                      aria-pressed={isBulkMode}
-                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
-                        isBulkMode
-                          ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
-                          : 'border-border-main bg-surface text-text-muted hover:bg-surface-subtle hover:text-text-main'
-                      }`}
+                      role="tab"
+                      aria-selected={isSelectedTab}
+                      onClick={() => setFilterTab(tab)}
+                      className={
+                        isSelectedTab
+                          ? 'flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface text-text-main shadow-xs transition-colors cursor-pointer whitespace-nowrap'
+                          : 'flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface/60 transition-colors cursor-pointer whitespace-nowrap'
+                      }
                     >
-                      <CheckSquare className="h-3 w-3" />
-                      <span>
-                        {isBulkMode
-                          ? UI_LABELS.library.selectModeDone
-                          : UI_LABELS.library.selectModeButton}
+                      <span>{UI_LABELS.library.tabs[tab]}</span>
+                      <span className="font-mono text-[10px] text-text-faint tabular-nums">
+                        {tabCounts[tab]}
                       </span>
                     </button>
+                  );
+                })}
+              </div>
+
+              {/* Row 2: Custom Sort Menu (left) + Bulk Select Toggle (right) */}
+              <div className="flex items-center justify-between gap-2">
+                <div ref={sortMenuRef} className="relative">
+                  <button
+                    type="button"
+                    aria-label={UI_LABELS.library.sortAria}
+                    aria-haspopup="menu"
+                    aria-expanded={isSortMenuOpen}
+                    onClick={() => setIsSortMenuOpen((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                      isSortMenuOpen
+                        ? 'border-border-main bg-surface-muted text-text-main'
+                        : 'border-border-main bg-surface text-text-body hover:bg-surface-subtle hover:text-text-main'
+                    }`}
+                  >
+                    <ArrowUpDown className="h-3 w-3 text-text-faint shrink-0" />
+                    <span>{UI_LABELS.library.sortOptions[sortBy]}</span>
+                    <ChevronDown
+                      className={`h-3 w-3 text-text-faint shrink-0 transition-transform duration-150 ${
+                        isSortMenuOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {isSortMenuOpen && (
+                    <div
+                      role="menu"
+                      aria-label={UI_LABELS.library.sortAria}
+                      className="absolute top-full left-0 mt-1.5 w-40 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main py-1"
+                    >
+                      {SORT_OPTIONS.map((opt) => {
+                        const isActiveSort = sortBy === opt;
+                        return (
+                          <button
+                            key={opt}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={isActiveSort}
+                            onClick={() => {
+                              setSortBy(opt);
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 text-[11.5px] flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              isActiveSort
+                                ? 'bg-surface-muted font-semibold text-text-main'
+                                : 'font-medium text-text-body hover:bg-surface-subtle hover:text-text-main'
+                            }`}
+                          >
+                            <span>{UI_LABELS.library.sortOptions[opt]}</span>
+                            {isActiveSort && <Check className="h-3 w-3 text-text-main shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
+
+                {customScripts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBulkMode((prev) => {
+                        if (prev) setCheckedIds(new Set());
+                        return !prev;
+                      });
+                    }}
+                    aria-label={UI_LABELS.library.selectModeAria}
+                    aria-pressed={isBulkMode}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                      isBulkMode
+                        ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
+                        : 'border-border-main bg-surface text-text-muted hover:bg-surface-subtle hover:text-text-main'
+                    }`}
+                  >
+                    <CheckSquare className="h-3 w-3" />
+                    <span>
+                      {isBulkMode
+                        ? UI_LABELS.library.selectModeDone
+                        : UI_LABELS.library.selectModeButton}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Quiet Folder & Tag Filter Strip (only shown when folders/tags exist) */}
@@ -606,10 +665,10 @@ function ScriptLibraryModalContent({
                             handleOpenRow(row);
                           }
                         }}
-                        className={`flex items-start gap-2.5 px-3.5 py-2.5 transition-colors cursor-pointer ${
+                        className={`flex items-start gap-2.5 pl-3 pr-3.5 py-2.5 border-l-2 transition-colors cursor-pointer ${
                           isSelected
-                            ? 'bg-surface-subtle'
-                            : 'bg-surface hover:bg-surface-subtle/60'
+                            ? 'border-l-text-main bg-surface-muted/75'
+                            : 'border-l-transparent bg-surface hover:bg-surface-subtle/70'
                         }`}
                       >
                         {isBulkMode && (

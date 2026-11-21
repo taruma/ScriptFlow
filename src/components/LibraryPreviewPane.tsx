@@ -73,13 +73,17 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   const [tagDraft, setTagDraft] = useState<string>('');
 
   const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const previewScrollRef = useRef<HTMLDivElement | null>(null);
   const rowKey = row ? `${row.kind}:${row.id}` : null;
   const rowFolder = row?.kind === 'custom' ? (row.folder ?? '') : '';
 
-  // Reset transient drafts whenever the selected script changes
+  // Reset transient drafts and scroll position whenever the selected script changes
   useEffect(() => {
     setIsRenaming(false);
     setTagDraft('');
+    if (previewScrollRef.current) {
+      previewScrollRef.current.scrollTop = 0;
+    }
   }, [rowKey]);
 
   useEffect(() => {
@@ -351,7 +355,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                 onKeyDown={handleFolderKeyDown}
                 placeholder={UI_LABELS.library.folderPlaceholder}
                 aria-label={UI_LABELS.library.folderInputAria}
-                className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder-text-placeholder hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
+                className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
               />
               <datalist id="library-existing-folders">
                 {existingFolders.map((folder) => (
@@ -389,7 +393,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                 onBlur={commitTag}
                 placeholder={UI_LABELS.library.tagPlaceholder}
                 aria-label={UI_LABELS.library.tagInputAria}
-                className="w-20 min-w-[72px] rounded-md bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-text-body placeholder-text-placeholder hover:bg-surface-subtle focus:bg-surface-subtle focus:w-28 focus:outline-none focus:ring-1 focus:ring-border-main transition-all"
+                className="w-24 min-w-[84px] rounded-md bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:w-36 focus:outline-none focus:ring-1 focus:ring-border-main transition-all"
               />
             </div>
           </div>
@@ -401,7 +405,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
       </div>
 
       {/* Preview Mode Switcher Strip */}
-      <div className="flex items-center justify-between gap-2 px-5 py-2 border-b border-border-subtle bg-surface-subtle/70 shrink-0">
+      <div className="flex items-center justify-between gap-2 px-5 py-2 border-b border-border-main/80 bg-surface-subtle shrink-0">
         <div className="inline-flex items-center bg-surface-muted p-0.5 rounded-lg border border-border-main">
           <button
             type="button"
@@ -437,7 +441,10 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
       </div>
 
       {/* Scrollable Preview Content */}
-      <div className="auteur-pane-scroll flex-1 min-h-0 overflow-y-auto px-5 py-4">
+      <div
+        ref={previewScrollRef}
+        className="auteur-pane-scroll flex-1 min-h-0 overflow-y-auto px-5 py-4"
+      >
         {previewMode === 'source' ? (
           <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-text-body bg-surface rounded-xl border border-border-subtle p-4">
             {row.rawText}
