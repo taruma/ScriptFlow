@@ -269,18 +269,39 @@ export interface AuditReviewSuggestion {
   warningCount: number;
 }
 
-export type StagedSuggestion = PatchSuggestion | DraftSuggestion | AuditReviewSuggestion;
+export interface ClarifyingQuestionItem {
+  id: string;
+  question: string;
+  options: string[];
+}
+
+export interface QuestionSuggestion {
+  id: string;
+  kind: 'question';
+  intro?: string;
+  questions: ClarifyingQuestionItem[];
+}
+
+export type StagedSuggestion =
+  | PatchSuggestion
+  | DraftSuggestion
+  | AuditReviewSuggestion
+  | QuestionSuggestion;
 
 /**
  * Merges a newly staged suggestion into the active turn's staged list, replacing
- * superseded earlier drafts, audit reviews, or same-target patches produced
+ * superseded earlier drafts, audit reviews, question cards, or same-target patches produced
  * during multi-round self-repair in the same turn.
  */
 export function upsertStagedSuggestion(
   existing: readonly StagedSuggestion[],
   incoming: StagedSuggestion
 ): StagedSuggestion[] {
-  if (incoming.kind === 'draft' || incoming.kind === 'audit_review') {
+  if (
+    incoming.kind === 'draft' ||
+    incoming.kind === 'audit_review' ||
+    incoming.kind === 'question'
+  ) {
     const idx = existing.findIndex((item) => item.kind === incoming.kind);
     if (idx !== -1) {
       return existing.map((item, i) => (i === idx ? incoming : item));
@@ -525,6 +546,44 @@ function buildStaticToolDeclarationsMap(): Record<
       description:
         'Validates a structured Script Supervisor AuteurReview (including dry-running any embedded suggestedPatch payloads against active lint rules) and stages clickable AuditReviewSuggestion items.',
       parameters: reviewSchema,
+    },
+    ask_question: {
+      type: 'function',
+      name: 'ask_question',
+      description:
+        'Presents 1 to 4 concise clarifying questions to the user as an interactive multi-select card (every question lets the user pick multiple options and add an optional custom comment). Stop after calling and wait for the user to answer.',
+      parameters: sanitizeJsonSchemaForTool({
+        type: 'object',
+        properties: {
+          intro: {
+            type: 'string',
+            description: 'Optional brief one-line context sentence shown above the questions.',
+          },
+          questions: {
+            type: 'array',
+            description:
+              '1 to 4 concise clarifying questions. All questions are multi-select and include an inline comment field automatically.',
+            items: {
+              type: 'object',
+              properties: {
+                question: {
+                  type: 'string',
+                  description:
+                    'Clear, concise question text (unnumbered, without "select all that apply").',
+                },
+                options: {
+                  type: 'array',
+                  description:
+                    '2 to 5 short, distinct options (unnumbered, without an "Other" choice—the UI provides a comment field automatically).',
+                  items: {type: 'string'},
+                },
+              },
+              required: ['question', 'options'],
+            },
+          },
+        },
+        required: ['questions'],
+      }) as Record<string, unknown>,
     },
   };
 }
@@ -1595,6 +1654,114 @@ function runLoadAuteurSkill(
   };
 }
 
+function runAskQuestion(
+  args: Record<string, unknown>,
+  context: ScriptToolContext,
+  nextId: () => string
+): ScriptToolExecutionResult {
+  const rawQuestions = args.questions;
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+    return {
+      ok: false,
+      toolName: 'ask_question',
+      result: {
+        ok: false,
+        error: 'Missing required non-empty "questions" array.',
+        repairHint:
+          'Provide 1 to 4 concise questions, each with a non-empty "question" string and 2 to 5 short "options" strings.',
+      },
+    };
+  }
+
+  const MAX_QUESTIONS = 6;
+  const MAX_OPTIONS = 8;
+  const parsedQuestions: ClarifyingQuestionItem[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < Math.min(rawQuestions.length, MAX_QUESTIONS); i++) {
+    const rawItem = rawQuestions[i];
+    if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) {
+      errors.push(`questions[${i}] must be an object with "question" and "options".`);
+      continue;
+    }
+
+    const record = rawItem as Record<string, unknown>;
+    const questionText = typeof record.question === 'string' ? record.question.trim() : '';
+    if (!questionText) {
+      errors.push(`questions[${i}].question must be a non-empty string.`);
+      continue;
+    }
+
+    const rawOptions = Array.isArray(record.options) ? record.options : [];
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const opt of rawOptions) {
+      if (typeof opt !== 'string') continue;
+      const clean = opt.trim();
+      if (!clean) continue;
+      if (/^other(?:\s*\(.*\))?$/i.test(clean)) continue;
+      const lower = clean.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      options.push(clean);
+      if (options.length >= MAX_OPTIONS) break;
+    }
+
+    if (options.length < 2) {
+      errors.push(
+        `questions[${i}].options must contain at least 2 distinct non-empty choices (excluding "Other").`
+      );
+      continue;
+    }
+
+    parsedQuestions.push({
+      id: `q-${i + 1}`,
+      question: questionText,
+      options,
+    });
+  }
+
+  if (parsedQuestions.length === 0 || errors.length > 0) {
+    return {
+      ok: false,
+      toolName: 'ask_question',
+      result: {
+        ok: false,
+        errors: errors.length > 0 ? errors : ['No valid questions provided.'],
+        repairHint:
+          'Pass 1–4 questions where each item has a concise "question" string and 2–5 distinct short "options" strings (do not include an "Other" option).',
+      },
+    };
+  }
+
+  const intro = typeof args.intro === 'string' && args.intro.trim().length > 0
+    ? args.intro.trim()
+    : undefined;
+
+  const suggestion: QuestionSuggestion = {
+    id: nextId(),
+    kind: 'question',
+    ...(intro ? {intro} : {}),
+    questions: parsedQuestions,
+  };
+
+  context.onStageSuggestion?.(suggestion);
+
+  return {
+    ok: true,
+    toolName: 'ask_question',
+    stagedSuggestion: suggestion,
+    result: {
+      ok: true,
+      staged: true,
+      suggestionId: suggestion.id,
+      questionCount: parsedQuestions.length,
+      note: 'The clarifying questions are now displayed to the user as an interactive multi-select card with comment fields. Stop calling tools now, avoid repeating the questions in prose, and wait for the user to submit their answers.',
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public Mode- & Context-Scoped Tool Dispatcher
 // ---------------------------------------------------------------------------
@@ -1644,5 +1811,7 @@ export function executeScriptToolCall(
       return runReportAuditReview(args, context, nextId);
     case 'load_auteur_skill':
       return runLoadAuteurSkill(args, context);
+    case 'ask_question':
+      return runAskQuestion(args, context, nextId);
   }
 }

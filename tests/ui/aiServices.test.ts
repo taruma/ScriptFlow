@@ -6,6 +6,10 @@ import {
   buildAiTargetOptions,
   buildAuditQuickPrompt,
   buildScopedRefinePrompt,
+  formatQuestionAnswersPrompt,
+  formatToolCallTooltip,
+  formatToolDisplayName,
+  hasAnyQuestionAnswer,
   isSuggestionStale,
   reconcileTargetScope,
   resolveEditorJumpTarget,
@@ -51,6 +55,7 @@ import {
   type AuditReviewSuggestion,
   type DraftSuggestion,
   type PatchSuggestion,
+  type QuestionSuggestion,
   type StagedSuggestion,
 } from '../../src/services/scriptTools.ts';
 import {
@@ -2261,6 +2266,183 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     // Trace still records both tool rounds transparently
     expect(result.trace.toolRounds).toBe(2);
     expect(result.trace.rounds).toHaveLength(3);
+  });
+});
+
+describe('ask_question opt-in clarifying workflow', () => {
+  const sampleScript = SCRIPT_PRESETS[0].content;
+
+  it('omits ask_question by default across all focuses and exposes it only when explicitly enabled outside Audit', () => {
+    for (const focus of ['auto', 'draft', 'refine', 'audit'] as const) {
+      const ctx = composeAgentContext({focus, rawText: sampleScript});
+      expect(ctx.allowedToolNames).not.toContain('ask_question');
+      expect(buildToolDeclarationsForContext(ctx).map((t) => t.name)).not.toContain('ask_question');
+    }
+
+    const askFirstAuto = composeAgentContext({
+      focus: 'auto',
+      rawText: sampleScript,
+      askQuestionMode: 'ask_first',
+    });
+    expect(askFirstAuto.allowedToolNames).toContain('ask_question');
+    expect(askFirstAuto.sections.toolProtocol.text).toContain('Ask First');
+    expect(buildToolDeclarationsForContext(askFirstAuto).map((t) => t.name)).toContain(
+      'ask_question'
+    );
+
+    const followupDraft = composeAgentContext({
+      focus: 'draft',
+      rawText: '',
+      askQuestionMode: 'followup',
+    });
+    expect(followupDraft.allowedToolNames).toContain('ask_question');
+    expect(followupDraft.sections.toolProtocol.text).toContain('Clarifying follow-up');
+
+    // Audit focus always suppresses ask_question even if requested
+    const auditBlocked = composeAgentContext({
+      focus: 'audit',
+      rawText: sampleScript,
+      askQuestionMode: 'ask_first',
+    });
+    expect(auditBlocked.allowedToolNames).not.toContain('ask_question');
+  });
+
+  it('validates, sanitizes, stages, and supersedes QuestionSuggestion cards cleanly', () => {
+    const defaultCtx = composeAgentContext({focus: 'draft', rawText: ''});
+    const blocked = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {
+          questions: [{question: 'Topology?', options: ['Oner', 'Coverage']}],
+        },
+      },
+      {mode: 'draft', rawText: '', composedContext: defaultCtx}
+    );
+    expect(blocked.ok).toBe(false);
+
+    const askCtx = composeAgentContext({
+      focus: 'draft',
+      rawText: '',
+      askQuestionMode: 'ask_first',
+    });
+
+    // Rejects invalid/too-few options after stripping "Other"
+    const invalid = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {
+          questions: [{question: 'Pick one?', options: ['Only one', 'Other']}],
+        },
+      },
+      {mode: 'draft', rawText: '', composedContext: askCtx}
+    );
+    expect(invalid.ok).toBe(false);
+
+    const staged: StagedSuggestion[] = [];
+    const valid = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {
+          intro: 'Quick creative check before drafting:',
+          questions: [
+            {
+              question: 'Camera topology?',
+              options: ['Continuous Oner', 'Multi-Camera Coverage', 'continuous oner', 'Other'],
+            },
+            {
+              question: 'Audio emphasis?',
+              options: ['Dialogue-driven', 'Diegetic foley only', 'Minimal score'],
+            },
+          ],
+        },
+      },
+      {
+        mode: 'draft',
+        rawText: '',
+        composedContext: askCtx,
+        createSuggestionId: () => 'q-sug-1',
+        onStageSuggestion: (item) => staged.push(item),
+      }
+    );
+
+    expect(valid.ok).toBe(true);
+    expect(staged).toHaveLength(1);
+    const card = staged[0] as QuestionSuggestion;
+    expect(card.kind).toBe('question');
+    expect(card.intro).toBe('Quick creative check before drafting:');
+    expect(card.questions).toHaveLength(2);
+    // Deduplicated case-insensitively and stripped "Other"
+    expect(card.questions[0].options).toEqual(['Continuous Oner', 'Multi-Camera Coverage']);
+
+    // Superseding question card in the same turn replaces prior question card
+    const replacement: QuestionSuggestion = {
+      id: 'q-sug-2',
+      kind: 'question',
+      questions: [{id: 'q-1', question: 'Pacing?', options: ['Fast', 'Slow']}],
+    };
+    const merged = upsertStagedSuggestion(staged, replacement);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe('q-sug-2');
+  });
+
+  it('formats multi-select choices, inline comments, and skipped questions cleanly', () => {
+    const suggestion: QuestionSuggestion = {
+      id: 'q-sug-1',
+      kind: 'question',
+      questions: [
+        {
+          id: 'q-1',
+          question: 'Camera topology?',
+          options: ['Continuous Oner', 'Handheld tracking', 'Static locked-off'],
+        },
+        {
+          id: 'q-2',
+          question: 'Audio mood?',
+          options: ['Silent + foley', 'Dialogue-driven'],
+        },
+        {
+          id: 'q-3',
+          question: 'Color palette?',
+          options: ['Warm tungsten', 'Cold fluorescent'],
+        },
+      ],
+    };
+
+    expect(hasAnyQuestionAnswer({})).toBe(false);
+    expect(hasAnyQuestionAnswer({'q-1': {selectedOptions: [], comment: '   '}})).toBe(false);
+
+    const answers = {
+      'q-1': {
+        selectedOptions: ['Handheld tracking', 'Continuous Oner'],
+        comment: 'Start close on her hands then widen',
+      },
+      'q-2': {
+        selectedOptions: [],
+        comment: 'Rain on metal roof only',
+      },
+    };
+    expect(hasAnyQuestionAnswer(answers)).toBe(true);
+
+    const formatted = formatQuestionAnswersPrompt(suggestion, answers);
+    expect(formatted.answeredCount).toBe(2);
+    expect(formatted.totalCount).toBe(3);
+    // Preserves canonical option order from question definition
+    expect(formatted.displayText).toContain('- Selected: Continuous Oner, Handheld tracking');
+    expect(formatted.displayText).toContain('- Comment: Start close on her hands then widen');
+    expect(formatted.displayText).toContain('- Comment: Rain on metal roof only');
+    expect(formatted.displayText).toContain('- (No preference — your call)');
+    expect(formatted.promptText).toContain('Clarifying answers:');
+
+    expect(formatToolDisplayName('ask_question')).toBe('Clarifying questions');
+    const tooltip = formatToolCallTooltip({
+      callId: 'c-q',
+      name: 'ask_question',
+      arguments: {questions: [{question: 'Camera topology?', options: ['Oner', 'Coverage']}]},
+      status: 'ok',
+    });
+    expect(tooltip.title).toBe('Clarifying questions');
+    expect(tooltip.detail).toContain('1 question');
+    expect(tooltip.detail).toContain('Camera topology?');
   });
 });
 

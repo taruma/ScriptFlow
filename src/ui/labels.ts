@@ -723,6 +723,12 @@ export const UI_LABELS = {
       `${isOpen ? 'Close' : 'Open'} Scene Brief & References${
         hasContent ? (isActive ? ' (active)' : ' (paused)') : ''
       }`,
+    askFirstToggle: 'Ask First',
+    askFirstTitle:
+      'Have the assistant ask multi-select clarifying questions before drafting or editing (resets after sending)',
+    askFirstAria: (enabled: boolean) =>
+      `Ask clarifying questions first (${enabled ? 'on for next send' : 'off'})`,
+    askFirstBadge: 'Ask First',
     briefTray: {
       dialogAria: 'Scene Brief & References',
       title: 'Scene Brief & References',
@@ -868,6 +874,17 @@ export const UI_LABELS = {
       patchLabel: 'Proposed Patch',
       draftLabel: 'Proposed Draft',
       auditLabel: 'Script Supervisor Audit',
+      questionLabel: 'Clarifying Questions',
+      questionMultiSelectHint: 'Multi-select',
+      questionCount: (count: number) => `${count} ${count === 1 ? 'question' : 'questions'}`,
+      questionCommentPlaceholder: 'Add comment or extra detail (optional)...',
+      questionCommentAria: (index: number) => `Additional comment for question ${index + 1}`,
+      questionSubmitButton: 'Submit Answers',
+      questionSubmitDisabledTitle: 'Select at least one option or add a comment',
+      questionAnsweredBadge: 'Answered',
+      questionAnsweredSummary: (answered: number, total: number) =>
+        `${answered}/${total} answered`,
+      questionSkippedNote: 'No preference — assistant decides',
       applyButton: 'Apply',
       applyFixButton: 'Apply Fix',
       applyAllFixesButton: (count: number) => `Apply All (${count})`,

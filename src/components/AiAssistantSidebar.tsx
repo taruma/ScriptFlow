@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  HelpCircle,
   KeyRound,
   Layers,
   Loader2,
@@ -36,7 +37,11 @@ import {
   X,
 } from 'lucide-react';
 import type {AuteurDocument, LintRuleOverrides} from '../core/index.ts';
-import {composeAgentContext, type AssistantFocus} from '../services/auteurKnowledge.ts';
+import {
+  composeAgentContext,
+  type AskQuestionMode,
+  type AssistantFocus,
+} from '../services/auteurKnowledge.ts';
 import {
   GeminiServiceError,
   runGeminiAgentTurn,
@@ -47,6 +52,7 @@ import {
   upsertStagedSuggestion,
   type DraftSuggestion,
   type PatchSuggestion,
+  type QuestionSuggestion,
   type StagedSuggestion,
 } from '../services/scriptTools.ts';
 import {
@@ -60,6 +66,7 @@ import {
   collectPendingBriefAttachments,
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
+  formatQuestionAnswersPrompt,
   formatSceneBriefContext,
   formatToolCallTooltip,
   getBriefReferenceHandles,
@@ -77,6 +84,7 @@ import {
   type AiToolCallItem,
   type AuditQuickCheckId,
   type DraftBriefState,
+  type QuestionAnswerDraft,
   type ReferenceEntry,
 } from '../ui/aiAssistant.ts';
 import {
@@ -100,6 +108,7 @@ import {
   AuditReviewSuggestionCard,
   DraftSuggestionCard,
   PatchSuggestionCard,
+  QuestionSuggestionCard,
 } from './AiSuggestionCards.tsx';
 import {MarkdownContent} from './MarkdownContent.tsx';
 
@@ -580,6 +589,7 @@ export function AiAssistantSidebar({
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>('whole');
   const [brief, setBrief] = useState<DraftBriefState>(EMPTY_DRAFT_BRIEF);
   const [isBriefOpen, setIsBriefOpen] = useState<boolean>(false);
+  const [askFirstEnabled, setAskFirstEnabled] = useState<boolean>(false);
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
   const [isRunning, setIsRunning] = useState<boolean>(false);
@@ -612,6 +622,9 @@ export function AiAssistantSidebar({
   const activeBriefContext = useMemo(() => formatSceneBriefContext(brief), [brief]);
   const briefSummaryLabel = useMemo(() => buildBriefSummaryBadge(brief), [brief]);
 
+  const effectivePreviewAskMode: AskQuestionMode =
+    askFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
+
   // Compose live agent context lazily inside sidebar so closed sidebar incurs zero composition cost
   const previewComposedContext = useMemo(
     () =>
@@ -625,6 +638,7 @@ export function AiAssistantSidebar({
         customSkills: skillsState.customSkills,
         referenceHandles: activeReferenceHandles,
         briefContext: activeBriefContext,
+        askQuestionMode: effectivePreviewAskMode,
       }),
     [
       focus,
@@ -636,6 +650,7 @@ export function AiAssistantSidebar({
       skillsState.customSkills,
       activeReferenceHandles,
       activeBriefContext,
+      effectivePreviewAskMode,
     ]
   );
 
@@ -832,6 +847,7 @@ export function AiAssistantSidebar({
     shouldAutoScrollRef.current = true;
     setIsScrolledUp(false);
     setLastTurnSnapshotHash(undefined);
+    setAskFirstEnabled(false);
     setMessages([]);
   }, []);
 
@@ -965,10 +981,17 @@ export function AiAssistantSidebar({
   const submitPrompt = useCallback(
     async (
       rawUserPrompt: string,
-      options?: {overrideFocus?: AssistantFocus; displayText?: string; scopeLabel?: string}
+      options?: {
+        overrideFocus?: AssistantFocus;
+        displayText?: string;
+        scopeLabel?: string;
+        askQuestionMode?: AskQuestionMode;
+      }
     ) => {
       const activeFocus = options?.overrideFocus ?? focus;
       const legacyMode = focusToLegacyMode(activeFocus, isEmpty);
+      const effectiveAskMode: AskQuestionMode =
+        activeFocus === 'audit' ? 'off' : (options?.askQuestionMode ?? 'off');
       const trimmed = rawUserPrompt.trim();
       if (!trimmed || isRunning) return;
 
@@ -1006,6 +1029,7 @@ export function AiAssistantSidebar({
         text: options?.displayText ?? trimmed,
         ...(scopeLabel ? {scopeLabel} : {}),
         ...(briefSummary ? {briefSummary} : {}),
+        ...(effectiveAskMode === 'ask_first' ? {askFirst: true} : {}),
       };
 
       const turnSnapshotHash = currentSnapshotHash;
@@ -1051,6 +1075,7 @@ export function AiAssistantSidebar({
           customSkills: skillsState.customSkills,
           referenceHandles: activeReferenceHandles,
           briefContext: activeBriefContext,
+          askQuestionMode: effectiveAskMode,
           attachments: pendingAttachments,
           signal: controller.signal,
           callbacks: {
@@ -1201,9 +1226,14 @@ export function AiAssistantSidebar({
   const handleComposerSend = useCallback(() => {
     const trimmed = inputValue.trim();
     if (!trimmed || isRunning) return;
+    const turnAskMode: AskQuestionMode =
+      askFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
     setInputValue('');
-    void submitPrompt(trimmed);
-  }, [inputValue, isRunning, submitPrompt]);
+    if (askFirstEnabled) {
+      setAskFirstEnabled(false);
+    }
+    void submitPrompt(trimmed, {askQuestionMode: turnAskMode});
+  }, [inputValue, isRunning, askFirstEnabled, focus, submitPrompt]);
 
   const handleComposerKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -1247,6 +1277,26 @@ export function AiAssistantSidebar({
       }));
     },
     [updateAssistantMessage]
+  );
+
+  const handleSubmitQuestionAnswers = useCallback(
+    (
+      messageId: string,
+      suggestion: QuestionSuggestion,
+      answers: Record<string, QuestionAnswerDraft>
+    ) => {
+      if (isRunning) return;
+      const formatted = formatQuestionAnswersPrompt(suggestion, answers);
+      markSuggestionApplied(messageId, suggestion.id);
+      if (askFirstEnabled) {
+        setAskFirstEnabled(false);
+      }
+      void submitPrompt(formatted.promptText, {
+        displayText: formatted.displayText,
+        askQuestionMode: 'followup',
+      });
+    },
+    [isRunning, askFirstEnabled, markSuggestionApplied, submitPrompt]
   );
 
   const handleApplyPatch = useCallback(
@@ -1509,7 +1559,7 @@ export function AiAssistantSidebar({
                   return (
                     <div key={msg.id} className="flex justify-end">
                       <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-border-main bg-surface px-3 py-2 text-xs text-text-main shadow-2xs space-y-1">
-                        {(msg.scopeLabel || msg.briefSummary) && (
+                        {(msg.scopeLabel || msg.briefSummary || msg.askFirst) && (
                           <div className="flex flex-wrap items-center gap-1.5">
                             {msg.scopeLabel && (
                               <span className="font-mono text-[10px] text-text-faint truncate">
@@ -1519,6 +1569,11 @@ export function AiAssistantSidebar({
                             {msg.briefSummary && (
                               <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-aesthetic">
                                 {msg.briefSummary}
+                              </span>
+                            )}
+                            {msg.askFirst && (
+                              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-logic">
+                                {UI_LABELS.ai.askFirstBadge}
                               </span>
                             )}
                           </div>
@@ -1588,6 +1643,22 @@ export function AiAssistantSidebar({
                                 isApplied={applied.includes(suggestion.id)}
                                 isDismissed={dismissed.includes(suggestion.id)}
                                 onApply={(s) => void handleApplyDraft(msg.id, s)}
+                                onDismiss={(id) => markSuggestionDismissed(msg.id, id)}
+                              />
+                            );
+                          }
+                          if (suggestion.kind === 'question') {
+                            return (
+                              <QuestionSuggestionCard
+                                key={suggestion.id}
+                                suggestion={suggestion}
+                                isStreaming={msgStreaming}
+                                isRunning={isRunning}
+                                isAnswered={applied.includes(suggestion.id)}
+                                isDismissed={dismissed.includes(suggestion.id)}
+                                onSubmit={(s, answers) =>
+                                  handleSubmitQuestionAnswers(msg.id, s, answers)
+                                }
                                 onDismiss={(id) => markSuggestionDismissed(msg.id, id)}
                               />
                             );
@@ -1845,31 +1916,51 @@ export function AiAssistantSidebar({
               </div>
             )}
 
-            {/* Bottom Utility Row: Brief Modal Trigger + Session Cost + Model Settings Chip */}
+            {/* Bottom Utility Row: Brief + Ask First Toggle | Session Cost + Model Settings Chip */}
             <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border-subtle">
-              <button
-                type="button"
-                aria-haspopup="dialog"
-                aria-expanded={isBriefOpen}
-                aria-label={UI_LABELS.ai.briefToggleAria(
-                  isBriefOpen,
-                  briefHasContent,
-                  briefIsActive
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={isBriefOpen}
+                  aria-label={UI_LABELS.ai.briefToggleAria(
+                    isBriefOpen,
+                    briefHasContent,
+                    briefIsActive
+                  )}
+                  title={UI_LABELS.ai.briefToggleTitle}
+                  onClick={() => setIsBriefOpen(true)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors cursor-pointer shrink-0 ${
+                    isBriefOpen || briefIsActive
+                      ? 'auteur-phase-aesthetic'
+                      : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
+                  }`}
+                >
+                  <FileText className="h-3 w-3" />
+                  <span>
+                    {briefSummaryLabel ??
+                      (briefHasContent ? UI_LABELS.ai.briefPausedLabel : UI_LABELS.ai.briefToggle)}
+                  </span>
+                </button>
+
+                {focus !== 'audit' && (
+                  <button
+                    type="button"
+                    aria-pressed={askFirstEnabled}
+                    aria-label={UI_LABELS.ai.askFirstAria(askFirstEnabled)}
+                    title={UI_LABELS.ai.askFirstTitle}
+                    onClick={() => setAskFirstEnabled((prev) => !prev)}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors cursor-pointer shrink-0 ${
+                      askFirstEnabled
+                        ? 'auteur-phase-logic'
+                        : 'border-border-main bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main'
+                    }`}
+                  >
+                    <HelpCircle className="h-3 w-3" />
+                    <span>{UI_LABELS.ai.askFirstToggle}</span>
+                  </button>
                 )}
-                title={UI_LABELS.ai.briefToggleTitle}
-                onClick={() => setIsBriefOpen(true)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors cursor-pointer shrink-0 ${
-                  isBriefOpen || briefIsActive
-                    ? 'auteur-phase-aesthetic'
-                    : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
-                }`}
-              >
-                <FileText className="h-3 w-3" />
-                <span>
-                  {briefSummaryLabel ??
-                    (briefHasContent ? UI_LABELS.ai.briefPausedLabel : UI_LABELS.ai.briefToggle)}
-                </span>
-              </button>
+              </div>
 
               <div className="flex items-center gap-1.5 min-w-0">
                 {settings.showEstimatedCost && sessionCost.turnCount > 0 && (

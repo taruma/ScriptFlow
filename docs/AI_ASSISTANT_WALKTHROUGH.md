@@ -132,7 +132,7 @@ Your message in the composer box is **always sent verbatim** (except for an expl
 
 ## 5. Complete Local AI Tools Reference
 
-All 6 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptTools.ts) and execute **locally in the browser** against your current `rawText` and active `Settings → Supervisor rules` (`ruleOverrides`).
+All 7 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptTools.ts) and execute **locally in the browser** against your current `rawText` and active `Settings → Supervisor rules` (`ruleOverrides`).
 
 ### 1. `get_script_overview` *(Read-Only)*
 - **UI Badge:** `Inspect overview`
@@ -199,6 +199,12 @@ All 6 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptToo
   - `active` → returns `{ ok: true, alreadyActive: true }` (prevents redundant token dumps or error loops).
   - `muted` → returns `{ ok: false, error: 'Skill is muted by the user.', availableSkills }` (strictly honors user Mute).
   - Unknown ID → returns `{ ok: false, error, availableSkills, repairHint }`.
+
+### 7. `ask_question` *(Opt-In Multi-Select Clarifying Interview)*
+- **UI Badge:** `Clarifying questions`
+- **Available In:** Physically **omitted by default** across all focuses so the assistant never quizzes you unprompted. Exposed strictly when you toggle **`Ask First`** ON beside `Brief` (in `Auto`, `Draft`, or `Refine`; auto-resets after sending) and remains available on the follow-up turn after submitting answers from a Question Card so multi-round clarification works when needed. Always omitted in `Audit`.
+- **Arguments:** `{ intro?: string, questions: [{ question, options[] }] }` (1–4 concise questions, 2–5 short distinct options each; redundant `"Other"` options are stripped automatically).
+- **Interactive Card (`QuestionSuggestionCard`):** Every question is **always multi-select** (toggle any combination of provided chips) paired with an inline comment input (`data-native-undo="true"`) so you can combine provided answers and extra directorial notes simultaneously. Submitting answers ends cleanly and sends a structured follow-up turn (leaving skipped questions as *"No preference — your call"*), collapsing the card into a quiet expandable **`Answered`** receipt.
 
 ---
 

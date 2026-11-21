@@ -5,7 +5,11 @@ import type {
   AgentTurnTrace,
   GeminiErrorCode,
 } from '../services/geminiInteractions.ts';
-import type {AssistantMode, StagedSuggestion} from '../services/scriptTools.ts';
+import type {
+  AssistantMode,
+  QuestionSuggestion,
+  StagedSuggestion,
+} from '../services/scriptTools.ts';
 
 export type AiTargetScope =
   | {kind: 'whole'; key: 'whole'; label: string}
@@ -97,6 +101,7 @@ export interface AiChatMessage {
   text: string;
   scopeLabel?: string;
   briefSummary?: string;
+  askFirst?: boolean;
   thoughtSummary?: string;
   toolCalls?: AiToolCallItem[];
   loadedSkills?: AiLoadedSkillItem[];
@@ -338,6 +343,8 @@ export function formatToolDisplayName(toolName: string): string {
       return 'Stage audit review';
     case 'load_auteur_skill':
       return 'Load skill';
+    case 'ask_question':
+      return 'Clarifying questions';
     default:
       return toolName;
   }
@@ -699,6 +706,22 @@ export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo
       detail = skillId ? `Skill: ${skillId}` : 'Loads an on-demand Auteur craft skill.';
       break;
     }
+    case 'ask_question': {
+      const questions = Array.isArray(args.questions) ? args.questions : [];
+      const count = questions.length;
+      const firstQ =
+        questions[0] && typeof questions[0] === 'object' && !Array.isArray(questions[0])
+          ? String((questions[0] as Record<string, unknown>).question ?? '').trim()
+          : '';
+      if (count > 0 && firstQ) {
+        detail = `${count} ${count === 1 ? 'question' : 'questions'} · ${truncatePreview(firstQ, 70)}`;
+      } else if (count > 0) {
+        detail = `${count} clarifying ${count === 1 ? 'question' : 'questions'}`;
+      } else {
+        detail = 'Presents multi-select clarifying questions.';
+      }
+      break;
+    }
     default: {
       const keys = Object.keys(args);
       if (keys.length > 0) {
@@ -727,6 +750,67 @@ export function clampComposerHeight(requestedHeight: number, sidebarHeight?: num
       : MAX_COMPOSER_HEIGHT;
   const safeValue = Number.isFinite(requestedHeight) ? requestedHeight : MIN_COMPOSER_HEIGHT;
   return Math.max(MIN_COMPOSER_HEIGHT, Math.min(dynamicMax, Math.round(safeValue)));
+}
+
+export interface QuestionAnswerDraft {
+  selectedOptions: string[];
+  comment: string;
+}
+
+export interface FormattedQuestionAnswers {
+  promptText: string;
+  displayText: string;
+  answeredCount: number;
+  totalCount: number;
+}
+
+export function hasAnyQuestionAnswer(
+  answers: Readonly<Record<string, QuestionAnswerDraft>>
+): boolean {
+  return Object.values(answers).some(
+    (entry) => entry.selectedOptions.length > 0 || entry.comment.trim().length > 0
+  );
+}
+
+/**
+ * Formats multi-select choices and optional inline comments from a QuestionSuggestion card
+ * into a clean structured follow-up message for the next AI turn.
+ */
+export function formatQuestionAnswersPrompt(
+  suggestion: QuestionSuggestion,
+  answers: Readonly<Record<string, QuestionAnswerDraft>>
+): FormattedQuestionAnswers {
+  const blocks: string[] = [];
+  let answeredCount = 0;
+
+  suggestion.questions.forEach((item, index) => {
+    const draft = answers[item.id];
+    const selectedSet = new Set(draft?.selectedOptions ?? []);
+    const orderedSelected = item.options.filter((opt) => selectedSet.has(opt));
+    const comment = draft?.comment.trim() ?? '';
+
+    const lines: string[] = [`${index + 1}. ${item.question}`];
+    if (orderedSelected.length > 0 || comment.length > 0) {
+      answeredCount += 1;
+      if (orderedSelected.length > 0) {
+        lines.push(`- Selected: ${orderedSelected.join(', ')}`);
+      }
+      if (comment.length > 0) {
+        lines.push(`- Comment: ${comment}`);
+      }
+    } else {
+      lines.push('- (No preference — your call)');
+    }
+    blocks.push(lines.join('\n'));
+  });
+
+  const body = blocks.join('\n\n');
+  return {
+    promptText: `Clarifying answers:\n\n${body}`,
+    displayText: body,
+    answeredCount,
+    totalCount: suggestion.questions.length,
+  };
 }
 
 

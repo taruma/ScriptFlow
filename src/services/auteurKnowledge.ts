@@ -17,6 +17,7 @@ export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k2';
 
 export type AssistantMode = 'refine' | 'check' | 'draft';
 export type AssistantFocus = 'auto' | 'draft' | 'refine' | 'audit';
+export type AskQuestionMode = 'off' | 'ask_first' | 'followup';
 
 export type ScriptToolName =
   | 'get_script_overview'
@@ -24,7 +25,8 @@ export type ScriptToolName =
   | 'propose_script_patch'
   | 'propose_script_draft'
   | 'report_audit_review'
-  | 'load_auteur_skill';
+  | 'load_auteur_skill'
+  | 'ask_question';
 
 export type AuteurSkillCategory = 'workflow' | 'module';
 export type SkillPinMode = 'auto' | 'pinned' | 'muted';
@@ -151,6 +153,7 @@ export interface ComposeAgentContextOptions {
   customSkills?: readonly CustomAuteurSkill[];
   referenceHandles?: readonly string[];
   briefContext?: string;
+  askQuestionMode?: AskQuestionMode;
 }
 
 export interface ComposedAgentContext {
@@ -411,10 +414,18 @@ export interface ToolProtocolParams {
   snapshotHash: string;
   isEmpty: boolean;
   availableSkillCount: number;
+  askQuestionMode?: AskQuestionMode;
 }
 
 export function buildToolProtocolBlock(params: ToolProtocolParams): string {
-  const {focus, allowedToolNames, snapshotHash, isEmpty, availableSkillCount} = params;
+  const {
+    focus,
+    allowedToolNames,
+    snapshotHash,
+    isEmpty,
+    availableSkillCount,
+    askQuestionMode = 'off',
+  } = params;
   const hasTool = (name: ScriptToolName) => allowedToolNames.includes(name);
 
   const lines: string[] = [
@@ -456,6 +467,18 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
     lines.push(
       '- On-demand skills: call `load_auteur_skill` only when the current task genuinely requires one of the skills listed in the Available Skill Directory below. Never call it for skills already injected as Active.'
     );
+  }
+
+  if (hasTool('ask_question')) {
+    if (askQuestionMode === 'ask_first') {
+      lines.push(
+        '- Clarifying interview requested (Ask First): the user explicitly asked to be interviewed before drafting or editing. Call `ask_question` with 1–4 concise, high-leverage directorial questions (each with 2–5 short multi-select options; the UI automatically lets the user select multiple options and add a custom comment per question—never include an "Other" option). Do not stage a draft or patch in this same turn; once `ask_question` succeeds, stop calling tools and wait for the user to reply without repeating the questions in prose.'
+      );
+    } else if (askQuestionMode === 'followup') {
+      lines.push(
+        '- Clarifying follow-up: the user just submitted answers to your clarifying questions. If you now have enough direction, proceed directly to drafting or staging your patch. Only call `ask_question` for a concise follow-up round if a critical ambiguity still blocks a strong result (and stop after calling it so the user can respond).'
+      );
+    }
   }
 
   return lines.join('\n');
@@ -522,7 +545,8 @@ function buildSkillDirectorySectionText(availableSkills: readonly ResolvedAuteur
 function computeAllowedToolNames(
   focus: AssistantFocus,
   isEmpty: boolean,
-  hasAvailableSkills: boolean
+  hasAvailableSkills: boolean,
+  askQuestionMode: AskQuestionMode = 'off'
 ): ScriptToolName[] {
   const tools: ScriptToolName[] = [];
 
@@ -543,6 +567,10 @@ function computeAllowedToolNames(
   } else {
     // focus === 'audit'
     tools.push('get_script_overview', 'inspect_lens_slice', 'report_audit_review');
+  }
+
+  if (askQuestionMode !== 'off' && focus !== 'audit') {
+    tools.push('ask_question');
   }
 
   if (hasAvailableSkills) {
@@ -713,10 +741,14 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   const availableSkills = resolvedSkills.filter((skill) => skill.status === 'available');
   const mutedSkills = resolvedSkills.filter((skill) => skill.status === 'muted');
 
+  const effectiveAskQuestionMode: AskQuestionMode =
+    options.focus === 'audit' ? 'off' : (options.askQuestionMode ?? 'off');
+
   const allowedToolNames = computeAllowedToolNames(
     options.focus,
     isEmpty,
-    availableSkills.length > 0
+    availableSkills.length > 0,
+    effectiveAskQuestionMode
   );
 
   const trimmedCraftOverride = options.foundationalCraftOverride?.trim();
@@ -735,6 +767,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     snapshotHash: editorState.snapshotHash,
     isEmpty,
     availableSkillCount: availableSkills.length,
+    askQuestionMode: effectiveAskQuestionMode,
   });
 
   const sections: ComposedSystemSections = {

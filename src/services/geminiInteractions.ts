@@ -4,6 +4,7 @@ import type {GeminiModelId, ReasoningLevel} from '../ui/aiSettings.ts';
 import {
   assistantModeToFocus,
   composeAgentContext,
+  type AskQuestionMode,
   type AssistantFocus,
   type CustomAuteurSkill,
   type SkillOverride,
@@ -176,6 +177,7 @@ export interface RunAgentTurnOptions {
   customSkills?: readonly CustomAuteurSkill[];
   referenceHandles?: readonly string[];
   briefContext?: string;
+  askQuestionMode?: AskQuestionMode;
   attachments?: readonly AgentMediaAttachment[];
   signal?: AbortSignal;
   maxToolRounds?: number;
@@ -788,6 +790,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     customSkills: options.customSkills,
     referenceHandles: options.referenceHandles,
     briefContext: options.briefContext,
+    askQuestionMode: options.askQuestionMode,
   });
 
   activeSkillIds = composedContext.activeSkills.map((skill) => skill.id);
