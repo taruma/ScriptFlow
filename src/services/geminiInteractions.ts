@@ -144,6 +144,21 @@ export interface InteractionStreamEventLike {
   };
 }
 
+export interface AgentMediaAttachment {
+  handle: string;
+  label: string;
+  note?: string;
+  kind: 'image' | 'video' | 'audio' | 'document';
+  source: 'inline' | 'files_api' | 'youtube';
+  mimeType: string;
+  fileName?: string;
+  inlineBase64?: string;
+  inlineText?: string;
+  uri?: string;
+  processingMode?: 'static' | 'agentic';
+  fingerprint: string;
+}
+
 export interface RunAgentTurnOptions {
   apiKey: string;
   model: GeminiModelId;
@@ -160,6 +175,7 @@ export interface RunAgentTurnOptions {
   customSkills?: readonly CustomAuteurSkill[];
   referenceHandles?: readonly string[];
   briefContext?: string;
+  attachments?: readonly AgentMediaAttachment[];
   signal?: AbortSignal;
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;
@@ -196,6 +212,133 @@ interface TrackedStreamingFunctionCall {
 
 function defaultCreateClient(apiKey: string): InteractionsClientLike {
   return new GoogleGenAI({apiKey}) as unknown as InteractionsClientLike;
+}
+
+/**
+ * Builds the Round 1 `input` payload for Gemini Interactions API (`v1`).
+ * Returns the verbatim prompt string when no multimodal attachments need to be delivered,
+ * or a `v1` `UserInputStep` array (`[{ type: 'user_input', content: [...] }]`) pairing each
+ * `@handle` label with its inline image/text, Gemini Files API URI, or YouTube video URI.
+ */
+export function buildInitialInteractionInput(
+  prompt: string,
+  attachments?: readonly AgentMediaAttachment[]
+): string | Array<{type: 'user_input'; content: Array<Record<string, unknown>>}> {
+  if (!attachments || attachments.length === 0) {
+    return prompt;
+  }
+
+  const blocks: Array<Record<string, unknown>> = [];
+
+  for (const att of attachments) {
+    const labelText = [
+      att.handle || `@${att.kind}`,
+      att.label ? `(${att.label})` : '',
+      att.note ? `— ${att.note}` : '',
+    ]
+      .filter((part) => part.length > 0)
+      .join(' ');
+
+    if (att.source === 'inline' && typeof att.inlineText === 'string') {
+      const fileHeader = att.fileName ? ` · ${att.fileName}` : '';
+      blocks.push({
+        type: 'text',
+        text: `[Reference ${labelText}${fileHeader}]\n${att.inlineText}`,
+      });
+      continue;
+    }
+
+    if (att.source === 'inline' && att.inlineBase64) {
+      blocks.push({type: 'text', text: `[Reference ${labelText}]`});
+      blocks.push({
+        type: att.kind === 'image' ? 'image' : att.kind,
+        data: att.inlineBase64,
+        mime_type: att.mimeType,
+      });
+      continue;
+    }
+
+    if (att.source === 'youtube' && att.uri) {
+      blocks.push({type: 'text', text: `[Reference ${labelText} — YouTube video]`});
+      blocks.push({
+        type: 'video',
+        uri: att.uri,
+        ...(att.processingMode === 'agentic' ? {processing: 'agentic'} : {}),
+      });
+      continue;
+    }
+
+    if (att.source === 'files_api' && att.uri) {
+      blocks.push({type: 'text', text: `[Reference ${labelText}]`});
+      if (att.kind === 'video') {
+        blocks.push({
+          type: 'video',
+          uri: att.uri,
+          mime_type: att.mimeType,
+          ...(att.processingMode === 'agentic' ? {processing: 'agentic'} : {}),
+        });
+      } else if (att.kind === 'image') {
+        blocks.push({
+          type: 'image',
+          uri: att.uri,
+          mime_type: att.mimeType,
+        });
+      } else if (att.kind === 'audio') {
+        blocks.push({
+          type: 'audio',
+          uri: att.uri,
+          mime_type: att.mimeType,
+        });
+      } else {
+        blocks.push({
+          type: 'document',
+          uri: att.uri,
+          mime_type: att.mimeType,
+        });
+      }
+    }
+  }
+
+  if (blocks.length === 0) {
+    return prompt;
+  }
+
+  blocks.push({type: 'text', text: prompt});
+  return [{type: 'user_input', content: blocks}];
+}
+
+function sanitizeTraceContentBlock(item: unknown): unknown {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+  const record = item as Record<string, unknown>;
+  if (typeof record.data === 'string' && record.data.length > 128) {
+    const approxKb = Math.max(1, Math.round((record.data.length * 3) / 4 / 1024));
+    return {
+      ...record,
+      data: `<base64 ~${approxKb} KB omitted>`,
+    };
+  }
+  if (typeof record.text === 'string' && record.text.length > 4000) {
+    return {
+      ...record,
+      text: `${record.text.slice(0, 1200)}\n... <truncated ${record.text.length - 1200} chars>`,
+    };
+  }
+  if (Array.isArray(record.content)) {
+    return {
+      ...record,
+      content: record.content.map(sanitizeTraceContentBlock),
+    };
+  }
+  return record;
+}
+
+/**
+ * Strips bulky base64 payloads from trace snapshots (including nested `user_input.content`)
+ * so AI Trace Inspector & Copy Trace JSON remain fast, readable, and lightweight.
+ */
+export function sanitizeTraceInput(input: unknown): unknown {
+  if (!Array.isArray(input)) return input;
+  return input.map(sanitizeTraceContentBlock);
 }
 
 function isAbortError(error: unknown, signal?: AbortSignal): boolean {
@@ -659,7 +802,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const toolNames = tools.map((tool) => tool.name);
   const systemInstruction = composedContext.systemInstruction;
 
-  let nextInput: unknown = options.prompt;
+  let nextInput: unknown = buildInitialInteractionInput(options.prompt, options.attachments);
   let accumulatedText = '';
   let accumulatedThought = '';
   const toolTraces: AgentToolCallTrace[] = [];
@@ -684,7 +827,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         generation_config: generationConfig,
         toolNames: [...toolNames],
         systemInstruction,
-        input: nextInput,
+        input: sanitizeTraceInput(nextInput),
       };
 
       activeRoundStartMs = getNow();

@@ -53,6 +53,7 @@ import {
   buildBriefSummaryBadge,
   buildScopedRefinePrompt,
   clampComposerHeight,
+  collectPendingBriefAttachments,
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
   formatSceneBriefContext,
@@ -82,6 +83,7 @@ import {useAiSkills} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {collectActiveAiPatches, type ActiveAiPatchItem} from '../ui/patchIndicators.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import type {NewReferenceEntryDraft} from './AiBriefModal.tsx';
 import type {ContextInspectorTabId} from './AiContextInspectorModal.tsx';
 import {
   AuditReviewSuggestionCard,
@@ -367,6 +369,7 @@ export function AiAssistantSidebar({
 
   const previousInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
+  const sentAttachmentFingerprintsRef = useRef<Set<string>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
   const sidebarRef = useRef<HTMLElement | null>(null);
@@ -453,7 +456,7 @@ export function AiAssistantSidebar({
         ...prev.references,
         {
           id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-          handle: getNextReferenceHandle(prev.references),
+          handle: getNextReferenceHandle(prev.references, 'text'),
           kind: 'text',
           label: '',
           note: '',
@@ -462,8 +465,28 @@ export function AiAssistantSidebar({
     }));
   }, []);
 
+  const handleAddReferenceEntry = useCallback((draft: NewReferenceEntryDraft) => {
+    setBrief((prev) => ({
+      ...prev,
+      references: [
+        ...prev.references,
+        {
+          id: `ref-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          handle: getNextReferenceHandle(prev.references, draft.kind),
+          kind: draft.kind,
+          label: draft.label,
+          note: draft.note ?? '',
+          ...(draft.attachment ? {attachment: draft.attachment} : {}),
+        },
+      ],
+    }));
+  }, []);
+
   const handleUpdateReference = useCallback(
-    (refId: string, patch: Partial<Pick<ReferenceEntry, 'handle' | 'label' | 'note'>>) => {
+    (
+      refId: string,
+      patch: Partial<Pick<ReferenceEntry, 'handle' | 'label' | 'note' | 'attachment'>>
+    ) => {
       setBrief((prev) => ({
         ...prev,
         references: prev.references.map((entry) =>
@@ -511,6 +534,7 @@ export function AiAssistantSidebar({
     setInspectedTrace(null);
     previousInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
+    sentAttachmentFingerprintsRef.current.clear();
     setLastTurnSnapshotHash(undefined);
     setMessages([]);
   }, []);
@@ -649,6 +673,11 @@ export function AiAssistantSidebar({
 
       const scopeLabel = options?.scopeLabel ?? (useTargetScope ? activeTarget.label : undefined);
       const briefSummary = briefIsActive ? briefSummaryLabel : undefined;
+      const pendingAttachments = collectPendingBriefAttachments(
+        brief,
+        sentAttachmentFingerprintsRef.current,
+        Boolean(previousInteractionIdRef.current)
+      );
 
       const userMessageId = `msg-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       const assistantMessageId = `msg-a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -704,6 +733,7 @@ export function AiAssistantSidebar({
           customSkills: skillsState.customSkills,
           referenceHandles: activeReferenceHandles,
           briefContext: activeBriefContext,
+          attachments: pendingAttachments,
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -777,6 +807,9 @@ export function AiAssistantSidebar({
 
         if (result.interactionId) {
           previousInteractionIdRef.current = result.interactionId;
+          for (const att of pendingAttachments) {
+            sentAttachmentFingerprintsRef.current.add(att.fingerprint);
+          }
         }
         lastTurnSnapshotHashRef.current = turnSnapshotHash;
         setLastTurnSnapshotHash(turnSnapshotHash);
@@ -826,6 +859,7 @@ export function AiAssistantSidebar({
     [
       focus,
       isEmpty,
+      brief,
       briefIsActive,
       briefSummaryLabel,
       activeReferenceHandles,
@@ -1503,11 +1537,15 @@ export function AiAssistantSidebar({
         <Suspense fallback={null}>
           <AiBriefModal
             isOpen={isBriefOpen}
+            apiKey={settings.apiKey}
+            hasApiKey={hasApiKey}
             brief={brief}
             briefHasContent={briefHasContent}
             onClose={() => setIsBriefOpen(false)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
             onSetEnabled={handleSetBriefEnabled}
             onAddReference={handleAddReference}
+            onAddReferenceEntry={handleAddReferenceEntry}
             onUpdateReference={handleUpdateReference}
             onRemoveReference={handleRemoveReference}
             onUpdateSpecs={handleUpdateBriefSpecs}
