@@ -1,0 +1,325 @@
+export const EDITOR_LABELS = {
+  topBar: {
+    sceneTitleAria: 'Scene title',
+    beatUnit: (count: number) => (count === 1 ? 'Macro-State' : 'Macro-States'),
+    errorShort: (count: number) => `${count} err`,
+    warningShort: (count: number) => `${count} warn`,
+    jumpToFirstDiagnostic: 'Jump to first Script Supervisor diagnostic',
+    viewModeAria: 'Editor view mode',
+    liveMode: 'Live',
+    sourceMode: 'Source',
+    fileButton: 'File',
+    fileMenuAria: 'File actions',
+    fileMenuNewBlank: 'New Blank Script',
+    fileMenuImportFile: 'Import File (.txt / .json)...',
+    fileMenuFormatScript: 'Format Script',
+    fileMenuVersionHistory: 'Version History...',
+    fileMenuExportHeader: 'Download Current',
+    fileMenuDownloadCanonical: 'Download Canonical .txt',
+    fileMenuDownloadTagless: 'Download Tagless .txt',
+    fileMenuDownloadJsonEnvelope: 'Download JSON Envelope',
+    fileMenuLibraryHeader: 'Library & Backup',
+    fileMenuBackupAll: 'Backup All Scripts (.json)',
+    fileMenuRestoreBackup: 'Restore Backup (.json)...',
+    fileMenuBrowseLibrary: 'Browse Library...',
+    fileMenuToolsHeader: 'Tools & Settings',
+    fileMenuJsonIrInspector: 'JSON IR Inspector...',
+    fileMenuSettings: 'Settings',
+    libraryButton: 'Library',
+    libraryAria: 'Open Script Library',
+    exampleBadge: 'Example',
+    exampleBadgeTitle: 'Read-only reference example',
+    forkToEditButton: 'Fork to Edit',
+    forkToEditTitle: 'Create an editable copy of this example in My Scripts',
+    newBlankScript: 'New Blank Script',
+    settingsButton: 'Settings',
+    settingsAria: 'Display and editor settings',
+    settingsHeader: 'Settings',
+    settingsTextSizeLabel: 'Text size',
+    settingsClauseGuidesLabel: 'Clause underlines',
+    settingsClauseGuidesDesc: 'Dotted phrases · solid sentences',
+    settingsThemeLabel: 'Theme',
+    settingsRulesLabel: 'Supervisor rules',
+    settingsRulesDesc: 'Tune live linter severities',
+    settingsRulesSummaryDefault: 'Default',
+    settingsRulesSummaryCustom: (count: number) => `${count} custom`,
+    settingsRulesOpenAria: 'Configure Script Supervisor linter rules',
+    settingsRulesBackAria: 'Back to settings',
+    settingsRulesHeader: 'Supervisor Rules',
+    settingsRulesReset: 'Reset defaults',
+    settingsRulesResetAria: 'Reset all Script Supervisor rules to default severities',
+    settingsRulesSeverityGroupAria: (ruleName: string) => `${ruleName} severity`,
+    settingsRulesSeverityLabels: {
+      off: 'Off',
+      warning: 'Warn',
+      error: 'Error',
+    } as const,
+    settingsRulesLensShort: (lens: string) => lens.split(':')[0] ?? lens,
+    settingsRulesFootnote: 'Changes apply live to diagnostics and persist in this browser.',
+    settingsJsonIrLabel: 'JSON IR Inspector',
+    settingsJsonIrDesc: 'Inspect IR, Lens Slicer & Patch Sandbox',
+    settingsJsonIrOpenAria: 'Open JSON IR Debug Inspector',
+    themeHeader: 'Appearance',
+    themeAria: (label: string) => `Theme: ${label}`,
+    textSizeGroupAria: 'Script text size',
+    decreaseTextSizeLabel: 'A−',
+    increaseTextSizeLabel: 'A+',
+    decreaseTextSizeAria: 'Decrease script text size',
+    increaseTextSizeAria: 'Increase script text size',
+    resetTextSizeTitle: (px: number, isDefault: boolean) =>
+      isDefault ? `Text size: ${px}px (default)` : `Text size: ${px}px — click to reset`,
+    resetTextSizeAria: (label: string, px: number) =>
+      `Text size ${label} (${px}px). Reset to default`,
+    clauseGuidesTitle: (enabled: boolean) =>
+      enabled ? 'Phrase & sentence underlines: On' : 'Phrase & sentence underlines: Off',
+    clauseGuidesAria: (enabled: boolean) =>
+      `Toggle phrase and sentence underlines (${enabled ? 'currently on' : 'currently off'})`,
+    copyButton: 'Copy',
+    copyDefaultTitle: 'Copy Canonical Plain Text',
+    copyDefaultAria: 'Copy Canonical Plain Text to clipboard',
+    copyMenuAria: 'Choose copy format',
+    copyMenuTitle: 'More copy formats',
+    copiedPlain: 'Copied',
+    copiedTagless: 'Copied Tagless',
+    copiedJson: 'Copied JSON',
+    copyHeader: 'Export to Clipboard',
+    copyPlainTitle: 'Copy Plain Text',
+    copyPlainDesc: 'Canonical v0.4.0 script',
+    copyTaglessTitle: 'Copy Tagless',
+    copyTaglessDesc: 'Strips [TAG] labels, keeps -> flow',
+    copyJsonTitle: 'Copy JSON Envelope',
+    copyJsonDesc: 'Structured AuteurEnvelope JSON',
+    debugButton: 'JSON IR',
+    debugAria: 'Open JSON IR Debug Inspector',
+    aiButton: 'AI',
+    aiAria: 'Toggle AI Script Assistant',
+    aiTitle: 'Open or close AI Script Assistant',
+    historyGroupAria: 'Document history',
+    undoAria: 'Undo',
+    redoAria: 'Redo',
+    undoTitle: 'Undo (⌘Z / Ctrl+Z)',
+    redoTitle: 'Redo (⇧⌘Z / Ctrl+Y)',
+  },
+
+  document: {
+    stagingPaneAria: 'Phase 1 Staging',
+    executionPaneAria: 'Phase 2 Execution',
+    phase1Kicker: 'Phase 1',
+    phase1Name: 'Staging',
+    phase2Kicker: 'Phase 2',
+    phase2Name: 'Execution',
+    phase1Title: 'Phase 1 — Staging',
+    phase2Title: 'Phase 2 — Execution',
+    stagingBlockCount: (count: number) =>
+      `S0 · ${count} ${count === 1 ? 'Macro-Block' : 'Macro-Blocks'}`,
+    noStagingBlocks:
+      'No Staging Macro-Blocks yet. Add a Macro-Block below, paste a script, or draft with AI.',
+    expandAll: 'Expand all',
+    collapseAll: 'Collapse all',
+    noBeatsYet: 'No Macro-States yet',
+    beatRange: (count: number) =>
+      count === 0 ? 'No Macro-States yet' : count === 1 ? 'S1' : `S1 → S${count}`,
+    cutMarker: 'cut',
+    cutRecallMarker: 'cut · recall',
+    addMacroBlock: 'Add Macro-Block',
+    insertMacroBlockBeforeFirst: 'Insert Macro-Block before first Macro-Block',
+    insertMacroBlockBetween: (prevName: string, nextName: string) =>
+      `Insert Macro-Block between [${prevName}] and [${nextName}]`,
+    addBeat: 'Add Macro-State',
+    insertBeatBeforeFirst: 'Insert Macro-State before S1',
+    insertBeatBetween: (prevIndex: number, nextIndex: number) =>
+      `Insert Macro-State between S${prevIndex} and S${nextIndex}`,
+    footerHint:
+      'Click any Macro-Block or Sub-State to edit live · Paste any plain-text Auteur Script anywhere to hydrate',
+    footerHintReadOnly:
+      'Read-only reference example · Click Fork to Edit to make changes, or switch to Source to inspect raw text',
+  },
+
+  staging: {
+    emptySummary: 'Empty Staging Macro-Block — click to author',
+    editAria: (name: string) => `Edit [${name}] Macro-Block`,
+    editPlaceholder: (name: string) => `Write [${name}] content...`,
+    castBindings: (count: number) => `${count} ${count === 1 ? '@ref' : '@refs'}`,
+    mappedTokens: (count: number) => `${count} ${count === 1 ? 'token' : 'tokens'}`,
+    lookbookLines: (count: number) => `${count} lookbook ${count === 1 ? 'line' : 'lines'}`,
+    keysCount: (count: number) => `${count} ${count === 1 ? 'key' : 'keys'}`,
+    linesCount: (count: number) => `${count} ${count === 1 ? 'line' : 'lines'}`,
+    expandPreviewTitle: (name: string) => `Expand [${name}] Macro-Block`,
+    aestheticKeyPlaceholder: 'Key',
+    aestheticValuePlaceholder: 'Describe lookbook detail or -> TOKEN...',
+    addAestheticKey: 'Add key',
+    removeAestheticKeyTitle: 'Remove key',
+    aestheticKeyAria: (index: number) => `Aesthetic key ${index + 1}`,
+    aestheticValueAria: (key: string, index: number) =>
+      key ? `Aesthetic value for ${key}` : `Aesthetic value ${index + 1}`,
+    pickerHeader: 'Add Staging Macro-Block',
+    alreadyAdded: 'Added',
+    customHeaderPlaceholder: 'Custom Macro-Block (e.g. PROPS, AUDIO NOTES)',
+    customHeaderAdd: 'Add',
+    customHeaderReservedError: 'Reserved for Phase 2 Execution',
+    dragReorderTitle: 'Drag to reorder Macro-Block',
+    deleteBlockTitle: (name: string) => `Delete [${name}]`,
+  },
+
+  execution: {
+    holdFraming: 'hold framing',
+    emptySummary: 'Empty Macro-State — click to author',
+    collapseBeatTitle: (index: number) => `Collapse S${index}`,
+    expandBeatTitle: (index: number) => `Expand S${index}`,
+    addStep: 'Add Sub-State',
+    chainHintLead: 'Type',
+    chainHintArrow: '->',
+    chainHintTail: 'or press Enter to chain next Sub-State',
+    moveHintShortcut: 'Alt+↑↓',
+    moveHintTail: 'to move',
+    dragReorderTitle: 'Drag to reorder Macro-State',
+    stepsCount: (count: number) => `${count} ${count === 1 ? 'Sub-State' : 'Sub-States'}`,
+    deleteBeatTitle: (index: number) => `Delete S${index}`,
+    removeStepTitle: 'Remove Sub-State',
+    removeStepAria: (stepNumber: number, beatIndex: number) =>
+      `Remove Sub-State ${stepNumber} from S${beatIndex}`,
+    leadStepAria: (beatIndex: number) => `S${beatIndex} lead Sub-State`,
+    stepAria: (beatIndex: number, stepNumber: number) => `S${beatIndex} Sub-State ${stepNumber}`,
+    newStepAria: (beatIndex: number) => `New Sub-State in S${beatIndex}`,
+    leadPlaceholder: '[CAM 01] MS, eye level',
+    stepPlaceholder: '[ACT] ..., Speaker says {line}, or <foley>',
+  },
+
+  source: {
+    heading: 'Canonical Plain-Text Source',
+    linesCount: (count: number) => `${count} ${count === 1 ? 'line' : 'lines'}`,
+    charsCount: (count: number) => `${count} ${count === 1 ? 'char' : 'chars'}`,
+    formatButton: 'Format',
+    formatTitle:
+      'Remove empty lines inside blocks, trim trailing spaces, and keep a single blank line between Macro-Blocks',
+    formatAria: 'Format script whitespace',
+    ariaLabel: 'Canonical Auteur Script plain-text source',
+    placeholder: '[INTENT]\nCreate a cinematic scene...',
+  },
+
+  diagnostics: {
+    dialogAria: 'Script Supervisor Diagnostics',
+    headerTitle: (count: number) => `Script Supervisor (${count})`,
+    closeAria: 'Close diagnostics',
+    repairPrefix: 'Repair: ',
+    triggerAria: (count: number, hasError: boolean) =>
+      `${count} Script Supervisor ${hasError ? 'error' : 'warning'}${count === 1 ? '' : 's'}`,
+  },
+
+  errorBoundary: {
+    title: 'Editor encountered an unexpected error',
+    description:
+      'Your last saved script remains safely stored in this browser. Copy it to your clipboard or reload the editor to continue.',
+    reloadAction: 'Reload Editor',
+    copySavedScript: 'Copy Saved Script',
+    copiedSavedScript: 'Saved Script Copied',
+    copyFailedNote: 'Unable to access clipboard automatically.',
+    noSavedScriptNote: 'No saved script found in local storage.',
+  },
+
+  confirm: {
+    dialogAria: 'Confirm action',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    deleteMacroBlockTitle: (name: string) => `Delete [${name}] Macro-Block?`,
+    deleteMacroBlockDesc:
+      'This will remove this Staging Macro-Block and its content from the script.',
+    deleteMacroStateTitle: (beatIndex: number) => `Delete S${beatIndex} Macro-State?`,
+    deleteMacroStateDesc:
+      'This will remove this Macro-State and all of its chained Sub-States from the execution timeline.',
+    deleteScriptTitle: (title: string) => `Delete "${title}"?`,
+    deleteScriptDesc:
+      'This will permanently remove this script from your browser library.',
+    deleteMultipleScriptsTitle: (count: number) =>
+      `Delete ${count} ${count === 1 ? 'script' : 'scripts'}?`,
+    deleteMultipleScriptsDesc:
+      'This will permanently remove the selected scripts from your browser library.',
+    clearLibraryTitle: (count: number) =>
+      `Clear all ${count} saved ${count === 1 ? 'script' : 'scripts'}?`,
+    clearLibraryDesc:
+      'This will permanently remove all saved scripts from your browser library. Bundled examples, editor settings, and AI configuration will not be affected.',
+    clearLibraryConfirm: 'Clear Library',
+    clearLibraryBackupAction: 'Backup All Scripts (.json)',
+    clearLibraryBackupDone: 'Backup Downloaded (.json)',
+    deleteSnapshotTitle: (label: string) => `Delete snapshot "${label}"?`,
+    deleteSnapshotDesc:
+      'This will permanently remove this snapshot from Version History. Your current script will not be affected.',
+    clearSnapshotsTitle: (count: number) =>
+      `Clear all ${count} ${count === 1 ? 'snapshot' : 'snapshots'}?`,
+    clearSnapshotsDesc:
+      'This will permanently remove all saved snapshots and milestones for this script. Your current script will not be affected.',
+    clearSnapshotsConfirm: 'Clear History',
+  },
+
+  toasts: {
+    scriptHydrated: 'Script pasted and hydrated',
+    readOnlyPasteBlocked:
+      'Read-only example — click Fork to Edit or create a New Blank Script to paste',
+    forkedExample: (title: string) => `Forked "${title}" to My Scripts`,
+    duplicatedScript: (title: string) => `Duplicated "${title}"`,
+    createdBlankScript: 'Created new blank script',
+    importedScript: (title: string) => `Imported "${title}"`,
+    renamedScript: (title: string) => `Renamed to "${title}"`,
+    deletedScript: (title: string) => `Deleted "${title}"`,
+    deletedMultipleScripts: (count: number) =>
+      `Deleted ${count} ${count === 1 ? 'script' : 'scripts'}`,
+    clearedLibrary: (count: number) =>
+      `Cleared ${count} saved ${count === 1 ? 'script' : 'scripts'} from library`,
+    exportedSelectedScripts: (count: number) =>
+      `Exported ${count} ${count === 1 ? 'script' : 'scripts'}`,
+    backupExported: (count: number) =>
+      `Backed up ${count} ${count === 1 ? 'script' : 'scripts'}`,
+    backupEmpty: 'No custom scripts to back up yet',
+    backupRestored: (added: number, forked: number, skipped: number) => {
+      const parts: string[] = [];
+      if (added > 0) parts.push(`${added} added`);
+      if (forked > 0) parts.push(`${forked} forked`);
+      if (skipped > 0) parts.push(`${skipped} unchanged`);
+      return parts.length > 0 ? `Backup restored: ${parts.join(', ')}` : 'Backup contained no scripts';
+    },
+    fileReadError: 'Unable to read the selected file',
+    aiPatchApplied: 'AI patch applied — press Undo to revert',
+    aiDraftApplied: 'AI draft applied — press Undo to revert',
+    aiFixApplied: 'AI fix applied — press Undo to revert',
+    aiFixesBatchApplied: (count: number) => `Applied ${count} AI fixes — press Undo to revert`,
+    aiForkedAndApplied: (title: string) => `Forked "${title}" and applied AI suggestion`,
+    snapshotSaved: (label: string) => `Saved milestone "${label}"`,
+    snapshotRestored: 'Snapshot restored — press Undo or open Version History to revert',
+    snapshotForked: (title: string) => `Forked snapshot to "${title}"`,
+    snapshotDeleted: 'Deleted snapshot',
+    snapshotsCleared: 'Cleared version history for this script',
+    scriptFormatted: 'Script formatted — press Undo to revert',
+    scriptAlreadyFormatted: 'Script is already cleanly formatted',
+  },
+
+  patchIndicators: {
+    triggerAria: (count: number, hasDelete: boolean) =>
+      `${count} proposed AI ${count === 1 ? 'change' : 'changes'}${hasDelete ? ' (includes deletion)' : ''} — hover to preview diff, click to pin`,
+    dialogAria: 'AI proposed change preview',
+    headerTitle: (count: number) =>
+      count === 1 ? 'AI Proposed Change' : `AI Proposed Changes (${count})`,
+    insertionHeaderTitle: (count: number) =>
+      count === 1 ? 'AI Proposed Insertion' : `AI Proposed Insertions (${count})`,
+    closeAria: 'Close AI change preview',
+    footerHint: 'Apply directly here (Undo with Cmd/Ctrl+Z) or review in AI Assistant',
+    kindBadges: {
+      modify: 'Modify',
+      delete: 'Delete',
+      reorder: 'Reorder',
+      insert: 'Insert',
+    } as const,
+    sourceAuditFix: 'Audit Fix',
+    sourcePatch: 'AI Patch',
+    headerRename: (from: string, to: string) => `[${from}] → [${to}]`,
+    movedToBeat: (beatIndex: number) => `Moves to S${beatIndex}`,
+    omittedLines: (count: number) =>
+      `… ${count} unchanged ${count === 1 ? 'line' : 'lines'} …`,
+    emptyBodyPlaceholder: '(empty block)',
+    insertBlockSeamLabel: (header: string, extraCount: number) =>
+      extraCount > 0 ? `AI Insert [${header}] (+${extraCount})` : `AI Insert [${header}]`,
+    insertBeatSeamLabel: (count: number) =>
+      count === 1 ? 'AI Insert Macro-State' : `AI Insert ${count} Macro-States`,
+    insertSeamAria: (label: string) => `${label} — hover to preview, click to pin`,
+    insertedBeatBadge: (beatIndex: number) => `New S${beatIndex}`,
+  },
+} as const;

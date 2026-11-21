@@ -1,0 +1,776 @@
+export const AI_LABELS = {
+  ai: {
+    sidebarAria: 'AI Script Assistant',
+    title: 'AI Assistant',
+    newChatButton: 'New Chat',
+    newChatTitle: 'Start a fresh conversation for this script',
+    closeAria: 'Close AI Assistant',
+    resizeAria: 'Resize AI Assistant panel',
+    settingsChipTitle: 'Configure Gemini API key, model, and reasoning level',
+    settingsChipAria: (modelLabel: string, levelLabel: string) =>
+      `AI Settings: ${modelLabel}, ${levelLabel} reasoning`,
+    contextButton: 'Context',
+    contextButtonTitle: 'Inspect live prompt context, craft instructions, and extension skills',
+    contextButtonAria: (activeCount: number, customCount: number) =>
+      customCount > 0
+        ? `Context & Skills: ${activeCount} active skills, ${customCount} ${customCount === 1 ? 'customization' : 'customizations'}`
+        : `Context & Skills: ${activeCount} active skills`,
+    focusAria: 'Assistant focus',
+    focusLabels: {
+      auto: 'Auto',
+      draft: 'Draft',
+      refine: 'Refine',
+      audit: 'Audit',
+    } as const,
+    focuses: {
+      autoEmpty: {
+        placeholder: 'Describe your scene idea, or open Brief below to add cast refs and specs...',
+        emptyTitle: 'Draft a Pure Auteur Script',
+        emptyDesc:
+          'Describe the premise, cast, and look—or open Brief below for @ref handles, specs, and subtext. Drafts compile with live lint checks before applying.',
+      },
+      autoActive: {
+        placeholder:
+          'Ask to refine Macro-States or Sub-States, audit continuity, draft a fresh scene, or discuss craft...',
+        emptyTitle: 'Unified Auteur Assistant',
+        emptyDesc:
+          'Ask for targeted edits, run a Script Supervisor audit, draft from a brief, or discuss camera and blocking. Every script change is staged with a diff before applying.',
+      },
+      draft: {
+        placeholder: 'Describe the scene premise, characters, look, and camera topology...',
+        emptyTitle: 'Draft a new scene',
+        emptyDesc:
+          'Provide a scene idea and optional Brief / Refs to compile a lint-checked v0.4.0 script ready to preview and apply.',
+      },
+      refine: {
+        placeholder: 'Describe a targeted edit, rewrite, or continuity fix...',
+        emptyTitle: 'Targeted script refinement',
+        emptyDesc:
+          'Ask for camera tightening, sharper blocking, dialogue polish, or lookbook updates. Edits are staged with a diff before applying.',
+      },
+      audit: {
+        placeholder: 'Ask for a custom Script Supervisor check or click a lens below...',
+        emptyTitle: 'Script Supervisor audit',
+        emptyDesc:
+          'Run a full 5-lens audit or focus on a single lens to surface clickable issues and dry-run fixes.',
+      },
+    },
+    skillSources: {
+      passive: 'Auto',
+      pinned: 'Pinned',
+      tool: 'Loaded',
+    } as const,
+    skillSourceDescriptions: {
+      passive: 'Auto-activated from current script or Scene Brief',
+      pinned: 'Pinned in Context & Skills',
+      tool: 'Loaded on demand during this turn',
+    } as const,
+    modesAria: 'Assistant mode',
+    modes: {
+      refine: {
+        label: 'Refine',
+        placeholder: 'Describe a targeted edit, rewrite, or continuity fix...',
+        emptyTitle: 'Targeted script refinement',
+        emptyDesc:
+          'Ask for camera tightening, sharper blocking, dialogue polish, or lookbook updates. Edits are staged with a diff before applying.',
+      },
+      check: {
+        label: 'Check',
+        placeholder: 'Ask for a custom Script Supervisor check or click a lens below...',
+        emptyTitle: 'Script Supervisor audit',
+        emptyDesc:
+          'Run a full 5-lens audit or focus on a single lens to surface clickable issues and dry-run fixes.',
+      },
+      draft: {
+        label: 'Draft',
+        placeholder: 'Describe the scene premise, characters, look, and camera topology...',
+        emptyTitle: 'Draft a new scene',
+        emptyDesc:
+          'Provide a brief and the assistant will compile a lint-checked v0.4.0 script ready to preview and apply.',
+      },
+    },
+    refineTargetLabel: 'Scope',
+    refineTargetAria: 'Target scope for refinement',
+    refineWholeScript: 'Whole Script',
+    quickAuditAllButton: 'Audit All',
+    quickAuditAllTitle: 'Run a full 5-lens Script Supervisor audit without leaving Auto focus',
+    quickScanButton: 'Quick Scan',
+    quickScanTitle:
+      'Run a fast (~400ms, $0 output) Decisions API semantic craft & Brief pre-check across atomic rules',
+    quickScanRunning: 'Running Quick Scan…',
+    quickScanFallbackButton: 'Run Standard Audit All instead',
+    quickScan: {
+      cardTitle: 'Quick Scan (Layer 2.5)',
+      dismissedBadge: 'Dismissed',
+      runningLabel: 'Evaluating atomic checks…',
+      staleNotice: 'Script edited since this scan.',
+      rescanButton: 'Re-scan',
+      youtubeNotice: (handles: readonly string[]) =>
+        `YouTube ${handles.join(', ')} evaluated via text labels only (Decisions API omits YouTube streams).`,
+      checksSummary: (count: number) => `${count} ${count === 1 ? 'check' : 'checks'}`,
+      statusFlagged: 'Flagged',
+      statusBorderline: 'Borderline',
+      statusClean: 'Clean',
+      summaryAllClean: 'All checked atomic rules clean',
+      summaryCounts: (flagged: number, borderline: number) => {
+        const parts: string[] = [];
+        if (flagged > 0) parts.push(`${flagged} flagged`);
+        if (borderline > 0) parts.push(`${borderline} borderline`);
+        return parts.join(' · ') || 'Clean';
+      },
+      lensLabels: {
+        lens1_spatial_optics: 'Lens 1 · Spatial & Optics',
+        lens2_temporal_pacing_wear: 'Lens 2 · Temporal & Wear',
+        lens3_props_inventory: 'Lens 3 · Props & Inventory',
+        lens4_acoustics_voice: 'Lens 4 · Acoustics & Voice',
+        lens5_blocks_grammar: 'Lens 5 · Blocks & Grammar',
+        brief: 'Scene Brief & Media',
+      } as const,
+      lensCheckboxAria: (label: string) => `Include ${label} in Deep Audit`,
+      lensExpandAria: (label: string) => `Show checked rules for ${label}`,
+      lensCollapseAria: (label: string) => `Hide checked rules for ${label}`,
+      deterministicBadge: 'Lint',
+      questionAskedLabel: 'Question:',
+      flaggedIfLabel: 'Flagged if:',
+      expandFindingAria: (label: string) => `Show question asked for ${label}`,
+      collapseFindingAria: (label: string) => `Hide question asked for ${label}`,
+      suspectStatesHeading: 'Suspect Macro-States',
+      jumpToStateTitle: (targetId: string, topRule: string, pct: number) =>
+        `Jump to ${targetId} (${topRule} · ${pct}%)`,
+      deepAuditSelectedButton: (count: number) =>
+        `Deep Audit Selected (${count})`,
+      runFullDeepAuditButton: 'Run Full Deep Audit',
+      dismissButton: 'Dismiss',
+      noRulesRanNote:
+        'No Quick Scan rules matched this script. Enable rules in Context → Quick Scan Rules.',
+      liveIndicatorTriggerAria: (beatIndex: number, count: number, hasFlagged: boolean) =>
+        `Quick Scan on S${beatIndex}: ${count} ${count === 1 ? 'suspect rule' : 'suspect rules'}${
+          hasFlagged ? ' (flagged)' : ' (borderline)'
+        } — hover to inspect, click to pin`,
+      liveIndicatorDialogAria: (beatIndex: number) => `Quick Scan findings for S${beatIndex}`,
+      liveIndicatorHeader: (beatIndex: number) => `Quick Scan · S${beatIndex}`,
+      liveIndicatorCloseAria: 'Close Quick Scan preview',
+      liveIndicatorAuditButton: (beatIndex: number) => `Audit S${beatIndex}`,
+      liveIndicatorFooterHint:
+        'System-1 semantic pre-check · click Audit to verify with Gemini 4 & stage fixes',
+    },
+    auditQuickGroupAria: 'Quick Script Supervisor audit lenses',
+    auditQuickAll: 'All Lenses',
+    auditQuickLensShort: {
+      lens1_spatial_optics: 'Lens 1 · Spatial',
+      lens2_temporal_pacing_wear: 'Lens 2 · Pacing',
+      lens3_props_inventory: 'Lens 3 · Props',
+      lens4_acoustics_voice: 'Lens 4 · Acoustics',
+      lens5_blocks_grammar: 'Lens 5 · Grammar',
+    } as const,
+    briefToggle: 'Brief',
+    briefPausedLabel: 'Brief · Off',
+    briefToggleTitle: 'Open Scene Brief & References (carried across all modes)',
+    briefToggleAria: (isOpen: boolean, hasContent: boolean, isActive: boolean) =>
+      `${isOpen ? 'Close' : 'Open'} Scene Brief & References${
+        hasContent ? (isActive ? ' (active)' : ' (paused)') : ''
+      }`,
+    askFirstToggle: 'Ask First',
+    askFirstTitle:
+      'Have the assistant ask multi-select clarifying questions before drafting or editing (resets after sending)',
+    askFirstAria: (enabled: boolean) =>
+      `Ask clarifying questions first (${enabled ? 'on for next send' : 'off'})`,
+    askFirstBadge: 'Ask First',
+    briefTray: {
+      dialogAria: 'Scene Brief & References',
+      title: 'Scene Brief & References',
+      subtitle: 'Cast handles, format specs, and additional instructions carried across all modes.',
+      closeAria: 'Close Scene Brief & References',
+      doneButton: 'Done',
+      regionAria: 'Scene brief and references',
+      enableLabel: 'Include in AI context',
+      enableDesc: 'Applies as reference context across Auto, Draft, Refine, and Audit turns',
+      enableAria: 'Include Scene Brief and References in AI context',
+      pausedHint: 'Paused — your notes are saved here and will not be sent until turned back on.',
+      refsHeading: 'Cast & References',
+      addRefButton: 'Text handle',
+      addRefAria: 'Add a text-only reference handle',
+      filesApiButton: 'Files API',
+      filesApiAria: 'Upload or browse Gemini Files API media',
+      youtubeButton: 'YouTube',
+      youtubeAria: 'Attach a public YouTube video URL',
+      dropzoneTitle: 'Drop Image or Text',
+      dropzoneSubtitle: '1600px · 85% · Click or drag files',
+      dropzoneBrowseButton: 'Browse',
+      dropzoneAria: 'Upload local image or text reference files',
+      dropzoneHint:
+        'Local images compress to 1600px (85%) and text files attach inline. Use Files API for video, audio, PDFs, or full-fidelity originals.',
+      previewClickHint: 'Click to inspect',
+      previewPlayHint: 'Click to play preview',
+      previewCloseAria: 'Close reference preview',
+      previewOpenYoutube: 'Open on YouTube',
+      previewFilesApiUriLabel: 'Gemini Files URI',
+      previewExpiresLabel: 'Expires',
+      previewLinesChars: (lines: number, chars: number) =>
+        `${lines.toLocaleString()} ${lines === 1 ? 'line' : 'lines'} · ${chars.toLocaleString()} chars`,
+      previewNoLocalMedia:
+        'Hosted on Gemini Cloud (Files API). Gemini reads this asset directly via its URI during AI turns.',
+      filesApiRedirectNotice: (fileName: string) =>
+        `"${fileName}" uses Gemini Files API (for video, audio, PDFs, or large files).`,
+      filesApiRedirectAction: 'Upload via Files API',
+      dismissNoticeAria: 'Dismiss notice',
+      youtubeUrlPlaceholder: 'https://www.youtube.com/watch?v=...',
+      youtubeUrlAria: 'Public YouTube video URL',
+      youtubeLabelPlaceholder: 'Optional label (e.g. Rainy alley lighting ref)',
+      youtubeLabelAria: 'YouTube reference label',
+      youtubeAddButton: 'Attach',
+      youtubeCancelButton: 'Cancel',
+      youtubeInvalidError: 'Enter a valid public YouTube URL (youtube.com/watch?v=... or youtu.be/...).',
+      filesApiPanelTitle: 'Gemini Files API (Up to 2 GB · 48h Cloud)',
+      filesApiDropTitle: 'Drop files to upload via Files API',
+      filesApiDropAria: 'Drop or choose files to upload to Gemini Files API',
+      filesApiUploadButton: 'Choose Files',
+      filesApiUploadHint: 'Video, audio, PDF, full-res images, or large text documents',
+      filesApiUploading: 'Uploading directly to Gemini Cloud…',
+      filesApiUploadingBatch: (current: number, total: number) =>
+        `Uploading ${current}/${total} to Gemini Cloud…`,
+      filesApiProcessing: 'Processing media tracks on Gemini…',
+      filesApiProcessingBatch: (current: number, total: number) =>
+        `Processing ${current}/${total} on Gemini…`,
+      filesApiMissingKey: 'Add your Gemini API key in AI Settings to upload or browse Files API media.',
+      filesApiOpenSettings: 'Open AI Settings',
+      filesApiRefreshButton: 'Refresh',
+      filesApiRefreshAria: 'Refresh Gemini Files list',
+      filesApiCloudHeading: 'Active Gemini Cloud Files (48h)',
+      filesApiLoadingList: 'Loading cloud files…',
+      filesApiEmptyList: 'No active files on this API key yet.',
+      filesApiAttachButton: 'Attach',
+      filesApiAttachedBadge: 'Attached',
+      filesApiDeleteAria: (name: string) => `Delete ${name} from Gemini Cloud`,
+      filesApiCloseButton: 'Close',
+      cardMapToName: 'Label',
+      cardFilesApiBadge: 'FILES API',
+      cardYoutubeBadge: 'YT',
+      cardInlineTextBadge: 'TEXT',
+      cardManualBadge: 'HANDLE',
+      cardVideoModeStatic: 'Static',
+      cardVideoModeAgentic: 'Agentic',
+      cardVideoModeTitle: 'Toggle Static (1 fps) vs. Agentic video understanding',
+      emptyRefsHint:
+        'Drop an image or text file, attach a YouTube link, or upload video/audio/PDF via Files API.',
+      handlePlaceholder: '@image1',
+      handleAria: 'Reference handle',
+      labelPlaceholder: 'Subject (e.g. Mark)',
+      labelAria: 'Reference subject label',
+      notePlaceholder: 'Optional note (e.g. voice: @audio1)',
+      noteAria: 'Reference note',
+      removeRefAria: 'Remove reference',
+      specsLabel: 'Format & Specs',
+      specsPlaceholder: 'Camera topology, Macro-State cadence, dialogue or acoustic constraints...',
+      specsAria: 'Format and specifications',
+      subtextLabel: 'Subtext & Additional Instructions',
+      subtextPlaceholder:
+        'Unspoken tension, directorial notes, or extra constraints to carry across turns...',
+      subtextAria: 'Subtext and additional instructions',
+      clearButton: 'Clear',
+      clearAria: 'Clear all brief and reference fields',
+    },
+    missingKeyTitle: 'Bring your own Gemini API key',
+    missingKeyDesc:
+      'Your key is stored only in this browser and sent directly to the Gemini API. Nothing is routed through a third-party server.',
+    missingKeyCta: 'Open AI Settings',
+    composerAria: 'Message the AI Script Assistant',
+    composerResizeAria: 'Resize prompt box height',
+    composerResizeTitle: 'Drag to resize prompt box · double-click to reset',
+    sendButton: 'Send',
+    sendAria: 'Send message',
+    stopButton: 'Stop',
+    stopAria: 'Cancel active request',
+    composerHint: 'Enter to send · Shift+Enter for newline',
+    reasoningToggleLabel: 'Thinking',
+    reasoningRunning: 'Thinking…',
+    reasoningToolCount: (count: number) => `${count} ${count === 1 ? 'tool' : 'tools'}`,
+    reasoningSkillCount: (count: number) => `${count} ${count === 1 ? 'skill' : 'skills'}`,
+    reasoningNoSummary: 'Reasoning summary hidden in AI Settings.',
+    toolsSkillsRegionAria: 'Active skills and tool calls for this turn',
+    jumpToLatestButton: 'Latest',
+    jumpToLatestAria: 'Scroll to latest assistant output',
+    inspectTraceButton: 'Inspect',
+    inspectTraceTitle: 'Inspect sanitized Gemini Interactions API trace for this turn',
+    inspectTraceAria: 'Inspect AI debug trace for this turn',
+    cost: {
+      turnBadgeAria: (formattedUsd: string) => `Estimated turn cost ${formattedUsd}`,
+      turnTooltipTitle: 'Estimated Turn Cost',
+      turnTooltipSubtitle: (modelLabel: string, rounds: number, isPromo: boolean) => {
+        const roundText = `${rounds} ${rounds === 1 ? 'round' : 'rounds'}`;
+        return isPromo ? `${modelLabel} · ${roundText} · Promo rate` : `${modelLabel} · ${roundText}`;
+      },
+      sessionBadgeAria: (formattedUsd: string, turns: number) =>
+        `Estimated session cost ${formattedUsd} across ${turns} ${turns === 1 ? 'turn' : 'turns'}`,
+      sessionTooltipTitle: 'Session Estimated Cost',
+      sessionTooltipSubtitle: (turns: number) =>
+        `${turns} ${turns === 1 ? 'turn' : 'turns'} in this chat · resets on New Chat`,
+      rowInput: 'Input',
+      rowCached: 'Cached',
+      rowToolInput: 'Tool input',
+      rowOutput: 'Output',
+      rowThinking: 'Thinking',
+      rowTotalTokens: 'Total tokens',
+      formatTokens: (count: number) => `${Math.round(count).toLocaleString()} tok`,
+      disclaimer: 'Client-side estimate from standard Gemini API token rates.',
+    },
+    hitToolLimitNote:
+      'Reached the maximum tool-call rounds for this turn. Ask a follow-up to continue.',
+    openSettingsAction: 'Open AI Settings',
+    retryHint: 'You can edit your prompt or adjust AI Settings and try again.',
+    stoppedNote: 'Generation stopped.',
+    toolStatusRunning: 'running',
+    toolStatusOk: 'done',
+    toolStatusError: 'retrying',
+    toolStatusStopped: 'stopped',
+    suggestions: {
+      patchLabel: 'Proposed Patch',
+      draftLabel: 'Proposed Draft',
+      auditLabel: 'Script Supervisor Audit',
+      questionLabel: 'Clarifying Questions',
+      questionMultiSelectHint: 'Multi-select',
+      questionCount: (count: number) => `${count} ${count === 1 ? 'question' : 'questions'}`,
+      questionCommentPlaceholder: 'Add comment or extra detail (optional)...',
+      questionCommentAria: (index: number) => `Additional comment for question ${index + 1}`,
+      questionSubmitButton: 'Submit Answers',
+      questionSubmitDisabledTitle: 'Select at least one option or add a comment',
+      questionAnsweredBadge: 'Answered',
+      questionAnsweredSummary: (answered: number, total: number) =>
+        `${answered}/${total} answered`,
+      questionSkippedNote: 'No preference — assistant decides',
+      applyButton: 'Apply',
+      applyFixButton: 'Apply Fix',
+      applyAllFixesButton: (count: number) => `Apply All (${count})`,
+      forkAndApplyButton: 'Fork & Apply',
+      forkAndApplyAllFixesButton: (count: number) => `Fork & Apply All (${count})`,
+      finishingLabel: 'Finishing…',
+      waitUntilFinishedTitle: 'Wait for response to finish before applying',
+      dismissButton: 'Dismiss',
+      appliedBadge: 'Applied',
+      allFixesAppliedBadge: 'All Applied',
+      batchPartialNote: (included: number, total: number) =>
+        `${included} of ${total} non-conflicting fixes ready to combine`,
+      dismissedBadge: 'Dismissed',
+      showDiff: 'Show diff',
+      hideDiff: 'Hide diff',
+      showPreview: 'Preview script',
+      hidePreview: 'Hide preview',
+      viewModeDiff: 'Diff',
+      viewModePreview: 'Preview',
+      noTextChanges: 'No textual changes produced.',
+      staleWarning:
+        'Script changed since this suggestion was staged. Ask the assistant to regenerate it so manual edits are not overwritten.',
+      lintClean: 'Lint clean',
+      lintDeltaResolved: (count: number) => `-${count} resolved`,
+      lintWarnings: (count: number) => `${count} ${count === 1 ? 'warn' : 'warns'}`,
+      lintErrors: (count: number) => `${count} ${count === 1 ? 'err' : 'errs'}`,
+      draftStats: (blocks: number, beats: number) =>
+        `${blocks} MB · ${beats} ${beats === 1 ? 'Macro-State' : 'Macro-States'}`,
+      auditNoIssues: 'No issues found across the inspected lenses.',
+      showIssuesToggle: (count: number) => `Show ${count} ${count === 1 ? 'issue' : 'issues'}`,
+      hideIssuesToggle: (count: number) => `Hide ${count} ${count === 1 ? 'issue' : 'issues'}`,
+      appliedProgressBadge: (applied: number, total: number) => `${applied}/${total} applied`,
+      expandDetailsAria: 'Expand suggestion details',
+      collapseDetailsAria: 'Collapse suggestion details',
+      auditCounts: (errors: number, warnings: number) => {
+        if (errors === 0 && warnings === 0) return 'Clean';
+        const parts: string[] = [];
+        if (errors > 0) parts.push(`${errors} err`);
+        if (warnings > 0) parts.push(`${warnings} warn`);
+        return parts.join(' · ');
+      },
+      jumpToTargetTitle: (targetId: string) => `Jump to ${targetId} in editor`,
+      repairHintPrefix: 'Repair: ',
+      embeddedPatchUnavailable: 'Automatic fix withheld due to validation checks.',
+    },
+    settingsModal: {
+      dialogAria: 'AI Settings',
+      title: 'AI Settings',
+      subtitle: 'Configure your browser-local Gemini API key, model, and reasoning depth.',
+      closeAria: 'Close AI Settings',
+      apiKeyLabel: 'Gemini API Key (BYOK)',
+      apiKeyPlaceholder: 'AIza...',
+      apiKeyAria: 'Gemini API Key',
+      showKeyAria: 'Show API key',
+      hideKeyAria: 'Hide API key',
+      privacyNote:
+        'Stays in this browser only and is sent directly to the Gemini API. Never read from server environment variables.',
+      privacyNoteShort: 'Browser-local only · sent directly to Gemini API',
+      sessionOnlyLabel: 'Session only',
+      sessionOnlyDesc: 'Keep key in sessionStorage (clears when this tab closes)',
+      sessionOnlyAria: 'Store API key for this browser session only',
+      clearKeyButton: 'Clear Key',
+      clearKeyAria: 'Clear stored Gemini API key',
+      keyConfiguredBadge: 'Key saved',
+      keyMissingBadge: 'Not set',
+      modelLabel: 'Gemini Model',
+      modelMetaHint: '1M context · in / out per 1M',
+      modelPromoBadge: 'promo',
+      modelLiteBadge: 'budget',
+      modelGroupAria: 'Gemini model selection',
+      reasoningLabel: 'Reasoning Level',
+      reasoningGroupAria: 'Reasoning level selection',
+      quickScanSensitivityLabel: 'Quick Scan Sensitivity',
+      quickScanSensitivityGroupAria: 'Quick Scan sensitivity selection',
+      quickScanSensitivityMeta: 'gemini-decision-1 · $0.10 / $0 per 1M',
+      thinkingSummaryLabel: 'Show reasoning summary',
+      thinkingSummaryDesc: 'Streamed thought summaries in the Thinking accordion',
+      thinkingSummaryAria: 'Toggle reasoning summary display',
+      estimatedCostLabel: 'Show estimated cost',
+      estimatedCostDesc: 'Per-turn and session USD token estimates in the AI sidebar',
+      estimatedCostAria: 'Toggle estimated USD cost display',
+      debugTraceLabel: 'Show Debug Trace',
+      debugTraceDesc: 'Quiet Inspect button on turns for requests, tool loops, and errors',
+      debugTraceAria: 'Toggle AI debug trace inspector',
+      resetDefaultsButton: 'Reset to defaults',
+      resetDefaultsTitle:
+        'Restore default model, reasoning level, and display toggles without clearing your API key',
+      resetDefaultsAria: 'Reset AI preferences to defaults without clearing API key',
+      doneButton: 'Done',
+    },
+    contextInspector: {
+      dialogAria: 'Agent Context & Skills',
+      title: 'Agent Context & Skills',
+      subtitle: 'Inspect the exact system instructions sent on the next turn and customize Auteur craft or extension skills.',
+      closeAria: 'Close Agent Context & Skills',
+      tabsAria: 'Context inspector sections',
+      tabPreview: 'Live Prompt Preview',
+      tabCraft: 'Foundational Craft',
+      tabSkills: 'Skills & Extensions',
+      tabQuickScan: 'Quick Scan Rules',
+      quickScanRules: {
+        upstreamUpdateTitle: 'Built-in Quick Scan rules updated',
+        upstreamUpdateDesc:
+          'Built-in Quick Scan rules have been updated since your overrides were saved. Keep your overrides or reset to adopt the new catalog.',
+        summary: (enabled: number, total: number, custom: number) =>
+          custom > 0
+            ? `${enabled}/${total} enabled · ${custom} custom`
+            : `${enabled}/${total} enabled`,
+        description:
+          'Atomic binary checks run in a single Decisions API pass (gemini-decision-1). Per-Macro-State rules fan out over S# lines ({{STATE_ID}}) and Per-Sub-State rules fan out over individual S#.# units ({{SUB_STATE_ID}}).',
+        addCustomRuleButton: 'Add Custom Rule',
+        enableAllRulesButton: 'Enable all',
+        disableAllRulesButton: 'Disable all',
+        enableAllRulesAria: 'Enable all built-in and custom Quick Scan rules',
+        disableAllRulesAria: 'Disable all built-in and custom Quick Scan rules',
+        formAddTitle: 'New Custom Quick Scan Rule',
+        formEditTitle: 'Edit Custom Quick Scan Rule',
+        fieldLabel: 'Rule Label',
+        fieldLabelPlaceholder: 'e.g. Avoid Unmotivated Slow Motion',
+        fieldId: 'Rule ID (snake_case)',
+        fieldIdPlaceholder: 'avoid_unmotivated_slow_mo',
+        fieldLens: 'Audit Lens Group',
+        fieldScope: 'Evaluation Scope',
+        scopeDocument: 'Document (1 check)',
+        scopeMacroState: 'Per Macro-State (S1..Sn)',
+        scopeSubState: 'Per Sub-State (S1.0..Sn.k)',
+        fieldWhen: 'Run Condition (AST Filter)',
+        whenLabels: {
+          all: 'Always',
+          continuous: 'Continuous scenes',
+          oner: 'Continuous oners only',
+          montage: 'Montage scenes only',
+          has_opening: 'Has [OPENING]',
+          has_intent: 'Has [INTENT]',
+          has_aesthetic: 'Has [AESTHETIC]',
+          has_dialogue: 'Has {dialogue}',
+          has_foley: 'State has <foley>',
+          has_action: 'State has [ACT]',
+          has_action_or_prop: 'State has [ACT]/[PROP]',
+          has_brief_text: 'Active Brief text',
+          has_brief_media: 'Active Brief media',
+          sub_is_action: 'Sub-State is [ACT]',
+          sub_is_camera: 'Sub-State is [CAM]',
+          sub_is_foley: 'Sub-State is <foley>',
+          sub_is_dialogue: 'Sub-State is {dialogue}',
+          sub_is_action_or_prop: 'Sub-State is [ACT]/[PROP]',
+        } as const,
+        fieldInstructions: 'Binary Question (Yes = Issue)',
+        fieldInstructionsPlaceholder:
+          'Does {{SUB_STATE_ID}} / {{STATE_ID}} violate ...?',
+        fieldTrueDesc: 'Violation Criteria (True)',
+        fieldTrueDescPlaceholder: 'Concrete condition that means an issue IS present...',
+        fieldFalseDesc: 'Clean Criteria (False)',
+        fieldFalseDescPlaceholder: 'Concrete condition that means the script is clean...',
+        fieldEscalationHint: 'Deep Audit Hint (Optional)',
+        fieldEscalationHintPlaceholder: 'Short repair guidance passed to Gemini 4 on escalation...',
+        saveRuleButton: 'Save Rule',
+        updateRuleButton: 'Update Rule',
+        toggleAria: (label: string, enabled: boolean) =>
+          `${enabled ? 'Disable' : 'Enable'} Quick Scan rule ${label}`,
+        resetAllRulesButton: 'Reset Quick Scan rules',
+        confirmDeleteTitle: (label: string) => `Delete "${label}"?`,
+        confirmDeleteDesc:
+          'This custom Quick Scan rule will be permanently removed from this browser.',
+        confirmDeleteAction: 'Delete Rule',
+        confirmResetAllTitle: 'Reset all Quick Scan rules?',
+        confirmResetAllDesc:
+          'This will permanently delete all custom Quick Scan rules and restore every built-in rule default stored in this browser. Export your Agent Context first if you want a backup.',
+        confirmResetAllDetailedDesc: (customCount: number, overrideCount: number) => {
+          const parts: string[] = [];
+          if (customCount > 0) {
+            parts.push(
+              `permanently delete ${customCount} custom Quick Scan ${customCount === 1 ? 'rule' : 'rules'}`
+            );
+          }
+          if (overrideCount > 0) {
+            parts.push(
+              `reset ${overrideCount} built-in rule ${overrideCount === 1 ? 'override' : 'overrides'}`
+            );
+          }
+          const actionSummary =
+            parts.length > 0
+              ? parts.join(' and ')
+              : 'restore all Quick Scan rule defaults';
+          return `This will ${actionSummary} stored in this browser. Custom rules cannot be recovered after reset — export your Agent Context first if you want a backup.`;
+        },
+        confirmResetAllAction: 'Reset Rules',
+      },
+      upstreamUpdateTitle: 'Built-in Auteur knowledge updated',
+      upstreamUpdateDesc:
+        'Built-in craft defaults have been updated since your overrides were saved. Keep your custom rules or reset to adopt the new defaults.',
+      acknowledgeButton: 'Keep My Overrides',
+      resetAllButton: 'Reset All',
+      summaryFocus: 'Focus',
+      summaryTopology: 'Topology',
+      summarySnapshot: 'Snapshot',
+      summaryTools: 'Tools',
+      summaryChangedBadge: 'changed',
+      charsCount: (count: number) => `${count.toLocaleString()} chars`,
+      copyPromptButton: 'Copy Prompt',
+      copiedPromptButton: 'Copied',
+      copyPromptAria: 'Copy assembled system prompt to clipboard',
+      editableBadge: 'Editable',
+      readOnlyBadge: 'Read-Only · Code-Owned',
+      briefActiveBadge: 'Active · From Brief',
+      briefInactiveBadge: 'Not Attached',
+      modifiedBadge: 'Modified',
+      sectionFoundationalCraft: 'Foundational Auteur Craft',
+      sectionLiveEditorState: 'Live Editor State',
+      sectionSceneBrief: 'Scene Brief & References',
+      sectionActiveSkills: 'Active Skills (Loaded This Turn)',
+      sectionSkillDirectory: 'On-Demand Skill Directory',
+      sectionToolProtocol: 'Tool & Safety Protocol',
+      emptySceneBrief:
+        'No active Scene Brief attached. Open Brief in the sidebar to add cast refs, specs, or additional instructions.',
+      emptyActiveSkills: 'No extension skills are preloaded for the current script state.',
+      emptyAvailableSkills: 'All non-muted skills are currently preloaded.',
+      foundationalCraftHeading: 'Foundational Auteur Craft',
+      foundationalCraftDesc:
+        'Directorial rules sent on every turn. Tool safety and snapshot verification remain code-owned and cannot be disabled here.',
+      foundationalCraftAria: 'Foundational Auteur Craft instructions',
+      resetToDefaultButton: 'Reset to default',
+      skillsSummary: (active: number, available: number, muted: number) =>
+        `${active} active · ${available} available · ${muted} muted`,
+      autoAllSkillsButton: 'Auto all',
+      muteAllSkillsButton: 'Mute all',
+      autoAllSkillsAria: 'Set all built-in and custom skills to Auto mode',
+      muteAllSkillsAria: 'Mute all built-in and custom skills',
+      addCustomSkillButton: 'Add Custom Skill',
+      cancelFormButton: 'Cancel',
+      formAddTitle: 'New Custom Skill',
+      formEditTitle: 'Edit Custom Skill',
+      fieldNameLabel: 'Skill Name',
+      fieldNamePlaceholder: 'e.g. Action Choreography Polish',
+      fieldIdLabel: 'Skill ID (snake_case)',
+      fieldIdPlaceholder: 'action_choreography_polish',
+      fieldIdHint: 'Unique lowercase identifier used by load_auteur_skill. Cannot match built-in IDs.',
+      fieldTriggerLabel: 'Trigger Hint',
+      fieldTriggerPlaceholder:
+        'When the user asks to choreograph combat [ACT] Sub-States or kinetic camera passes.',
+      fieldBodyLabel: 'Skill Instructions',
+      fieldBodyPlaceholder: 'Write clear, Pure Auteur Script v0.4.0 guidelines for this skill...',
+      saveSkillButton: 'Save Skill',
+      updateSkillButton: 'Update Skill',
+      builtInBadge: 'Built-in',
+      customBadge: 'Custom',
+      categoryWorkflow: 'Workflow',
+      categoryModule: 'Module',
+      statusActivePassive: 'Active · Auto',
+      statusActivePinned: 'Active · Pinned',
+      statusAvailable: 'Available',
+      statusMuted: 'Muted',
+      pinModeGroupAria: (name: string) => `Activation mode for ${name}`,
+      pinModes: {
+        auto: 'Auto',
+        pinned: 'Pin',
+        muted: 'Mute',
+      } as const,
+      expandSkillAria: (name: string) => `Inspect or edit instructions for ${name}`,
+      collapseSkillAria: (name: string) => `Collapse instructions for ${name}`,
+      skillBodyOverrideLabel: 'Skill Instructions Override',
+      skillBodyOverrideAria: (name: string) => `Instructions for ${name}`,
+      editButton: 'Edit',
+      deleteButton: 'Delete',
+      resetSkillButton: 'Reset',
+      resetAllDefaultsButton: 'Reset all defaults',
+      doneButton: 'Done',
+      confirmDeleteTitle: (name: string) => `Delete "${name}"?`,
+      confirmDeleteDesc:
+        'This custom skill and any pin override for it will be permanently removed from this browser.',
+      confirmDeleteAction: 'Delete Skill',
+      confirmResetAllTitle: 'Reset all craft & skill defaults?',
+      confirmResetAllDesc:
+        'This will permanently delete all custom skills and restore built-in Foundational Craft and skill defaults stored in this browser. Export your Agent Context first if you want a backup.',
+      confirmResetAllDetailedDesc: (
+        hasCraftOverride: boolean,
+        customSkillCount: number,
+        overrideCount: number
+      ) => {
+        const parts: string[] = [];
+        if (customSkillCount > 0) {
+          parts.push(
+            `permanently delete ${customSkillCount} custom ${customSkillCount === 1 ? 'skill' : 'skills'}`
+          );
+        }
+        if (hasCraftOverride) {
+          parts.push('revert your Foundational Craft edit');
+        }
+        if (overrideCount > 0) {
+          parts.push(
+            `reset ${overrideCount} built-in skill ${overrideCount === 1 ? 'override' : 'overrides'}`
+          );
+        }
+        const actionSummary =
+          parts.length > 0
+            ? parts.join(', ')
+            : 'restore built-in Foundational Craft and skill defaults';
+        return `This will ${actionSummary} stored in this browser. Custom skills cannot be recovered after reset — export your Agent Context first if you want a backup.`;
+      },
+      confirmResetAllAction: 'Reset All',
+      exportBackupBeforeResetButton: 'Export Agent Context first',
+      exportBackupBeforeResetDone: 'Backup JSON exported',
+      exportImport: {
+        exportButton: 'Export JSON',
+        exportAria: 'Export unified Agent Context, Skills, and Quick Scan Rules as JSON',
+        exportTitle:
+          'Export Foundational Craft override, skill pin/body overrides, custom skills, and Quick Scan rules as one JSON file',
+        importButton: 'Import JSON',
+        importAria: 'Import Agent Context, Skills, and Quick Scan Rules from a JSON file',
+        importTitle: 'Import an exported Agent Context JSON pack (choose exact items & Merge or Replace)',
+        dismissNoticeAria: 'Dismiss import notice',
+        exportedNotice: (filename: string) => `Exported ${filename}`,
+        exportFailedNotice: 'Unable to download the Agent Context JSON file in this environment.',
+        importReadError: 'Unable to read the selected JSON file.',
+        importedSuccessNotice: (summary: string) => `Import applied: ${summary}`,
+        dialogAria: 'Import Agent Context & Skills',
+        dialogTitle: 'Import Agent Context & Skills',
+        closeDialogAria: 'Close import dialog',
+        exportedAtMeta: (date: string) => `Exported ${date}`,
+        packVersionMeta: (version: number) => `Pack v${version}`,
+        warningsHeading: 'Sanitizer notes',
+        modeHeading: 'Import Strategy',
+        modeMergeTitle: 'Merge (Keep existing)',
+        modeMergeDesc:
+          'Apply only the checked items below on top of your current setup. Unchecked local overrides and custom items stay untouched.',
+        modeReplaceTitle: 'Replace (Switch profile)',
+        modeReplaceDesc:
+          'Replace each checked section below with only the selected items. Local custom items and overrides in checked sections not selected here will be removed.',
+        selectAllButton: 'Select all',
+        selectNoneButton: 'None',
+        domainSkillsTitle: 'Foundational Craft & Skills',
+        domainSkillsToggleAria: 'Include Foundational Craft & Skills section in import',
+        domainSkillsEmptyNote:
+          'This file contains no Foundational Craft or Skill customizations (default baseline).',
+        domainQuickScanTitle: 'Quick Scan Rules',
+        domainQuickScanToggleAria: 'Include Quick Scan Rules section in import',
+        domainQuickScanEmptyNote:
+          'This file contains no Quick Scan Rule customizations (default baseline).',
+        groupFoundationalCraft: 'Foundational Craft Override',
+        groupBuiltInSkillOverrides: (count: number) => `Built-in Skill Overrides (${count})`,
+        groupCustomSkills: (count: number) => `Custom Skills (${count})`,
+        groupBuiltInRuleOverrides: (count: number) => `Built-in Rule Overrides (${count})`,
+        groupCustomRules: (count: number) => `Custom Quick Scan Rules (${count})`,
+        badgeNew: 'New',
+        badgeOverwrites: 'Overwrites local',
+        badgeEditedBody: 'Edited body',
+        badgeEnabled: 'Enabled',
+        badgeDisabled: 'Disabled',
+        badgeEditedCriteria: 'Edited criteria',
+        scopeShortDocument: 'Doc',
+        scopeShortMacroState: 'S#',
+        scopeShortSubState: 'S#.#',
+        impactHeading: 'Import Summary',
+        impactNoSelectionMerge: 'Select at least one item above to merge.',
+        impactNoDomainReplace: 'Check at least one section above to replace.',
+        impactWillApplyPrefix: 'Will apply: ',
+        impactNoItemsReplaceBaseline: 'Restores checked section(s) to clean built-in defaults.',
+        impactDestructiveWarning: (details: string) =>
+          `Replace will permanently remove/reset: ${details}.`,
+        exportCurrentBeforeReplace: 'Export current backup first',
+        exportCurrentBeforeReplaceDone: 'Current backup exported',
+        cancelButton: 'Cancel',
+        confirmMergeButton: (count: number) =>
+          count > 0 ? `Merge ${count} ${count === 1 ? 'Item' : 'Items'}` : 'Merge Selected',
+        confirmReplaceButton: 'Replace Selected',
+      },
+    },
+    traceModal: {
+      dialogAria: 'AI Trace Inspector',
+      title: 'AI Trace Inspector',
+      subtitle: 'Sanitized Gemini API request, tool loop, and response diagnostics',
+      quickScanSubtitle:
+        'Sanitized Gemini Decisions API (v1beta) atomic question matrix and calibrated probabilities',
+      quickScanSensitivity: 'Sensitivity',
+      quickScanQuestions: 'Questions',
+      quickScanBatches: 'Batches',
+      quickScanAnswersHeading: (count: number) => `Calibrated Answers (${count})`,
+      quickScanQuestionsHeading: (count: number) => `Questions Sent (${count})`,
+      quickScanInputHeading: 'Shared Input Sent',
+      closeAria: 'Close AI Trace Inspector',
+      copyJsonButton: 'Copy Trace JSON',
+      copiedJsonButton: 'Copied',
+      copyJsonAria: 'Copy sanitized trace JSON to clipboard',
+      doneButton: 'Done',
+      summaryModel: 'Model',
+      summaryReasoning: 'Reasoning',
+      summaryMode: 'Mode',
+      summaryFocus: 'Focus',
+      summarySkills: 'Skills',
+      skillActivePrefix: 'active',
+      skillLoadedPrefix: 'loaded',
+      summaryDuration: 'Duration',
+      summaryRounds: 'Tool Rounds',
+      summaryStatus: 'Status',
+      summaryInteractionChain: 'Interaction Chain',
+      summaryUsage: 'Token Usage',
+      summaryEstimatedCost: 'Est. Cost',
+      costPromoBadge: 'promo',
+      costRateSummary: (inputPer1M: number, outputPer1M: number) =>
+        `$${inputPer1M}/$${outputPer1M} per 1M`,
+      summaryStartedAt: 'Started',
+      statusCompleted: 'Completed',
+      statusRoundLimit: 'Round Limit',
+      statusStopped: 'Stopped',
+      statusError: 'Error',
+      roundLimitBadge: 'max rounds',
+      noInteractionId: 'none',
+      errorDetailsHeading: 'Error Details',
+      errorStatusLabel: 'HTTP',
+      errorCodeLabel: 'Code',
+      roundsHeading: (count: number) =>
+        `Round Timeline (${count} ${count === 1 ? 'round' : 'rounds'})`,
+      noRoundsNote: 'This turn ended before an Interactions API request round was sent.',
+      roundTitle: (index: number) => `Round ${index}`,
+      roundToolCount: (count: number) => `${count} ${count === 1 ? 'tool' : 'tools'}`,
+      sectionRequest: 'Request Sent',
+      sectionToolCalls: (count: number) => `Tool Calls & Results (${count})`,
+      requestModelLabel: 'model',
+      requestPrevIdLabel: 'previous_interaction_id',
+      requestGenConfigLabel: 'generation_config',
+      requestToolsLabel: 'tools',
+      requestNoTools: 'none',
+      requestInputLabel: 'input',
+      requestSystemInstructionLabel: 'system_instruction',
+      charsCount: (count: number) => `${count.toLocaleString()} chars`,
+      toolStatusOk: 'ok',
+      toolStatusError: 'error',
+      toolStagedLabel: 'staged',
+      toolRepairHintLabel: 'Repair Hint',
+      toolArgumentsLabel: 'arguments',
+      toolResultLabel: 'result',
+      formatDurationMs: (ms: number) =>
+        ms < 1 ? '< 1 ms' : `${Math.round(ms).toLocaleString()} ms`,
+    },
+  },
+} as const;
