@@ -835,10 +835,16 @@ export const UI_LABELS = {
       youtubeCancelButton: 'Cancel',
       youtubeInvalidError: 'Enter a valid public YouTube URL (youtube.com/watch?v=... or youtu.be/...).',
       filesApiPanelTitle: 'Gemini Files API (Up to 2 GB · 48h Cloud)',
-      filesApiUploadButton: 'Choose File to Upload',
+      filesApiDropTitle: 'Drop files to upload via Files API',
+      filesApiDropAria: 'Drop or choose files to upload to Gemini Files API',
+      filesApiUploadButton: 'Choose Files',
       filesApiUploadHint: 'Video, audio, PDF, full-res images, or large text documents',
       filesApiUploading: 'Uploading directly to Gemini Cloud…',
+      filesApiUploadingBatch: (current: number, total: number) =>
+        `Uploading ${current}/${total} to Gemini Cloud…`,
       filesApiProcessing: 'Processing media tracks on Gemini…',
+      filesApiProcessingBatch: (current: number, total: number) =>
+        `Processing ${current}/${total} on Gemini…`,
       filesApiMissingKey: 'Add your Gemini API key in AI Settings to upload or browse Files API media.',
       filesApiOpenSettings: 'Open AI Settings',
       filesApiRefreshButton: 'Refresh',

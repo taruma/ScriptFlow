@@ -165,7 +165,12 @@ function AiBriefModalContent({
 
   // Inline Gemini Files API upload & cloud picker panel
   const [isFilesApiOpen, setIsFilesApiOpen] = useState(false);
+  const [filesApiDragActive, setFilesApiDragActive] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'processing'>('idle');
+  const [uploadBatchProgress, setUploadBatchProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [filesApiError, setFilesApiError] = useState<string | null>(null);
   const [cloudFiles, setCloudFiles] = useState<GeminiUploadedFile[]>([]);
   const [isLoadingCloudFiles, setIsLoadingCloudFiles] = useState(false);
@@ -256,8 +261,12 @@ function AiBriefModalContent({
     [onAddReferenceEntry]
   );
 
-  const handleFilesApiUpload = useCallback(
-    async (file: File) => {
+  const handleFilesApiUploadFiles = useCallback(
+    async (fileInput: File | FileList | readonly File[]) => {
+      const files =
+        fileInput instanceof File ? [fileInput] : Array.from(fileInput);
+      if (files.length === 0) return;
+
       if (!hasApiKey) {
         setFilesApiError(labels.filesApiMissingKey);
         setIsFilesApiOpen(true);
@@ -273,48 +282,64 @@ function AiBriefModalContent({
       setRedirectFile(null);
       setIsFilesApiOpen(true);
       setUploadStatus('uploading');
+      setUploadBatchProgress(files.length > 1 ? {current: 1, total: files.length} : null);
 
       try {
-        const uploaded = await uploadFileToGeminiFilesApi({
-          apiKey,
-          file,
-          displayName: file.name,
-          signal: controller.signal,
-          onStatus: (status) => {
-            if (status === 'uploading') setUploadStatus('uploading');
-            else if (status === 'processing') setUploadStatus('processing');
-          },
-        });
-
-        const kind = inferReferenceKindFromMime(uploaded.mimeType, uploaded.displayName);
-        let localMediaUrl: string | undefined;
-        let previewUrl: string | undefined;
-        let dims: {width: number; height: number} | null = null;
-
-        if (kind === 'image' || kind === 'video' || kind === 'audio') {
-          localMediaUrl = URL.createObjectURL(file);
-          if (kind === 'image') {
-            previewUrl = localMediaUrl;
-            dims = await readImageNaturalDimensions(localMediaUrl);
+        for (let idx = 0; idx < files.length; idx++) {
+          const file = files[idx];
+          if (controller.signal.aborted) break;
+          if (files.length > 1) {
+            setUploadBatchProgress({current: idx + 1, total: files.length});
           }
-        }
+          setUploadStatus('uploading');
 
-        attachCloudFile(uploaded, {
-          customLabel: filenameToDefaultLabel(file.name),
-          localMediaUrl,
-          previewUrl,
-          width: dims?.width,
-          height: dims?.height,
-        });
-        setCloudFiles((prev) => [uploaded, ...prev.filter((item) => item.uri !== uploaded.uri)]);
+          const uploaded = await uploadFileToGeminiFilesApi({
+            apiKey,
+            file,
+            displayName: file.name,
+            signal: controller.signal,
+            onStatus: (status) => {
+              if (status === 'uploading') setUploadStatus('uploading');
+              else if (status === 'processing') setUploadStatus('processing');
+            },
+          });
+
+          const kind = inferReferenceKindFromMime(uploaded.mimeType, uploaded.displayName);
+          let localMediaUrl: string | undefined;
+          let previewUrl: string | undefined;
+          let dims: {width: number; height: number} | null = null;
+
+          if (kind === 'image' || kind === 'video' || kind === 'audio') {
+            localMediaUrl = URL.createObjectURL(file);
+            if (kind === 'image') {
+              previewUrl = localMediaUrl;
+              dims = await readImageNaturalDimensions(localMediaUrl);
+            }
+          }
+
+          attachCloudFile(uploaded, {
+            customLabel: filenameToDefaultLabel(file.name),
+            localMediaUrl,
+            previewUrl,
+            width: dims?.width,
+            height: dims?.height,
+          });
+          setCloudFiles((prev) => [uploaded, ...prev.filter((item) => item.uri !== uploaded.uri)]);
+        }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setFilesApiError(err instanceof Error ? err.message : 'Failed to upload file.');
       } finally {
         setUploadStatus('idle');
+        setUploadBatchProgress(null);
       }
     },
     [apiKey, hasApiKey, attachCloudFile, labels.filesApiMissingKey]
+  );
+
+  const handleFilesApiUpload = useCallback(
+    async (file: File) => handleFilesApiUploadFiles(file),
+    [handleFilesApiUploadFiles]
   );
 
   const processLocalFiles = useCallback(
@@ -414,11 +439,37 @@ function AiBriefModalContent({
   };
 
   const handleFilesApiInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      void handleFilesApiUpload(file);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      void handleFilesApiUploadFiles(files);
     }
     event.target.value = '';
+  };
+
+  const handleFilesApiDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!filesApiDragActive && uploadStatus === 'idle') {
+      setFilesApiDragActive(true);
+    }
+  };
+
+  const handleFilesApiDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setFilesApiDragActive(false);
+    }
+  };
+
+  const handleFilesApiDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setFilesApiDragActive(false);
+    if (uploadStatus !== 'idle') return;
+    if (event.dataTransfer?.files?.length) {
+      void handleFilesApiUploadFiles(event.dataTransfer.files);
+    }
   };
 
   const handleAttachYoutube = () => {
@@ -863,37 +914,84 @@ function AiBriefModalContent({
                     </div>
                   ) : (
                     <>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <input
-                            ref={filesApiInputRef}
-                            type="file"
-                            accept="image/*,video/*,audio/*,application/pdf,text/*,.md,.json,.csv,.srt,.vtt"
-                            onChange={handleFilesApiInputChange}
-                            className="hidden"
-                          />
-                          <button
-                            type="button"
-                            disabled={uploadStatus !== 'idle'}
-                            onClick={() => filesApiInputRef.current?.click()}
-                            className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1.5 !px-3 !py-1.5 !text-xs disabled:opacity-60`}
+                      <input
+                        ref={filesApiInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,video/*,audio/*,application/pdf,text/*,.md,.json,.csv,.srt,.vtt"
+                        onChange={handleFilesApiInputChange}
+                        className="hidden"
+                      />
+                      <div
+                        role="button"
+                        tabIndex={uploadStatus === 'idle' ? 0 : -1}
+                        aria-disabled={uploadStatus !== 'idle'}
+                        aria-label={labels.filesApiDropAria}
+                        onClick={() => {
+                          if (uploadStatus === 'idle') {
+                            filesApiInputRef.current?.click();
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (
+                            uploadStatus === 'idle' &&
+                            (event.key === 'Enter' || event.key === ' ')
+                          ) {
+                            event.preventDefault();
+                            filesApiInputRef.current?.click();
+                          }
+                        }}
+                        onDragOver={handleFilesApiDragOver}
+                        onDragLeave={handleFilesApiDragLeave}
+                        onDrop={handleFilesApiDrop}
+                        className={`flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-dashed px-3 py-2.5 transition-colors ${
+                          uploadStatus !== 'idle'
+                            ? 'border-border-main bg-surface/70 opacity-75 cursor-wait'
+                            : filesApiDragActive
+                              ? 'border-[var(--phase-aesthetic-text)] bg-surface shadow-inner cursor-copy'
+                              : 'border-border-main bg-surface/80 hover:bg-surface hover:border-text-muted/60 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            aria-hidden="true"
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border-main bg-surface-subtle text-text-muted"
                           >
                             {uploadStatus !== 'idle' ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--phase-aesthetic-text)]" />
                             ) : (
                               <Upload className="h-3.5 w-3.5" />
                             )}
-                            <span>
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-text-main truncate">
                               {uploadStatus === 'uploading'
-                                ? labels.filesApiUploading
+                                ? uploadBatchProgress
+                                  ? labels.filesApiUploadingBatch(
+                                      uploadBatchProgress.current,
+                                      uploadBatchProgress.total
+                                    )
+                                  : labels.filesApiUploading
                                 : uploadStatus === 'processing'
-                                  ? labels.filesApiProcessing
-                                  : labels.filesApiUploadButton}
-                            </span>
-                          </button>
+                                  ? uploadBatchProgress
+                                    ? labels.filesApiProcessingBatch(
+                                        uploadBatchProgress.current,
+                                        uploadBatchProgress.total
+                                      )
+                                    : labels.filesApiProcessing
+                                  : labels.filesApiDropTitle}
+                            </div>
+                            <div className="text-[10.5px] text-text-faint truncate">
+                              {labels.filesApiUploadHint}
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-[11px] text-text-faint">
-                          {labels.filesApiUploadHint}
+                        <span
+                          className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1.5 !px-2.5 !py-1 !text-[11px] shrink-0 ${
+                            uploadStatus !== 'idle' ? 'opacity-60' : ''
+                          }`}
+                        >
+                          {labels.filesApiUploadButton}
                         </span>
                       </div>
 
