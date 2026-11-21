@@ -1062,6 +1062,10 @@ export const UI_LABELS = {
         description:
           'Atomic binary checks run in a single Decisions API pass (gemini-decision-1). Per-Macro-State rules fan out over S# lines ({{STATE_ID}}) and Per-Sub-State rules fan out over individual S#.# units ({{SUB_STATE_ID}}).',
         addCustomRuleButton: 'Add Custom Rule',
+        enableAllRulesButton: 'Enable all',
+        disableAllRulesButton: 'Disable all',
+        enableAllRulesAria: 'Enable all built-in and custom Quick Scan rules',
+        disableAllRulesAria: 'Disable all built-in and custom Quick Scan rules',
         formAddTitle: 'New Custom Quick Scan Rule',
         formEditTitle: 'Edit Custom Quick Scan Rule',
         fieldLabel: 'Rule Label',
@@ -1153,6 +1157,10 @@ export const UI_LABELS = {
       resetToDefaultButton: 'Reset to default',
       skillsSummary: (active: number, available: number, muted: number) =>
         `${active} active · ${available} available · ${muted} muted`,
+      autoAllSkillsButton: 'Auto all',
+      muteAllSkillsButton: 'Mute all',
+      autoAllSkillsAria: 'Set all built-in and custom skills to Auto mode',
+      muteAllSkillsAria: 'Mute all built-in and custom skills',
       addCustomSkillButton: 'Add Custom Skill',
       cancelFormButton: 'Cancel',
       formAddTitle: 'New Custom Skill',

@@ -51,6 +51,7 @@ export interface AiContextInspectorModalProps {
   hasUpstreamUpdate: boolean;
   onSetFoundationalCraft: (value: string | null) => void;
   onSetPinMode: (skillId: string, pinMode: SkillPinMode) => void;
+  onSetAllPinModes?: (pinMode: 'auto' | 'muted') => void;
   onSetBodyOverride: (skillId: string, bodyOverride: string | null) => void;
   onResetSkill: (skillId: string) => void;
   onSaveCustomSkill: (skill: CustomAuteurSkill, editingId?: string) => void;
@@ -61,6 +62,7 @@ export interface AiContextInspectorModalProps {
   quickScanCustomizationCount?: number;
   hasQuickScanUpstreamUpdate?: boolean;
   onSetQuickScanRuleEnabled?: (ruleId: string, enabled: boolean) => void;
+  onSetAllQuickScanRulesEnabled?: (enabled: boolean) => void;
   onSetQuickScanRuleTextOverride?: (
     ruleId: string,
     patch: {
@@ -123,6 +125,7 @@ export function AiContextInspectorModal({
   hasUpstreamUpdate,
   onSetFoundationalCraft,
   onSetPinMode,
+  onSetAllPinModes,
   onSetBodyOverride,
   onResetSkill,
   onSaveCustomSkill,
@@ -133,6 +136,7 @@ export function AiContextInspectorModal({
   quickScanCustomizationCount = 0,
   hasQuickScanUpstreamUpdate = false,
   onSetQuickScanRuleEnabled,
+  onSetAllQuickScanRulesEnabled,
   onSetQuickScanRuleTextOverride,
   onResetQuickScanRule,
   onSaveCustomQuickScanRule,
@@ -491,7 +495,7 @@ export function AiContextInspectorModal({
             )}
 
             {activeTab === 'skills' && (
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-[11px] text-text-faint tabular-nums">
                   {labels.skillsSummary(
                     composedContext.activeSkills.length,
@@ -499,6 +503,28 @@ export function AiContextInspectorModal({
                     composedContext.mutedSkills.length
                   )}
                 </span>
+                {onSetAllPinModes && composedContext.resolvedSkills.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={composedContext.resolvedSkills.every((s) => s.pinMode === 'auto')}
+                      onClick={() => onSetAllPinModes('auto')}
+                      aria-label={labels.autoAllSkillsAria}
+                      className={`${UI_TOKENS.button.actionPill} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      <span>{labels.autoAllSkillsButton}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={composedContext.resolvedSkills.every((s) => s.pinMode === 'muted')}
+                      onClick={() => onSetAllPinModes('muted')}
+                      aria-label={labels.muteAllSkillsAria}
+                      className={`${UI_TOKENS.button.actionPill} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      <span>{labels.muteAllSkillsButton}</span>
+                    </button>
+                  </div>
+                )}
                 {!customForm && (
                   <button
                     type="button"
@@ -971,6 +997,7 @@ export function AiContextInspectorModal({
                 onSetRuleEnabled={(ruleId, enabled) =>
                   onSetQuickScanRuleEnabled?.(ruleId, enabled)
                 }
+                onSetAllRulesEnabled={onSetAllQuickScanRulesEnabled}
                 onSetRuleTextOverride={(ruleId, patch) =>
                   onSetQuickScanRuleTextOverride?.(ruleId, patch)
                 }

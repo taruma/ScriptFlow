@@ -251,12 +251,12 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
 2. **Foundational Craft**: Edit **Foundational Auteur Craft** directly (persisted in `localStorage` under `auteur-editor-ai-skills-v1`), with a **`Modified`** indicator and **`Reset to default`**.
 3. **Skills & Extensions**:
-   - Toggle any built-in or custom skill between **`Auto`**, **`Pin`**, and **`Mute`** and immediately see its resolved status (`Active · Passive`, `Active · Pinned`, `Available`, `Muted`).
+   - Toggle any built-in or custom skill between **`Auto`**, **`Pin`**, and **`Mute`** (or use **`Auto all`** / **`Mute all`** to update every skill in one click without losing custom skills or body overrides) and immediately see its resolved status (`Active · Passive`, `Active · Pinned`, `Available`, `Muted`).
    - Expand any skill to read or override its instruction body (`Reset` restores built-in text).
    - Click **`+ Add Custom Skill`** to create your own reusable extension skills (`Name`, auto-slugified `snake_case` `ID` validated against built-in collisions, `Trigger Hint`, and `Instruction Body`), plus edit or delete them (destructive deletes and **Reset all defaults** confirm via `ConfirmDialog`).
 4. **Quick Scan Rules**:
    - Browse the declarative built-in atomic rule catalog (`src/data/knowledge/quick-scan-rules.json`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc`, `Per S#`, `Per S#.#`) and AST `when` condition tags.
-   - Toggle any built-in or custom rule On/Off, expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document`, `Per Macro-State` (`{{STATE_ID}}`), or `Per Sub-State` (`{{SUB_STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
+   - Toggle any built-in or custom rule On/Off (or use **`Enable all`** / **`Disable all`** to toggle every rule in one click without deleting custom rules or text overrides), expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document`, `Per Macro-State` (`{{STATE_ID}}`), or `Per Sub-State` (`{{SUB_STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
 
 ---
 

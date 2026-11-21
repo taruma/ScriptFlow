@@ -594,6 +594,7 @@ export function AiAssistantSidebar({
     hasUpstreamUpdate,
     setFoundationalCraft,
     setPinMode,
+    setAllPinModes,
     setBodyOverride,
     resetSkill,
     saveCustomSkill,
@@ -607,6 +608,7 @@ export function AiAssistantSidebar({
     customizationCount: quickScanCustomizationCount,
     hasUpstreamUpdate: hasQuickScanUpstreamUpdate,
     setRuleEnabled: setQuickScanRuleEnabled,
+    setAllRulesEnabled: setAllQuickScanRulesEnabled,
     setRuleTextOverride: setQuickScanRuleTextOverride,
     resetRule: resetQuickScanRule,
     saveCustomRule: saveCustomQuickScanRule,
@@ -2388,6 +2390,7 @@ export function AiAssistantSidebar({
             hasUpstreamUpdate={hasUpstreamUpdate}
             onSetFoundationalCraft={setFoundationalCraft}
             onSetPinMode={setPinMode}
+            onSetAllPinModes={setAllPinModes}
             onSetBodyOverride={setBodyOverride}
             onResetSkill={resetSkill}
             onSaveCustomSkill={saveCustomSkill}
@@ -2398,6 +2401,7 @@ export function AiAssistantSidebar({
             quickScanCustomizationCount={quickScanCustomizationCount}
             hasQuickScanUpstreamUpdate={hasQuickScanUpstreamUpdate}
             onSetQuickScanRuleEnabled={setQuickScanRuleEnabled}
+            onSetAllQuickScanRulesEnabled={setAllQuickScanRulesEnabled}
             onSetQuickScanRuleTextOverride={setQuickScanRuleTextOverride}
             onResetQuickScanRule={resetQuickScanRule}
             onSaveCustomQuickScanRule={saveCustomQuickScanRule}

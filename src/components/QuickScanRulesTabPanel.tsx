@@ -35,6 +35,7 @@ export interface QuickScanRulesTabPanelProps {
   rulesState: QuickScanRulesState;
   hasUpstreamUpdate: boolean;
   onSetRuleEnabled: (ruleId: string, enabled: boolean) => void;
+  onSetAllRulesEnabled?: (enabled: boolean) => void;
   onSetRuleTextOverride: (
     ruleId: string,
     patch: {
@@ -69,6 +70,7 @@ export function QuickScanRulesTabPanel({
   rulesState,
   hasUpstreamUpdate,
   onSetRuleEnabled,
+  onSetAllRulesEnabled,
   onSetRuleTextOverride,
   onResetRule,
   onSaveCustomRule,
@@ -285,14 +287,38 @@ export function QuickScanRulesTabPanel({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={customForm ? () => setCustomForm(null) : openAddForm}
-          className={UI_TOKENS.button.actionPill}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>{customForm ? ctxLabels.cancelFormButton : qsRuleLabels.addCustomRuleButton}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          {onSetAllRulesEnabled && resolvedRules.length > 0 && (
+            <>
+              <button
+                type="button"
+                disabled={enabledCount === resolvedRules.length}
+                onClick={() => onSetAllRulesEnabled(true)}
+                aria-label={qsRuleLabels.enableAllRulesAria}
+                className={`${UI_TOKENS.button.actionPill} disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                <span>{qsRuleLabels.enableAllRulesButton}</span>
+              </button>
+              <button
+                type="button"
+                disabled={enabledCount === 0}
+                onClick={() => onSetAllRulesEnabled(false)}
+                aria-label={qsRuleLabels.disableAllRulesAria}
+                className={`${UI_TOKENS.button.actionPill} disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                <span>{qsRuleLabels.disableAllRulesButton}</span>
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={customForm ? () => setCustomForm(null) : openAddForm}
+            className={UI_TOKENS.button.actionPill}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{customForm ? ctxLabels.cancelFormButton : qsRuleLabels.addCustomRuleButton}</span>
+          </button>
+        </div>
       </div>
 
       {/* Add / Edit Custom Rule Form */}

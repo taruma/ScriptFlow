@@ -43,6 +43,7 @@ import {
   isBuiltinSkillId,
   loadStoredAiSkills,
   resetAllAiSkills,
+  setAllSkillsPinMode,
   resetSkillOverride,
   sanitizeAiSkillsState,
   saveStoredAiSkills,
@@ -580,6 +581,42 @@ describe('src/data/knowledge markdown catalog loader', () => {
         {'./skills/a.md': 'A', './skills/b.md': 'B'}
       )
     ).toThrow(/Duplicate bundled knowledge skill id/);
+  });
+
+  it('bulk-mutes and bulk-autos all built-in and custom skills without losing body overrides or custom skills', () => {
+    const start = {
+      ...DEFAULT_AI_SKILLS_STATE,
+      foundationalCraftOverride: 'Custom craft',
+      skillOverrides: {
+        draft_craft: {pinMode: 'pinned' as const, bodyOverride: 'Custom draft body'},
+      },
+      customSkills: [
+        {
+          id: 'house_dialogue',
+          name: 'House Dialogue',
+          triggerHint: 'Dialogue scenes',
+          body: 'Keep lines under 12 words.',
+        },
+      ],
+    };
+
+    const mutedAll = setAllSkillsPinMode(start, 'muted');
+    expect(mutedAll.foundationalCraftOverride).toBe('Custom craft');
+    expect(mutedAll.customSkills).toHaveLength(1);
+    expect(mutedAll.skillOverrides.draft_craft?.bodyOverride).toBe('Custom draft body');
+    for (const skill of BUILTIN_AUTEUR_SKILLS) {
+      expect(mutedAll.skillOverrides[skill.id]?.pinMode).toBe('muted');
+    }
+    expect(mutedAll.skillOverrides.house_dialogue?.pinMode).toBe('muted');
+
+    const autoAll = setAllSkillsPinMode(mutedAll, 'auto');
+    expect(autoAll.foundationalCraftOverride).toBe('Custom craft');
+    expect(autoAll.customSkills).toHaveLength(1);
+    expect(autoAll.skillOverrides.draft_craft).toEqual({bodyOverride: 'Custom draft body'});
+    expect(autoAll.skillOverrides.house_dialogue).toBeUndefined();
+    for (const skill of BUILTIN_AUTEUR_SKILLS) {
+      expect(autoAll.skillOverrides[skill.id]?.pinMode).toBeUndefined();
+    }
   });
 });
 

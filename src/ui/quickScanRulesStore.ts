@@ -413,6 +413,39 @@ export function setQuickScanRuleEnabledInState(
   });
 }
 
+/**
+ * Bulk-enables or bulk-disables every built-in and custom Quick Scan rule while
+ * preserving all custom rule definitions and built-in criteria text overrides.
+ */
+export function setAllQuickScanRulesEnabledInState(
+  state: QuickScanRulesState,
+  enabled: boolean
+): QuickScanRulesState {
+  const nextOverrides: Record<string, QuickScanRuleOverride> = {...state.ruleOverrides};
+
+  for (const builtIn of BUNDLED_QUICK_SCAN_RULES) {
+    const prev = nextOverrides[builtIn.id] ?? {};
+    nextOverrides[builtIn.id] = {
+      ...prev,
+      enabled,
+    };
+  }
+
+  for (const custom of state.customRules) {
+    const id = custom.id.trim().toLowerCase();
+    const prev = nextOverrides[id] ?? {};
+    nextOverrides[id] = {
+      ...prev,
+      enabled,
+    };
+  }
+
+  return sanitizeQuickScanRulesState({
+    ...state,
+    ruleOverrides: nextOverrides,
+  });
+}
+
 export function setQuickScanRuleTextOverrideInState(
   state: QuickScanRulesState,
   ruleId: string,
@@ -527,6 +560,7 @@ export function useQuickScanRulesStore(): {
   customizationCount: number;
   hasUpstreamUpdate: boolean;
   setRuleEnabled: (ruleId: string, enabled: boolean) => void;
+  setAllRulesEnabled: (enabled: boolean) => void;
   setRuleTextOverride: (
     ruleId: string,
     patch: {
@@ -552,6 +586,13 @@ export function useQuickScanRulesStore(): {
   const setRuleEnabled = useCallback(
     (ruleId: string, enabled: boolean) => {
       commit((prev) => setQuickScanRuleEnabledInState(prev, ruleId, enabled));
+    },
+    [commit]
+  );
+
+  const setAllRulesEnabled = useCallback(
+    (enabled: boolean) => {
+      commit((prev) => setAllQuickScanRulesEnabledInState(prev, enabled));
     },
     [commit]
   );
@@ -604,6 +645,7 @@ export function useQuickScanRulesStore(): {
     customizationCount: countQuickScanCustomizations(rulesState),
     hasUpstreamUpdate: hasUpstreamQuickScanRulesUpdate(rulesState),
     setRuleEnabled,
+    setAllRulesEnabled,
     setRuleTextOverride,
     resetRule,
     saveCustomRule,

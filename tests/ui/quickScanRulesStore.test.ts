@@ -17,6 +17,7 @@ import {
   resetQuickScanRuleInState,
   sanitizeQuickScanRulesState,
   saveStoredQuickScanRulesState,
+  setAllQuickScanRulesEnabledInState,
   setQuickScanRuleEnabledInState,
   setQuickScanRuleTextOverrideInState,
   slugifyCustomQuickScanRuleId,
@@ -134,5 +135,46 @@ describe('quickScanRulesStore persistence, validation & customization helpers', 
     store.setItem(QUICK_SCAN_RULES_STORAGE_KEY, '{corrupt');
     expect(loadStoredQuickScanRulesState(store)).toEqual(DEFAULT_QUICK_SCAN_RULES_STATE);
     expect(sanitizeQuickScanRulesState(null)).toEqual(DEFAULT_QUICK_SCAN_RULES_STATE);
+  });
+
+  it('bulk-disables and bulk-enables all built-in and custom Quick Scan rules while preserving text overrides and custom rules', () => {
+    let state = setQuickScanRuleTextOverrideInState(
+      DEFAULT_QUICK_SCAN_RULES_STATE,
+      'state_lookbook_bleed',
+      {instructionsOverride: 'Custom bleed prompt on {{STATE_ID}}?'}
+    );
+    state = upsertCustomQuickScanRuleInState(state, {
+      id: 'studio_custom_rule',
+      label: 'Studio Custom Rule',
+      lens: 'lens1_spatial_optics',
+      scope: 'document',
+      when: ['all'],
+      instructions: 'Custom check?',
+      trueDescription: 'Violated',
+      falseDescription: 'Clean',
+    });
+
+    const allDisabled = setAllQuickScanRulesEnabledInState(state, false);
+    const resolvedDisabled = resolveQuickScanRules(
+      allDisabled.ruleOverrides,
+      allDisabled.customRules
+    );
+    expect(resolvedDisabled.every((r) => !r.enabled)).toBe(true);
+    expect(allDisabled.customRules).toHaveLength(1);
+    expect(allDisabled.ruleOverrides.state_lookbook_bleed?.instructionsOverride).toBe(
+      'Custom bleed prompt on {{STATE_ID}}?'
+    );
+
+    const allEnabled = setAllQuickScanRulesEnabledInState(allDisabled, true);
+    const resolvedEnabled = resolveQuickScanRules(
+      allEnabled.ruleOverrides,
+      allEnabled.customRules
+    );
+    expect(resolvedEnabled.every((r) => r.enabled)).toBe(true);
+    expect(allEnabled.customRules).toHaveLength(1);
+    expect(allEnabled.ruleOverrides.state_lookbook_bleed?.instructionsOverride).toBe(
+      'Custom bleed prompt on {{STATE_ID}}?'
+    );
+    expect(allEnabled.ruleOverrides.studio_custom_rule).toBeUndefined();
   });
 });

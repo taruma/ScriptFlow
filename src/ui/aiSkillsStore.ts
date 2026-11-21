@@ -382,6 +382,47 @@ export function resetSkillOverride(state: AiSkillsState, skillId: string): AiSki
   };
 }
 
+/**
+ * Bulk-sets `pinMode` (`'auto'` or `'muted'`) across every built-in and custom skill
+ * while preserving all custom skill definitions, body overrides, and Foundational Craft edits.
+ */
+export function setAllSkillsPinMode(
+  state: AiSkillsState,
+  pinMode: 'auto' | 'muted'
+): AiSkillsState {
+  const allIds = new Set<string>();
+  for (const skill of BUILTIN_AUTEUR_SKILLS) {
+    allIds.add(skill.id);
+  }
+  for (const custom of state.customSkills) {
+    allIds.add(custom.id.trim().toLowerCase());
+  }
+
+  const nextOverrides: Record<string, SkillOverride> = {...state.skillOverrides};
+  for (const id of allIds) {
+    const existing = nextOverrides[id];
+    if (pinMode === 'auto') {
+      if (!existing) continue;
+      if (existing.bodyOverride) {
+        nextOverrides[id] = {bodyOverride: existing.bodyOverride};
+      } else {
+        delete nextOverrides[id];
+      }
+    } else {
+      nextOverrides[id] = {
+        ...(existing?.bodyOverride ? {bodyOverride: existing.bodyOverride} : {}),
+        pinMode: 'muted',
+      };
+    }
+  }
+
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    skillOverrides: nextOverrides,
+  };
+}
+
 export function upsertCustomSkill(
   state: AiSkillsState,
   skill: CustomAuteurSkill,
@@ -489,6 +530,7 @@ export function useAiSkills(): {
   hasUpstreamUpdate: boolean;
   setFoundationalCraft: (value: string | null) => void;
   setPinMode: (skillId: string, pinMode: SkillPinMode) => void;
+  setAllPinModes: (pinMode: 'auto' | 'muted') => void;
   setBodyOverride: (skillId: string, bodyOverride: string | null) => void;
   resetSkill: (skillId: string) => void;
   saveCustomSkill: (skill: CustomAuteurSkill, editingId?: string) => void;
@@ -504,6 +546,10 @@ export function useAiSkills(): {
 
   const setPinMode = useCallback((skillId: string, pinMode: SkillPinMode) => {
     setSkillsState((prev) => saveStoredAiSkills(setSkillPinMode(prev, skillId, pinMode)));
+  }, []);
+
+  const setAllPinModes = useCallback((pinMode: 'auto' | 'muted') => {
+    setSkillsState((prev) => saveStoredAiSkills(setAllSkillsPinMode(prev, pinMode)));
   }, []);
 
   const setBodyOverride = useCallback((skillId: string, bodyOverride: string | null) => {
@@ -536,6 +582,7 @@ export function useAiSkills(): {
     hasUpstreamUpdate: hasUpstreamKnowledgeUpdate(skillsState),
     setFoundationalCraft,
     setPinMode,
+    setAllPinModes,
     setBodyOverride,
     resetSkill,
     saveCustomSkill,
