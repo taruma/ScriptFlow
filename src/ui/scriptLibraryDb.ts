@@ -1,6 +1,15 @@
 import {exportPlainText} from '../core/index.ts';
 import {BUNDLED_EXAMPLES, type BundledExample} from '../data/examples/index.ts';
 import {
+  isValidSnapshotTrigger,
+  MAX_AUTO_SNAPSHOTS_PER_SCRIPT,
+  selectSnapshotsToPrune,
+  shouldSkipAutoSnapshot,
+  sortScriptSnapshots,
+  type ScriptSnapshot,
+  type SnapshotTrigger,
+} from './scriptSnapshots.ts';
+import {
   LIBRARY_FALLBACK_STORAGE_KEY,
   readActiveScriptId,
   readLibraryMigratedFlag,
@@ -13,9 +22,22 @@ import {
 } from './scriptStorage.ts';
 
 export const SCRIPT_LIBRARY_DB_NAME = 'auteur-script-library-v1';
-export const SCRIPT_LIBRARY_DB_VERSION = 1;
+export const SCRIPT_LIBRARY_DB_VERSION = 2;
 export const SCRIPT_LIBRARY_STORE_NAME = 'scripts';
 export const SCRIPT_LIBRARY_UPDATED_AT_INDEX = 'updatedAt';
+export const SCRIPT_SNAPSHOTS_STORE_NAME = 'snapshots';
+export const SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX = 'scriptId';
+
+export interface SaveSnapshotInput {
+  scriptId: string;
+  trigger: SnapshotTrigger;
+  label: string;
+  rawText: string;
+  pinned?: boolean;
+  createdAt?: number;
+  id?: string;
+  maxAuto?: number;
+}
 
 export interface ScriptRecord {
   id: string;
@@ -74,6 +96,14 @@ export interface ScriptLibraryStore {
   delete(id: string): Promise<void>;
   bulkDelete(ids: readonly string[]): Promise<void>;
   clearAll(): Promise<void>;
+  listSnapshots(scriptId: string): Promise<ScriptSnapshot[]>;
+  saveSnapshot(input: SaveSnapshotInput): Promise<ScriptSnapshot | null>;
+  updateSnapshot(
+    id: string,
+    patch: {label?: string; pinned?: boolean}
+  ): Promise<ScriptSnapshot | null>;
+  deleteSnapshot(id: string): Promise<void>;
+  clearSnapshotsForScript(scriptId: string): Promise<void>;
   migrateFromLegacyLocalStorage(options?: LegacyMigrationOptions): Promise<LegacyMigrationResult>;
 }
 
@@ -229,6 +259,82 @@ function persistFallbackMap(storageKey: string | null, map: Map<string, ScriptRe
   }
 }
 
+function isValidStoredSnapshot(value: unknown): value is ScriptSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.trim().length > 0 &&
+    typeof candidate.scriptId === 'string' &&
+    candidate.scriptId.trim().length > 0 &&
+    isValidSnapshotTrigger(candidate.trigger) &&
+    typeof candidate.label === 'string' &&
+    typeof candidate.rawText === 'string' &&
+    typeof candidate.createdAt === 'number' &&
+    Number.isFinite(candidate.createdAt)
+  );
+}
+
+function sanitizeSnapshot(snapshot: ScriptSnapshot): ScriptSnapshot {
+  const createdAt =
+    typeof snapshot.createdAt === 'number' &&
+    Number.isFinite(snapshot.createdAt) &&
+    snapshot.createdAt >= 0
+      ? snapshot.createdAt
+      : Date.now();
+  const clean: ScriptSnapshot = {
+    id: snapshot.id.trim(),
+    scriptId: snapshot.scriptId.trim(),
+    trigger: snapshot.trigger,
+    label: snapshot.label.trim() || 'Snapshot',
+    rawText: snapshot.rawText,
+    createdAt,
+  };
+  if (snapshot.pinned === true) {
+    clean.pinned = true;
+  }
+  return clean;
+}
+
+function getSnapshotsFallbackKey(storageKey: string | null): string | null {
+  return storageKey ? `${storageKey}-snapshots` : null;
+}
+
+function readFallbackSnapshotsMap(storageKey: string | null): Map<string, ScriptSnapshot> {
+  const map = new Map<string, ScriptSnapshot>();
+  const key = getSnapshotsFallbackKey(storageKey);
+  if (!key) return map;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return map;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return map;
+    for (const item of parsed) {
+      if (isValidStoredSnapshot(item)) {
+        const clean = sanitizeSnapshot(item);
+        map.set(clean.id, clean);
+      }
+    }
+  } catch {
+    // Ignore storage read/parse failures
+  }
+  return map;
+}
+
+function persistFallbackSnapshotsMap(
+  storageKey: string | null,
+  map: Map<string, ScriptSnapshot>
+): void {
+  const key = getSnapshotsFallbackKey(storageKey);
+  if (!key) return;
+  try {
+    const payload = JSON.stringify(sortScriptSnapshots(Array.from(map.values())));
+    window.localStorage.setItem(key, payload);
+  } catch {
+    // Ignore storage quota or restricted environment errors
+  }
+}
+
 function openIndexedDb(factory: IDBFactory, dbName: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let request: IDBOpenDBRequest;
@@ -252,6 +358,21 @@ function openIndexedDb(factory: IDBFactory, dbName: string): Promise<IDBDatabase
         store.createIndex(
           SCRIPT_LIBRARY_UPDATED_AT_INDEX,
           SCRIPT_LIBRARY_UPDATED_AT_INDEX,
+          {unique: false}
+        );
+      }
+
+      let snapshotStore: IDBObjectStore;
+      if (!db.objectStoreNames.contains(SCRIPT_SNAPSHOTS_STORE_NAME)) {
+        snapshotStore = db.createObjectStore(SCRIPT_SNAPSHOTS_STORE_NAME, {keyPath: 'id'});
+      } else {
+        snapshotStore = request.transaction!.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME);
+      }
+
+      if (!snapshotStore.indexNames.contains(SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX)) {
+        snapshotStore.createIndex(
+          SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX,
+          SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX,
           {unique: false}
         );
       }
@@ -317,11 +438,28 @@ function idbBulkPut(db: IDBDatabase, records: readonly ScriptRecord[]): Promise<
   });
 }
 
+function deleteSnapshotsForScriptInTx(snapshotStore: IDBObjectStore, scriptId: string): void {
+  const index = snapshotStore.index(SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX);
+  const req = index.openCursor(IDBKeyRange.only(scriptId));
+  req.onsuccess = () => {
+    const cursor = req.result;
+    if (cursor) {
+      cursor.delete();
+      cursor.continue();
+    }
+  };
+}
+
 function idbDelete(db: IDBDatabase, id: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(SCRIPT_LIBRARY_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(SCRIPT_LIBRARY_STORE_NAME);
-    store.delete(id);
+    const storeNames = db.objectStoreNames.contains(SCRIPT_SNAPSHOTS_STORE_NAME)
+      ? [SCRIPT_LIBRARY_STORE_NAME, SCRIPT_SNAPSHOTS_STORE_NAME]
+      : [SCRIPT_LIBRARY_STORE_NAME];
+    const tx = db.transaction(storeNames, 'readwrite');
+    tx.objectStore(SCRIPT_LIBRARY_STORE_NAME).delete(id);
+    if (storeNames.includes(SCRIPT_SNAPSHOTS_STORE_NAME)) {
+      deleteSnapshotsForScriptInTx(tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME), id);
+    }
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error('Failed to delete script record.'));
@@ -332,10 +470,19 @@ function idbDelete(db: IDBDatabase, id: string): Promise<void> {
 function idbBulkDelete(db: IDBDatabase, ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(SCRIPT_LIBRARY_STORE_NAME, 'readwrite');
+    const storeNames = db.objectStoreNames.contains(SCRIPT_SNAPSHOTS_STORE_NAME)
+      ? [SCRIPT_LIBRARY_STORE_NAME, SCRIPT_SNAPSHOTS_STORE_NAME]
+      : [SCRIPT_LIBRARY_STORE_NAME];
+    const tx = db.transaction(storeNames, 'readwrite');
     const store = tx.objectStore(SCRIPT_LIBRARY_STORE_NAME);
+    const snapshotStore = storeNames.includes(SCRIPT_SNAPSHOTS_STORE_NAME)
+      ? tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME)
+      : null;
     for (const id of ids) {
       store.delete(id);
+      if (snapshotStore) {
+        deleteSnapshotsForScriptInTx(snapshotStore, id);
+      }
     }
 
     tx.oncomplete = () => resolve();
@@ -346,13 +493,108 @@ function idbBulkDelete(db: IDBDatabase, ids: readonly string[]): Promise<void> {
 
 function idbClearAll(db: IDBDatabase): Promise<void> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(SCRIPT_LIBRARY_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(SCRIPT_LIBRARY_STORE_NAME);
-    store.clear();
+    const storeNames = db.objectStoreNames.contains(SCRIPT_SNAPSHOTS_STORE_NAME)
+      ? [SCRIPT_LIBRARY_STORE_NAME, SCRIPT_SNAPSHOTS_STORE_NAME]
+      : [SCRIPT_LIBRARY_STORE_NAME];
+    const tx = db.transaction(storeNames, 'readwrite');
+    tx.objectStore(SCRIPT_LIBRARY_STORE_NAME).clear();
+    if (storeNames.includes(SCRIPT_SNAPSHOTS_STORE_NAME)) {
+      tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME).clear();
+    }
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error('Failed to clear script library.'));
     tx.onabort = () => reject(tx.error ?? new Error('Script library clear transaction aborted.'));
+  });
+}
+
+function idbListSnapshots(db: IDBDatabase, scriptId: string): Promise<ScriptSnapshot[]> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_SNAPSHOTS_STORE_NAME, 'readonly');
+    const store = tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME);
+    const index = store.index(SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX);
+    const req = index.getAll(IDBKeyRange.only(scriptId));
+
+    req.onsuccess = () => {
+      const rows = Array.isArray(req.result) ? req.result : [];
+      const valid = rows.filter(isValidStoredSnapshot).map(sanitizeSnapshot);
+      resolve(sortScriptSnapshots(valid));
+    };
+    req.onerror = () => reject(req.error ?? new Error('Failed to list script snapshots.'));
+  });
+}
+
+function idbPutSnapshotAndPrune(
+  db: IDBDatabase,
+  snapshot: ScriptSnapshot,
+  pruneIds: readonly string[]
+): Promise<ScriptSnapshot> {
+  const clean = sanitizeSnapshot(snapshot);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_SNAPSHOTS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME);
+    store.put(clean);
+    for (const id of pruneIds) {
+      store.delete(id);
+    }
+
+    tx.oncomplete = () => resolve(clean);
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to save script snapshot.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Snapshot save transaction aborted.'));
+  });
+}
+
+function idbUpdateSnapshot(
+  db: IDBDatabase,
+  id: string,
+  patch: {label?: string; pinned?: boolean}
+): Promise<ScriptSnapshot | null> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_SNAPSHOTS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME);
+    const req = store.get(id);
+    let updated: ScriptSnapshot | null = null;
+
+    req.onsuccess = () => {
+      if (!isValidStoredSnapshot(req.result)) {
+        return;
+      }
+      const existing = sanitizeSnapshot(req.result);
+      const next: ScriptSnapshot = sanitizeSnapshot({
+        ...existing,
+        ...(patch.label !== undefined ? {label: patch.label} : {}),
+        ...(patch.pinned !== undefined ? {pinned: patch.pinned} : {}),
+      });
+      if (patch.pinned === false) {
+        delete next.pinned;
+      }
+      updated = next;
+      store.put(next);
+    };
+    req.onerror = () => reject(req.error ?? new Error('Failed to update script snapshot.'));
+    tx.oncomplete = () => resolve(updated);
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to update script snapshot.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Snapshot update transaction aborted.'));
+  });
+}
+
+function idbDeleteSnapshot(db: IDBDatabase, id: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_SNAPSHOTS_STORE_NAME, 'readwrite');
+    tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to delete script snapshot.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Snapshot delete transaction aborted.'));
+  });
+}
+
+function idbClearSnapshotsForScript(db: IDBDatabase, scriptId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_SNAPSHOTS_STORE_NAME, 'readwrite');
+    deleteSnapshotsForScriptInTx(tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME), scriptId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to clear script snapshots.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Snapshot clear transaction aborted.'));
   });
 }
 
@@ -373,12 +615,34 @@ export function createScriptLibraryStore(
   let activeBackend: 'indexeddb' | 'fallback' = idbFactory ? 'indexeddb' : 'fallback';
   let dbPromise: Promise<IDBDatabase> | null = null;
   let fallbackMap: Map<string, ScriptRecord> | null = null;
+  let fallbackSnapshotsMap: Map<string, ScriptSnapshot> | null = null;
 
   const ensureFallbackMap = (): Map<string, ScriptRecord> => {
     if (!fallbackMap) {
       fallbackMap = readFallbackMap(fallbackStorageKey);
     }
     return fallbackMap;
+  };
+
+  const ensureFallbackSnapshotsMap = (): Map<string, ScriptSnapshot> => {
+    if (!fallbackSnapshotsMap) {
+      fallbackSnapshotsMap = readFallbackSnapshotsMap(fallbackStorageKey);
+    }
+    return fallbackSnapshotsMap;
+  };
+
+  const deleteFallbackSnapshotsForScripts = (scriptIds: ReadonlySet<string>): void => {
+    const snapMap = ensureFallbackSnapshotsMap();
+    let changed = false;
+    for (const [snapId, snap] of snapMap.entries()) {
+      if (scriptIds.has(snap.scriptId)) {
+        snapMap.delete(snapId);
+        changed = true;
+      }
+    }
+    if (changed) {
+      persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+    }
   };
 
   const tryOpenDb = async (): Promise<IDBDatabase | null> => {
@@ -495,6 +759,7 @@ export function createScriptLibraryStore(
         (map) => {
           map.delete(cleanId);
           persistFallbackMap(fallbackStorageKey, map);
+          deleteFallbackSnapshotsForScripts(new Set([cleanId]));
         }
       );
     },
@@ -509,6 +774,7 @@ export function createScriptLibraryStore(
             map.delete(id);
           }
           persistFallbackMap(fallbackStorageKey, map);
+          deleteFallbackSnapshotsForScripts(new Set(cleanIds));
         }
       );
     },
@@ -519,6 +785,117 @@ export function createScriptLibraryStore(
         (map) => {
           map.clear();
           persistFallbackMap(fallbackStorageKey, map);
+          const snapMap = ensureFallbackSnapshotsMap();
+          snapMap.clear();
+          persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+        }
+      );
+    },
+
+    async listSnapshots(scriptId: string): Promise<ScriptSnapshot[]> {
+      const cleanScriptId = scriptId.trim();
+      if (!cleanScriptId) return [];
+      return runWithFallback(
+        (db) => idbListSnapshots(db, cleanScriptId),
+        () => {
+          const snapMap = ensureFallbackSnapshotsMap();
+          const matching: ScriptSnapshot[] = [];
+          for (const snap of snapMap.values()) {
+            if (snap.scriptId === cleanScriptId) {
+              matching.push({...snap});
+            }
+          }
+          return sortScriptSnapshots(matching);
+        }
+      );
+    },
+
+    async saveSnapshot(input: SaveSnapshotInput): Promise<ScriptSnapshot | null> {
+      const cleanScriptId = input.scriptId.trim();
+      if (!cleanScriptId) return null;
+
+      const existing = await store.listSnapshots(cleanScriptId);
+      if (shouldSkipAutoSnapshot(existing[0], input.rawText, input.trigger)) {
+        return null;
+      }
+
+      const candidate: ScriptSnapshot = sanitizeSnapshot({
+        id: input.id?.trim() || createScriptId('snap'),
+        scriptId: cleanScriptId,
+        trigger: input.trigger,
+        label: input.label,
+        rawText: input.rawText,
+        createdAt: input.createdAt ?? Date.now(),
+        ...(input.pinned ? {pinned: true} : {}),
+      });
+
+      const pruneIds = selectSnapshotsToPrune(
+        [candidate, ...existing],
+        input.maxAuto ?? MAX_AUTO_SNAPSHOTS_PER_SCRIPT
+      );
+
+      return runWithFallback(
+        (db) => idbPutSnapshotAndPrune(db, candidate, pruneIds),
+        () => {
+          const snapMap = ensureFallbackSnapshotsMap();
+          snapMap.set(candidate.id, candidate);
+          for (const pruneId of pruneIds) {
+            snapMap.delete(pruneId);
+          }
+          persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+          return {...candidate};
+        }
+      );
+    },
+
+    async updateSnapshot(
+      id: string,
+      patch: {label?: string; pinned?: boolean}
+    ): Promise<ScriptSnapshot | null> {
+      const cleanId = id.trim();
+      if (!cleanId) return null;
+      return runWithFallback(
+        (db) => idbUpdateSnapshot(db, cleanId, patch),
+        () => {
+          const snapMap = ensureFallbackSnapshotsMap();
+          const existing = snapMap.get(cleanId);
+          if (!existing) return null;
+          const next: ScriptSnapshot = sanitizeSnapshot({
+            ...existing,
+            ...(patch.label !== undefined ? {label: patch.label} : {}),
+            ...(patch.pinned !== undefined ? {pinned: patch.pinned} : {}),
+          });
+          if (patch.pinned === false) {
+            delete next.pinned;
+          }
+          snapMap.set(cleanId, next);
+          persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+          return {...next};
+        }
+      );
+    },
+
+    async deleteSnapshot(id: string): Promise<void> {
+      const cleanId = id.trim();
+      if (!cleanId) return;
+      return runWithFallback(
+        (db) => idbDeleteSnapshot(db, cleanId),
+        () => {
+          const snapMap = ensureFallbackSnapshotsMap();
+          if (snapMap.delete(cleanId)) {
+            persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+          }
+        }
+      );
+    },
+
+    async clearSnapshotsForScript(scriptId: string): Promise<void> {
+      const cleanScriptId = scriptId.trim();
+      if (!cleanScriptId) return;
+      return runWithFallback(
+        (db) => idbClearSnapshotsForScript(db, cleanScriptId),
+        () => {
+          deleteFallbackSnapshotsForScripts(new Set([cleanScriptId]));
         }
       );
     },

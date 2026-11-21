@@ -308,7 +308,7 @@ Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on a
 
 - **Composer shortcuts:** `Enter` sends; `Shift+Enter` inserts a newline.
 - **Safe native Undo inside AI inputs:** Every `<input>` and `<textarea>` inside the composer, `Brief / Refs` tray, **AI Settings**, and **Context Inspector** carries `data-native-undo="true"`, and all AI modals carry `aria-modal="true"`—so pressing `Cmd/Ctrl+Z` while editing prompts or skills undoes your text input without undoing the Auteur Script behind it.
-- **Document Undo after Apply:** Every applied Draft, Patch, or Audit Fix commits a single history `'checkpoint'`, so one `Cmd/Ctrl+Z` in the editor reverts the entire AI change cleanly.
+- **Document Undo & Persistent Version History after Apply:** Every applied Draft, Patch, or Audit Fix automatically saves a persistent **pre-apply snapshot** in IndexedDB (`File ▾ → Version History…`, surviving page reloads and script switches) AND commits a single in-memory history `'checkpoint'`, so you can either press `Cmd/Ctrl+Z` immediately or compare/restore/fork any prior checkpoint later.
 - **Local-only persistence:**
   - API key: `auteur-editor-ai-api-key-v1` (`localStorage` or tab-scoped `sessionStorage` when `Session only` is on).
   - Model/reasoning/trace settings: `auteur-editor-ai-settings-v1` (`localStorage`).

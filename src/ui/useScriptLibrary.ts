@@ -43,6 +43,7 @@ import {
   sortScriptRecords,
   type ScriptRecord,
 } from './scriptLibraryDb.ts';
+import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
 import {createCopyTitle, type ActiveScriptRef} from './scriptLibraryView.ts';
 import {
   mirrorActiveScriptToLocalStorage,
@@ -152,8 +153,20 @@ export interface UseScriptLibraryResult {
   handleForkCurrentExample: () => void;
   handleForkCurrentExampleWithContent: (
     nextRawText: string,
-    options?: {title?: string; toastMessage?: string}
+    options?: {
+      title?: string;
+      toastMessage?: string;
+      snapshotMeta?: {trigger: 'ai_draft' | 'ai_patch' | 'ai_fix'; label: string};
+    }
   ) => Promise<boolean>;
+  handleCreateSnapshot: (options: {
+    trigger: SnapshotTrigger;
+    label: string;
+    rawText?: string;
+    scriptId?: string;
+  }) => Promise<ScriptSnapshot | null>;
+  handleRestoreSnapshot: (snapshot: ScriptSnapshot) => Promise<boolean>;
+  handleForkSnapshotAsNewScript: (snapshot: ScriptSnapshot) => Promise<ScriptRecord | null>;
   handleNewBlank: () => Promise<void>;
   handleDuplicateScript: (record: ScriptRecord) => Promise<void>;
   handleRenameScript: (record: ScriptRecord, nextTitle: string) => Promise<void>;
@@ -518,7 +531,11 @@ export function useScriptLibrary({
   const handleForkCurrentExampleWithContent = useCallback(
     async (
       nextRawText: string,
-      options?: {title?: string; toastMessage?: string}
+      options?: {
+        title?: string;
+        toastMessage?: string;
+        snapshotMeta?: {trigger: 'ai_draft' | 'ai_patch' | 'ai_fix'; label: string};
+      }
     ): Promise<boolean> => {
       const current = activeScriptRef.current;
       if (current.kind !== 'example') return false;
@@ -544,6 +561,16 @@ export function useScriptLibrary({
       };
       const saved = await scriptLibraryDb.put(forked);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
+
+      if (options?.snapshotMeta) {
+        void scriptLibraryDb.saveSnapshot({
+          scriptId: saved.id,
+          trigger: options.snapshotMeta.trigger,
+          label: options.snapshotMeta.label,
+          rawText: example.content,
+          createdAt: now,
+        });
+      }
 
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
@@ -573,6 +600,78 @@ export function useScriptLibrary({
       return true;
     },
     [persistCurrentCustomIfDirty, onToast]
+  );
+
+  const handleCreateSnapshot = useCallback(
+    async (options: {
+      trigger: SnapshotTrigger;
+      label: string;
+      rawText?: string;
+      scriptId?: string;
+    }): Promise<ScriptSnapshot | null> => {
+      const targetScriptId =
+        options.scriptId ??
+        (activeScriptRef.current.kind === 'custom' ? activeScriptRef.current.id : null);
+      if (!targetScriptId) return null;
+      const textToSave = options.rawText ?? rawTextRef.current;
+      return scriptLibraryDb.saveSnapshot({
+        scriptId: targetScriptId,
+        trigger: options.trigger,
+        label: options.label,
+        rawText: textToSave,
+      });
+    },
+    []
+  );
+
+  const handleRestoreSnapshot = useCallback(
+    async (snapshot: ScriptSnapshot): Promise<boolean> => {
+      const current = activeScriptRef.current;
+      if (current.kind !== 'custom' || current.id !== snapshot.scriptId) {
+        return false;
+      }
+      const beforeText = rawTextRef.current;
+      if (beforeText === snapshot.rawText) {
+        return false;
+      }
+
+      // Always protect current state with a pre-restore checkpoint before rolling back
+      await scriptLibraryDb.saveSnapshot({
+        scriptId: current.id,
+        trigger: 'pre_restore',
+        label: `Before restore: ${snapshot.label}`,
+        rawText: beforeText,
+      });
+
+      commitRawText(snapshot.rawText, {mode: 'checkpoint'});
+      onToast(UI_LABELS.toasts.snapshotRestored);
+      return true;
+    },
+    [commitRawText, onToast]
+  );
+
+  const handleForkSnapshotAsNewScript = useCallback(
+    async (snapshot: ScriptSnapshot): Promise<ScriptRecord | null> => {
+      await persistCurrentCustomIfDirty();
+      const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
+      const baseTitle = sceneTitleRef.current.trim() || APP_META.untitledScene;
+      const title = createCopyTitle(baseTitle, existingTitles, 'Snapshot');
+      const now = Date.now();
+      const forked: ScriptRecord = {
+        id: createScriptId('script'),
+        title,
+        rawText: snapshot.rawText,
+        createdAt: now,
+        updatedAt: now,
+        forkedFromId: snapshot.scriptId,
+      };
+      const saved = await scriptLibraryDb.put(forked);
+      setCustomScripts((prev) => upsertSortedScript(prev, saved));
+      activateCustomScript(saved);
+      onToast(UI_LABELS.toasts.snapshotForked(saved.title));
+      return saved;
+    },
+    [persistCurrentCustomIfDirty, activateCustomScript, onToast]
   );
 
   const handleNewBlank = useCallback(async () => {
@@ -978,6 +1077,9 @@ export function useScriptLibrary({
     handleForkExample,
     handleForkCurrentExample,
     handleForkCurrentExampleWithContent,
+    handleCreateSnapshot,
+    handleRestoreSnapshot,
+    handleForkSnapshotAsNewScript,
     handleNewBlank,
     handleDuplicateScript,
     handleRenameScript,

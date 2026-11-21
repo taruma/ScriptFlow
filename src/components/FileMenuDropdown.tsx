@@ -8,6 +8,7 @@ import {
   FileText,
   FolderArchive,
   FolderOpen,
+  History,
   Upload,
 } from 'lucide-react';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -19,6 +20,7 @@ export interface FileMenuDropdownProps {
   onClose: () => void;
   onNewBlank: () => void;
   onImportFile: () => void;
+  onVersionHistory: () => void;
   onDownloadCanonical: () => void;
   onDownloadTagless: () => void;
   onDownloadJsonEnvelope: () => void;
@@ -29,7 +31,7 @@ export interface FileMenuDropdownProps {
 
 /**
  * Quiet left-wing File menu dropdown housing creation, single-file import/export,
- * full-library backup/restore, and library browser navigation.
+ * version history, full-library backup/restore, and library browser navigation.
  */
 export function FileMenuDropdown({
   isOpen,
@@ -37,6 +39,7 @@ export function FileMenuDropdown({
   onClose,
   onNewBlank,
   onImportFile,
+  onVersionHistory,
   onDownloadCanonical,
   onDownloadTagless,
   onDownloadJsonEnvelope,
@@ -88,6 +91,17 @@ export function FileMenuDropdown({
               <span className="inline-flex items-center gap-2">
                 <Upload className="h-3.5 w-3.5 text-text-muted" />
                 <span>{UI_LABELS.topBar.fileMenuImportFile}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={runAndClose(onVersionHistory)}
+              className={UI_TOKENS.dropdown.item}
+            >
+              <span className="inline-flex items-center gap-2">
+                <History className="h-3.5 w-3.5 text-text-muted" />
+                <span>{UI_LABELS.topBar.fileMenuVersionHistory}</span>
               </span>
             </button>
           </div>

@@ -35,6 +35,7 @@ import {matchHistoryShortcut} from './ui/historyShortcuts.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
 import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
+import {buildAiSnapshotLabel} from './ui/scriptSnapshots.ts';
 import {useScriptLibrary} from './ui/useScriptLibrary.ts';
 import {useStableValue} from './ui/useStableValue.ts';
 
@@ -47,6 +48,12 @@ const JsonIrDebugDrawer = lazy(() =>
 const AiAssistantSidebar = lazy(() =>
   import('./components/AiAssistantSidebar.tsx').then((mod) => ({
     default: mod.AiAssistantSidebar,
+  }))
+);
+
+const VersionHistoryModal = lazy(() =>
+  import('./components/VersionHistoryModal.tsx').then((mod) => ({
+    default: mod.VersionHistoryModal,
   }))
 );
 
@@ -74,6 +81,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [activeAiPatches, setActiveAiPatches] = useState<ActiveAiPatchItem[]>([]);
   const livePatchActionsRef = useRef<AiLivePatchActionHandlers | null>(null);
@@ -186,7 +194,7 @@ export default function App() {
   // Global Paste-and-Hydrate with Active-Editor & Read-Only Guards
   useEffect(() => {
     const handleGlobalPaste = (event: ClipboardEvent) => {
-      if (isDebugOpen || confirmRequest !== null || isLibraryOpen) return;
+      if (isDebugOpen || confirmRequest !== null || isLibraryOpen || isVersionHistoryOpen) return;
       if (document.querySelector('[aria-modal="true"]')) return;
 
       const pasted = event.clipboardData?.getData('text/plain');
@@ -232,7 +240,15 @@ export default function App() {
 
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [viewMode, isReadOnly, isDebugOpen, confirmRequest, isLibraryOpen, commitRawText]);
+  }, [
+    viewMode,
+    isReadOnly,
+    isDebugOpen,
+    confirmRequest,
+    isLibraryOpen,
+    isVersionHistoryOpen,
+    commitRawText,
+  ]);
 
   // Document-level Undo / Redo keyboard shortcuts (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
   useEffect(() => {
@@ -241,7 +257,15 @@ export default function App() {
       const action = matchHistoryShortcut(event);
       if (!action) return;
 
-      if (isReadOnly || isDebugOpen || confirmRequest !== null || isLibraryOpen) return;
+      if (
+        isReadOnly ||
+        isDebugOpen ||
+        confirmRequest !== null ||
+        isLibraryOpen ||
+        isVersionHistoryOpen
+      ) {
+        return;
+      }
       if (document.querySelector('[aria-modal="true"]')) return;
 
       const active = document.activeElement;
@@ -259,7 +283,15 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isReadOnly, isDebugOpen, confirmRequest, isLibraryOpen, handleUndo, handleRedo]);
+  }, [
+    isReadOnly,
+    isDebugOpen,
+    confirmRequest,
+    isLibraryOpen,
+    isVersionHistoryOpen,
+    handleUndo,
+    handleRedo,
+  ]);
 
   // Pure Serializer Mutations
   const handleUpdateStaging = useCallback(
@@ -485,10 +517,19 @@ export default function App() {
       kind: 'patch' | 'fix',
       options?: {batchCount?: number}
     ): Promise<boolean> => {
+      const trigger = kind === 'fix' ? 'ai_fix' : 'ai_patch';
+      const snapshotLabel = buildAiSnapshotLabel(trigger, suggestion.summary, options);
       if (isReadOnly) {
         skipNextAiResetRef.current = true;
-        return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText);
+        return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText, {
+          snapshotMeta: {trigger, label: snapshotLabel},
+        });
       }
+      void library.handleCreateSnapshot({
+        trigger,
+        label: snapshotLabel,
+        rawText,
+      });
       commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
       setToastMessage(
         kind === 'fix'
@@ -499,17 +540,27 @@ export default function App() {
       );
       return true;
     },
-    [isReadOnly, library, commitRawText]
+    [isReadOnly, library, rawText, commitRawText]
   );
 
   const handleApplyAiDraftSuggestion = useCallback(
     async (suggestion: DraftSuggestion): Promise<boolean> => {
+      const snapshotLabel = buildAiSnapshotLabel(
+        'ai_draft',
+        suggestion.title || suggestion.summary
+      );
       if (isReadOnly) {
         skipNextAiResetRef.current = true;
         return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText, {
           title: suggestion.title,
+          snapshotMeta: {trigger: 'ai_draft', label: snapshotLabel},
         });
       }
+      void library.handleCreateSnapshot({
+        trigger: 'ai_draft',
+        label: snapshotLabel,
+        rawText,
+      });
       commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
       if (
         suggestion.title &&
@@ -520,7 +571,7 @@ export default function App() {
       setToastMessage(UI_LABELS.toasts.aiDraftApplied);
       return true;
     },
-    [isReadOnly, library, commitRawText, sceneTitle, handleTitleChange]
+    [isReadOnly, library, rawText, commitRawText, sceneTitle, handleTitleChange]
   );
 
   const beatCount = doc.execution?.beats.length ?? 0;
@@ -539,6 +590,7 @@ export default function App() {
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
         onImportFile={library.handleTriggerImportFile}
+        onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
         onDownloadCanonical={library.handleDownloadCanonical}
         onDownloadTagless={library.handleDownloadTagless}
         onDownloadJsonEnvelope={library.handleDownloadJsonEnvelope}
@@ -668,6 +720,30 @@ export default function App() {
           onRequestBulkDeleteScripts={library.handleRequestBulkDeleteScripts}
           onRequestClearLibrary={library.handleRequestClearLibrary}
         />
+      )}
+
+      {isVersionHistoryOpen && (
+        <Suspense fallback={null}>
+          <VersionHistoryModal
+            isOpen={isVersionHistoryOpen}
+            onClose={() => setIsVersionHistoryOpen(false)}
+            scriptId={activeScript.id}
+            scriptTitle={sceneTitle || APP_META.untitledScene}
+            currentRawText={rawText}
+            isReadOnly={isReadOnly}
+            onForkCurrentExample={library.handleForkCurrentExample}
+            onSaveMilestone={(label) =>
+              library.handleCreateSnapshot({
+                trigger: 'manual',
+                label,
+                rawText,
+              })
+            }
+            onRestoreSnapshot={library.handleRestoreSnapshot}
+            onForkSnapshot={library.handleForkSnapshotAsNewScript}
+            onToast={setToastMessage}
+          />
+        </Suspense>
       )}
 
       {isDebugOpen && (

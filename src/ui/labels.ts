@@ -76,6 +76,7 @@ export const UI_LABELS = {
     fileMenuAria: 'File actions',
     fileMenuNewBlank: 'New Blank Script',
     fileMenuImportFile: 'Import File (.txt / .json)...',
+    fileMenuVersionHistory: 'Version History...',
     fileMenuExportHeader: 'Download Current',
     fileMenuDownloadCanonical: 'Download Canonical .txt',
     fileMenuDownloadTagless: 'Download Tagless .txt',
@@ -487,6 +488,14 @@ export const UI_LABELS = {
     clearLibraryConfirm: 'Clear Library',
     clearLibraryBackupAction: 'Backup All Scripts (.json)',
     clearLibraryBackupDone: 'Backup Downloaded (.json)',
+    deleteSnapshotTitle: (label: string) => `Delete snapshot "${label}"?`,
+    deleteSnapshotDesc:
+      'This will permanently remove this snapshot from Version History. Your current script will not be affected.',
+    clearSnapshotsTitle: (count: number) =>
+      `Clear all ${count} ${count === 1 ? 'snapshot' : 'snapshots'}?`,
+    clearSnapshotsDesc:
+      'This will permanently remove all saved snapshots and milestones for this script. Your current script will not be affected.',
+    clearSnapshotsConfirm: 'Clear History',
   },
 
   toasts: {
@@ -521,6 +530,64 @@ export const UI_LABELS = {
     aiFixApplied: 'AI fix applied — press Undo to revert',
     aiFixesBatchApplied: (count: number) => `Applied ${count} AI fixes — press Undo to revert`,
     aiForkedAndApplied: (title: string) => `Forked "${title}" and applied AI suggestion`,
+    snapshotSaved: (label: string) => `Saved milestone "${label}"`,
+    snapshotRestored: 'Snapshot restored — press Undo or open Version History to revert',
+    snapshotForked: (title: string) => `Forked snapshot to "${title}"`,
+    snapshotDeleted: 'Deleted snapshot',
+    snapshotsCleared: 'Cleared version history for this script',
+  },
+
+  versionHistory: {
+    dialogAria: 'Version History',
+    title: 'Version History',
+    subtitle: (scriptTitle: string, count: number) =>
+      `${scriptTitle} · ${count} ${count === 1 ? 'snapshot' : 'snapshots'}`,
+    subtitleReadOnly: (scriptTitle: string) => `${scriptTitle} · Read-only reference example`,
+    closeAria: 'Close Version History',
+    clearHistoryButton: 'Clear History',
+    clearHistoryAria: 'Clear all snapshots for this script',
+    saveMilestonePlaceholder: 'Save milestone label (optional)…',
+    saveMilestoneAria: 'Milestone snapshot label',
+    saveMilestoneButton: 'Save',
+    saveMilestoneDefaultLabel: 'Manual Milestone',
+    loadingText: 'Loading snapshots…',
+    readOnlyTitle: 'Version History tracks custom scripts',
+    readOnlyDesc:
+      'Bundled examples are read-only. Fork this example into My Scripts to save automatic pre-AI checkpoints and manual milestones.',
+    forkToEditButton: 'Fork to Edit',
+    emptyTitle: 'No snapshots saved yet',
+    emptyDesc:
+      'Checkpoints are saved automatically before every AI Draft, Patch, or Audit Fix apply—or save a manual milestone above anytime.',
+    selectPromptTitle: 'Select a snapshot to inspect',
+    selectPromptDesc:
+      'Compare any checkpoint against your current script, restore it as an undoable edit, or fork it into a new script.',
+    triggers: {
+      ai_draft: 'AI Draft',
+      ai_patch: 'AI Patch',
+      ai_fix: 'Audit Fix',
+      pre_restore: 'Pre-Restore',
+      manual: 'Milestone',
+    } as const,
+    currentMatchBadge: 'Current',
+    pinnedBadge: 'Pinned',
+    pinTitle: 'Pin snapshot (keeps it from auto-pruning)',
+    unpinTitle: 'Unpin snapshot',
+    pinAria: 'Pin snapshot',
+    unpinAria: 'Unpin snapshot',
+    deleteAria: 'Delete snapshot',
+    viewModeDiff: 'Diff vs. Current',
+    viewModeFull: 'Full Script',
+    viewModeAria: 'Snapshot preview mode',
+    diffLegend: 'Changes to current script if this snapshot is restored',
+    diffSummary: (added: number, removed: number) => `+${added} / -${removed} lines`,
+    matchesCurrentNote: 'This snapshot already matches your current script.',
+    retentionNote: 'Auto-saved before AI applies · 30 auto-checkpoints kept (milestones & pinned kept)',
+    forkSnapshotButton: 'Fork as New Script',
+    restoreButton: 'Restore',
+    restoreDisabledTitle: 'Snapshot already matches current script',
+    keyboardHint: '↑↓ navigate · Esc close',
+    beatCountLabel: (count: number) =>
+      `${count} ${count === 1 ? 'Macro-State' : 'Macro-States'}`,
   },
 
   ai: {
