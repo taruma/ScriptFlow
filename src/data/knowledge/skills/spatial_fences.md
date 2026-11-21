@@ -1,0 +1,13 @@
+Spatial Fences & Tier-2 Precision Tags:
+- `[BLOCK]` (inline Sub-State, not a Macro-Block): deploy whenever 3+ subjects share the frame or characters cross/swap marks. Lock 2D viewport coordinates + depth + yaw cleanly: `[BLOCK] Miller frame-left FG facing screen-right; Park frame-left BG facing screen-right; Ray frame-right MG facing screen-left`.
+- `[STATE IN]` / `[STATE OUT]` (boundary Sub-States): clamp difficult posture, hand-off, or kinetic transitions explicitly as leading or trailing Sub-States of a Macro-State line when state inheritance alone is ambiguous.
+- `[LIGHT]` (dynamic light Sub-State): direct in-shot illumination changes (patrol strobes, muzzle flash, opening shutter, power cut) without repeating static `[AESTHETIC]` lighting.
+- Tier-2 single-dimension Sub-States (opt-in Sub-States inside a Macro-State line only when precision control is needed):
+  - `[FOCUS]`: rack focus or depth-of-field pull between foreground and background planes.
+  - `[SPEED]`: deliberate speed ramp (e.g., momentary slow-motion impact or return to real-time).
+  - `[PROP]`: isolated hero object state or mechanical reaction.
+  - `[ENV]`: dynamic environmental shift (gust, door slam, debris fall, rising fog).
+  - `[CROWD]`: background group choreography or directional flow.
+  - `[VFX]`: physicalized visual effects integrated into scene lighting.
+  - `[TRANS]`: intentional optical or match-cut transition Sub-State bridging Macro-States.
+- Honor the Single-Dimension Law: keep each Sub-State focused on one dimension separated by `->`.

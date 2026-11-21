@@ -1,5 +1,13 @@
 import {describe, expect, it} from 'vitest';
 import {
+  BUNDLED_KNOWLEDGE_SKILLS,
+  DRAFT_WRAPPER_TEMPLATE_MD,
+  FOUNDATIONAL_CRAFT_MD,
+  KNOWLEDGE_SKILL_MANIFEST,
+  normalizeMarkdownContent,
+  resolveSkillCatalog,
+} from '../../src/data/knowledge/index.ts';
+import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
   composeAgentContext,
@@ -458,6 +466,71 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
     // Short sidebar caps height at 48% of available sidebar height while respecting MIN_COMPOSER_HEIGHT
     expect(clampComposerHeight(300, 400)).toBe(192);
     expect(clampComposerHeight(300, 100)).toBe(MIN_COMPOSER_HEIGHT);
+  });
+});
+
+describe('src/data/knowledge markdown catalog loader', () => {
+  it('loads foundational craft, draft template, and all 6 built-in skills cleanly from markdown', () => {
+    expect(FOUNDATIONAL_CRAFT_MD).toBe(DEFAULT_FOUNDATIONAL_CRAFT);
+    expect(FOUNDATIONAL_CRAFT_MD).not.toContain('\r');
+    expect(FOUNDATIONAL_CRAFT_MD).toContain('Macro-Block');
+    expect(FOUNDATIONAL_CRAFT_MD).toContain('Macro-State');
+    expect(FOUNDATIONAL_CRAFT_MD).toContain('Sub-State');
+
+    expect(DRAFT_WRAPPER_TEMPLATE_MD).toBe(DEFAULT_DRAFT_WRAPPER_TEMPLATE);
+    expect(DRAFT_WRAPPER_TEMPLATE_MD).toContain('{{idea}}');
+
+    expect(BUNDLED_KNOWLEDGE_SKILLS).toHaveLength(KNOWLEDGE_SKILL_MANIFEST.length);
+    expect(BUNDLED_KNOWLEDGE_SKILLS.map((s) => s.id)).toEqual(
+      BUILTIN_AUTEUR_SKILLS.map((s) => s.id)
+    );
+    for (const skill of BUNDLED_KNOWLEDGE_SKILLS) {
+      expect(skill.body.length).toBeGreaterThan(20);
+      expect(skill.body).not.toContain('\r');
+    }
+  });
+
+  it('normalizes BOM/CRLF and validates missing or duplicate skill manifest entries', () => {
+    expect(normalizeMarkdownContent('\uFEFFLine 1\r\nLine 2\r\n\r\n')).toBe('Line 1\nLine 2');
+
+    const resolved = resolveSkillCatalog(
+      [
+        {
+          id: 'custom_check',
+          name: 'Custom Check',
+          category: 'module',
+          triggerHint: 'Test hint',
+          file: 'custom_check.md',
+        },
+      ],
+      {'./skills/custom_check.md': '\uFEFFBody line\r\n'}
+    );
+    expect(resolved[0]?.body).toBe('Body line');
+
+    expect(() =>
+      resolveSkillCatalog(
+        [
+          {
+            id: 'missing_skill',
+            name: 'Missing',
+            category: 'module',
+            triggerHint: 'Missing',
+            file: 'does_not_exist.md',
+          },
+        ],
+        {}
+      )
+    ).toThrow(/Missing bundled knowledge skill markdown file/);
+
+    expect(() =>
+      resolveSkillCatalog(
+        [
+          {id: 'dup', name: 'A', category: 'module', triggerHint: 'A', file: 'a.md'},
+          {id: 'dup', name: 'B', category: 'module', triggerHint: 'B', file: 'b.md'},
+        ],
+        {'./skills/a.md': 'A', './skills/b.md': 'B'}
+      )
+    ).toThrow(/Duplicate bundled knowledge skill id/);
   });
 });
 

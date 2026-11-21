@@ -118,7 +118,7 @@ Click **`Brief`** at the bottom-left to open the dedicated **Scene Brief & Refer
    - **`Done`** (or `Esc`): Closes the modal while the **`Brief`** button retains a live badge (e.g., `Brief · 2 refs`) whenever brief content is active.
 
 ### How the Draft Wrapper Template Works
-On drafting turns (**`Focus = Draft`**, or **`Focus = Auto` on an empty script**), your message is formatted through the editable **Draft Wrapper Template** (default in `src/services/auteurKnowledge.ts`):
+On drafting turns (**`Focus = Draft`**, or **`Focus = Auto` on an empty script**), your message is formatted through the editable **Draft Wrapper Template** (authored in `src/data/knowledge/draft-wrapper-template.md` and exported from `src/services/auteurKnowledge.ts`):
 
 ```text
 Draft a complete Pure Auteur Script (v0.4.0) from this director brief:
@@ -231,7 +231,7 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 - **`available`** *(Default **`Auto`** when not passively triggered)* → Listed as a 1-line hint in the Available Skill Directory and loadable via `load_auteur_skill`.
 - **`muted`** *(User **Muted**)* → Omitted from both `system_instruction` and `load_auteur_skill`, and rejected at runtime if called.
 
-### Built-In Extension Skills Catalog (`BUILTIN_AUTEUR_SKILLS`)
+### Built-In Extension Skills Catalog (`BUILTIN_AUTEUR_SKILLS` · `src/data/knowledge/skills/*.md`)
 
 | Skill ID | Category | Passive Auto-Activation Trigger | What It Provides |
 |---|---|---|---|

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "draft_craft",
+    "name": "Draft Craft & Curated Examples",
+    "category": "workflow",
+    "triggerHint": "Block-by-block v0.4.0 drafting rules ([INTENT]/[LOGIC]/[AESTHETIC]/[OPENING]/[EXECUTION]), silent pre-flight ledger, and curated canonical examples.",
+    "file": "draft_craft.md"
+  },
+  {
+    "id": "video_continuation",
+    "name": "Video Continuation & Terminal-Frame Handoff",
+    "category": "module",
+    "triggerHint": "Extending an existing clip (@video1) with [CONTINUITY PROTOCOL], reduced delta-only [AESTHETIC], and exact terminal-frame [OPENING] handoff.",
+    "file": "video_continuation.md"
+  },
+  {
+    "id": "token_mapping",
+    "name": "Aesthetic Shorthand Token Mapping",
+    "category": "module",
+    "triggerHint": "Declaring `Description -> TOKEN` dictionaries (`LOC01`, `EV01`, `PROP01`) in [AESTHETIC] and reusing shorthand tokens cleanly in [EXECUTION].",
+    "file": "token_mapping.md"
+  },
+  {
+    "id": "character_reference",
+    "name": "Multimodal Character & Voice References",
+    "category": "module",
+    "triggerHint": "Isolating @image/@audio/@actor bindings in Phase 1 Staging, separating facial identity from fresh wardrobe, and using canonical names downstream.",
+    "file": "character_reference.md"
+  },
+  {
+    "id": "temporal_calibration",
+    "name": "Temporal Calibration & Tempo Table",
+    "category": "module",
+    "triggerHint": "Calibrating Macro-State count, target seconds per Macro-State, anti-float spacing, and cut-latency floors across combat, tactical, dialogue, and horror tempos.",
+    "file": "temporal_calibration.md"
+  },
+  {
+    "id": "spatial_fences",
+    "name": "Spatial Fences & Tier-2 Precision Tags",
+    "category": "module",
+    "triggerHint": "Using inline [BLOCK] for 3+ subjects or mark swaps, [STATE IN]/[STATE OUT] boundary clamps, [LIGHT] cues, and Tier-2 tags ([FOCUS], [SPEED], [PROP], [ENV], [CROWD], [VFX], [TRANS]).",
+    "file": "spatial_fences.md"
+  }
+]
