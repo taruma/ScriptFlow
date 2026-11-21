@@ -377,6 +377,25 @@ function ScriptLibraryModalContent({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {customScripts.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onRequestClearLibrary(() => {
+                      setIsBulkMode(false);
+                      setCheckedIds(new Set());
+                    })
+                  }
+                  aria-label={UI_LABELS.library.clearLibraryAria}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-red-500/10 hover:text-red-500 transition-colors active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{UI_LABELS.library.clearLibraryButton}</span>
+                </button>
+                <span aria-hidden="true" className="h-4 w-px bg-border-main mx-0.5" />
+              </>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -399,25 +418,6 @@ function ScriptLibraryModalContent({
               <Upload className="h-3.5 w-3.5 text-text-muted" />
               <span>{UI_LABELS.library.importButton}</span>
             </button>
-            {customScripts.length > 0 && (
-              <>
-                <span aria-hidden="true" className="h-4 w-px bg-border-main mx-0.5" />
-                <button
-                  type="button"
-                  onClick={() =>
-                    onRequestClearLibrary(() => {
-                      setIsBulkMode(false);
-                      setCheckedIds(new Set());
-                    })
-                  }
-                  aria-label={UI_LABELS.library.clearLibraryAria}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-red-500/10 hover:text-red-500 transition-colors active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{UI_LABELS.library.clearLibraryButton}</span>
-                </button>
-              </>
-            )}
             <button
               type="button"
               onClick={onClose}
