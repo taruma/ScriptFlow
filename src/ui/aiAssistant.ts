@@ -148,7 +148,13 @@ export function upsertLoadedSkill(
 
 export type EditorJumpTarget =
   | {phase: 'staging'; blockIndex: number; domId: string}
-  | {phase: 'execution'; beatIndex: number; domId: string};
+  | {
+      phase: 'execution';
+      beatIndex: number;
+      subStateIndex?: number;
+      domId: string;
+      fallbackDomId?: string;
+    };
 
 function truncatePreview(text: string, maxLength: number): string {
   const compact = text.replace(/\s+/g, ' ').trim();
@@ -276,15 +282,28 @@ export function resolveEditorJumpTarget(
     return null;
   }
 
-  const beatMatch = trimmed.match(/^S(\d+)(?:\.\d+)?$/i);
+  const beatMatch = trimmed.match(/^S(\d+)(?:\.(\d+))?$/i);
   if (beatMatch) {
     const beatIndex = Number.parseInt(beatMatch[1], 10);
-    const exists = doc.execution?.beats.some((beat) => beat.index === beatIndex) ?? false;
-    if (exists) {
+    const beat = doc.execution?.beats.find((b) => b.index === beatIndex);
+    if (beat) {
+      const beatDomId = `execution-beat-${beatIndex}`;
+      if (beatMatch[2] !== undefined) {
+        const subStateIndex = Number.parseInt(beatMatch[2], 10);
+        if (subStateIndex >= 0 && subStateIndex < beat.subStates.length) {
+          return {
+            phase: 'execution',
+            beatIndex,
+            subStateIndex,
+            domId: `execution-beat-${beatIndex}-substate-${subStateIndex}`,
+            fallbackDomId: beatDomId,
+          };
+        }
+      }
       return {
         phase: 'execution',
         beatIndex,
-        domId: `execution-beat-${beatIndex}`,
+        domId: beatDomId,
       };
     }
     return null;

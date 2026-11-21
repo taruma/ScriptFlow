@@ -1437,6 +1437,13 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
     expect(resolveEditorJumpTarget('S2.1', doc)).toEqual({
       phase: 'execution',
       beatIndex: 2,
+      subStateIndex: 1,
+      domId: 'execution-beat-2-substate-1',
+      fallbackDomId: 'execution-beat-2',
+    });
+    expect(resolveEditorJumpTarget('S2.99', doc)).toEqual({
+      phase: 'execution',
+      beatIndex: 2,
       domId: 'execution-beat-2',
     });
     expect(resolveEditorJumpTarget('[OPENING]', doc)?.phase).toBe('staging');

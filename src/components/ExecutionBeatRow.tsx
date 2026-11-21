@@ -685,7 +685,10 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
 
           {/* Step 1 — Lead Sub-State (always formatted, directly editable) + Per-Macro-State Collapse Trigger */}
           {leadNode && (
-            <div className={`relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-12'}`}>
+            <div
+              id={`execution-beat-${beat.index}-substate-0`}
+              className={`relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-12'}`}
+            >
               <button
                 type="button"
                 onClick={handleToggleCollapse}
@@ -735,7 +738,10 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
                 const stepIdx = offset + 1;
                 return (
                   <div key={`step-${stepIdx}`} className="space-y-0.5">
-                    <div className={`group/step relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-5'}`}>
+                    <div
+                      id={`execution-beat-${beat.index}-substate-${stepIdx}`}
+                      className={`group/step relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-5'}`}
+                    >
                       <span
                         aria-hidden="true"
                         className="auteur-tok-arrow mt-[1px] select-none text-[11px] font-bold opacity-85 shrink-0"

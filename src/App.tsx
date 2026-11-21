@@ -545,7 +545,11 @@ export default function App() {
       }
 
       requestAnimationFrame(() => {
-        const el = document.getElementById(resolved.domId);
+        const el =
+          document.getElementById(resolved.domId) ??
+          (resolved.phase === 'execution' && resolved.fallbackDomId
+            ? document.getElementById(resolved.fallbackDomId)
+            : null);
         if (!el) return;
         el.scrollIntoView({behavior: 'smooth', block: 'center'});
         el.classList.add('ring-2', 'ring-[var(--tok-continuity)]', 'rounded-lg');
