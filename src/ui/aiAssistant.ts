@@ -55,6 +55,8 @@ export interface ReferenceAttachment {
   height?: number;
   inlineBase64?: string;
   previewUrl?: string;
+  /** Optional session-local object URL for instant preview/playback of Files API uploads. */
+  localMediaUrl?: string;
   inlineText?: string;
   uri?: string;
   filesApiName?: string;

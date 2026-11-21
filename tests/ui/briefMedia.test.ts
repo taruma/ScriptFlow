@@ -21,8 +21,14 @@ import {
 } from '../../src/ui/aiAssistant.ts';
 import {
   buildAttachmentFingerprint,
+  buildTextExcerpt,
+  CARD_DEFAULT_WIDTH,
+  CARD_MAX_WIDTH,
+  CARD_MIN_WIDTH,
+  CARD_VIDEO_DEFAULT_WIDTH,
   classifyLocalDropFile,
   computeDownscaledDimensions,
+  computeReferenceCardWidth,
   extractYouTubeVideoId,
   filenameToDefaultLabel,
   formatByteSize,
@@ -45,6 +51,44 @@ describe('briefMedia pure helpers', () => {
     expect(computeDownscaledDimensions(1800, 3600)).toEqual({width: 800, height: 1600});
     expect(computeDownscaledDimensions(1200, 800)).toEqual({width: 1200, height: 800});
     expect(computeDownscaledDimensions(1600, 1600)).toEqual({width: 1600, height: 1600});
+  });
+
+  it('computes fixed-height proportional reference card widths clamped safely between min and max', () => {
+    // Portrait 960x1280 clamps cleanly at CARD_MIN_WIDTH
+    expect(
+      computeReferenceCardWidth({kind: 'image', mediaWidth: 960, mediaHeight: 1280})
+    ).toBe(CARD_MIN_WIDTH);
+
+    // Square 1000x1000 fits 136px inner + 16px padding = 152px
+    expect(
+      computeReferenceCardWidth({kind: 'image', mediaWidth: 1000, mediaHeight: 1000})
+    ).toBe(152);
+
+    // 4:3 landscape fits naturally between min and max
+    const w43 = computeReferenceCardWidth({kind: 'image', mediaWidth: 1600, mediaHeight: 1200});
+    expect(w43).toBeGreaterThan(CARD_MIN_WIDTH);
+    expect(w43).toBeLessThan(CARD_MAX_WIDTH);
+
+    // Ultra-wide 21:9 clamps cleanly at CARD_MAX_WIDTH
+    expect(
+      computeReferenceCardWidth({kind: 'image', mediaWidth: 2100, mediaHeight: 900})
+    ).toBe(CARD_MAX_WIDTH);
+
+    // Fallbacks when dimensions are unknown
+    expect(computeReferenceCardWidth({kind: 'video'})).toBe(CARD_VIDEO_DEFAULT_WIDTH);
+    expect(computeReferenceCardWidth({kind: 'document'})).toBe(CARD_DEFAULT_WIDTH);
+  });
+
+  it('produces clean bounded text excerpts for document hover previews', () => {
+    const short = buildTextExcerpt('Line 1\nLine 2');
+    expect(short).toEqual({excerpt: 'Line 1\nLine 2', truncated: false});
+
+    const manyLines = Array.from({length: 20}, (_, i) => `Line ${i + 1}`).join('\n');
+    const clipped = buildTextExcerpt(manyLines, 5, 500);
+    expect(clipped.truncated).toBe(true);
+    expect(clipped.excerpt.endsWith('…')).toBe(true);
+    expect(clipped.excerpt).toContain('Line 5');
+    expect(clipped.excerpt).not.toContain('Line 6');
   });
 
   it('routes local drops strictly to inline image, inline small text, or Files API', () => {

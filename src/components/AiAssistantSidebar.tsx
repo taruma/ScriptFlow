@@ -498,14 +498,27 @@ export function AiAssistantSidebar({
   );
 
   const handleRemoveReference = useCallback((refId: string) => {
-    setBrief((prev) => ({
-      ...prev,
-      references: prev.references.filter((entry) => entry.id !== refId),
-    }));
+    setBrief((prev) => {
+      const target = prev.references.find((entry) => entry.id === refId);
+      if (target?.attachment?.localMediaUrl) {
+        URL.revokeObjectURL(target.attachment.localMediaUrl);
+      }
+      return {
+        ...prev,
+        references: prev.references.filter((entry) => entry.id !== refId),
+      };
+    });
   }, []);
 
   const handleClearBrief = useCallback(() => {
-    setBrief(EMPTY_DRAFT_BRIEF);
+    setBrief((prev) => {
+      for (const entry of prev.references) {
+        if (entry.attachment?.localMediaUrl) {
+          URL.revokeObjectURL(entry.attachment.localMediaUrl);
+        }
+      }
+      return EMPTY_DRAFT_BRIEF;
+    });
   }, []);
 
   const handleSetBriefEnabled = useCallback((enabled: boolean) => {

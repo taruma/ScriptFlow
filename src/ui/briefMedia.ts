@@ -5,6 +5,13 @@ export const IMAGE_COMPRESSION_QUALITY = 0.85;
 export const MAX_INLINE_TEXT_BYTES = 256 * 1024; // 256 KB
 export const MAX_FILES_API_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 
+export const CARD_PREVIEW_HEIGHT = 136;
+export const CARD_MIN_WIDTH = 148;
+export const CARD_MAX_WIDTH = 256;
+export const CARD_DEFAULT_WIDTH = 164;
+export const CARD_VIDEO_DEFAULT_WIDTH = 248;
+const CARD_HORIZONTAL_PADDING = 16; // p-2 (8px * 2)
+
 const INLINE_TEXT_EXTENSIONS = new Set([
   'txt',
   'md',
@@ -69,6 +76,64 @@ export function computeDownscaledDimensions(
   return {
     width: Math.max(1, Math.round(safeW * scale)),
     height: Math.max(1, Math.round(safeH * scale)),
+  };
+}
+
+/**
+ * Computes a reference card's outer pixel width for a fixed-height preview strip
+ * so images preserve their natural aspect ratio within `[minWidth, maxWidth]`.
+ */
+export function computeReferenceCardWidth(options: {
+  kind: ReferenceKind;
+  mediaWidth?: number;
+  mediaHeight?: number;
+  previewHeight?: number;
+  minWidth?: number;
+  maxWidth?: number;
+}): number {
+  const previewHeight = options.previewHeight ?? CARD_PREVIEW_HEIGHT;
+  const minWidth = options.minWidth ?? CARD_MIN_WIDTH;
+  const maxWidth = options.maxWidth ?? CARD_MAX_WIDTH;
+
+  if (
+    typeof options.mediaWidth === 'number' &&
+    typeof options.mediaHeight === 'number' &&
+    Number.isFinite(options.mediaWidth) &&
+    Number.isFinite(options.mediaHeight) &&
+    options.mediaWidth > 0 &&
+    options.mediaHeight > 0
+  ) {
+    const idealInnerWidth = Math.round(previewHeight * (options.mediaWidth / options.mediaHeight));
+    const idealCardWidth = idealInnerWidth + CARD_HORIZONTAL_PADDING;
+    return Math.max(minWidth, Math.min(maxWidth, idealCardWidth));
+  }
+
+  if (options.kind === 'video') {
+    return Math.max(minWidth, Math.min(maxWidth, CARD_VIDEO_DEFAULT_WIDTH));
+  }
+
+  return Math.max(minWidth, Math.min(maxWidth, CARD_DEFAULT_WIDTH));
+}
+
+/**
+ * Produces a concise multi-line text excerpt for hover previews of inline text documents.
+ */
+export function buildTextExcerpt(
+  text: string,
+  maxLines: number = 14,
+  maxChars: number = 900
+): {excerpt: string; truncated: boolean} {
+  const normalized = text.replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  let truncated = lines.length > maxLines;
+  let joined = lines.slice(0, maxLines).join('\n');
+  if (joined.length > maxChars) {
+    joined = joined.slice(0, maxChars).trimEnd();
+    truncated = true;
+  }
+  return {
+    excerpt: truncated ? `${joined}\n…` : joined,
+    truncated,
   };
 }
 

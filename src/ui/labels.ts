@@ -649,9 +649,20 @@ export const UI_LABELS = {
       youtubeAria: 'Attach a public YouTube video URL',
       dropzoneTitle: 'Drop Image or Text',
       dropzoneSubtitle: '1600px · 85% · Click or drag files',
+      dropzoneBrowseButton: 'Browse',
       dropzoneAria: 'Upload local image or text reference files',
       dropzoneHint:
         'Local images compress to 1600px (85%) and text files attach inline. Use Files API for video, audio, PDFs, or full-fidelity originals.',
+      previewClickHint: 'Click to inspect',
+      previewPlayHint: 'Click to play preview',
+      previewCloseAria: 'Close reference preview',
+      previewOpenYoutube: 'Open on YouTube',
+      previewFilesApiUriLabel: 'Gemini Files URI',
+      previewExpiresLabel: 'Expires',
+      previewLinesChars: (lines: number, chars: number) =>
+        `${lines.toLocaleString()} ${lines === 1 ? 'line' : 'lines'} · ${chars.toLocaleString()} chars`,
+      previewNoLocalMedia:
+        'Hosted on Gemini Cloud (Files API). Gemini reads this asset directly via its URI during AI turns.',
       filesApiRedirectNotice: (fileName: string) =>
         `"${fileName}" uses Gemini Files API (for video, audio, PDFs, or large files).`,
       filesApiRedirectAction: 'Upload via Files API',
