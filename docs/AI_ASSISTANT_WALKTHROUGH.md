@@ -62,7 +62,7 @@ Click the **`Model · Level`** status chip at the bottom-right of the sidebar co
 |---|---|---|
 | **Gemini API Key (BYOK)** | Your personal key (`AIza...`) | Stored strictly in this browser and sent directly to the Gemini API. Never read from server environment variables. |
 | **Session only** | Off (`localStorage`) / On (`sessionStorage`) | Toggle on to keep your key only until the browser tab closes. **Clear Key** purges both stores immediately. |
-| **Gemini 4 Model** | `Gemini 4 Hydrogen` *(default, fast)*<br>`Gemini 4 Argon` *(balanced craft)*<br>`Gemini 4 Carbon` *(deep reasoning)* | Switch anytime between turns. Use Hydrogen for quick surgical tweaks, Argon for scene rewrites, and Carbon for complex multi-lens audits or dense drafts. |
+| **Gemini 4 Model** | `Gemini 4 Hydrogen` *(default, fast)*<br>`Gemini 4 Neon` *(frontier speed)*<br>`Gemini 4 Carbon` *(strongest reasoning)* | All three share a 1M unified context window and can be switched anytime between turns. Use Hydrogen for fast everyday edits and multimodal briefs, Neon for frontier-level rewrites and coverage with fast end-to-end completion, and Carbon for complex multi-lens continuity audits or dense drafts. |
 | **Reasoning Level** | `Low` / `Medium` *(default)* / `High` | Maps directly to `generation_config.thinking_level` (`thinking_summaries: 'auto'`). |
 | **Show reasoning summary** | On *(default)* / Off | Controls whether streamed thought summaries appear inside the **Reasoning & Tools** accordion. |
 | **Show Debug Trace** | Off *(default)* / On | Surfaces a quiet **`Inspect`** button on completed, stopped, and failed turns to open the **AI Trace Inspector** modal. |

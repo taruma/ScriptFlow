@@ -87,7 +87,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
   it('exposes strictly the Gemini 4 catalog and default settings', () => {
     expect(GEMINI_MODEL_OPTIONS.map((m) => m.id)).toEqual([
       'gemini-4-hydrogen',
-      'gemini-4-argon',
+      'gemini-4-neon',
       'gemini-4-carbon',
     ]);
     expect(DEFAULT_GEMINI_MODEL).toBe('gemini-4-hydrogen');
@@ -110,7 +110,7 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
 
     const saved = saveStoredAiSettings(
       {
-        model: 'gemini-4-argon',
+        model: 'gemini-4-neon',
         reasoningLevel: 'high',
         apiKey: '  AIza-test-key-123  ',
         sessionOnly: false,
@@ -178,6 +178,11 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
       showThinkingSummary: true,
       showDebugTrace: false,
     });
+
+    // Legacy gemini-4-argon preference migrates cleanly to the middle tier (gemini-4-neon)
+    expect(sanitizeAiSettings({model: 'gemini-4-argon', reasoningLevel: 'high'}).model).toBe(
+      'gemini-4-neon'
+    );
 
     expect(
       sanitizeAiSettings({
@@ -1072,7 +1077,7 @@ describe('geminiInteractions streaming agent client', () => {
 
     const result = await runGeminiAgentTurn({
       apiKey: secretKey,
-      model: 'gemini-4-argon',
+      model: 'gemini-4-neon',
       reasoningLevel: 'high',
       mode: 'refine',
       prompt: 'Have Nadia cross the room.',
@@ -1084,7 +1089,7 @@ describe('geminiInteractions streaming agent client', () => {
     });
 
     const {trace} = result;
-    expect(trace.model).toBe('gemini-4-argon');
+    expect(trace.model).toBe('gemini-4-neon');
     expect(trace.reasoningLevel).toBe('high');
     expect(trace.mode).toBe('refine');
     expect(trace.focus).toBe('refine');

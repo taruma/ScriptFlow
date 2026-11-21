@@ -1,6 +1,6 @@
 import {useCallback, useState} from 'react';
 
-export type GeminiModelId = 'gemini-4-hydrogen' | 'gemini-4-argon' | 'gemini-4-carbon';
+export type GeminiModelId = 'gemini-4-hydrogen' | 'gemini-4-neon' | 'gemini-4-carbon';
 export type ReasoningLevel = 'low' | 'medium' | 'high';
 
 export interface GeminiModelOption {
@@ -25,21 +25,24 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     id: 'gemini-4-hydrogen',
     label: 'Gemini 4 Hydrogen',
     shortLabel: 'Hydrogen',
-    description: 'Fast, responsive assistant for rapid script edits and checks',
+    description:
+      '1M context · Fast, balanced performance for everyday agentic edits and multimodal briefs',
     tier: 'fast',
   },
   {
-    id: 'gemini-4-argon',
-    label: 'Gemini 4 Argon',
-    shortLabel: 'Argon',
-    description: 'Balanced creative and analytical craft for coverage and rewrites',
+    id: 'gemini-4-neon',
+    label: 'Gemini 4 Neon',
+    shortLabel: 'Neon',
+    description:
+      '1M context · Frontier-level intelligence with fast end-to-end completion for rewrites and coverage',
     tier: 'balanced',
   },
   {
     id: 'gemini-4-carbon',
     label: 'Gemini 4 Carbon',
     shortLabel: 'Carbon',
-    description: 'Deep reasoning for multi-lens continuity audits and complex drafts',
+    description:
+      '1M context · Strongest frontier reasoning for complex multi-lens audits and dense drafts',
     tier: 'deep',
   },
 ] as const;
@@ -197,8 +200,13 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
     };
   }
   const record = input as Record<string, unknown>;
+  const resolvedModel: GeminiModelId = isGeminiModelId(record.model)
+    ? record.model
+    : record.model === 'gemini-4-argon'
+      ? 'gemini-4-neon'
+      : DEFAULT_AI_SETTINGS.model;
   return {
-    model: isGeminiModelId(record.model) ? record.model : DEFAULT_AI_SETTINGS.model,
+    model: resolvedModel,
     reasoningLevel: isReasoningLevel(record.reasoningLevel)
       ? record.reasoningLevel
       : DEFAULT_AI_SETTINGS.reasoningLevel,
