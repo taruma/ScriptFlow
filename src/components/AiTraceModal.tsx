@@ -10,6 +10,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import type {QuickScanTrace} from '../services/geminiDecisions.ts';
 import type {
   AgentRoundTrace,
   AgentToolCallTrace,
@@ -25,10 +26,16 @@ import {copyTextToClipboard} from '../ui/clipboard.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 
+export type AiInspectableTrace = AgentTurnTrace | QuickScanTrace;
+
 export interface AiTraceModalProps {
   isOpen: boolean;
-  trace: AgentTurnTrace | null;
+  trace: AiInspectableTrace | null;
   onClose: () => void;
+}
+
+function isQuickScanTrace(trace: AiInspectableTrace): trace is QuickScanTrace {
+  return 'kind' in trace && trace.kind === 'quick_scan';
 }
 
 function formatJsonPretty(value: unknown): string {
@@ -86,6 +93,9 @@ function getRoundStatusBadgeClass(status: string | null): string {
 
 export function AiTraceModal({isOpen, trace, onClose}: AiTraceModalProps) {
   if (!isOpen || !trace) return null;
+  if (isQuickScanTrace(trace)) {
+    return <QuickScanTraceModalContent trace={trace} onClose={onClose} />;
+  }
   return <AiTraceModalContent trace={trace} onClose={onClose} />;
 }
 
@@ -705,6 +715,259 @@ function ToolCallTraceCard({call}: {call: AgentToolCallTrace}) {
           <pre className="rounded-lg border border-border-subtle bg-app p-2 font-mono text-[10px] leading-relaxed text-text-body whitespace-pre-wrap break-words max-h-56 overflow-y-auto auteur-pane-scroll">
             {formattedResult}
           </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickScanTraceModalContent({
+  trace,
+  onClose,
+}: {
+  trace: QuickScanTrace;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [showInput, setShowInput] = useState(false);
+  const [showQuestions, setShowQuestions] = useState(false);
+  const labels = UI_LABELS.ai.traceModal;
+
+  const usageEntries = useMemo(() => formatUsageEntries(trace.usage), [trace.usage]);
+  const turnCost = useMemo(() => estimateTraceCost(trace), [trace]);
+  const serializedTraceJson = useMemo(() => formatJsonPretty(trace), [trace]);
+  const sortedAnswers = useMemo(
+    () => Object.entries(trace.answers).sort(([, a], [, b]) => b.noul - a.noul),
+    [trace.answers]
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const handleCopyJson = async () => {
+    const ok = await copyTextToClipboard(serializedTraceJson);
+    if (ok) setCopied(true);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={labels.dialogAria}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className={UI_TOKENS.modal.overlay}
+    >
+      <div className="bg-surface w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden border border-border-main text-text-main flex flex-col max-h-[88dvh]">
+        {/* Header */}
+        <div className={UI_TOKENS.modal.header}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border-main bg-surface text-text-main"
+            >
+              <Terminal className="h-3.5 w-3.5" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-serif text-[15px] font-bold tracking-tight text-text-main">
+                {labels.title}
+              </h2>
+              <p className="text-[11px] text-text-muted truncate">{labels.quickScanSubtitle}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => void handleCopyJson()}
+              aria-label={labels.copyJsonAria}
+              className={UI_TOKENS.button.actionPill}
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-[var(--phase-aesthetic-text)]" />
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-text-muted" />
+              )}
+              <span>{copied ? labels.copiedJsonButton : labels.copyJsonButton}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={labels.closeAria}
+              className={UI_TOKENS.button.iconClose}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Summary Strip */}
+        <div className="border-b border-border-subtle bg-surface px-4 py-3 md:px-5 space-y-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]">
+            <div>
+              <span className="text-text-faint">{labels.summaryModel}: </span>
+              <span className="font-mono font-semibold text-text-main">
+                {trace.model} ({trace.apiVersion})
+              </span>
+            </div>
+            <div>
+              <span className="text-text-faint">{labels.quickScanSensitivity}: </span>
+              <span className="font-mono capitalize text-text-main">{trace.sensitivity}</span>
+            </div>
+            <div>
+              <span className="text-text-faint">{labels.summaryDuration}: </span>
+              <span className="font-mono text-text-main">
+                {labels.formatDurationMs(trace.durationMs)}
+              </span>
+            </div>
+            <div>
+              <span className="text-text-faint">{labels.quickScanQuestions}: </span>
+              <span className="font-mono text-text-main">{trace.totalQuestions}</span>
+            </div>
+            <div>
+              <span className="text-text-faint">{labels.quickScanBatches}: </span>
+              <span className="font-mono text-text-main">{trace.batchCount}</span>
+            </div>
+            {turnCost && (
+              <div>
+                <span className="text-text-faint">{labels.summaryEstimatedCost}: </span>
+                <span className="font-mono font-semibold text-text-main">
+                  {formatEstimatedUsd(turnCost.totalCostUsd)}
+                </span>
+                <span className="ml-1 font-mono text-[10px] text-text-faint">
+                  ({formatUsdBreakdown(turnCost.inputCostUsd)} in / $0 out)
+                </span>
+              </div>
+            )}
+          </div>
+
+          {usageEntries.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-text-faint">
+              <span>{labels.summaryUsage}:</span>
+              {usageEntries.map((entry) => (
+                <span
+                  key={entry.key}
+                  className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 text-text-muted"
+                >
+                  {entry.key}={entry.value}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Scrollable Details */}
+        <div className="flex-1 overflow-y-auto auteur-pane-scroll px-4 py-3 md:px-5 space-y-3">
+          {/* Calibrated Answers Table */}
+          <section className="rounded-xl border border-border-main bg-surface overflow-hidden">
+            <div className="border-b border-border-subtle bg-surface-subtle px-3 py-2 text-[11px] font-semibold text-text-main">
+              {labels.quickScanAnswersHeading(sortedAnswers.length)}
+            </div>
+            <div className="divide-y divide-border-subtle max-h-64 overflow-y-auto auteur-pane-scroll">
+              {sortedAnswers.map(([key, ans]) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-2 px-3 py-1.5 font-mono text-[10.5px]"
+                >
+                  <span className="text-text-main truncate">{key}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-text-muted tabular-nums">
+                      P={(ans.noul * 100).toFixed(1)}%
+                    </span>
+                    <span className="text-text-faint tabular-nums">
+                      conf={(ans.confidence * 100).toFixed(1)}%
+                    </span>
+                    <span
+                      className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold ${
+                        ans.status === 'flagged'
+                          ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+                          : ans.status === 'borderline'
+                            ? 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                            : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      }`}
+                    >
+                      {ans.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Collapsible Input Sent */}
+          <section className="rounded-xl border border-border-main bg-surface overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowInput((prev) => !prev)}
+              className="w-full flex items-center justify-between gap-2 bg-surface-subtle px-3 py-2 text-left text-[11px] font-semibold text-text-main cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {showInput ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-text-faint" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
+                )}
+                <span>{labels.quickScanInputHeading}</span>
+              </span>
+            </button>
+            {showInput && (
+              <pre className="p-3 font-mono text-[10px] leading-relaxed text-text-body whitespace-pre-wrap break-words max-h-64 overflow-y-auto auteur-pane-scroll bg-app">
+                {typeof trace.input === 'string' ? trace.input : formatJsonPretty(trace.input)}
+              </pre>
+            )}
+          </section>
+
+          {/* Collapsible Questions Sent */}
+          <section className="rounded-xl border border-border-main bg-surface overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowQuestions((prev) => !prev)}
+              className="w-full flex items-center justify-between gap-2 bg-surface-subtle px-3 py-2 text-left text-[11px] font-semibold text-text-main cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {showQuestions ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-text-faint" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
+                )}
+                <span>{labels.quickScanQuestionsHeading(trace.totalQuestions)}</span>
+              </span>
+            </button>
+            {showQuestions && (
+              <pre className="p-3 font-mono text-[10px] leading-relaxed text-text-body whitespace-pre-wrap break-words max-h-72 overflow-y-auto auteur-pane-scroll bg-app">
+                {formatJsonPretty(trace.questions)}
+              </pre>
+            )}
+          </section>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end border-t border-border-subtle bg-surface-subtle px-4 py-2.5 md:px-5 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className={`${UI_TOKENS.button.primary} px-3.5 py-1.5 text-xs`}
+          >
+            {labels.doneButton}
+          </button>
         </div>
       </div>
     </div>

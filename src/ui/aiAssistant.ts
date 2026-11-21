@@ -1,5 +1,6 @@
 import type {AuditLens, AuteurDocument, AuteurLensPresetId, SceneTopology} from '../core/index.ts';
 import type {AssistantFocus} from '../services/auteurKnowledge.ts';
+import type {QuickScanResult, QuickScanTrace} from '../services/geminiDecisions.ts';
 import type {
   AgentMediaAttachment,
   AgentTurnTrace,
@@ -113,6 +114,10 @@ export interface AiChatMessage {
     message: string;
   };
   trace?: AgentTurnTrace;
+  quickScan?: QuickScanResult;
+  quickScanTrace?: QuickScanTrace;
+  quickScanDismissed?: boolean;
+  quickScanErrorFallback?: boolean;
   isStreaming?: boolean;
   hitToolRoundLimit?: boolean;
 }
@@ -811,6 +816,36 @@ export function formatQuestionAnswersPrompt(
     answeredCount,
     totalCount: suggestion.questions.length,
   };
+}
+
+/**
+ * Returns the latest active (non-dismissed, non-stale, non-superseded) Quick Scan result
+ * from the chat history so Live Mode suspect `S#` dots stay synchronized and clear
+ * automatically once edited, dismissed, or superseded by a newer completed Audit review.
+ */
+export function getLatestActiveQuickScan(
+  messages: readonly AiChatMessage[],
+  currentSnapshotHash: string
+): QuickScanResult | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== 'assistant') continue;
+
+    // A newer completed Audit review supersedes prior Quick Scan Live Mode dots
+    if (
+      !msg.isStreaming &&
+      msg.suggestions?.some((s) => s.kind === 'audit_review')
+    ) {
+      return null;
+    }
+
+    if (msg.quickScan) {
+      if (msg.quickScanDismissed) return null;
+      if (msg.quickScan.snapshotHash !== currentSnapshotHash) return null;
+      return msg.quickScan;
+    }
+  }
+  return null;
 }
 
 

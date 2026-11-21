@@ -30,6 +30,7 @@ import {SourceEditor} from './components/SourceEditor.tsx';
 import type {StagingBlockCommitOptions} from './components/stagingBlockRegistry.ts';
 import {TopSlateBar, type CopyFormatKind, type ViewMode} from './components/TopSlateBar.tsx';
 import {BUNDLED_EXAMPLES} from './data/examples/index.ts';
+import type {QuickScanResult} from './services/geminiDecisions.ts';
 import type {DraftSuggestion, PatchSuggestion} from './services/scriptTools.ts';
 import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
 import {copyTextToClipboard} from './ui/clipboard.ts';
@@ -87,11 +88,16 @@ export default function App() {
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [activeAiPatches, setActiveAiPatches] = useState<ActiveAiPatchItem[]>([]);
+  const [activeQuickScan, setActiveQuickScan] = useState<QuickScanResult | null>(null);
   const livePatchActionsRef = useRef<AiLivePatchActionHandlers | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   const handleActiveAiPatchesChange = useCallback((next: ActiveAiPatchItem[]) => {
     setActiveAiPatches((prev) => (prev.length === 0 && next.length === 0 ? prev : next));
+  }, []);
+
+  const handleActiveQuickScanChange = useCallback((next: QuickScanResult | null) => {
+    setActiveQuickScan((prev) => (prev === next ? prev : next));
   }, []);
 
   const handleRegisterLivePatchActions = useCallback(
@@ -109,9 +115,14 @@ export default function App() {
     livePatchActionsRef.current?.dismissPatchById(patchId);
   }, []);
 
+  const handleAuditQuickScanBeat = useCallback((beatIndex: number) => {
+    livePatchActionsRef.current?.auditQuickScanBeat?.(beatIndex);
+  }, []);
+
   useEffect(() => {
     if (!isAiOpen) {
       setActiveAiPatches((prev) => (prev.length === 0 ? prev : []));
+      setActiveQuickScan((prev) => (prev === null ? prev : null));
       livePatchActionsRef.current = null;
     }
   }, [isAiOpen]);
@@ -666,6 +677,8 @@ export default function App() {
               activeAiPatches={activeAiPatches}
               onApplyAiPatch={handleApplyLivePatch}
               onDismissAiPatch={handleDismissLivePatch}
+              activeQuickScan={activeQuickScan}
+              onAuditQuickScanBeat={handleAuditQuickScanBeat}
               historyRevision={history.revision}
               readOnly={isReadOnly}
               onUpdateStaging={handleUpdateStaging}
@@ -705,6 +718,7 @@ export default function App() {
               onApplyDraftSuggestion={handleApplyAiDraftSuggestion}
               onJumpToTarget={handleJumpToAiTarget}
               onActivePatchesChange={handleActiveAiPatchesChange}
+              onActiveQuickScanChange={handleActiveQuickScanChange}
               onRegisterLivePatchActions={handleRegisterLivePatchActions}
             />
           </Suspense>

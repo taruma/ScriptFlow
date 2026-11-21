@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  ScanSearch,
   Trash2,
   X,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import {
   type ResolvedAuteurSkill,
   type SkillPinMode,
 } from '../services/auteurKnowledge.ts';
+import type {CustomQuickScanRule} from '../services/geminiDecisions.ts';
 import {
   slugifyCustomSkillId,
   validateCustomSkillInput,
@@ -30,10 +32,12 @@ import {
 } from '../ui/aiSkillsStore.ts';
 import {copyTextToClipboard} from '../ui/clipboard.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import type {QuickScanRulesState} from '../ui/quickScanRulesStore.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import {ConfirmDialog, type ConfirmDialogRequest} from './ConfirmDialog.tsx';
+import {QuickScanRulesTabPanel} from './QuickScanRulesTabPanel.tsx';
 
-export type ContextInspectorTabId = 'preview' | 'craft' | 'skills';
+export type ContextInspectorTabId = 'preview' | 'craft' | 'skills' | 'quick_scan';
 
 const PIN_MODES: readonly SkillPinMode[] = ['auto', 'pinned', 'muted'];
 
@@ -53,6 +57,23 @@ export interface AiContextInspectorModalProps {
   onDeleteCustomSkill: (skillId: string) => void;
   onResetAll: () => void;
   onAcknowledgeUpdate: () => void;
+  quickScanRulesState?: QuickScanRulesState;
+  quickScanCustomizationCount?: number;
+  hasQuickScanUpstreamUpdate?: boolean;
+  onSetQuickScanRuleEnabled?: (ruleId: string, enabled: boolean) => void;
+  onSetQuickScanRuleTextOverride?: (
+    ruleId: string,
+    patch: {
+      instructionsOverride?: string | null;
+      trueDescriptionOverride?: string | null;
+      falseDescriptionOverride?: string | null;
+    }
+  ) => void;
+  onResetQuickScanRule?: (ruleId: string) => void;
+  onSaveCustomQuickScanRule?: (rule: CustomQuickScanRule, editingId?: string) => void;
+  onDeleteCustomQuickScanRule?: (ruleId: string) => void;
+  onResetAllQuickScanRules?: () => void;
+  onAcknowledgeQuickScanUpdate?: () => void;
 }
 
 interface CustomSkillFormState {
@@ -108,6 +129,16 @@ export function AiContextInspectorModal({
   onDeleteCustomSkill,
   onResetAll,
   onAcknowledgeUpdate,
+  quickScanRulesState,
+  quickScanCustomizationCount = 0,
+  hasQuickScanUpstreamUpdate = false,
+  onSetQuickScanRuleEnabled,
+  onSetQuickScanRuleTextOverride,
+  onResetQuickScanRule,
+  onSaveCustomQuickScanRule,
+  onDeleteCustomQuickScanRule,
+  onResetAllQuickScanRules,
+  onAcknowledgeQuickScanUpdate,
 }: AiContextInspectorModalProps) {
   const [activeTab, setActiveTab] = useState<ContextInspectorTabId>(initialTab);
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
@@ -412,6 +443,9 @@ export function AiContextInspectorModal({
                   {id: 'preview', label: labels.tabPreview, icon: FileCode2},
                   {id: 'craft', label: labels.tabCraft, icon: BookOpen},
                   {id: 'skills', label: labels.tabSkills, icon: Layers},
+                  ...(quickScanRulesState
+                    ? [{id: 'quick_scan' as const, label: labels.tabQuickScan, icon: ScanSearch}]
+                    : []),
                 ] as const
               ).map(({id, label, icon: Icon}) => {
                 const isSelected = activeTab === id;
@@ -929,19 +963,60 @@ export function AiContextInspectorModal({
                 })}
               </div>
             )}
+
+            {activeTab === 'quick_scan' && quickScanRulesState && (
+              <QuickScanRulesTabPanel
+                rulesState={quickScanRulesState}
+                hasUpstreamUpdate={hasQuickScanUpstreamUpdate}
+                onSetRuleEnabled={(ruleId, enabled) =>
+                  onSetQuickScanRuleEnabled?.(ruleId, enabled)
+                }
+                onSetRuleTextOverride={(ruleId, patch) =>
+                  onSetQuickScanRuleTextOverride?.(ruleId, patch)
+                }
+                onResetRule={(ruleId) => onResetQuickScanRule?.(ruleId)}
+                onSaveCustomRule={(rule, editingId) =>
+                  onSaveCustomQuickScanRule?.(rule, editingId)
+                }
+                onDeleteCustomRule={(ruleId) => onDeleteCustomQuickScanRule?.(ruleId)}
+                onResetAllRules={() => onResetAllQuickScanRules?.()}
+                onAcknowledgeUpdate={() => onAcknowledgeQuickScanUpdate?.()}
+                onRequestConfirm={setConfirmRequest}
+              />
+            )}
           </div>
 
           {/* Footer */}
           <div className="flex items-center justify-between gap-3 border-t border-border-subtle bg-surface px-5 py-3 shrink-0">
-            <button
-              type="button"
-              disabled={customizationCount === 0}
-              onClick={requestResetAll}
-              className={`${UI_TOKENS.button.danger} inline-flex items-center gap-1.5 !px-3 !py-1.5 !rounded-lg disabled:opacity-40 disabled:cursor-not-allowed`}
-            >
-              <RotateCcw className="h-3 w-3" />
-              <span>{labels.resetAllDefaultsButton}</span>
-            </button>
+            {activeTab === 'quick_scan' && onResetAllQuickScanRules ? (
+              <button
+                type="button"
+                disabled={quickScanCustomizationCount === 0}
+                onClick={() =>
+                  setConfirmRequest({
+                    title: labels.quickScanRules.confirmResetAllTitle,
+                    description: labels.quickScanRules.confirmResetAllDesc,
+                    confirmLabel: labels.quickScanRules.confirmResetAllAction,
+                    tone: 'danger',
+                    onConfirm: () => onResetAllQuickScanRules(),
+                  })
+                }
+                className={`${UI_TOKENS.button.danger} inline-flex items-center gap-1.5 !px-3 !py-1.5 !rounded-lg disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>{labels.quickScanRules.resetAllRulesButton}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={customizationCount === 0}
+                onClick={requestResetAll}
+                className={`${UI_TOKENS.button.danger} inline-flex items-center gap-1.5 !px-3 !py-1.5 !rounded-lg disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>{labels.resetAllDefaultsButton}</span>
+              </button>
+            )}
 
             <button
               type="button"

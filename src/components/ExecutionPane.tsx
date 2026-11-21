@@ -12,8 +12,10 @@ import type {
   LiveBeatPatchIndicator,
   LiveInsertionPatchIndicator,
 } from '../ui/patchIndicators.ts';
+import type {LiveBeatQuickScanIndicator} from '../ui/quickScanIndicators.ts';
 import {
   EMPTY_BEAT_PATCH_INDICATORS,
+  EMPTY_BEAT_QUICK_SCAN_INDICATORS,
   EMPTY_DIAGNOSTICS,
   EMPTY_INSERTION_PATCH_INDICATORS,
 } from '../ui/referenceStability.ts';
@@ -39,6 +41,7 @@ interface ExecutionPaneProps {
   diagnosticsByBeatIndex: Map<number, LintDiagnostic[]>;
   patchIndicatorsByBeatIndex: Map<number, LiveBeatPatchIndicator[]>;
   patchInsertionsByAfterBeatIndex: Map<number, LiveInsertionPatchIndicator[]>;
+  quickScanIndicatorsByBeatIndex: Map<number, LiveBeatQuickScanIndicator[]>;
   historyRevision: number;
   readOnly?: boolean;
   onUpdateSubState: (
@@ -98,6 +101,7 @@ export const ExecutionPane = memo(function ExecutionPane({
   diagnosticsByBeatIndex,
   patchIndicatorsByBeatIndex,
   patchInsertionsByAfterBeatIndex,
+  quickScanIndicatorsByBeatIndex,
   historyRevision,
   readOnly = false,
   onUpdateSubState,
@@ -270,6 +274,9 @@ export const ExecutionPane = memo(function ExecutionPane({
             patchIndicators={
               patchIndicatorsByBeatIndex.get(beat.index) ?? EMPTY_BEAT_PATCH_INDICATORS
             }
+            quickScanIndicators={
+              quickScanIndicatorsByBeatIndex.get(beat.index) ?? EMPTY_BEAT_QUICK_SCAN_INDICATORS
+            }
             historyRevision={historyRevision}
             readOnly={readOnly}
             collapsed={collapsedIndices.has(idx)}
@@ -293,6 +300,7 @@ export const ExecutionPane = memo(function ExecutionPane({
       diagnosticsByBeatIndex,
       patchIndicatorsByBeatIndex,
       patchInsertionsByAfterBeatIndex,
+      quickScanIndicatorsByBeatIndex,
       historyRevision,
       readOnly,
       collapsedIndices,

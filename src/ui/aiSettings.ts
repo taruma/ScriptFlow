@@ -1,4 +1,7 @@
 import {useCallback, useState} from 'react';
+import type {QuickScanSensitivity} from '../services/geminiDecisions.ts';
+
+export type {QuickScanSensitivity};
 
 export type GeminiModelId =
   | 'gemini-4-hydrogen'
@@ -6,6 +9,32 @@ export type GeminiModelId =
   | 'gemini-4-carbon'
   | 'gemini-3.5-flash-lite';
 export type ReasoningLevel = 'low' | 'medium' | 'high';
+
+export interface QuickScanSensitivityOption {
+  id: QuickScanSensitivity;
+  label: string;
+  description: string;
+}
+
+export const DEFAULT_QUICK_SCAN_SENSITIVITY: QuickScanSensitivity = 'balanced';
+
+export const QUICK_SCAN_SENSITIVITY_OPTIONS: readonly QuickScanSensitivityOption[] = [
+  {
+    id: 'strict',
+    label: 'Strict',
+    description: 'High recall — flags >=35% and highlights borderline >=20%',
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    description: 'Recommended — flags >=50% and highlights borderline >=28%',
+  },
+  {
+    id: 'lenient',
+    label: 'Lenient',
+    description: 'Low noise — flags >=65% and highlights borderline >=42%',
+  },
+] as const;
 
 export interface GeminiModelOption {
   id: GeminiModelId;
@@ -84,6 +113,9 @@ export const REASONING_LEVEL_OPTIONS: readonly ReasoningLevelOption[] = [
 
 const VALID_MODELS = new Set<string>(GEMINI_MODEL_OPTIONS.map((m) => m.id));
 const VALID_REASONING_LEVELS = new Set<string>(REASONING_LEVEL_OPTIONS.map((r) => r.id));
+const VALID_QUICK_SCAN_SENSITIVITIES = new Set<string>(
+  QUICK_SCAN_SENSITIVITY_OPTIONS.map((s) => s.id)
+);
 
 export const AI_SETTINGS_STORAGE_KEY = 'auteur-editor-ai-settings-v1';
 export const AI_API_KEY_STORAGE_KEY = 'auteur-editor-ai-api-key-v1';
@@ -91,6 +123,7 @@ export const AI_API_KEY_STORAGE_KEY = 'auteur-editor-ai-api-key-v1';
 export interface AiSettings {
   model: GeminiModelId;
   reasoningLevel: ReasoningLevel;
+  quickScanSensitivity: QuickScanSensitivity;
   apiKey: string;
   sessionOnly: boolean;
   showThinkingSummary: boolean;
@@ -101,6 +134,7 @@ export interface AiSettings {
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: DEFAULT_GEMINI_MODEL,
   reasoningLevel: DEFAULT_REASONING_LEVEL,
+  quickScanSensitivity: DEFAULT_QUICK_SCAN_SENSITIVITY,
   apiKey: '',
   sessionOnly: false,
   showThinkingSummary: true,
@@ -190,6 +224,10 @@ export function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return typeof value === 'string' && VALID_REASONING_LEVELS.has(value);
 }
 
+export function isQuickScanSensitivity(value: unknown): value is QuickScanSensitivity {
+  return typeof value === 'string' && VALID_QUICK_SCAN_SENSITIVITIES.has(value);
+}
+
 export function getGeminiModelOption(model: GeminiModelId): GeminiModelOption {
   return (
     GEMINI_MODEL_OPTIONS.find((option) => option.id === model) ?? GEMINI_MODEL_OPTIONS[0]
@@ -203,6 +241,7 @@ export function hasConfiguredApiKey(settings: Pick<AiSettings, 'apiKey'>): boole
 interface PersistedAiPrefs {
   model: GeminiModelId;
   reasoningLevel: ReasoningLevel;
+  quickScanSensitivity: QuickScanSensitivity;
   sessionOnly: boolean;
   showThinkingSummary: boolean;
   showEstimatedCost: boolean;
@@ -214,6 +253,7 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
     return {
       model: DEFAULT_AI_SETTINGS.model,
       reasoningLevel: DEFAULT_AI_SETTINGS.reasoningLevel,
+      quickScanSensitivity: DEFAULT_AI_SETTINGS.quickScanSensitivity,
       sessionOnly: DEFAULT_AI_SETTINGS.sessionOnly,
       showThinkingSummary: DEFAULT_AI_SETTINGS.showThinkingSummary,
       showEstimatedCost: DEFAULT_AI_SETTINGS.showEstimatedCost,
@@ -231,6 +271,9 @@ function sanitizePersistedPrefs(input: unknown): PersistedAiPrefs {
     reasoningLevel: isReasoningLevel(record.reasoningLevel)
       ? record.reasoningLevel
       : DEFAULT_AI_SETTINGS.reasoningLevel,
+    quickScanSensitivity: isQuickScanSensitivity(record.quickScanSensitivity)
+      ? record.quickScanSensitivity
+      : DEFAULT_AI_SETTINGS.quickScanSensitivity,
     sessionOnly:
       typeof record.sessionOnly === 'boolean'
         ? record.sessionOnly
@@ -271,6 +314,7 @@ export function loadStoredAiSettings(adapters?: AiSettingsStorageAdapters): AiSe
   let prefs: PersistedAiPrefs = {
     model: DEFAULT_AI_SETTINGS.model,
     reasoningLevel: DEFAULT_AI_SETTINGS.reasoningLevel,
+    quickScanSensitivity: DEFAULT_AI_SETTINGS.quickScanSensitivity,
     sessionOnly: DEFAULT_AI_SETTINGS.sessionOnly,
     showThinkingSummary: DEFAULT_AI_SETTINGS.showThinkingSummary,
     showEstimatedCost: DEFAULT_AI_SETTINGS.showEstimatedCost,
@@ -310,6 +354,7 @@ export function saveStoredAiSettings(
   const prefs: PersistedAiPrefs = {
     model: normalized.model,
     reasoningLevel: normalized.reasoningLevel,
+    quickScanSensitivity: normalized.quickScanSensitivity,
     sessionOnly: normalized.sessionOnly,
     showThinkingSummary: normalized.showThinkingSummary,
     showEstimatedCost: normalized.showEstimatedCost,
@@ -365,12 +410,18 @@ export function switchApiKeyStorageMode(
 export function isDefaultAiPreferences(
   settings: Pick<
     AiSettings,
-    'model' | 'reasoningLevel' | 'showThinkingSummary' | 'showEstimatedCost' | 'showDebugTrace'
+    | 'model'
+    | 'reasoningLevel'
+    | 'quickScanSensitivity'
+    | 'showThinkingSummary'
+    | 'showEstimatedCost'
+    | 'showDebugTrace'
   >
 ): boolean {
   return (
     settings.model === DEFAULT_AI_SETTINGS.model &&
     settings.reasoningLevel === DEFAULT_AI_SETTINGS.reasoningLevel &&
+    settings.quickScanSensitivity === DEFAULT_AI_SETTINGS.quickScanSensitivity &&
     settings.showThinkingSummary === DEFAULT_AI_SETTINGS.showThinkingSummary &&
     settings.showEstimatedCost === DEFAULT_AI_SETTINGS.showEstimatedCost &&
     settings.showDebugTrace === DEFAULT_AI_SETTINGS.showDebugTrace

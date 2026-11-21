@@ -18,10 +18,11 @@ The AI Assistant is **multi-turn, agentic, and strictly suggestions-first**—no
 1. **Plain-Text-as-Truth & Zero Direct Mutation**: None of the AI tools can directly overwrite your editor text. Every draft, targeted edit, or audit fix is validated against Zod schemas and the deterministic Script Supervisor linter, then staged as a reviewable card (`Apply`, `Apply Fix`, `Fork & Apply`, or `Dismiss`). Clicking **Apply** commits a single undoable history checkpoint (`Cmd/Ctrl+Z`).
 2. **Multi-Turn Memory (`previous_interaction_id`)**: Conversation continuity is maintained across user messages via the Gemini Interactions API (`client.interactions.create` with `stream: true`), while a fresh **Live Editor State** summary (`snapshotHash`, `changedSinceLastTurn`, `sceneTopology`, active lint counts) is injected on every turn so manual edits or clicked Apply actions never leave the model working on stale memory.
 3. **Agentic Tool Loop (Up to 8 Rounds per Turn)**: Round 1 never dumps your entire script into the chat prompt. Instead, the model receives your craft rules, live editor summary, skill directory, and pruned tool schemas, then pulls only the overview, lens slices, or craft skills it needs locally in your browser before staging its result.
-4. **3-Layer Verification Stack**:
+4. **3.5-Layer Verification Stack**:
    - **Layer 1 — Grammar & Schema Integrity** (`src/core/parser.ts`, `irSchemas.ts`, `patch.ts`): Structural validity, snapshot concurrency (`expectedSnapshotHash`), and valid target IDs (`MB#`, `S#`).
    - **Layer 2 — Deterministic Code Linter** (`src/core/linter.ts`): 5 instant, zero-token rules enforced on every keystroke and every AI dry-run (`rejectOnNewErrors: true`).
-   - **Layer 3 — AI Semantic Script Supervisor** (`src/core/slicer.ts` + selected Gemini 4 model): Evaluates spatial 180° eyelines, camera visibility, prop hand-tracking, temporal pacing, physical wear, and lookbook bleed across the 5 lenses.
+   - **Layer 2.5 — Decisions API Quick Scan** (`src/services/geminiDecisions.ts` + `gemini-decision-1` on `v1beta`): Optional, single-pass (~400ms, `$0` output tokens, `~$0.0003` text scan) AST-filtered atomic `noul` matrix evaluating declarative document-level and per-`S#` semantic craft & Brief rules, merging Layer 2 lint, surfacing suspect `S#` dots in Live Mode, and handing off selected lenses + unverified leads to Layer 3.
+   - **Layer 3 — AI Semantic Script Supervisor** (`src/core/slicer.ts` + selected Gemini 4 model): Evaluates spatial 180° eyelines, camera visibility, prop hand-tracking, temporal pacing, physical wear, and lookbook bleed across the 5 lenses, staging verified `suggestedPatch` fixes.
 
 ### Turn Execution Lifecycle
 
@@ -64,6 +65,7 @@ Click the **`Model · Level`** status chip at the bottom-right of the sidebar co
 | **Session only** | Off (`localStorage`) / On (`sessionStorage`) | Toggle on to keep your key only until the browser tab closes. **Clear Key** purges both stores immediately. |
 | **Gemini Model** | `Gemini 4 Hydrogen` *(default, fast)*<br>`Gemini 4 Neon` *(frontier speed)*<br>`Gemini 4 Carbon` *(strongest reasoning)*<br>`Gemini 3.5 Flash-Lite` *(budget / ultra-fast)* | All four share a 1M unified context window and can be switched anytime between turns. Use Hydrogen for fast everyday edits and multimodal briefs, Neon for frontier-level rewrites and coverage, Carbon for complex multi-lens audits or dense drafts, and 3.5 Flash-Lite for ultra-low-cost, low-latency iterations. |
 | **Reasoning Level** | `Low` / `Medium` *(default)* / `High` | Maps directly to `generation_config.thinking_level` (`thinking_summaries: 'auto'`). |
+| **Quick Scan Sensitivity** | `Strict` / `Balanced` *(default)* / `Lenient` | Calibrated `gemini-decision-1` (`v1beta`, `$0.10 / $0` per 1M) probability cutoffs for `Flagged` and `Borderline` badges (`Strict`: `>=35% / >=20%`, `Balanced`: `>=50% / >=28%`, `Lenient`: `>=65% / >=42%`). |
 | **Show reasoning summary** | On *(default)* / Off | Controls whether streamed thought summaries appear inside the **Thinking** accordion. |
 | **Show estimated cost** | On *(default)* / Off | Displays a quiet approximate USD badge (`~$0.0042`) on completed turns and a cumulative session total to the left of the **`Model · Level`** pill below the prompt box (with hover token & USD breakdown tooltips). |
 | **Show Debug Trace** | Off *(default)* / On | Surfaces a quiet **`Inspect`** button on completed, stopped, and failed turns to open the **AI Trace Inspector** modal. |
@@ -91,8 +93,9 @@ To prevent unnecessary token cost and accidental whole-script overwrites, the co
 
 ### Contextual Focus Controls
 - **Target Scope Selector (`Auto` / `Refine` on non-empty scripts):** Choose `Whole Script`, any Staging Macro-Block (`MB0 · [INTENT]`, `MB2 · [AESTHETIC]`, etc.), or any Execution Macro-State (`S1`, `S2`, ...). When a specific target is chosen, your prompt is automatically prefixed with `[Target Scope: ... — focus edits on <ID> unless adjacent context requires minimal continuity alignment.]`.
-- **One-Click `Audit All` Pill (`Auto` on non-empty scripts):** Runs a full 5-lens Script Supervisor audit (`overrideFocus: 'audit'`) without switching your active Focus pill away from `Auto`.
-- **6 Quick Audit Lens Pills (`Audit` focus):** One-click triggers for **`All Lenses`** or any individual lens (**`Lens 1 · Spatial`**, **`Lens 2 · Pacing`**, **`Lens 3 · Props`**, **`Lens 4 · Acoustics`**, **`Lens 5 · Grammar`**).
+- **One-Click `Quick Scan` & `Audit All` Pills (`Auto` on non-empty scripts):** Click **`Quick Scan`** for a ~400ms, zero-output-token Decisions API pre-check (`gemini-decision-1`) across AST-filtered atomic rules + active Brief fidelity without touching `previous_interaction_id`, or click **`Audit All`** to run a full 5-lens Gemini 4 Script Supervisor audit (`overrideFocus: 'audit'`) without leaving `Auto`.
+- **Quick Scan + 6 Quick Audit Lens Pills (`Audit` focus):** One-click triggers for **`Quick Scan`** (Layer 2.5 screening) alongside **`All Lenses`** or any individual lens (**`Lens 1 · Spatial`**, **`Lens 2 · Pacing`**, **`Lens 3 · Props`**, **`Lens 4 · Acoustics`**, **`Lens 5 · Grammar`**).
+  - *Quick Scan Escalation:* Results render in an interactive **`QuickScanCard`** with pre-checked flagged/borderline lenses, expandable atomic rule probabilities, clickable suspect `S#` jump pills, a stale-script `Re-scan` banner, a 1-click **`Deep Audit Selected (N)`** handoff (forwarding tripped checks & suspect `S#` IDs as unverified System-1 leads to Gemini 4), and a 1-click **`Run Standard Audit All instead`** fallback if `v1beta` errors. *(Note: Decisions API has no context caching and omits YouTube video streams—YouTube Brief refs gracefully downgrade to text `@handle` labels.)*
 
 ### Chat Session Lifecycle & Read-Only Examples
 - Conversations are kept **in memory per open script**. Click **`New Chat`** (reset icon in the sidebar header) to clear messages, reset `previous_interaction_id`, and start a fresh thread.
@@ -244,13 +247,16 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 | `temporal_calibration` | Module | On demand *(or Pin)* | Macro-State-to-duration tempo table (combat oner `0.8s–1.2s`, tactical `1.5s–2.0s`, dialogue `2.5s–4.0s`, slow horror `4.0s–6.0s+`), anti-float rule, and cut-latency floor (`Duration / 2.0`). |
 | `spatial_fences` | Module | On demand *(or Pin)* | Inline `[BLOCK]` for 3+ subjects/mark swaps, `[STATE IN]`/`[STATE OUT]` boundary clamps, dynamic `[LIGHT]`, and Tier-2 single-dimension tags (`[FOCUS]`, `[SPEED]`, `[PROP]`, `[ENV]`, `[CROWD]`, `[VFX]`, `[TRANS]`). |
 
-### Inside the 3 Tabs of `AiContextInspectorModal`
+### Inside the 4 Tabs of `AiContextInspectorModal`
 1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
 2. **Foundational Craft**: Edit **Foundational Auteur Craft** directly (persisted in `localStorage` under `auteur-editor-ai-skills-v1`), with a **`Modified`** indicator and **`Reset to default`**.
 3. **Skills & Extensions**:
    - Toggle any built-in or custom skill between **`Auto`**, **`Pin`**, and **`Mute`** and immediately see its resolved status (`Active · Passive`, `Active · Pinned`, `Available`, `Muted`).
    - Expand any skill to read or override its instruction body (`Reset` restores built-in text).
    - Click **`+ Add Custom Skill`** to create your own reusable extension skills (`Name`, auto-slugified `snake_case` `ID` validated against built-in collisions, `Trigger Hint`, and `Instruction Body`), plus edit or delete them (destructive deletes and **Reset all defaults** confirm via `ConfirmDialog`).
+4. **Quick Scan Rules**:
+   - Browse the declarative built-in atomic rule catalog (`src/data/knowledge/quick-scan-rules.json`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc` vs `Per S#`) and AST `when` condition tags.
+   - Toggle any built-in or custom rule On/Off, expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document` or `Per Macro-State` (`{{STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
 
 ---
 

@@ -28,6 +28,7 @@ import {
   Layers,
   Loader2,
   RotateCcw,
+  ScanSearch,
   Settings2,
   ShieldAlert,
   Sparkles,
@@ -36,12 +37,18 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import type {AuteurDocument, LintRuleOverrides} from '../core/index.ts';
+import type {AuteurDocument, AuteurLensPresetId, LintRuleOverrides} from '../core/index.ts';
 import {
   composeAgentContext,
   type AskQuestionMode,
   type AssistantFocus,
 } from '../services/auteurKnowledge.ts';
+import {
+  AUDIT_LENS_PRESET_IDS,
+  buildQuickScanEscalationPrompt,
+  runQuickScan,
+  type QuickScanResult,
+} from '../services/geminiDecisions.ts';
 import {
   GeminiServiceError,
   runGeminiAgentTurn,
@@ -70,6 +77,7 @@ import {
   formatSceneBriefContext,
   formatToolCallTooltip,
   getBriefReferenceHandles,
+  getLatestActiveQuickScan,
   getNextReferenceHandle,
   hasDraftBriefContent,
   isDraftBriefActive,
@@ -101,6 +109,7 @@ import {
 import {useAiSkills} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {collectActiveAiPatches, type ActiveAiPatchItem} from '../ui/patchIndicators.ts';
+import {useQuickScanRulesStore} from '../ui/quickScanRulesStore.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import type {NewReferenceEntryDraft} from './AiBriefModal.tsx';
 import type {ContextInspectorTabId} from './AiContextInspectorModal.tsx';
@@ -110,7 +119,9 @@ import {
   PatchSuggestionCard,
   QuestionSuggestionCard,
 } from './AiSuggestionCards.tsx';
+import type {AiInspectableTrace} from './AiTraceModal.tsx';
 import {MarkdownContent} from './MarkdownContent.tsx';
+import {QuickScanCard} from './QuickScanCard.tsx';
 
 const AiSettingsModal = lazy(() =>
   import('./AiSettingsModal.tsx').then((mod) => ({
@@ -147,6 +158,7 @@ const DEFAULT_SIDEBAR_WIDTH = 410;
 export interface AiLivePatchActionHandlers {
   applyPatchById: (patchId: string) => void;
   dismissPatchById: (patchId: string) => void;
+  auditQuickScanBeat?: (beatIndex: number) => void;
 }
 
 export interface AiAssistantSidebarProps {
@@ -164,6 +176,7 @@ export interface AiAssistantSidebarProps {
   onApplyDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean> | boolean;
   onJumpToTarget: (targetId: string) => void;
   onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
+  onActiveQuickScanChange?: (quickScan: QuickScanResult | null) => void;
   onRegisterLivePatchActions?: (actions: AiLivePatchActionHandlers | null) => void;
 }
 
@@ -261,7 +274,7 @@ interface ReasoningAccordionProps {
   toolCalls: readonly AiToolCallItem[];
   loadedSkills: readonly AiLoadedSkillItem[];
   trace?: AgentTurnTrace;
-  onInspectTrace: (trace: AgentTurnTrace) => void;
+  onInspectTrace: (trace: AiInspectableTrace) => void;
 }
 
 const ReasoningAccordion = memo(function ReasoningAccordion({
@@ -330,7 +343,7 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
     if (!showCost || !turnCost || !trace) return null;
     const costLabels = UI_LABELS.ai.cost;
     const formattedTotal = formatEstimatedUsd(turnCost.totalCostUsd);
-    const modelLabel = getGeminiModelOption(turnCost.model).label;
+    const modelLabel = getGeminiModelOption(trace.model).label;
     const roundsCount = Math.max(1, trace.rounds.length);
     const nonCachedInputOnlyCost =
       (turnCost.usage.nonCachedInputTokens * turnCost.rates.inputPer1M) / 1_000_000;
@@ -559,6 +572,7 @@ export function AiAssistantSidebar({
   onApplyDraftSuggestion,
   onJumpToTarget,
   onActivePatchesChange,
+  onActiveQuickScanChange,
   onRegisterLivePatchActions,
 }: AiAssistantSidebarProps) {
   const {
@@ -585,6 +599,22 @@ export function AiAssistantSidebar({
     acknowledgeUpdate,
   } = useAiSkills();
 
+  const {
+    rulesState: quickScanRulesState,
+    customizationCount: quickScanCustomizationCount,
+    hasUpstreamUpdate: hasQuickScanUpstreamUpdate,
+    setRuleEnabled: setQuickScanRuleEnabled,
+    setRuleTextOverride: setQuickScanRuleTextOverride,
+    resetRule: resetQuickScanRule,
+    saveCustomRule: saveCustomQuickScanRule,
+    deleteCustomRule: deleteCustomQuickScanRule,
+    resetAllRules: resetAllQuickScanRules,
+    acknowledgeRulesUpdate: acknowledgeQuickScanRulesUpdate,
+  } = useQuickScanRulesStore();
+
+  const totalCustomizationCount = customizationCount + quickScanCustomizationCount;
+  const hasAnyUpstreamUpdate = hasUpstreamUpdate || hasQuickScanUpstreamUpdate;
+
   const [focus, setFocus] = useState<AssistantFocus>('auto');
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>('whole');
   const [brief, setBrief] = useState<DraftBriefState>(EMPTY_DRAFT_BRIEF);
@@ -596,7 +626,7 @@ export function AiAssistantSidebar({
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
   const [contextInitialTab, setContextInitialTab] = useState<ContextInspectorTabId>('preview');
-  const [inspectedTrace, setInspectedTrace] = useState<AgentTurnTrace | null>(null);
+  const [inspectedTrace, setInspectedTrace] = useState<AiInspectableTrace | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
   const [manualComposerHeight, setManualComposerHeight] = useState<number | null>(null);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
@@ -662,6 +692,11 @@ export function AiAssistantSidebar({
     [messages, currentSnapshotHash]
   );
 
+  const activeQuickScan = useMemo(
+    () => getLatestActiveQuickScan(messages, currentSnapshotHash),
+    [messages, currentSnapshotHash]
+  );
+
   useEffect(() => {
     onActivePatchesChange?.(activePatches);
   }, [activePatches, onActivePatchesChange]);
@@ -671,6 +706,16 @@ export function AiAssistantSidebar({
       onActivePatchesChange?.([]);
     };
   }, [onActivePatchesChange]);
+
+  useEffect(() => {
+    onActiveQuickScanChange?.(activeQuickScan);
+  }, [activeQuickScan, onActiveQuickScanChange]);
+
+  useEffect(() => {
+    return () => {
+      onActiveQuickScanChange?.(null);
+    };
+  }, [onActiveQuickScanChange]);
 
   // Target scope options for Refine / Auto modes on non-empty scripts
   const targetOptions = useMemo(
@@ -851,7 +896,7 @@ export function AiAssistantSidebar({
     setMessages([]);
   }, []);
 
-  const handleInspectTrace = useCallback((trace: AgentTurnTrace) => {
+  const handleInspectTrace = useCallback((trace: AiInspectableTrace) => {
     setInspectedTrace(trace);
   }, []);
 
@@ -1259,6 +1304,143 @@ export function AiAssistantSidebar({
     [submitPrompt]
   );
 
+  const handleQuickScan = useCallback(async () => {
+    if (isRunning || isEmpty) return;
+
+    if (!hasApiKey) {
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    const userMsgId = `msg-u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const assistantMsgId = `msg-a-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const runId = ++activeRunIdRef.current;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsRunning(true);
+    shouldAutoScrollRef.current = true;
+    setIsScrolledUp(false);
+
+    const briefForTurn = briefIsActive ? activeBriefContext : undefined;
+    const allBriefAttachments = briefIsActive
+      ? collectPendingBriefAttachments(brief, new Set(), false)
+      : undefined;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMsgId,
+        role: 'user',
+        mode: 'check',
+        focus: 'audit',
+        text: UI_LABELS.ai.quickScanButton,
+        ...(briefIsActive && briefSummaryLabel ? {briefSummary: briefSummaryLabel} : {}),
+      },
+      {
+        id: assistantMsgId,
+        role: 'assistant',
+        mode: 'check',
+        focus: 'audit',
+        text: '',
+        isStreaming: true,
+      },
+    ]);
+
+    try {
+      const {result, trace} = await runQuickScan({
+        apiKey: settings.apiKey,
+        rawText,
+        sensitivity: settings.quickScanSensitivity,
+        lintRuleOverrides: ruleOverrides,
+        ruleOverrides: quickScanRulesState.ruleOverrides,
+        customRules: quickScanRulesState.customRules,
+        briefContext: briefForTurn,
+        attachments: allBriefAttachments,
+        signal: controller.signal,
+      });
+
+      if (activeRunIdRef.current !== runId) return;
+
+      updateAssistantMessage(assistantMsgId, (msg) => ({
+        ...msg,
+        quickScan: result,
+        quickScanTrace: trace,
+        isStreaming: false,
+      }));
+    } catch (error) {
+      if (activeRunIdRef.current !== runId) return;
+
+      const normalized =
+        error instanceof GeminiServiceError
+          ? error
+          : new GeminiServiceError(
+              'api_error',
+              error instanceof Error ? error.message : 'Quick Scan request failed.'
+            );
+
+      updateAssistantMessage(assistantMsgId, (msg) => ({
+        ...msg,
+        isStreaming: false,
+        quickScanErrorFallback: normalized.code !== 'aborted',
+        error: {
+          code: normalized.code,
+          message: normalized.message,
+        },
+      }));
+    } finally {
+      if (activeRunIdRef.current === runId) {
+        abortControllerRef.current = null;
+        setIsRunning(false);
+      }
+    }
+  }, [
+    isRunning,
+    isEmpty,
+    hasApiKey,
+    briefIsActive,
+    activeBriefContext,
+    brief,
+    briefSummaryLabel,
+    settings.apiKey,
+    settings.quickScanSensitivity,
+    rawText,
+    ruleOverrides,
+    quickScanRulesState.ruleOverrides,
+    quickScanRulesState.customRules,
+    updateAssistantMessage,
+  ]);
+
+  const handleDismissQuickScan = useCallback(
+    (messageId: string) => {
+      updateAssistantMessage(messageId, (msg) => ({
+        ...msg,
+        quickScanDismissed: true,
+      }));
+    },
+    [updateAssistantMessage]
+  );
+
+  const handleDeepAuditFromQuickScan = useCallback(
+    (
+      selectedLenses: AuteurLensPresetId[],
+      result: QuickScanResult,
+      targetBeatIndex?: number
+    ) => {
+      if (isRunning) return;
+      const {prompt, displayText} = buildQuickScanEscalationPrompt({
+        result,
+        selectedLenses,
+        targetBeatIndex,
+      });
+      void submitPrompt(prompt, {
+        overrideFocus: 'audit',
+        displayText,
+      });
+    },
+    [isRunning, submitPrompt]
+  );
+
   const markSuggestionApplied = useCallback(
     (messageId: string, suggestionId: string) => {
       updateAssistantMessage(messageId, (msg) => ({
@@ -1359,12 +1541,36 @@ export function AiAssistantSidebar({
         if (!target || target.sourceKind !== 'patch') return;
         markSuggestionDismissed(target.messageId, target.id);
       },
+      auditQuickScanBeat: (beatIndex: number) => {
+        if (!activeQuickScan) return;
+        const beat = activeQuickScan.suspectBeats.find((b) => b.beatIndex === beatIndex);
+        if (!beat) return;
+        const lenses = Array.from(
+          new Set(
+            beat.items
+              .map((item) => item.lens)
+              .filter((lens): lens is AuteurLensPresetId => lens !== 'brief')
+          )
+        );
+        handleDeepAuditFromQuickScan(
+          lenses.length > 0 ? lenses : [...AUDIT_LENS_PRESET_IDS],
+          activeQuickScan,
+          beatIndex
+        );
+      },
     };
     onRegisterLivePatchActions(handlers);
     return () => {
       onRegisterLivePatchActions(null);
     };
-  }, [activePatches, handleApplyPatch, markSuggestionDismissed, onRegisterLivePatchActions]);
+  }, [
+    activePatches,
+    activeQuickScan,
+    handleApplyPatch,
+    handleDeepAuditFromQuickScan,
+    markSuggestionDismissed,
+    onRegisterLivePatchActions,
+  ]);
 
   const handleApplyAuditFixesBatch = useCallback(
     async (messageId: string, batchPatch: PatchSuggestion, includedFixIds: string[]) => {
@@ -1452,7 +1658,7 @@ export function AiAssistantSidebar({
                 title={UI_LABELS.ai.contextButtonTitle}
                 aria-label={UI_LABELS.ai.contextButtonAria(
                   previewComposedContext.activeSkills.length,
-                  customizationCount
+                  totalCustomizationCount
                 )}
                 className={UI_TOKENS.ai.statusChip}
               >
@@ -1463,11 +1669,11 @@ export function AiAssistantSidebar({
                     {previewComposedContext.activeSkills.length}
                   </span>
                 )}
-                {(customizationCount > 0 || hasUpstreamUpdate) && (
+                {(totalCustomizationCount > 0 || hasAnyUpstreamUpdate) && (
                   <span
                     aria-hidden="true"
                     className={`h-1.5 w-1.5 rounded-full ${
-                      hasUpstreamUpdate
+                      hasAnyUpstreamUpdate
                         ? 'bg-amber-500'
                         : 'bg-[var(--phase-continuity-text)]'
                     }`}
@@ -1586,21 +1792,92 @@ export function AiAssistantSidebar({
 
                 const dismissed = msg.dismissedSuggestionIds ?? [];
                 const applied = msg.appliedSuggestionIds ?? [];
+                const isQuickScanMsg =
+                  Boolean(msg.quickScan) ||
+                  Boolean(msg.quickScanTrace) ||
+                  Boolean(msg.quickScanErrorFallback) ||
+                  (Boolean(msg.isStreaming) &&
+                    msg.mode === 'check' &&
+                    !msg.thoughtSummary &&
+                    (!msg.toolCalls || msg.toolCalls.length === 0) &&
+                    !msg.text &&
+                    messages.some(
+                      (prevMsg, idx) =>
+                        idx < messages.indexOf(msg) &&
+                        idx === messages.indexOf(msg) - 1 &&
+                        prevMsg.role === 'user' &&
+                        prevMsg.text === UI_LABELS.ai.quickScanButton
+                    ));
+                const quickScanCost =
+                  msg.quickScanTrace && !msg.isStreaming
+                    ? estimateTraceCost(msg.quickScanTrace)
+                    : null;
 
                 return (
                   <div key={msg.id} className="space-y-2">
-                    <ReasoningAccordion
-                      isStreaming={Boolean(msg.isStreaming)}
-                      showThinkingSummary={settings.showThinkingSummary}
-                      showEstimatedCost={settings.showEstimatedCost}
-                      showDebugTrace={settings.showDebugTrace}
-                      hasError={Boolean(msg.error)}
-                      thoughtSummary={msg.thoughtSummary ?? ''}
-                      toolCalls={msg.toolCalls ?? EMPTY_TOOL_CALLS}
-                      loadedSkills={msg.loadedSkills ?? EMPTY_LOADED_SKILLS}
-                      trace={msg.trace}
-                      onInspectTrace={handleInspectTrace}
-                    />
+                    {!isQuickScanMsg && (
+                      <ReasoningAccordion
+                        isStreaming={Boolean(msg.isStreaming)}
+                        showThinkingSummary={settings.showThinkingSummary}
+                        showEstimatedCost={settings.showEstimatedCost}
+                        showDebugTrace={settings.showDebugTrace}
+                        hasError={Boolean(msg.error)}
+                        thoughtSummary={msg.thoughtSummary ?? ''}
+                        toolCalls={msg.toolCalls ?? EMPTY_TOOL_CALLS}
+                        loadedSkills={msg.loadedSkills ?? EMPTY_LOADED_SKILLS}
+                        trace={msg.trace}
+                        onInspectTrace={handleInspectTrace}
+                      />
+                    )}
+
+                    {isQuickScanMsg && msg.isStreaming && (
+                      <div className="inline-flex items-center gap-2 rounded-xl border border-border-main bg-surface-subtle px-3 py-2 text-[11px] text-text-muted">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--phase-continuity-text)]" />
+                        <span>{UI_LABELS.ai.quickScan.runningLabel}</span>
+                      </div>
+                    )}
+
+                    {msg.quickScan && (
+                      <div className="space-y-1.5">
+                        <QuickScanCard
+                          result={msg.quickScan}
+                          currentSnapshotHash={currentSnapshotHash}
+                          dismissed={Boolean(msg.quickScanDismissed)}
+                          disabled={isRunning}
+                          onJumpToTarget={onJumpToTarget}
+                          onDeepAuditSelected={(lenses, res) =>
+                            handleDeepAuditFromQuickScan(lenses, res)
+                          }
+                          onRescan={() => void handleQuickScan()}
+                          onDismiss={() => handleDismissQuickScan(msg.id)}
+                        />
+                        {((settings.showEstimatedCost && quickScanCost) ||
+                          (settings.showDebugTrace && msg.quickScanTrace)) && (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {settings.showEstimatedCost && quickScanCost && (
+                              <span
+                                title={`gemini-decision-1 · ${quickScanCost.usage.inputTokens.toLocaleString()} input tok · 0 output tok`}
+                                className="inline-flex items-center rounded-md border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums"
+                              >
+                                {formatEstimatedUsd(quickScanCost.totalCostUsd)}
+                              </span>
+                            )}
+                            {settings.showDebugTrace && msg.quickScanTrace && (
+                              <button
+                                type="button"
+                                onClick={() => handleInspectTrace(msg.quickScanTrace!)}
+                                title={UI_LABELS.ai.inspectTraceTitle}
+                                aria-label={UI_LABELS.ai.inspectTraceAria}
+                                className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
+                              >
+                                <Terminal className="h-2.5 w-2.5 text-text-faint" />
+                                <span>{UI_LABELS.ai.inspectTraceButton}</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {msg.text.trim().length > 0 && (
                       <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5 shadow-2xs">
@@ -1720,8 +1997,21 @@ export function AiAssistantSidebar({
                             </div>
                           </div>
                           {(shouldShowSettingsLinkForError(msg.error.code) ||
-                            (settings.showDebugTrace && Boolean(msg.trace))) && (
+                            Boolean(msg.quickScanErrorFallback) ||
+                            (settings.showDebugTrace &&
+                              Boolean(msg.trace ?? msg.quickScanTrace))) && (
                             <div className="flex flex-wrap items-center gap-1.5">
+                              {msg.quickScanErrorFallback && !isEmpty && (
+                                <button
+                                  type="button"
+                                  disabled={isRunning}
+                                  onClick={() => handleQuickAudit('all')}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-main hover:bg-surface-subtle transition-colors cursor-pointer disabled:opacity-45"
+                                >
+                                  <ShieldAlert className="h-3 w-3" />
+                                  <span>{UI_LABELS.ai.quickScanFallbackButton}</span>
+                                </button>
+                              )}
                               {shouldShowSettingsLinkForError(msg.error.code) && (
                                 <button
                                   type="button"
@@ -1732,10 +2022,12 @@ export function AiAssistantSidebar({
                                   <span>{UI_LABELS.ai.openSettingsAction}</span>
                                 </button>
                               )}
-                              {settings.showDebugTrace && msg.trace && (
+                              {settings.showDebugTrace && (msg.trace ?? msg.quickScanTrace) && (
                                 <button
                                   type="button"
-                                  onClick={() => handleInspectTrace(msg.trace!)}
+                                  onClick={() =>
+                                    handleInspectTrace((msg.trace ?? msg.quickScanTrace)!)
+                                  }
                                   title={UI_LABELS.ai.inspectTraceTitle}
                                   aria-label={UI_LABELS.ai.inspectTraceAria}
                                   className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-surface px-2 py-1 font-mono text-[10px] font-medium text-text-main hover:bg-surface-subtle transition-colors cursor-pointer"
@@ -1876,16 +2168,28 @@ export function AiAssistantSidebar({
                   ))}
                 </select>
                 {focus === 'auto' && (
-                  <button
-                    type="button"
-                    disabled={isRunning}
-                    onClick={() => handleQuickAudit('all')}
-                    title={UI_LABELS.ai.quickAuditAllTitle}
-                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-1 px-2`}
-                  >
-                    <ShieldAlert className="h-3 w-3 text-text-faint" />
-                    <span>{UI_LABELS.ai.quickAuditAllButton}</span>
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => void handleQuickScan()}
+                      title={UI_LABELS.ai.quickScanTitle}
+                      className={`${UI_TOKENS.ai.pillButton} text-[10px] py-1 px-2`}
+                    >
+                      <ScanSearch className="h-3 w-3 text-text-faint" />
+                      <span>{UI_LABELS.ai.quickScanButton}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => handleQuickAudit('all')}
+                      title={UI_LABELS.ai.quickAuditAllTitle}
+                      className={`${UI_TOKENS.ai.pillButton} text-[10px] py-1 px-2`}
+                    >
+                      <ShieldAlert className="h-3 w-3 text-text-faint" />
+                      <span>{UI_LABELS.ai.quickAuditAllButton}</span>
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -1896,6 +2200,18 @@ export function AiAssistantSidebar({
                 aria-label={UI_LABELS.ai.auditQuickGroupAria}
                 className="flex flex-wrap gap-1"
               >
+                {!isEmpty && (
+                  <button
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => void handleQuickScan()}
+                    title={UI_LABELS.ai.quickScanTitle}
+                    className={`${UI_TOKENS.ai.pillButton} text-[10px] py-0.5 px-2 font-semibold`}
+                  >
+                    <ScanSearch className="h-3 w-3 text-text-faint" />
+                    <span>{UI_LABELS.ai.quickScanButton}</span>
+                  </button>
+                )}
                 {AUDIT_QUICK_CHECKS.map((check) => {
                   const label =
                     check.id === 'all'
@@ -2062,6 +2378,16 @@ export function AiAssistantSidebar({
             onDeleteCustomSkill={removeCustomSkill}
             onResetAll={resetAll}
             onAcknowledgeUpdate={acknowledgeUpdate}
+            quickScanRulesState={quickScanRulesState}
+            quickScanCustomizationCount={quickScanCustomizationCount}
+            hasQuickScanUpstreamUpdate={hasQuickScanUpstreamUpdate}
+            onSetQuickScanRuleEnabled={setQuickScanRuleEnabled}
+            onSetQuickScanRuleTextOverride={setQuickScanRuleTextOverride}
+            onResetQuickScanRule={resetQuickScanRule}
+            onSaveCustomQuickScanRule={saveCustomQuickScanRule}
+            onDeleteCustomQuickScanRule={deleteCustomQuickScanRule}
+            onResetAllQuickScanRules={resetAllQuickScanRules}
+            onAcknowledgeQuickScanUpdate={acknowledgeQuickScanRulesUpdate}
           />
         </Suspense>
       )}

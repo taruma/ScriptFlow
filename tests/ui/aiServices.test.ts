@@ -105,6 +105,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
     expect(DEFAULT_AI_SETTINGS).toEqual({
       model: 'gemini-4-hydrogen',
       reasoningLevel: 'medium',
+      quickScanSensitivity: 'balanced',
       apiKey: '',
       sessionOnly: false,
       showThinkingSummary: true,
@@ -122,6 +123,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
       {
         model: 'gemini-4-neon',
         reasoningLevel: 'high',
+        quickScanSensitivity: 'strict',
         apiKey: '  AIza-test-key-123  ',
         sessionOnly: false,
         showThinkingSummary: false,
@@ -186,6 +188,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
     ).toEqual({
       model: 'gemini-4-hydrogen',
       reasoningLevel: 'medium',
+      quickScanSensitivity: 'balanced',
       apiKey: 'secret',
       sessionOnly: false,
       showThinkingSummary: true,
@@ -224,6 +227,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
       {
         model: 'gemini-4-carbon',
         reasoningLevel: 'high',
+        quickScanSensitivity: 'lenient',
         apiKey: 'AIza-keep-me-intact',
         sessionOnly: true,
         showThinkingSummary: false,
@@ -240,6 +244,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
     expect(reset).toEqual({
       model: 'gemini-4-hydrogen',
       reasoningLevel: 'medium',
+      quickScanSensitivity: 'balanced',
       apiKey: 'AIza-keep-me-intact',
       sessionOnly: true,
       showThinkingSummary: true,

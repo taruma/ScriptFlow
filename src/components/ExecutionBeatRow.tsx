@@ -22,8 +22,13 @@ import {
 } from '../ui/beatFocus.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import type {LiveBeatPatchIndicator} from '../ui/patchIndicators.ts';
-import {EMPTY_BEAT_PATCH_INDICATORS} from '../ui/referenceStability.ts';
+import type {LiveBeatQuickScanIndicator} from '../ui/quickScanIndicators.ts';
+import {
+  EMPTY_BEAT_PATCH_INDICATORS,
+  EMPTY_BEAT_QUICK_SCAN_INDICATORS,
+} from '../ui/referenceStability.ts';
 import {AiPatchIndicator} from './AiPatchIndicator.tsx';
+import {AiQuickScanIndicator} from './AiQuickScanIndicator.tsx';
 import {DiagnosticDot} from './DiagnosticDot.tsx';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
 import type {SortableItemBinding} from './SortableList.tsx';
@@ -35,6 +40,7 @@ interface ExecutionBeatRowProps {
   aestheticTokens: AestheticToken[];
   diagnostics: LintDiagnostic[];
   patchIndicators?: readonly LiveBeatPatchIndicator[];
+  quickScanIndicators?: readonly LiveBeatQuickScanIndicator[];
   historyRevision: number;
   readOnly?: boolean;
   collapsed: boolean;
@@ -80,6 +86,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   aestheticTokens,
   diagnostics,
   patchIndicators = EMPTY_BEAT_PATCH_INDICATORS,
+  quickScanIndicators = EMPTY_BEAT_QUICK_SCAN_INDICATORS,
   historyRevision,
   readOnly = false,
   collapsed,
@@ -803,9 +810,12 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
         </div>
       )}
 
-      {/* Right Margin Diagnostics & Quiet AI Patch Indicator (zero layout shift) */}
+      {/* Right Margin Diagnostics, Quick Scan Indicator & Quiet AI Patch Indicator (zero layout shift) */}
       <div className="flex w-6 flex-col items-center gap-1 pt-1.5">
         <AiPatchIndicator phase="execution" indicators={patchIndicators} />
+        {patchIndicators.length === 0 && (
+          <AiQuickScanIndicator beatIndex={beat.index} indicators={quickScanIndicators} />
+        )}
         <DiagnosticDot diagnostics={diagnostics} />
       </div>
     </div>

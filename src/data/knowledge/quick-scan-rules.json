@@ -1,0 +1,167 @@
+[
+  {
+    "id": "doc_opening_motion",
+    "lens": "lens5_blocks_grammar",
+    "scope": "document",
+    "label": "Frozen [OPENING] Motion Purity",
+    "when": ["has_opening"],
+    "instructions": "Does [OPENING] describe ongoing motion, actions unfolding over time, or camera movement instead of a frozen motionless t=0 frame?",
+    "trueDescription": "[OPENING] describes characters walking, turning, pacing, gesturing over time, or camera pans/tracks/pushes.",
+    "falseDescription": "[OPENING] describes strictly static poses, layout, and frozen t=0 framing.",
+    "escalationHint": "Check [OPENING] for motion verbs or camera movement and rewrite as a motionless t=0 snapshot."
+  },
+  {
+    "id": "doc_opening_audio",
+    "lens": "lens5_blocks_grammar",
+    "scope": "document",
+    "label": "Frozen [OPENING] Audio Purity",
+    "when": ["has_opening"],
+    "instructions": "Does [OPENING] describe any sound, noise, buzzing, humming, footsteps, foley, or spoken dialogue?",
+    "trueDescription": "[OPENING] mentions audible sounds, noises, humming/buzzing, ambience, or speech.",
+    "falseDescription": "[OPENING] is strictly visual with zero audio or sound cues.",
+    "escalationHint": "Remove audio or sound cues from [OPENING] and relocate continuous ambience to [AESTHETIC] Audio."
+  },
+  {
+    "id": "doc_intent_shotlist",
+    "lens": "lens5_blocks_grammar",
+    "scope": "document",
+    "label": "Flowing [INTENT] (No Shot List)",
+    "when": ["has_intent"],
+    "instructions": "Does [INTENT] read like a multi-step shot list or play-by-play choreography instead of one concise directorial sentence?",
+    "trueDescription": "[INTENT] breaks down multiple sequential shots, camera cuts, or detailed action choreography.",
+    "falseDescription": "[INTENT] is a concise high-level directorial goal sentence.",
+    "escalationHint": "Condense [INTENT] into one flowing directorial sentence starting with 'Create ...'."
+  },
+  {
+    "id": "doc_eyeline_parity",
+    "lens": "lens1_spatial_optics",
+    "scope": "document",
+    "label": "180° Axis & Eyeline Parity",
+    "when": ["continuous"],
+    "instructions": "Does [EXECUTION] violate the 180-degree axis or flip a character's screen placement or facing direction compared to [LOGIC] and [OPENING] without a motivating camera arc or neutral bridge?",
+    "trueDescription": "A character swaps screen sides (e.g., frame-right facing screen-left becomes frame-left facing screen-right) across a cut without an arcing camera move or neutral bridge.",
+    "falseDescription": "Character screen placement and facing yaw stay consistent with [LOGIC] and [OPENING], or any axis cross is physically bridged.",
+    "escalationHint": "Audit 180-degree axis parity and facing directions across cuts against [LOGIC] and [OPENING]."
+  },
+  {
+    "id": "doc_s0_s1_handoff",
+    "lens": "lens1_spatial_optics",
+    "scope": "document",
+    "label": "Clean S0 -> S1 Opening Handoff",
+    "when": ["continuous", "has_opening"],
+    "instructions": "Does Macro-State S1 contradict the camera framing, character posture, viewport layout, or hand grips locked in [OPENING]?",
+    "trueDescription": "S1 starts from a conflicting shot scale, repositioned character, different posture, or altered hand grip compared to [OPENING].",
+    "falseDescription": "S1 opens seamlessly from the exact frozen camera, posture, layout, and grips established in [OPENING].",
+    "escalationHint": "Align S1's initial camera framing, viewport coordinates, posture, and hand grips with [OPENING]."
+  },
+  {
+    "id": "doc_subtitle_guard",
+    "lens": "lens4_acoustics_voice",
+    "scope": "document",
+    "label": "Dialogue Subtitle Guard",
+    "when": ["has_dialogue"],
+    "instructions": "Does the script contain spoken {dialogue} while [LOGIC] omits any subtitle policy (such as 'No subtitles appear on screen.')?",
+    "trueDescription": "Spoken dialogue exists in [EXECUTION], and [LOGIC] does not mention subtitles or captions.",
+    "falseDescription": "[LOGIC] states a clear subtitle policy (e.g., 'No subtitles appear on screen.') or no spoken dialogue is present.",
+    "escalationHint": "Add an explicit subtitle policy (e.g., 'No subtitles appear on screen.') to [LOGIC]."
+  },
+  {
+    "id": "doc_wear_persistence",
+    "lens": "lens2_temporal_pacing_wear",
+    "scope": "document",
+    "label": "Physical Wear Persistence",
+    "when": ["continuous"],
+    "instructions": "Once physical wear or environmental baggage appears (sweat, blood, mud, bruises, soaked clothes, exhaustion), does a later visible Macro-State drop it without it being cleaned or resolved?",
+    "trueDescription": "Accumulated wear established earlier vanishes from visible [ACT] descriptions in later Macro-States without explanation.",
+    "falseDescription": "Either no persistent physical wear is introduced, or accumulated wear is restated whenever visible.",
+    "escalationHint": "Verify physical wear repetition across all visible Macro-States after wear is introduced."
+  },
+  {
+    "id": "doc_brief_specs",
+    "lens": "brief",
+    "scope": "document",
+    "label": "Scene Brief Specs & Constraints",
+    "when": ["has_brief_text"],
+    "instructions": "Does the script contradict any explicit format, line-count, shot-style, tone, or production constraint stated in the active Scene Brief?",
+    "trueDescription": "The script violates a concrete requirement from the Scene Brief (e.g., wrong shot style, extra dialogue lines, conflicting setting or character rule).",
+    "falseDescription": "The script follows all constraints and directorial notes in the active Scene Brief.",
+    "escalationHint": "Reconcile script blocks and execution lines against the active Scene Brief specs and subtext."
+  },
+  {
+    "id": "doc_brief_media",
+    "lens": "brief",
+    "scope": "document",
+    "label": "Multimodal Reference Fidelity",
+    "when": ["has_brief_media"],
+    "instructions": "Does the script contradict visual appearance, wardrobe, setting, audio identity, or continuation frame details shown in the attached Scene Brief reference media?",
+    "trueDescription": "Character identity, setting details, wardrobe, or continuation opening state conflict with the attached image, video, audio, or document references.",
+    "falseDescription": "The script aligns consistently with the attached Scene Brief reference media.",
+    "escalationHint": "Cross-check character details, setting, and opening continuation handoff against the attached reference media."
+  },
+  {
+    "id": "state_lookbook_bleed",
+    "lens": "lens5_blocks_grammar",
+    "scope": "macro_state",
+    "label": "Lookbook Bleed",
+    "when": ["has_aesthetic"],
+    "instructions": "Does Macro-State {{STATE_ID}} redundantly restate static wardrobe, film medium/lens stock, color palette, or room architecture already locked in [AESTHETIC]?",
+    "trueDescription": "{{STATE_ID}} repeats static lookbook prose (outfit, film format/grain, color palette, or unchanging room decor) already declared in [AESTHETIC].",
+    "falseDescription": "{{STATE_ID}} focuses on dynamic camera, blocking, action, dialogue, or foley without repeating static [AESTHETIC] prose.",
+    "escalationHint": "Trim static [AESTHETIC] descriptions repeated inside {{STATE_ID}} (use declared shorthand tokens if referencing locations)."
+  },
+  {
+    "id": "state_single_dimension",
+    "lens": "lens5_blocks_grammar",
+    "scope": "macro_state",
+    "label": "Single-Dimension Sub-State Law",
+    "when": ["all"],
+    "instructions": "Does any single '->'-separated Sub-State inside {{STATE_ID}} cram multiple unrelated dimensions together (such as mixing camera movement, physical acting, spoken dialogue, or sound effects inside one unit)?",
+    "trueDescription": "One Sub-State in {{STATE_ID}} combines two or more distinct dimensions that should be split with '->' into separate [CAM], [ACT], {dialogue}, or <foley> Sub-States.",
+    "falseDescription": "Every '->'-separated Sub-State in {{STATE_ID}} directs strictly one optical, spatial, physical, or acoustic dimension.",
+    "escalationHint": "Split multi-dimension Sub-States in {{STATE_ID}} into separate '->'-chained single-dimension units."
+  },
+  {
+    "id": "state_cam_visibility",
+    "lens": "lens1_spatial_optics",
+    "scope": "macro_state",
+    "label": "Action Visibility vs. Active Camera",
+    "when": ["has_action"],
+    "instructions": "Does {{STATE_ID}} describe a visual [ACT] detail (such as eyes, pupils, subtle expression, or hidden hand action) that is physically hidden or unreadable from {{STATE_ID}}'s active [CAM] framing and angle?",
+    "trueDescription": "{{STATE_ID}} describes facial or fine physical details that cannot be seen because the active camera is behind the subject, too wide, or aimed elsewhere.",
+    "falseDescription": "Every [ACT] detail in {{STATE_ID}} is plausibly visible from its active [CAM] angle and shot scale.",
+    "escalationHint": "Verify whether every [ACT] detail in {{STATE_ID}} is visible from its resolved camera framing, and adjust framing or action."
+  },
+  {
+    "id": "state_hand_allocation",
+    "lens": "lens3_props_inventory",
+    "scope": "macro_state",
+    "label": "Explicit Hand Allocation",
+    "when": ["has_action_or_prop"],
+    "instructions": "Does {{STATE_ID}} have a character grab, pick up, hold, open, or manipulate a distinct handheld prop without naming left hand, right hand, or both hands?",
+    "trueDescription": "In {{STATE_ID}}, a character handles a distinct handheld object/prop without specifying left hand, right hand, or both hands.",
+    "falseDescription": "Either {{STATE_ID}} has no handheld prop manipulation, or every handled prop explicitly names left, right, or both hands.",
+    "escalationHint": "Specify exact hand allocation (left hand, right hand, or both hands) for handheld props in {{STATE_ID}}."
+  },
+  {
+    "id": "state_ambient_foley",
+    "lens": "lens4_acoustics_voice",
+    "scope": "macro_state",
+    "label": "Room Tone Isolation (No Ambient Foley)",
+    "when": ["has_foley"],
+    "instructions": "Does a <sound> foley tag in {{STATE_ID}} describe continuous background room tone or ambient bed noise (such as steady hum, constant rain, or ongoing traffic) instead of a discrete physical sound event?",
+    "trueDescription": "A <...> tag in {{STATE_ID}} describes continuous ambient room tone that belongs in [AESTHETIC] Audio.",
+    "falseDescription": "Every <...> foley tag in {{STATE_ID}} is a distinct, discrete physical impact, friction, or off-screen trigger sound.",
+    "escalationHint": "Move continuous ambient room tone out of {{STATE_ID}}'s <foley> tag into [AESTHETIC] Audio."
+  },
+  {
+    "id": "state_montage_anchor",
+    "lens": "lens1_spatial_optics",
+    "scope": "macro_state",
+    "label": "Self-Contained Montage Anchoring",
+    "when": ["montage"],
+    "instructions": "Does independent montage Macro-State {{STATE_ID}} omit its subject or setting/location cue (or rely on an unstated prior cut), leaving the shot visually unanchored?",
+    "trueDescription": "{{STATE_ID}} lacks an explicit subject, location/LOC## cue, or self-contained plain [CAM] framing.",
+    "falseDescription": "{{STATE_ID}} cleanly anchors its own framing, subject, and setting/location.",
+    "escalationHint": "Ensure montage Macro-State {{STATE_ID}} explicitly establishes its own framing, subject, and setting (or declared LOC## token)."
+  }
+]

@@ -13,6 +13,7 @@ import type {
   WordDiffLine,
   WordDiffToken,
 } from './patchIndicators.ts';
+import type {LiveBeatQuickScanIndicator} from './quickScanIndicators.ts';
 
 /** Shared empty arrays to prevent fresh `[]` allocations from defeating React.memo. */
 export const EMPTY_DIAGNOSTICS: LintDiagnostic[] = [];
@@ -21,6 +22,7 @@ export const EMPTY_BEATS: ExecutionBeat[] = [];
 export const EMPTY_BLOCK_PATCH_INDICATORS: LiveBlockPatchIndicator[] = [];
 export const EMPTY_BEAT_PATCH_INDICATORS: LiveBeatPatchIndicator[] = [];
 export const EMPTY_INSERTION_PATCH_INDICATORS: LiveInsertionPatchIndicator[] = [];
+export const EMPTY_BEAT_QUICK_SCAN_INDICATORS: LiveBeatQuickScanIndicator[] = [];
 
 function stabilizeArray<T>(
   prev: T[],
@@ -321,4 +323,29 @@ export function stabilizeInsertionPatchMap(
   next: Map<number, LiveInsertionPatchIndicator[]>
 ): Map<number, LiveInsertionPatchIndicator[]> {
   return stabilizeIndexedMap(prev, next, isInsertionPatchIndicatorEqual);
+}
+
+function isBeatQuickScanIndicatorEqual(
+  a: LiveBeatQuickScanIndicator,
+  b: LiveBeatQuickScanIndicator
+): boolean {
+  return (
+    a.key === b.key &&
+    a.ruleId === b.ruleId &&
+    a.ruleLabel === b.ruleLabel &&
+    a.lens === b.lens &&
+    a.beatIndex === b.beatIndex &&
+    a.status === b.status &&
+    a.probability === b.probability &&
+    a.confidence === b.confidence &&
+    a.source === b.source &&
+    a.deterministicMessage === b.deterministicMessage
+  );
+}
+
+export function stabilizeBeatQuickScanMap(
+  prev: Map<number, LiveBeatQuickScanIndicator[]>,
+  next: Map<number, LiveBeatQuickScanIndicator[]>
+): Map<number, LiveBeatQuickScanIndicator[]> {
+  return stabilizeIndexedMap(prev, next, isBeatQuickScanIndicatorEqual);
 }

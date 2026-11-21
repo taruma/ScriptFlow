@@ -1,19 +1,23 @@
 import {memo, useMemo} from 'react';
+import {computeSnapshotHash} from '../core/index.ts';
 import type {HistoryCommitMode} from '../core/history.ts';
 import type {
   AuteurDocument,
   ExtractedMetadata,
   LintDiagnostic,
 } from '../core/types.ts';
+import type {QuickScanResult} from '../services/geminiDecisions.ts';
 import {
   buildLivePatchIndicators,
   type ActiveAiPatchItem,
 } from '../ui/patchIndicators.ts';
+import {buildLiveQuickScanIndicators} from '../ui/quickScanIndicators.ts';
 import {
   EMPTY_BEATS,
   stabilizeAestheticTokens,
   stabilizeBeatLinks,
   stabilizeBeatPatchMap,
+  stabilizeBeatQuickScanMap,
   stabilizeBlockPatchMap,
   stabilizeCharacters,
   stabilizeDiagnosticsMap,
@@ -23,6 +27,7 @@ import {
 } from '../ui/referenceStability.ts';
 import {useStableValue} from '../ui/useStableValue.ts';
 import {LivePatchActionContext} from './AiPatchIndicator.tsx';
+import {LiveQuickScanActionContext} from './AiQuickScanIndicator.tsx';
 import {ExecutionPane} from './ExecutionPane.tsx';
 import {StagingPane} from './StagingPane.tsx';
 import type {StagingBlockCommitOptions} from './stagingBlockRegistry.ts';
@@ -37,6 +42,8 @@ interface LiveDocumentProps {
   activeAiPatches?: readonly ActiveAiPatchItem[];
   onApplyAiPatch?: (patchId: string) => void;
   onDismissAiPatch?: (patchId: string) => void;
+  activeQuickScan?: QuickScanResult | null;
+  onAuditQuickScanBeat?: (beatIndex: number) => void;
   historyRevision: number;
   readOnly?: boolean;
   onUpdateStaging: (
@@ -85,6 +92,8 @@ export const LiveDocument = memo(function LiveDocument({
   activeAiPatches = EMPTY_ACTIVE_PATCHES,
   onApplyAiPatch,
   onDismissAiPatch,
+  activeQuickScan = null,
+  onAuditQuickScanBeat,
   historyRevision,
   readOnly = false,
   onUpdateStaging,
@@ -160,6 +169,15 @@ export const LiveDocument = memo(function LiveDocument({
     stabilizeInsertionPatchMap
   );
 
+  const rawQuickScanByBeatIndex = useMemo(() => {
+    if (!activeQuickScan) return new Map();
+    return buildLiveQuickScanIndicators(activeQuickScan, computeSnapshotHash(rawText));
+  }, [activeQuickScan, rawText]);
+  const beatQuickScanIndicatorsByIndex = useStableValue(
+    rawQuickScanByBeatIndex,
+    stabilizeBeatQuickScanMap
+  );
+
   const livePatchActionValue = useMemo(
     () => ({
       readOnly,
@@ -169,46 +187,56 @@ export const LiveDocument = memo(function LiveDocument({
     [readOnly, onApplyAiPatch, onDismissAiPatch]
   );
 
+  const liveQuickScanActionValue = useMemo(
+    () => ({
+      onAuditBeat: onAuditQuickScanBeat,
+    }),
+    [onAuditQuickScanBeat]
+  );
+
   return (
     <LivePatchActionContext.Provider value={livePatchActionValue}>
-      <main className="w-full lg:h-full lg:overflow-hidden">
-        <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <StagingPane
-          stagingBlocks={stagingBlocks}
-          characters={characters}
-          aestheticTokens={aestheticTokens}
-          diagnosticsByBlockIndex={stagingDiagnosticsByIndex}
-          patchIndicatorsByBlockIndex={stagingPatchIndicatorsByIndex}
-          patchInsertionsByAfterIndex={stagingPatchInsertionsByAfterIndex}
-          historyRevision={historyRevision}
-          readOnly={readOnly}
-          onUpdateStaging={onUpdateStaging}
-          onInsertStaging={onInsertStaging}
-          onDeleteStaging={onDeleteStaging}
-          onReorderStaging={onReorderStaging}
-        />
+      <LiveQuickScanActionContext.Provider value={liveQuickScanActionValue}>
+        <main className="w-full lg:h-full lg:overflow-hidden">
+          <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <StagingPane
+              stagingBlocks={stagingBlocks}
+              characters={characters}
+              aestheticTokens={aestheticTokens}
+              diagnosticsByBlockIndex={stagingDiagnosticsByIndex}
+              patchIndicatorsByBlockIndex={stagingPatchIndicatorsByIndex}
+              patchInsertionsByAfterIndex={stagingPatchInsertionsByAfterIndex}
+              historyRevision={historyRevision}
+              readOnly={readOnly}
+              onUpdateStaging={onUpdateStaging}
+              onInsertStaging={onInsertStaging}
+              onDeleteStaging={onDeleteStaging}
+              onReorderStaging={onReorderStaging}
+            />
 
-        <ExecutionPane
-          executionLabel={doc.execution?.headerName ?? 'EXECUTION'}
-          beats={beats}
-          beatLinks={beatLinks}
-          aestheticTokens={aestheticTokens}
-          diagnosticsByBeatIndex={beatDiagnosticsByIndex}
-          patchIndicatorsByBeatIndex={beatPatchIndicatorsByIndex}
-          patchInsertionsByAfterBeatIndex={beatPatchInsertionsByAfterBeatIndex}
-          historyRevision={historyRevision}
-          readOnly={readOnly}
-          onUpdateSubState={onUpdateSubState}
-          onInsertSubState={onInsertSubState}
-          onDeleteSubState={onDeleteSubState}
-          onMergeSubState={onMergeSubState}
-          onReorderSubState={onReorderSubState}
-          onInsertBeat={onInsertBeat}
-          onDeleteBeat={onDeleteBeat}
-          onReorderBeats={onReorderBeats}
-        />
-      </div>
-    </main>
+            <ExecutionPane
+              executionLabel={doc.execution?.headerName ?? 'EXECUTION'}
+              beats={beats}
+              beatLinks={beatLinks}
+              aestheticTokens={aestheticTokens}
+              diagnosticsByBeatIndex={beatDiagnosticsByIndex}
+              patchIndicatorsByBeatIndex={beatPatchIndicatorsByIndex}
+              patchInsertionsByAfterBeatIndex={beatPatchInsertionsByAfterBeatIndex}
+              quickScanIndicatorsByBeatIndex={beatQuickScanIndicatorsByIndex}
+              historyRevision={historyRevision}
+              readOnly={readOnly}
+              onUpdateSubState={onUpdateSubState}
+              onInsertSubState={onInsertSubState}
+              onDeleteSubState={onDeleteSubState}
+              onMergeSubState={onMergeSubState}
+              onReorderSubState={onReorderSubState}
+              onInsertBeat={onInsertBeat}
+              onDeleteBeat={onDeleteBeat}
+              onReorderBeats={onReorderBeats}
+            />
+          </div>
+        </main>
+      </LiveQuickScanActionContext.Provider>
     </LivePatchActionContext.Provider>
   );
 });

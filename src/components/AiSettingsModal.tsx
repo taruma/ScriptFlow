@@ -14,9 +14,11 @@ import {getGeminiModelPricing} from '../ui/aiPricing.ts';
 import {
   GEMINI_MODEL_OPTIONS,
   isDefaultAiPreferences,
+  QUICK_SCAN_SENSITIVITY_OPTIONS,
   REASONING_LEVEL_OPTIONS,
   type AiSettings,
   type GeminiModelId,
+  type QuickScanSensitivity,
   type ReasoningLevel,
 } from '../ui/aiSettings.ts';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -91,6 +93,9 @@ function AiSettingsModalContent({
   const selectedReasoning =
     REASONING_LEVEL_OPTIONS.find((r) => r.id === settings.reasoningLevel) ??
     REASONING_LEVEL_OPTIONS[1];
+  const selectedSensitivity =
+    QUICK_SCAN_SENSITIVITY_OPTIONS.find((s) => s.id === settings.quickScanSensitivity) ??
+    QUICK_SCAN_SENSITIVITY_OPTIONS[1];
 
   useEffect(() => {
     setKeyDraft(settings.apiKey);
@@ -417,6 +422,50 @@ function AiSettingsModalContent({
                 );
               })}
             </div>
+          </section>
+
+          {/* Section 3b: Quick Scan Sensitivity Segmented Control */}
+          <section className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted shrink-0">
+                {labels.quickScanSensitivityLabel}
+              </span>
+              <span className="font-mono text-[10px] text-text-faint truncate">
+                {labels.quickScanSensitivityMeta}
+              </span>
+            </div>
+
+            <div
+              role="radiogroup"
+              aria-label={labels.quickScanSensitivityGroupAria}
+              className={`${UI_TOKENS.button.segmentedGroup} grid grid-cols-3 w-full`}
+            >
+              {QUICK_SCAN_SENSITIVITY_OPTIONS.map((option) => {
+                const selected = settings.quickScanSensitivity === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    title={option.description}
+                    onClick={() =>
+                      onUpdateSettings({
+                        quickScanSensitivity: option.id as QuickScanSensitivity,
+                      })
+                    }
+                    className={`${
+                      selected
+                        ? UI_TOKENS.button.segmentedItemActive
+                        : UI_TOKENS.button.segmentedItem
+                    } justify-center py-1`}
+                  >
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10.5px] text-text-muted">{selectedSensitivity.description}</p>
           </section>
 
           {/* Section 4: Unified Compact Display & Diagnostics Toggles */}

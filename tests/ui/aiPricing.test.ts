@@ -217,4 +217,54 @@ describe('aiPricing Gemini 4 rate table & cost estimation', () => {
     expect(formatUsdBreakdown(0.254)).toBe('$0.254');
     expect(formatUsdBreakdown(2.5)).toBe('$2.50');
   });
+
+  it('prices gemini-decision-1 at $0.10/1M input and $0 output and rolls Quick Scan turns into session totals', () => {
+    expect(getGeminiModelPricing('gemini-decision-1', NOV_21_2026)).toEqual({
+      model: 'gemini-decision-1',
+      inputPer1M: 0.1,
+      cachedInputPer1M: 0.1,
+      outputPer1M: 0,
+      isPromoRate: false,
+    });
+
+    const quickScanEstimate = estimateTurnCost(
+      'gemini-decision-1',
+      {
+        total_input_tokens: 3_000,
+        total_output_tokens: 0,
+        total_tokens: 3_000,
+      },
+      NOV_21_2026
+    );
+    expect(quickScanEstimate?.totalCostUsd).toBeCloseTo(0.0003, 10);
+    expect(quickScanEstimate?.outputCostUsd).toBe(0);
+
+    const session = aggregateSessionCost(
+      [
+        {
+          role: 'assistant',
+          quickScanTrace: {
+            model: 'gemini-decision-1',
+            startedAt: '2026-11-21T10:00:00.000Z',
+            usage: {total_input_tokens: 4_000, total_output_tokens: 0, total_tokens: 4_000},
+          },
+        },
+        {
+          role: 'assistant',
+          trace: {
+            model: 'gemini-4-hydrogen',
+            startedAt: '2026-11-21T10:02:00.000Z',
+            usage: {total_input_tokens: 10_000, total_output_tokens: 1_000, total_tokens: 11_000},
+          },
+        },
+      ],
+      NOV_21_2026
+    );
+
+    // Quick Scan: 4k * 0.1 / 1M = 0.0004
+    // Hydrogen: (10k * 1.5 + 1k * 7.5) / 1M = 0.0225
+    expect(session.turnCount).toBe(2);
+    expect(session.totalCostUsd).toBeCloseTo(0.0229, 10);
+    expect(session.totalTokens).toBe(15_000);
+  });
 });

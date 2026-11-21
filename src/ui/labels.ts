@@ -707,6 +707,62 @@ export const UI_LABELS = {
     refineWholeScript: 'Whole Script',
     quickAuditAllButton: 'Audit All',
     quickAuditAllTitle: 'Run a full 5-lens Script Supervisor audit without leaving Auto focus',
+    quickScanButton: 'Quick Scan',
+    quickScanTitle:
+      'Run a fast (~400ms, $0 output) Decisions API semantic craft & Brief pre-check across atomic rules',
+    quickScanRunning: 'Running Quick Scan…',
+    quickScanFallbackButton: 'Run Standard Audit All instead',
+    quickScan: {
+      cardTitle: 'Quick Scan (Layer 2.5)',
+      dismissedBadge: 'Dismissed',
+      runningLabel: 'Evaluating atomic checks…',
+      staleNotice: 'Script edited since this scan.',
+      rescanButton: 'Re-scan',
+      youtubeNotice: (handles: readonly string[]) =>
+        `YouTube ${handles.join(', ')} evaluated via text labels only (Decisions API omits YouTube streams).`,
+      checksSummary: (count: number) => `${count} ${count === 1 ? 'check' : 'checks'}`,
+      statusFlagged: 'Flagged',
+      statusBorderline: 'Borderline',
+      statusClean: 'Clean',
+      summaryAllClean: 'All checked atomic rules clean',
+      summaryCounts: (flagged: number, borderline: number) => {
+        const parts: string[] = [];
+        if (flagged > 0) parts.push(`${flagged} flagged`);
+        if (borderline > 0) parts.push(`${borderline} borderline`);
+        return parts.join(' · ') || 'Clean';
+      },
+      lensLabels: {
+        lens1_spatial_optics: 'Lens 1 · Spatial & Optics',
+        lens2_temporal_pacing_wear: 'Lens 2 · Temporal & Wear',
+        lens3_props_inventory: 'Lens 3 · Props & Inventory',
+        lens4_acoustics_voice: 'Lens 4 · Acoustics & Voice',
+        lens5_blocks_grammar: 'Lens 5 · Blocks & Grammar',
+        brief: 'Scene Brief & Media',
+      } as const,
+      lensCheckboxAria: (label: string) => `Include ${label} in Deep Audit`,
+      lensExpandAria: (label: string) => `Show checked rules for ${label}`,
+      lensCollapseAria: (label: string) => `Hide checked rules for ${label}`,
+      deterministicBadge: 'Lint',
+      suspectStatesHeading: 'Suspect Macro-States',
+      jumpToStateTitle: (targetId: string, topRule: string, pct: number) =>
+        `Jump to ${targetId} (${topRule} · ${pct}%)`,
+      deepAuditSelectedButton: (count: number) =>
+        `Deep Audit Selected (${count})`,
+      runFullDeepAuditButton: 'Run Full Deep Audit',
+      dismissButton: 'Dismiss',
+      noRulesRanNote:
+        'No Quick Scan rules matched this script. Enable rules in Context → Quick Scan Rules.',
+      liveIndicatorTriggerAria: (beatIndex: number, count: number, hasFlagged: boolean) =>
+        `Quick Scan on S${beatIndex}: ${count} ${count === 1 ? 'suspect rule' : 'suspect rules'}${
+          hasFlagged ? ' (flagged)' : ' (borderline)'
+        } — hover to inspect, click to pin`,
+      liveIndicatorDialogAria: (beatIndex: number) => `Quick Scan findings for S${beatIndex}`,
+      liveIndicatorHeader: (beatIndex: number) => `Quick Scan · S${beatIndex}`,
+      liveIndicatorCloseAria: 'Close Quick Scan preview',
+      liveIndicatorAuditButton: (beatIndex: number) => `Audit S${beatIndex}`,
+      liveIndicatorFooterHint:
+        'System-1 semantic pre-check · click Audit to verify with Gemini 4 & stage fixes',
+    },
     auditQuickGroupAria: 'Quick Script Supervisor audit lenses',
     auditQuickAll: 'All Lenses',
     auditQuickLensShort: {
@@ -957,6 +1013,9 @@ export const UI_LABELS = {
       modelGroupAria: 'Gemini model selection',
       reasoningLabel: 'Reasoning Level',
       reasoningGroupAria: 'Reasoning level selection',
+      quickScanSensitivityLabel: 'Quick Scan Sensitivity',
+      quickScanSensitivityGroupAria: 'Quick Scan sensitivity selection',
+      quickScanSensitivityMeta: 'gemini-decision-1 · $0.10 / $0 per 1M',
       thinkingSummaryLabel: 'Show reasoning summary',
       thinkingSummaryDesc: 'Streamed thought summaries in the Thinking accordion',
       thinkingSummaryAria: 'Toggle reasoning summary display',
@@ -981,6 +1040,67 @@ export const UI_LABELS = {
       tabPreview: 'Live Prompt Preview',
       tabCraft: 'Foundational Craft',
       tabSkills: 'Skills & Extensions',
+      tabQuickScan: 'Quick Scan Rules',
+      quickScanRules: {
+        upstreamUpdateTitle: 'Built-in Quick Scan rules updated',
+        upstreamUpdateDesc:
+          'Built-in Quick Scan rules have been updated since your overrides were saved. Keep your overrides or reset to adopt the new catalog.',
+        summary: (enabled: number, total: number, custom: number) =>
+          custom > 0
+            ? `${enabled}/${total} enabled · ${custom} custom`
+            : `${enabled}/${total} enabled`,
+        description:
+          'Atomic binary checks run in a single Decisions API pass (gemini-decision-1). Per-Macro-State rules automatically fan out over matching S# lines using {{STATE_ID}}.',
+        addCustomRuleButton: 'Add Custom Rule',
+        formAddTitle: 'New Custom Quick Scan Rule',
+        formEditTitle: 'Edit Custom Quick Scan Rule',
+        fieldLabel: 'Rule Label',
+        fieldLabelPlaceholder: 'e.g. Avoid Unmotivated Slow Motion',
+        fieldId: 'Rule ID (snake_case)',
+        fieldIdPlaceholder: 'avoid_unmotivated_slow_mo',
+        fieldLens: 'Audit Lens Group',
+        fieldScope: 'Evaluation Scope',
+        scopeDocument: 'Document (1 check)',
+        scopeMacroState: 'Per Macro-State (S1..Sn)',
+        fieldWhen: 'Run Condition (AST Filter)',
+        whenLabels: {
+          all: 'Always',
+          continuous: 'Continuous scenes',
+          oner: 'Continuous oners only',
+          montage: 'Montage scenes only',
+          has_opening: 'Has [OPENING]',
+          has_intent: 'Has [INTENT]',
+          has_aesthetic: 'Has [AESTHETIC]',
+          has_dialogue: 'Has {dialogue}',
+          has_foley: 'State has <foley>',
+          has_action: 'State has [ACT]',
+          has_action_or_prop: 'State has [ACT]/[PROP]',
+          has_brief_text: 'Active Brief text',
+          has_brief_media: 'Active Brief media',
+        } as const,
+        fieldInstructions: 'Binary Question (Yes = Issue)',
+        fieldInstructionsPlaceholder:
+          'Does {{STATE_ID}} violate ...? (Use {{STATE_ID}} for Per Macro-State rules)',
+        fieldTrueDesc: 'Violation Criteria (True)',
+        fieldTrueDescPlaceholder: 'Concrete condition that means an issue IS present...',
+        fieldFalseDesc: 'Clean Criteria (False)',
+        fieldFalseDescPlaceholder: 'Concrete condition that means the script is clean...',
+        fieldEscalationHint: 'Deep Audit Hint (Optional)',
+        fieldEscalationHintPlaceholder: 'Short repair guidance passed to Gemini 4 on escalation...',
+        saveRuleButton: 'Save Rule',
+        updateRuleButton: 'Update Rule',
+        toggleAria: (label: string, enabled: boolean) =>
+          `${enabled ? 'Disable' : 'Enable'} Quick Scan rule ${label}`,
+        resetAllRulesButton: 'Reset Quick Scan rules',
+        confirmDeleteTitle: (label: string) => `Delete "${label}"?`,
+        confirmDeleteDesc:
+          'This custom Quick Scan rule will be permanently removed from this browser.',
+        confirmDeleteAction: 'Delete Rule',
+        confirmResetAllTitle: 'Reset all Quick Scan rules?',
+        confirmResetAllDesc:
+          'This will restore all built-in Quick Scan rule defaults and delete custom Quick Scan rules stored in this browser.',
+        confirmResetAllAction: 'Reset Rules',
+      },
       upstreamUpdateTitle: 'Built-in Auteur knowledge updated',
       upstreamUpdateDesc:
         'Built-in craft defaults have been updated since your overrides were saved. Keep your custom rules or reset to adopt the new defaults.',
@@ -1068,7 +1188,15 @@ export const UI_LABELS = {
     traceModal: {
       dialogAria: 'AI Trace Inspector',
       title: 'AI Trace Inspector',
-      subtitle: 'Sanitized Gemini Interactions API request, tool loop, and response diagnostics',
+      subtitle: 'Sanitized Gemini API request, tool loop, and response diagnostics',
+      quickScanSubtitle:
+        'Sanitized Gemini Decisions API (v1beta) atomic question matrix and calibrated probabilities',
+      quickScanSensitivity: 'Sensitivity',
+      quickScanQuestions: 'Questions',
+      quickScanBatches: 'Batches',
+      quickScanAnswersHeading: (count: number) => `Calibrated Answers (${count})`,
+      quickScanQuestionsHeading: (count: number) => `Questions Sent (${count})`,
+      quickScanInputHeading: 'Shared Input Sent',
       closeAria: 'Close AI Trace Inspector',
       copyJsonButton: 'Copy Trace JSON',
       copiedJsonButton: 'Copied',

@@ -1,5 +1,8 @@
+import type {QuickScanTrace} from '../services/geminiDecisions.ts';
 import type {AgentTurnTrace} from '../services/geminiInteractions.ts';
 import type {GeminiModelId} from './aiSettings.ts';
+
+export type PricingModelId = GeminiModelId | 'gemini-decision-1';
 
 /**
  * Timestamp (UTC) when `gemini-4-carbon` introductory promotional pricing ends
@@ -10,7 +13,7 @@ export const GEMINI_4_CARBON_PROMO_END_MS = Date.UTC(2026, 11, 1, 0, 0, 0, 0);
 const TOKENS_PER_MILLION = 1_000_000;
 
 export interface GeminiModelPricing {
-  model: GeminiModelId;
+  model: PricingModelId;
   /** Non-cached input token price in USD per 1,000,000 tokens. */
   inputPer1M: number;
   /** Context-cached input token price in USD per 1,000,000 tokens. */
@@ -41,7 +44,7 @@ export interface ParsedTokenUsage {
 }
 
 export interface TurnCostEstimate {
-  model: GeminiModelId;
+  model: PricingModelId;
   rates: GeminiModelPricing;
   usage: ParsedTokenUsage;
   inputCostUsd: number;
@@ -72,10 +75,18 @@ export interface SessionCostSummary {
  * Accepts an injectable `nowMs` timestamp for deterministic evaluation and tests.
  */
 export function getGeminiModelPricing(
-  model: GeminiModelId,
+  model: PricingModelId,
   nowMs: number = Date.now()
 ): GeminiModelPricing {
   switch (model) {
+    case 'gemini-decision-1':
+      return {
+        model,
+        inputPer1M: 0.1,
+        cachedInputPer1M: 0.1,
+        outputPer1M: 0,
+        isPromoRate: false,
+      };
     case 'gemini-3.5-flash-lite':
       return {
         model,
@@ -192,7 +203,7 @@ export function parseInteractionUsage(
  * aggregated usage metadata and model rate card.
  */
 export function estimateTurnCost(
-  model: GeminiModelId,
+  model: PricingModelId,
   usage: Record<string, unknown> | undefined,
   nowMs: number = Date.now()
 ): TurnCostEstimate | null {
@@ -220,11 +231,14 @@ export function estimateTurnCost(
 }
 
 /**
- * Estimates the USD cost of a recorded `AgentTurnTrace`, anchoring date-sensitive
- * promotional pricing to `trace.startedAt` when valid.
+ * Estimates the USD cost of a recorded `AgentTurnTrace` or `QuickScanTrace`,
+ * anchoring date-sensitive promotional pricing to `trace.startedAt` when valid.
  */
 export function estimateTraceCost(
-  trace: Pick<AgentTurnTrace, 'model' | 'usage' | 'startedAt'> | undefined,
+  trace:
+    | Pick<AgentTurnTrace, 'model' | 'usage' | 'startedAt'>
+    | Pick<QuickScanTrace, 'model' | 'usage' | 'startedAt'>
+    | undefined,
   fallbackNowMs: number = Date.now()
 ): TurnCostEstimate | null {
   if (!trace || !trace.usage) return null;
@@ -235,12 +249,13 @@ export function estimateTraceCost(
 
 /**
  * Aggregates cumulative estimated USD cost and token totals across all assistant
- * turns with usage telemetry in the active chat thread.
+ * turns with usage telemetry (Interactions API turns + Decisions API Quick Scans).
  */
 export function aggregateSessionCost(
   messages: ReadonlyArray<{
     role: string;
     trace?: Pick<AgentTurnTrace, 'model' | 'usage' | 'startedAt'>;
+    quickScanTrace?: Pick<QuickScanTrace, 'model' | 'usage' | 'startedAt'>;
   }>,
   fallbackNowMs: number = Date.now()
 ): SessionCostSummary {
@@ -259,8 +274,8 @@ export function aggregateSessionCost(
   let totalTokens = 0;
 
   for (const msg of messages) {
-    if (msg.role !== 'assistant' || !msg.trace) continue;
-    const estimate = estimateTraceCost(msg.trace, fallbackNowMs);
+    if (msg.role !== 'assistant') continue;
+    const estimate = estimateTraceCost(msg.trace ?? msg.quickScanTrace, fallbackNowMs);
     if (!estimate) continue;
     turnCount += 1;
     totalCostUsd += estimate.totalCostUsd;
