@@ -271,6 +271,36 @@ export interface AuditReviewSuggestion {
 
 export type StagedSuggestion = PatchSuggestion | DraftSuggestion | AuditReviewSuggestion;
 
+/**
+ * Merges a newly staged suggestion into the active turn's staged list, replacing
+ * superseded earlier drafts, audit reviews, or same-target patches produced
+ * during multi-round self-repair in the same turn.
+ */
+export function upsertStagedSuggestion(
+  existing: readonly StagedSuggestion[],
+  incoming: StagedSuggestion
+): StagedSuggestion[] {
+  if (incoming.kind === 'draft' || incoming.kind === 'audit_review') {
+    const idx = existing.findIndex((item) => item.kind === incoming.kind);
+    if (idx !== -1) {
+      return existing.map((item, i) => (i === idx ? incoming : item));
+    }
+    return [...existing, incoming];
+  }
+
+  const incomingKey = [...incoming.affectedIds].sort().join('|');
+  if (incomingKey.length > 0) {
+    const idx = existing.findIndex(
+      (item) =>
+        item.kind === 'patch' && [...item.affectedIds].sort().join('|') === incomingKey
+    );
+    if (idx !== -1) {
+      return existing.map((item, i) => (i === idx ? incoming : item));
+    }
+  }
+  return [...existing, incoming];
+}
+
 // ---------------------------------------------------------------------------
 // Tool Execution Context & Result
 // ---------------------------------------------------------------------------

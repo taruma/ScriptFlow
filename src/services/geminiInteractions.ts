@@ -11,6 +11,7 @@ import {
 import {
   buildToolDeclarationsForContext,
   executeScriptToolCall,
+  upsertStagedSuggestion,
   type AssistantMode,
   type GeminiFunctionToolDeclaration,
   type ScriptToolExecutionResult,
@@ -806,7 +807,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   let accumulatedText = '';
   let accumulatedThought = '';
   const toolTraces: AgentToolCallTrace[] = [];
-  const stagedSuggestions: StagedSuggestion[] = [];
+  let stagedSuggestions: StagedSuggestion[] = [];
   let activeRound: AgentRoundTrace | null = null;
   let activeRoundStartMs = 0;
 
@@ -961,7 +962,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
             composedContext,
             createSuggestionId: options.createSuggestionId,
             onStageSuggestion: (suggestion) => {
-              stagedSuggestions.push(suggestion);
+              stagedSuggestions = upsertStagedSuggestion(stagedSuggestions, suggestion);
               options.callbacks?.onSuggestionStaged?.(suggestion);
             },
             onSkillLoaded: (event) => {

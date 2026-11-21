@@ -44,6 +44,7 @@ import {
 } from '../services/geminiInteractions.ts';
 import {
   rebaseAuditReviewAfterFix,
+  upsertStagedSuggestion,
   type DraftSuggestion,
   type PatchSuggestion,
   type StagedSuggestion,
@@ -1114,7 +1115,7 @@ export function AiAssistantSidebar({
               if (activeRunIdRef.current !== runId) return;
               updateAssistantMessage(assistantMessageId, (msg) => ({
                 ...msg,
-                suggestions: [...(msg.suggestions ?? []), suggestion],
+                suggestions: upsertStagedSuggestion(msg.suggestions ?? [], suggestion),
               }));
             },
           },

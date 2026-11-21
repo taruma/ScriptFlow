@@ -47,6 +47,7 @@ import {
   getToolDeclarationsForMode,
   MODE_TOOL_NAMES,
   sanitizeJsonSchemaForTool,
+  upsertStagedSuggestion,
   type AuditReviewSuggestion,
   type DraftSuggestion,
   type PatchSuggestion,
@@ -2035,6 +2036,231 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     const serialized = JSON.stringify(result.trace);
     expect(serialized).not.toContain(secretKey);
     expect(serialized).not.toContain('apiKey');
+  });
+
+  it('replaces superseded drafts, audits, and same-target patches within a turn while keeping distinct patches', () => {
+    const emptyDiff = buildLineDiff('', '');
+    const emptyLintDelta = {
+      beforeErrors: 0,
+      beforeWarnings: 0,
+      afterErrors: 0,
+      afterWarnings: 0,
+      introducedErrors: [],
+      introducedWarnings: [],
+      resolvedDiagnostics: [],
+    };
+
+    const draftWarn: DraftSuggestion = {
+      id: 'draft-1',
+      kind: 'draft',
+      title: 'Roadside',
+      summary: 'First pass with 1 warn',
+      baseSnapshotHash: 'h0',
+      nextSnapshotHash: 'h1',
+      sceneTopology: 'multi_camera_coverage',
+      stagingBlockCount: 4,
+      beatCount: 4,
+      candidateRawText: 'v1',
+      diff: emptyDiff,
+      diagnostics: [],
+      errorCount: 0,
+      warningCount: 1,
+    };
+    const draftClean: DraftSuggestion = {
+      ...draftWarn,
+      id: 'draft-2',
+      summary: 'Polished clean pass',
+      nextSnapshotHash: 'h2',
+      candidateRawText: 'v2',
+      warningCount: 0,
+    };
+
+    const afterDrafts = upsertStagedSuggestion(
+      upsertStagedSuggestion([], draftWarn),
+      draftClean
+    );
+    expect(afterDrafts.map((s) => s.id)).toEqual(['draft-2']);
+
+    const patchS2Warn: PatchSuggestion = {
+      id: 'patch-1',
+      kind: 'patch',
+      summary: 'S2 pass 1',
+      baseSnapshotHash: 'h0',
+      nextSnapshotHash: 'h1',
+      affectedIds: ['S2'],
+      opsCount: 1,
+      patch: {ops: []},
+      beforeRawText: 'a',
+      candidateRawText: 'b',
+      diff: emptyDiff,
+      lintDelta: emptyLintDelta,
+    };
+    const patchMB0: PatchSuggestion = {
+      ...patchS2Warn,
+      id: 'patch-2',
+      summary: 'MB0 polish',
+      affectedIds: ['MB0'],
+    };
+    const patchS2Clean: PatchSuggestion = {
+      ...patchS2Warn,
+      id: 'patch-3',
+      summary: 'S2 pass 2',
+      affectedIds: ['S2'],
+    };
+
+    let list: StagedSuggestion[] = [];
+    list = upsertStagedSuggestion(list, patchS2Warn);
+    list = upsertStagedSuggestion(list, patchMB0);
+    list = upsertStagedSuggestion(list, patchS2Clean);
+    expect(list.map((s) => s.id)).toEqual(['patch-3', 'patch-2']);
+
+    const audit1: AuditReviewSuggestion = {
+      id: 'audit-1',
+      kind: 'audit_review',
+      baseSnapshotHash: 'h0',
+      overallSummary: 'Initial audit',
+      issues: [],
+      errorCount: 0,
+      warningCount: 1,
+    };
+    const audit2: AuditReviewSuggestion = {
+      ...audit1,
+      id: 'audit-2',
+      overallSummary: 'Revised audit',
+      warningCount: 0,
+    };
+    const afterAudits = upsertStagedSuggestion(upsertStagedSuggestion([], audit1), audit2);
+    expect(afterAudits.map((s) => s.id)).toEqual(['audit-2']);
+  });
+
+  it('deduplicates multi-round propose_script_draft self-repair in runGeminiAgentTurn while keeping both rounds in trace', async () => {
+    const draftPayloadV1 = {
+      title: 'Gravel Roadside Breakdown',
+      summary: 'First draft pass with trailing dialogue warning',
+      draft: {
+        stagingMacroBlocks: [
+          {header: 'INTENT', format: 'prose', body: 'Raw confrontation by the roadside.'},
+          {header: 'OPENING', format: 'prose', body: 'Robbie stands beside the shoulder.'},
+        ],
+        executionMacroBlock: {
+          header: 'EXECUTION',
+          macroStates: [
+            {
+              subStates: [
+                {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS, handheld'},
+                {dimension: 'action', subStateTag: 'ACT', content: 'Robbie kicks loose gravel'},
+                {
+                  dimension: 'dialogue',
+                  speaker: 'Robbie',
+                  delivery: 'hoarse',
+                  line: 'Stop talking.',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const draftPayloadV2 = {
+      ...draftPayloadV1,
+      summary: 'Clean revised draft pass',
+      draft: {
+        ...draftPayloadV1.draft,
+        executionMacroBlock: {
+          header: 'EXECUTION',
+          macroStates: [
+            {
+              subStates: [
+                {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS, handheld'},
+                {dimension: 'action', subStateTag: 'ACT', content: 'Robbie kicks loose gravel'},
+                {
+                  dimension: 'dialogue',
+                  speaker: 'Robbie',
+                  delivery: 'hoarse',
+                  line: 'Stop talking.',
+                },
+                {dimension: 'foley', sound: 'gravel crunching underfoot'},
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const roundStreams: InteractionStreamEventLike[][] = [
+      [
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-draft-1',
+            name: 'propose_script_draft',
+            arguments: draftPayloadV1,
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'interaction.completed',
+          interaction: {id: 'int-draft-1', status: 'requires_action'},
+        },
+      ],
+      [
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-draft-2',
+            name: 'propose_script_draft',
+            arguments: draftPayloadV2,
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'interaction.completed',
+          interaction: {id: 'int-draft-2', status: 'requires_action'},
+        },
+      ],
+      [
+        {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Staged clean draft.'}},
+        {event_type: 'interaction.completed', interaction: {id: 'int-draft-3', status: 'completed'}},
+      ],
+    ];
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async () => asAsyncStream(roundStreams.shift() ?? []),
+      },
+    };
+
+    let uiSuggestions: StagedSuggestion[] = [];
+    const result = await runGeminiAgentTurn({
+      apiKey: 'AIza-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'draft',
+      focus: 'draft',
+      prompt: 'Draft a tense roadside confrontation.',
+      rawText: '',
+      createClient: () => fakeClient,
+      callbacks: {
+        onSuggestionStaged: (suggestion) => {
+          uiSuggestions = upsertStagedSuggestion(uiSuggestions, suggestion);
+        },
+      },
+    });
+
+    expect(result.stagedSuggestions).toHaveLength(1);
+    expect(result.stagedSuggestions[0].kind).toBe('draft');
+    const finalDraft = result.stagedSuggestions[0] as DraftSuggestion;
+    expect(finalDraft.summary).toBe('Clean revised draft pass');
+    expect(finalDraft.warningCount).toBe(0);
+    expect(uiSuggestions).toHaveLength(1);
+    expect(uiSuggestions[0].id).toBe(finalDraft.id);
+    // Trace still records both tool rounds transparently
+    expect(result.trace.toolRounds).toBe(2);
+    expect(result.trace.rounds).toHaveLength(3);
   });
 });
 
