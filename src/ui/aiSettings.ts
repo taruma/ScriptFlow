@@ -7,6 +7,7 @@ export interface GeminiModelOption {
   id: GeminiModelId;
   label: string;
   shortLabel: string;
+  compactDesc: string;
   description: string;
   tier: 'fast' | 'balanced' | 'deep';
 }
@@ -25,6 +26,7 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     id: 'gemini-4-hydrogen',
     label: 'Gemini 4 Hydrogen',
     shortLabel: 'Hydrogen',
+    compactDesc: 'Fast everyday edits & multimodal briefs',
     description:
       '1M context · Fast, balanced performance for everyday agentic edits and multimodal briefs',
     tier: 'fast',
@@ -33,6 +35,7 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     id: 'gemini-4-neon',
     label: 'Gemini 4 Neon',
     shortLabel: 'Neon',
+    compactDesc: 'Frontier intelligence with fast completion',
     description:
       '1M context · Frontier-level intelligence with fast end-to-end completion for rewrites and coverage',
     tier: 'balanced',
@@ -41,6 +44,7 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     id: 'gemini-4-carbon',
     label: 'Gemini 4 Carbon',
     shortLabel: 'Carbon',
+    compactDesc: 'Strongest reasoning for complex audits',
     description:
       '1M context · Strongest frontier reasoning for complex multi-lens audits and dense drafts',
     tier: 'deep',
@@ -341,6 +345,41 @@ export function switchApiKeyStorageMode(
   return saveStoredAiSettings(next, adapters);
 }
 
+/**
+ * Returns true when non-credential AI preferences (model, reasoning level, and
+ * display toggles) already match `DEFAULT_AI_SETTINGS`.
+ */
+export function isDefaultAiPreferences(
+  settings: Pick<
+    AiSettings,
+    'model' | 'reasoningLevel' | 'showThinkingSummary' | 'showEstimatedCost' | 'showDebugTrace'
+  >
+): boolean {
+  return (
+    settings.model === DEFAULT_AI_SETTINGS.model &&
+    settings.reasoningLevel === DEFAULT_AI_SETTINGS.reasoningLevel &&
+    settings.showThinkingSummary === DEFAULT_AI_SETTINGS.showThinkingSummary &&
+    settings.showEstimatedCost === DEFAULT_AI_SETTINGS.showEstimatedCost &&
+    settings.showDebugTrace === DEFAULT_AI_SETTINGS.showDebugTrace
+  );
+}
+
+/**
+ * Restores default model, reasoning level, and display toggles while preserving
+ * the user's BYOK API key and `sessionOnly` storage preference intact.
+ */
+export function resetAiPreferencesToDefault(
+  current: AiSettings,
+  adapters?: AiSettingsStorageAdapters
+): AiSettings {
+  const next: AiSettings = {
+    ...DEFAULT_AI_SETTINGS,
+    apiKey: current.apiKey,
+    sessionOnly: current.sessionOnly,
+  };
+  return saveStoredAiSettings(next, adapters);
+}
+
 export function useAiSettings(): {
   settings: AiSettings;
   hasApiKey: boolean;
@@ -348,6 +387,7 @@ export function useAiSettings(): {
   setApiKey: (apiKey: string) => void;
   setSessionOnly: (sessionOnly: boolean) => void;
   clearStoredApiKey: () => void;
+  resetPreferencesToDefault: () => void;
 } {
   const [settings, setSettings] = useState<AiSettings>(() => loadStoredAiSettings());
 
@@ -368,6 +408,10 @@ export function useAiSettings(): {
     setSettings((prev) => ({...prev, apiKey: ''}));
   }, []);
 
+  const resetPreferencesToDefault = useCallback(() => {
+    setSettings((prev) => resetAiPreferencesToDefault(prev));
+  }, []);
+
   return {
     settings,
     hasApiKey: hasConfiguredApiKey(settings),
@@ -375,5 +419,6 @@ export function useAiSettings(): {
     setApiKey,
     setSessionOnly,
     clearStoredApiKey,
+    resetPreferencesToDefault,
   };
 }

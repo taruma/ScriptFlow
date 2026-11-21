@@ -1,7 +1,19 @@
 import {useEffect, useRef, useState} from 'react';
-import {Check, Eye, EyeOff, KeyRound, ShieldCheck, Sparkles, Trash2, X} from 'lucide-react';
+import {
+  Check,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
+import {getGeminiModelPricing} from '../ui/aiPricing.ts';
 import {
   GEMINI_MODEL_OPTIONS,
+  isDefaultAiPreferences,
   REASONING_LEVEL_OPTIONS,
   type AiSettings,
   type GeminiModelId,
@@ -19,6 +31,40 @@ export interface AiSettingsModalProps {
   onSetApiKey: (apiKey: string) => void;
   onSetSessionOnly: (sessionOnly: boolean) => void;
   onClearApiKey: () => void;
+  onResetDefaults: () => void;
+}
+
+function formatCompactRate(usdPer1M: number): string {
+  return Number.isInteger(usdPer1M) ? `$${usdPer1M}` : `$${usdPer1M.toFixed(2)}`;
+}
+
+interface CompactToggleSwitchProps {
+  checked: boolean;
+  ariaLabel: string;
+  onToggle: () => void;
+}
+
+function CompactToggleSwitch({checked, ariaLabel, onToggle}: CompactToggleSwitchProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={onToggle}
+      className={`relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
+        checked
+          ? 'border-btn-primary-bg bg-btn-primary-bg'
+          : 'border-border-main bg-surface-muted'
+      }`}
+    >
+      <span
+        className={`inline-block h-3 w-3 rounded-full transition-transform ${
+          checked ? 'translate-x-[15px] bg-btn-primary-text' : 'translate-x-0.5 bg-text-muted'
+        }`}
+      />
+    </button>
+  );
 }
 
 export function AiSettingsModal(props: AiSettingsModalProps) {
@@ -34,11 +80,17 @@ function AiSettingsModalContent({
   onSetApiKey,
   onSetSessionOnly,
   onClearApiKey,
+  onResetDefaults,
 }: Omit<AiSettingsModalProps, 'isOpen'>) {
   const [showKey, setShowKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState(settings.apiKey);
   const keyInputRef = useRef<HTMLInputElement | null>(null);
   const labels = UI_LABELS.ai.settingsModal;
+
+  const isAlreadyDefault = isDefaultAiPreferences(settings);
+  const selectedReasoning =
+    REASONING_LEVEL_OPTIONS.find((r) => r.id === settings.reasoningLevel) ??
+    REASONING_LEVEL_OPTIONS[1];
 
   useEffect(() => {
     setKeyDraft(settings.apiKey);
@@ -84,9 +136,9 @@ function AiSettingsModalContent({
       }}
       className={UI_TOKENS.modal.overlay}
     >
-      <div className="bg-surface w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-border-main text-text-main flex flex-col max-h-[90dvh]">
-        {/* Header */}
-        <div className={UI_TOKENS.modal.header}>
+      <div className="bg-surface w-full max-w-[540px] rounded-2xl shadow-2xl overflow-hidden border border-border-main text-text-main flex flex-col max-h-[92dvh]">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-surface-subtle shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <span
               aria-hidden="true"
@@ -95,7 +147,7 @@ function AiSettingsModalContent({
               <Sparkles className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
-              <h2 className="font-serif text-[15px] font-bold tracking-tight text-text-main">
+              <h2 className="font-serif text-[15px] font-bold tracking-tight text-text-main leading-tight">
                 {labels.title}
               </h2>
               <p className="text-[11px] text-text-muted truncate">{labels.subtitle}</p>
@@ -112,16 +164,16 @@ function AiSettingsModalContent({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="overflow-y-auto auteur-pane-scroll px-5 py-4 space-y-5">
+        {/* Compact Body */}
+        <div className="overflow-y-auto auteur-pane-scroll px-4 py-3.5 space-y-3.5">
           {/* Section 1: BYOK Gemini API Key */}
-          <section className="space-y-2.5">
+          <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <label
                 htmlFor="auteur-ai-api-key-input"
-                className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted"
+                className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted"
               >
-                <KeyRound className="h-3.5 w-3.5 text-text-faint" />
+                <KeyRound className="h-3 w-3 text-text-faint" />
                 <span>{labels.apiKeyLabel}</span>
               </label>
               <span
@@ -149,7 +201,7 @@ function AiSettingsModalContent({
                   onChange={(e) => handleKeyInputChange(e.target.value)}
                   placeholder={labels.apiKeyPlaceholder}
                   aria-label={labels.apiKeyAria}
-                  className={`${UI_TOKENS.input.field} pr-9 font-mono`}
+                  className={`${UI_TOKENS.input.field} py-1.5 pr-8 font-mono`}
                 />
                 <button
                   type="button"
@@ -167,110 +219,126 @@ function AiSettingsModalContent({
                 onClick={handleClear}
                 disabled={!hasApiKey && keyDraft.length === 0}
                 aria-label={labels.clearKeyAria}
-                className={`${UI_TOKENS.button.secondary} inline-flex items-center gap-1.5 py-2`}
+                className={`${UI_TOKENS.button.secondary} inline-flex items-center gap-1.5 px-3 py-1.5`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3 w-3" />
                 <span>{labels.clearKeyButton}</span>
               </button>
             </div>
 
-            <div className="flex items-start gap-2 rounded-xl border border-border-subtle bg-surface-subtle px-3 py-2 text-[11px] leading-relaxed text-text-muted">
-              <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--phase-aesthetic-text)]" />
-              <span>{labels.privacyNote}</span>
-            </div>
-
-            {/* Session-only toggle */}
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2">
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-text-main">{labels.sessionOnlyLabel}</div>
-                <div className="text-[11px] text-text-muted">{labels.sessionOnlyDesc}</div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.sessionOnly}
-                aria-label={labels.sessionOnlyAria}
-                onClick={() => onSetSessionOnly(!settings.sessionOnly)}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
-                  settings.sessionOnly
-                    ? 'border-btn-primary-bg bg-btn-primary-bg'
-                    : 'border-border-main bg-surface-muted'
-                }`}
+            {/* Inline privacy assurance + Session-only toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px] text-text-muted">
+              <div
+                title={labels.privacyNote}
+                className="flex items-center gap-1.5 min-w-0 text-[11px] text-text-muted"
               >
-                <span
-                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
-                    settings.sessionOnly
-                      ? 'translate-x-4 bg-btn-primary-text'
-                      : 'translate-x-0.5 bg-text-muted'
-                  }`}
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[var(--phase-aesthetic-text)]" />
+                <span className="truncate">{labels.privacyNoteShort}</span>
+              </div>
+
+              <div
+                title={labels.sessionOnlyDesc}
+                className="flex items-center gap-2 shrink-0 ml-auto"
+              >
+                <span className="text-[11px] font-medium text-text-body">
+                  {labels.sessionOnlyLabel}
+                </span>
+                <CompactToggleSwitch
+                  checked={settings.sessionOnly}
+                  ariaLabel={labels.sessionOnlyAria}
+                  onToggle={() => onSetSessionOnly(!settings.sessionOnly)}
                 />
-              </button>
+              </div>
             </div>
           </section>
 
           <hr className="border-border-subtle" />
 
-          {/* Section 2: Gemini 4 Model */}
-          <section className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-              {labels.modelLabel}
+          {/* Section 2: Gemini 4 Model (3-column: Hydrogen -> Neon -> Carbon) */}
+          <section className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                {labels.modelLabel}
+              </span>
+              <span className="font-mono text-[10px] text-text-faint">{labels.modelMetaHint}</span>
             </div>
+
             <div
               role="radiogroup"
               aria-label={labels.modelGroupAria}
-              className="grid grid-cols-1 gap-1.5"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-2"
             >
               {GEMINI_MODEL_OPTIONS.map((option) => {
                 const selected = settings.model === option.id;
+                const pricing = getGeminiModelPricing(option.id);
+                const rateText = `${formatCompactRate(pricing.inputPer1M)} / ${formatCompactRate(
+                  pricing.outputPer1M
+                )}`;
+
                 return (
                   <button
                     key={option.id}
                     type="button"
                     role="radio"
                     aria-checked={selected}
+                    title={`${option.id} — ${option.description}`}
                     onClick={() => onUpdateSettings({model: option.id as GeminiModelId})}
-                    className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                    className={`flex flex-col justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-left transition-colors cursor-pointer ${
                       selected
                         ? 'border-btn-primary-bg bg-surface-muted'
                         : 'border-border-main bg-surface hover:bg-surface-subtle'
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-text-main">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-xs font-semibold text-text-main truncate">
                           {option.shortLabel}
                         </span>
-                        <span className="font-mono text-[10px] text-text-faint">{option.id}</span>
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                            selected
+                              ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
+                              : 'border-border-main bg-surface'
+                          }`}
+                        >
+                          {selected && <Check className="h-2.5 w-2.5" />}
+                        </span>
                       </div>
-                      <p className="mt-0.5 text-[11px] leading-snug text-text-muted">
-                        {option.description}
+                      <p className="text-[10.5px] leading-snug text-text-muted">
+                        {option.compactDesc}
                       </p>
                     </div>
-                    <span
-                      aria-hidden="true"
-                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                        selected
-                          ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
-                          : 'border-border-main bg-surface'
-                      }`}
-                    >
-                      {selected && <Check className="h-2.5 w-2.5" />}
-                    </span>
+
+                    <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-border-subtle/70 font-mono text-[10px] text-text-faint tabular-nums">
+                      <span>{rateText}</span>
+                      {pricing.isPromoRate && (
+                        <span className="rounded px-1 py-0.25 text-[9px] auteur-phase-aesthetic">
+                          {labels.modelPromoBadge}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
             </div>
           </section>
 
-          {/* Section 3: Reasoning Level */}
-          <section className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-              {labels.reasoningLabel}
+          {/* Section 3: Compact Reasoning Level Segmented Control */}
+          <section className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted shrink-0">
+                {labels.reasoningLabel}
+              </span>
+              <span className="text-[11px] text-text-muted truncate">
+                {selectedReasoning.description}
+              </span>
             </div>
+
             <div
               role="radiogroup"
               aria-label={labels.reasoningGroupAria}
-              className="grid grid-cols-3 gap-1.5"
+              className={`${UI_TOKENS.button.segmentedGroup} grid grid-cols-3 w-full`}
             >
               {REASONING_LEVEL_OPTIONS.map((option) => {
                 const selected = settings.reasoningLevel === option.id;
@@ -280,124 +348,97 @@ function AiSettingsModalContent({
                     type="button"
                     role="radio"
                     aria-checked={selected}
+                    title={option.description}
                     onClick={() =>
                       onUpdateSettings({reasoningLevel: option.id as ReasoningLevel})
                     }
-                    className={`flex flex-col items-start rounded-xl border px-3 py-2 text-left transition-colors cursor-pointer ${
+                    className={`${
                       selected
-                        ? 'border-btn-primary-bg bg-surface-muted text-text-main'
-                        : 'border-border-main bg-surface text-text-body hover:bg-surface-subtle'
-                    }`}
+                        ? UI_TOKENS.button.segmentedItemActive
+                        : UI_TOKENS.button.segmentedItem
+                    } justify-center py-1`}
                   >
-                    <span className="text-xs font-semibold">{option.label}</span>
-                    <span className="mt-0.5 text-[10px] leading-snug text-text-muted">
-                      {option.description}
-                    </span>
+                    <span>{option.label}</span>
                   </button>
                 );
               })}
             </div>
           </section>
 
-          {/* Section 4: Display & Debugging Toggles */}
-          <div className="space-y-2">
-            {/* Show reasoning summary toggle */}
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2.5">
+          {/* Section 4: Unified Compact Display & Diagnostics Toggles */}
+          <section className="rounded-xl border border-border-subtle bg-surface-subtle/60 divide-y divide-border-subtle">
+            {/* Show reasoning summary */}
+            <div className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
-                <div className="text-xs font-medium text-text-main">
+                <div className="text-xs font-medium text-text-main leading-tight">
                   {labels.thinkingSummaryLabel}
                 </div>
-                <div className="text-[11px] text-text-muted">{labels.thinkingSummaryDesc}</div>
+                <div className="text-[11px] text-text-muted truncate">
+                  {labels.thinkingSummaryDesc}
+                </div>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.showThinkingSummary}
-                aria-label={labels.thinkingSummaryAria}
-                onClick={() =>
+              <CompactToggleSwitch
+                checked={settings.showThinkingSummary}
+                ariaLabel={labels.thinkingSummaryAria}
+                onToggle={() =>
                   onUpdateSettings({showThinkingSummary: !settings.showThinkingSummary})
                 }
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
-                  settings.showThinkingSummary
-                    ? 'border-btn-primary-bg bg-btn-primary-bg'
-                    : 'border-border-main bg-surface-muted'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
-                    settings.showThinkingSummary
-                      ? 'translate-x-4 bg-btn-primary-text'
-                      : 'translate-x-0.5 bg-text-muted'
-                  }`}
-                />
-              </button>
+              />
             </div>
 
-            {/* Show estimated cost toggle */}
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2.5">
+            {/* Show estimated cost */}
+            <div className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
-                <div className="text-xs font-medium text-text-main">
+                <div className="text-xs font-medium text-text-main leading-tight">
                   {labels.estimatedCostLabel}
                 </div>
-                <div className="text-[11px] text-text-muted">{labels.estimatedCostDesc}</div>
+                <div className="text-[11px] text-text-muted truncate">
+                  {labels.estimatedCostDesc}
+                </div>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.showEstimatedCost}
-                aria-label={labels.estimatedCostAria}
-                onClick={() =>
+              <CompactToggleSwitch
+                checked={settings.showEstimatedCost}
+                ariaLabel={labels.estimatedCostAria}
+                onToggle={() =>
                   onUpdateSettings({showEstimatedCost: !settings.showEstimatedCost})
                 }
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
-                  settings.showEstimatedCost
-                    ? 'border-btn-primary-bg bg-btn-primary-bg'
-                    : 'border-border-main bg-surface-muted'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
-                    settings.showEstimatedCost
-                      ? 'translate-x-4 bg-btn-primary-text'
-                      : 'translate-x-0.5 bg-text-muted'
-                  }`}
-                />
-              </button>
+              />
             </div>
 
-            {/* Show Debug Trace toggle */}
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2.5">
+            {/* Show Debug Trace */}
+            <div className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
-                <div className="text-xs font-medium text-text-main">{labels.debugTraceLabel}</div>
-                <div className="text-[11px] text-text-muted">{labels.debugTraceDesc}</div>
+                <div className="text-xs font-medium text-text-main leading-tight">
+                  {labels.debugTraceLabel}
+                </div>
+                <div className="text-[11px] text-text-muted truncate">
+                  {labels.debugTraceDesc}
+                </div>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.showDebugTrace}
-                aria-label={labels.debugTraceAria}
-                onClick={() => onUpdateSettings({showDebugTrace: !settings.showDebugTrace})}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
-                  settings.showDebugTrace
-                    ? 'border-btn-primary-bg bg-btn-primary-bg'
-                    : 'border-border-main bg-surface-muted'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
-                    settings.showDebugTrace
-                      ? 'translate-x-4 bg-btn-primary-text'
-                      : 'translate-x-0.5 bg-text-muted'
-                  }`}
-                />
-              </button>
+              <CompactToggleSwitch
+                checked={settings.showDebugTrace}
+                ariaLabel={labels.debugTraceAria}
+                onToggle={() => onUpdateSettings({showDebugTrace: !settings.showDebugTrace})}
+              />
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* Footer */}
-        <div className={UI_TOKENS.modal.footer}>
-          <button type="button" onClick={onClose} className={UI_TOKENS.button.primary}>
+        {/* Compact Footer: Reset to defaults (left) + Done (right) */}
+        <div className="px-4 py-2.5 border-t border-border-subtle bg-surface-subtle flex items-center justify-between gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={isAlreadyDefault}
+            onClick={onResetDefaults}
+            title={labels.resetDefaultsTitle}
+            aria-label={labels.resetDefaultsAria}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface-muted transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-muted disabled:cursor-not-allowed cursor-pointer"
+          >
+            <RotateCcw className="h-3 w-3" />
+            <span>{labels.resetDefaultsButton}</span>
+          </button>
+
+          <button type="button" onClick={onClose} className={`${UI_TOKENS.button.primary} py-1.5`}>
             {labels.doneButton}
           </button>
         </div>

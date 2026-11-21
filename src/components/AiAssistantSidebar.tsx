@@ -558,6 +558,7 @@ export function AiAssistantSidebar({
     setApiKey,
     setSessionOnly,
     clearStoredApiKey,
+    resetPreferencesToDefault,
   } = useAiSettings();
 
   const {
@@ -1946,6 +1947,7 @@ export function AiAssistantSidebar({
             onSetApiKey={setApiKey}
             onSetSessionOnly={setSessionOnly}
             onClearApiKey={clearStoredApiKey}
+            onResetDefaults={resetPreferencesToDefault}
           />
         </Suspense>
       )}

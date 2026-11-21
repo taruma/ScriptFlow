@@ -836,6 +836,7 @@ export const UI_LABELS = {
       hideKeyAria: 'Hide API key',
       privacyNote:
         'Stays in this browser only and is sent directly to the Gemini API. Never read from server environment variables.',
+      privacyNoteShort: 'Browser-local only · sent directly to Gemini API',
       sessionOnlyLabel: 'Session only',
       sessionOnlyDesc: 'Keep key in sessionStorage (clears when this tab closes)',
       sessionOnlyAria: 'Store API key for this browser session only',
@@ -844,20 +845,24 @@ export const UI_LABELS = {
       keyConfiguredBadge: 'Key saved',
       keyMissingBadge: 'Not set',
       modelLabel: 'Gemini 4 Model',
+      modelMetaHint: '1M context · in / out per 1M',
+      modelPromoBadge: 'promo',
       modelGroupAria: 'Gemini 4 model selection',
       reasoningLabel: 'Reasoning Level',
       reasoningGroupAria: 'Reasoning level selection',
       thinkingSummaryLabel: 'Show reasoning summary',
-      thinkingSummaryDesc: 'Display streamed thought summaries inside the Thinking accordion',
+      thinkingSummaryDesc: 'Streamed thought summaries in the Thinking accordion',
       thinkingSummaryAria: 'Toggle reasoning summary display',
       estimatedCostLabel: 'Show estimated cost',
-      estimatedCostDesc:
-        'Display approximate USD token cost per turn and cumulative session total in the AI sidebar',
+      estimatedCostDesc: 'Per-turn and session USD token estimates in the AI sidebar',
       estimatedCostAria: 'Toggle estimated USD cost display',
       debugTraceLabel: 'Show Debug Trace',
-      debugTraceDesc:
-        'Show a quiet Inspect button on AI turns to inspect requests, tool loops, and errors',
+      debugTraceDesc: 'Quiet Inspect button on turns for requests, tool loops, and errors',
       debugTraceAria: 'Toggle AI debug trace inspector',
+      resetDefaultsButton: 'Reset to defaults',
+      resetDefaultsTitle:
+        'Restore default model, reasoning level, and display toggles without clearing your API key',
+      resetDefaultsAria: 'Reset AI preferences to defaults without clearing API key',
       doneButton: 'Done',
     },
     contextInspector: {

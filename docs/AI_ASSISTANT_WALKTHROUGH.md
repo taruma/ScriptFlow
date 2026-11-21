@@ -67,6 +67,7 @@ Click the **`Model · Level`** status chip at the bottom-right of the sidebar co
 | **Show reasoning summary** | On *(default)* / Off | Controls whether streamed thought summaries appear inside the **Thinking** accordion. |
 | **Show estimated cost** | On *(default)* / Off | Displays a quiet approximate USD badge (`~$0.0042`) on completed turns and a cumulative session total to the left of the **`Model · Level`** pill below the prompt box (with hover token & USD breakdown tooltips). |
 | **Show Debug Trace** | Off *(default)* / On | Surfaces a quiet **`Inspect`** button on completed, stopped, and failed turns to open the **AI Trace Inspector** modal. |
+| **Reset to defaults** | Footer action | Restores default model (`Hydrogen`), reasoning level (`Medium`), and display toggles (`Show reasoning summary` On, `Show estimated cost` On, `Show Debug Trace` Off) **without clearing your BYOK API key or `Session only` storage mode**. |
 
 ---
 

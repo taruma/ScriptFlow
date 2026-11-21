@@ -21,8 +21,10 @@ import {
   DEFAULT_REASONING_LEVEL,
   GEMINI_MODEL_OPTIONS,
   hasConfiguredApiKey,
+  isDefaultAiPreferences,
   loadStoredAiSettings,
   REASONING_LEVEL_OPTIONS,
+  resetAiPreferencesToDefault,
   sanitizeAiSettings,
   saveStoredAiSettings,
   switchApiKeyStorageMode,
@@ -202,6 +204,44 @@ describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
 
     local.setItem(AI_SETTINGS_STORAGE_KEY, '{broken json');
     expect(loadStoredAiSettings(adapters)).toEqual(DEFAULT_AI_SETTINGS);
+  });
+
+  it('resets model, reasoning level, and display toggles to defaults without clearing API key or sessionOnly', () => {
+    const local = createMemoryStorage();
+    const session = createMemoryStorage();
+    const adapters = {local, session};
+
+    expect(isDefaultAiPreferences(DEFAULT_AI_SETTINGS)).toBe(true);
+
+    const customized = saveStoredAiSettings(
+      {
+        model: 'gemini-4-carbon',
+        reasoningLevel: 'high',
+        apiKey: 'AIza-keep-me-intact',
+        sessionOnly: true,
+        showThinkingSummary: false,
+        showEstimatedCost: false,
+        showDebugTrace: true,
+      },
+      adapters
+    );
+
+    expect(isDefaultAiPreferences(customized)).toBe(false);
+
+    const reset = resetAiPreferencesToDefault(customized, adapters);
+    expect(isDefaultAiPreferences(reset)).toBe(true);
+    expect(reset).toEqual({
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      apiKey: 'AIza-keep-me-intact',
+      sessionOnly: true,
+      showThinkingSummary: true,
+      showEstimatedCost: true,
+      showDebugTrace: false,
+    });
+    expect(session.getItem(AI_API_KEY_STORAGE_KEY)).toBe('AIza-keep-me-intact');
+    expect(local.getItem(AI_API_KEY_STORAGE_KEY)).toBeNull();
+    expect(loadStoredAiSettings(adapters)).toEqual(reset);
   });
 });
 
