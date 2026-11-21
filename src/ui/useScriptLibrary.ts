@@ -169,6 +169,7 @@ export interface UseScriptLibraryResult {
     records: readonly ScriptRecord[],
     onDeleted?: () => void
   ) => void;
+  handleRequestClearLibrary: (onCleared?: () => void) => void;
   handleDownloadCanonical: () => void;
   handleDownloadTagless: () => void;
   handleDownloadJsonEnvelope: () => void;
@@ -849,6 +850,46 @@ export function useScriptLibrary({
     onToast(UI_LABELS.toasts.backupExported(latestRecords.length));
   }, [persistCurrentCustomIfDirty, onToast]);
 
+  const handleRequestClearLibrary = useCallback(
+    (onCleared?: () => void) => {
+      const count = customScriptsRef.current.length;
+      if (count === 0) return;
+
+      onRequestConfirm({
+        title: UI_LABELS.confirm.clearLibraryTitle(count),
+        description: UI_LABELS.confirm.clearLibraryDesc,
+        confirmLabel: UI_LABELS.confirm.clearLibraryConfirm,
+        cancelLabel: UI_LABELS.confirm.cancel,
+        tone: 'danger',
+        auxiliaryAction: {
+          label: UI_LABELS.confirm.clearLibraryBackupAction,
+          completedLabel: UI_LABELS.confirm.clearLibraryBackupDone,
+          onAction: () => handleBackupAll(),
+        },
+        onConfirm: () => {
+          void (async () => {
+            if (saveTimerRef.current !== null) {
+              window.clearTimeout(saveTimerRef.current);
+              saveTimerRef.current = null;
+            }
+
+            await scriptLibraryDb.clearAll();
+            setCustomScripts([]);
+            customScriptsRef.current = [];
+
+            if (activeScriptRef.current.kind === 'custom') {
+              activateExample(DEFAULT_PRESET);
+            }
+
+            onCleared?.();
+            onToast(UI_LABELS.toasts.clearedLibrary(count));
+          })();
+        },
+      });
+    },
+    [onRequestConfirm, handleBackupAll, activateExample, onToast]
+  );
+
   const handleTriggerImportFile = useCallback(() => {
     importFileInputRef.current?.click();
   }, []);
@@ -946,6 +987,7 @@ export function useScriptLibrary({
     handleBulkExportScripts,
     handleRequestDeleteScript,
     handleRequestBulkDeleteScripts,
+    handleRequestClearLibrary,
     handleDownloadCanonical,
     handleDownloadTagless,
     handleDownloadJsonEnvelope,

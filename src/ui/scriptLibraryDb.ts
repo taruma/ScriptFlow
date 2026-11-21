@@ -73,6 +73,7 @@ export interface ScriptLibraryStore {
   bulkPut(records: readonly ScriptRecord[]): Promise<ScriptRecord[]>;
   delete(id: string): Promise<void>;
   bulkDelete(ids: readonly string[]): Promise<void>;
+  clearAll(): Promise<void>;
   migrateFromLegacyLocalStorage(options?: LegacyMigrationOptions): Promise<LegacyMigrationResult>;
 }
 
@@ -343,6 +344,18 @@ function idbBulkDelete(db: IDBDatabase, ids: readonly string[]): Promise<void> {
   });
 }
 
+function idbClearAll(db: IDBDatabase): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_LIBRARY_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(SCRIPT_LIBRARY_STORE_NAME);
+    store.clear();
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to clear script library.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Script library clear transaction aborted.'));
+  });
+}
+
 /**
  * Creates a lightweight, zero-dependency IndexedDB script library store with
  * automatic graceful fallback when IndexedDB is unavailable or restricted.
@@ -495,6 +508,16 @@ export function createScriptLibraryStore(
           for (const id of cleanIds) {
             map.delete(id);
           }
+          persistFallbackMap(fallbackStorageKey, map);
+        }
+      );
+    },
+
+    async clearAll(): Promise<void> {
+      return runWithFallback(
+        (db) => idbClearAll(db),
+        (map) => {
+          map.clear();
           persistFallbackMap(fallbackStorageKey, map);
         }
       );

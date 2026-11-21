@@ -783,6 +783,11 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
     await store.bulkDelete(['alpha', 'gamma']);
     const afterBulkDelete = await store.list();
     expect(afterBulkDelete.map((r) => r.id)).toEqual(['beta']);
+
+    // clearAll empties all remaining saved scripts cleanly
+    await store.clearAll();
+    expect(await store.list()).toEqual([]);
+    expect(await store.get('beta')).toBeNull();
   });
 });
 

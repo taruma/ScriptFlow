@@ -381,6 +381,8 @@ export const UI_LABELS = {
     closeAria: 'Close Script Library',
     newBlankButton: 'New Blank',
     importButton: 'Import',
+    clearLibraryButton: 'Clear Library',
+    clearLibraryAria: 'Clear all saved scripts from library',
     searchPlaceholder: 'Search titles, folders, tags, or script text...',
     searchAria: 'Search titles, folders, tags, or script text',
     clearSearchAria: 'Clear search',
@@ -478,6 +480,13 @@ export const UI_LABELS = {
       `Delete ${count} ${count === 1 ? 'script' : 'scripts'}?`,
     deleteMultipleScriptsDesc:
       'This will permanently remove the selected scripts from your browser library.',
+    clearLibraryTitle: (count: number) =>
+      `Clear all ${count} saved ${count === 1 ? 'script' : 'scripts'}?`,
+    clearLibraryDesc:
+      'This will permanently remove all saved scripts from your browser library. Bundled examples, editor settings, and AI configuration will not be affected.',
+    clearLibraryConfirm: 'Clear Library',
+    clearLibraryBackupAction: 'Backup All Scripts (.json)',
+    clearLibraryBackupDone: 'Backup Downloaded (.json)',
   },
 
   toasts: {
@@ -492,6 +501,8 @@ export const UI_LABELS = {
     deletedScript: (title: string) => `Deleted "${title}"`,
     deletedMultipleScripts: (count: number) =>
       `Deleted ${count} ${count === 1 ? 'script' : 'scripts'}`,
+    clearedLibrary: (count: number) =>
+      `Cleared ${count} saved ${count === 1 ? 'script' : 'scripts'} from library`,
     exportedSelectedScripts: (count: number) =>
       `Exported ${count} ${count === 1 ? 'script' : 'scripts'}`,
     backupExported: (count: number) =>

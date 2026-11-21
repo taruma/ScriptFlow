@@ -1,7 +1,13 @@
-import {useEffect, useRef} from 'react';
-import {AlertTriangle, X} from 'lucide-react';
+import {useEffect, useRef, useState} from 'react';
+import {AlertTriangle, Check, FolderArchive, X} from 'lucide-react';
 import {UI_LABELS} from '../ui/labels.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+
+export interface ConfirmDialogAuxiliaryAction {
+  label: string;
+  completedLabel?: string;
+  onAction: () => void | Promise<void>;
+}
 
 export interface ConfirmDialogRequest {
   title: string;
@@ -10,6 +16,7 @@ export interface ConfirmDialogRequest {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: 'danger' | 'primary';
+  auxiliaryAction?: ConfirmDialogAuxiliaryAction;
   onConfirm: () => void;
 }
 
@@ -24,6 +31,13 @@ interface ConfirmDialogProps {
  */
 export function ConfirmDialog({request, onClose}: ConfirmDialogProps) {
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [auxBusy, setAuxBusy] = useState(false);
+  const [auxDone, setAuxDone] = useState(false);
+
+  useEffect(() => {
+    setAuxBusy(false);
+    setAuxDone(false);
+  }, [request]);
 
   useEffect(() => {
     if (!request) return;
@@ -96,6 +110,36 @@ export function ConfirmDialog({request, onClose}: ConfirmDialogProps) {
             <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-2 font-script text-[12px] leading-snug text-text-muted line-clamp-2 break-words">
               {request.excerpt}
             </div>
+          )}
+
+          {request.auxiliaryAction && (
+            <button
+              type="button"
+              disabled={auxBusy}
+              onClick={() => {
+                if (!request.auxiliaryAction || auxBusy) return;
+                setAuxBusy(true);
+                void Promise.resolve(request.auxiliaryAction.onAction())
+                  .then(() => {
+                    setAuxDone(true);
+                  })
+                  .finally(() => {
+                    setAuxBusy(false);
+                  });
+              }}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-border-main bg-surface-subtle hover:bg-surface-hover px-3 py-2 text-xs font-medium text-text-body hover:text-text-main transition-colors active:scale-[0.99] disabled:opacity-60 cursor-pointer"
+            >
+              {auxDone ? (
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              ) : (
+                <FolderArchive className="h-3.5 w-3.5 text-text-muted shrink-0" />
+              )}
+              <span>
+                {auxDone && request.auxiliaryAction.completedLabel
+                  ? request.auxiliaryAction.completedLabel
+                  : request.auxiliaryAction.label}
+              </span>
+            </button>
           )}
         </div>
 

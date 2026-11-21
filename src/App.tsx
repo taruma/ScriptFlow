@@ -622,6 +622,7 @@ export default function App() {
           onBulkExportScripts={(records) => void library.handleBulkExportScripts(records)}
           onRequestDeleteScript={library.handleRequestDeleteScript}
           onRequestBulkDeleteScripts={library.handleRequestBulkDeleteScripts}
+          onRequestClearLibrary={library.handleRequestClearLibrary}
         />
       )}
 
