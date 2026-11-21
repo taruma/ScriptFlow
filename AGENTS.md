@@ -129,3 +129,4 @@ Always conclude completed work with a concise, plain-English summary covering:
 2. **How to verify in the UI** (short concrete steps to exercise the change).
 3. **Tests & docs updated** (exact test suites run/added and `docs/*.md` files synced).
 4. **Assumptions or tradeoffs** (anything inferred or intentionally deferred).
+5. **Proposed commit message (grounded in uncommitted Git state)**: Before concluding any task that modifies repository files, inspect the actual uncommitted working tree (`git status --short` and, when needed, `git diff --stat` / `git diff --staged --stat`) rather than relying only on the latest conversation turn. Propose a Conventional Commit message (matching recent `git log` style) covering **all** current uncommitted changes (staged, unstaged, and untracked). If unrelated uncommitted work exists alongside the current change, call it out briefly or suggest split commit messages. Do not run `git commit` unless explicitly asked.
