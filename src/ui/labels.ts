@@ -1118,7 +1118,25 @@ export const UI_LABELS = {
         confirmDeleteAction: 'Delete Rule',
         confirmResetAllTitle: 'Reset all Quick Scan rules?',
         confirmResetAllDesc:
-          'This will restore all built-in Quick Scan rule defaults and delete custom Quick Scan rules stored in this browser.',
+          'This will permanently delete all custom Quick Scan rules and restore every built-in rule default stored in this browser. Export your Agent Context first if you want a backup.',
+        confirmResetAllDetailedDesc: (customCount: number, overrideCount: number) => {
+          const parts: string[] = [];
+          if (customCount > 0) {
+            parts.push(
+              `permanently delete ${customCount} custom Quick Scan ${customCount === 1 ? 'rule' : 'rules'}`
+            );
+          }
+          if (overrideCount > 0) {
+            parts.push(
+              `reset ${overrideCount} built-in rule ${overrideCount === 1 ? 'override' : 'overrides'}`
+            );
+          }
+          const actionSummary =
+            parts.length > 0
+              ? parts.join(' and ')
+              : 'restore all Quick Scan rule defaults';
+          return `This will ${actionSummary} stored in this browser. Custom rules cannot be recovered after reset — export your Agent Context first if you want a backup.`;
+        },
         confirmResetAllAction: 'Reset Rules',
       },
       upstreamUpdateTitle: 'Built-in Auteur knowledge updated',
@@ -1204,10 +1222,101 @@ export const UI_LABELS = {
       confirmDeleteDesc:
         'This custom skill and any pin override for it will be permanently removed from this browser.',
       confirmDeleteAction: 'Delete Skill',
-      confirmResetAllTitle: 'Reset all craft & skill overrides?',
+      confirmResetAllTitle: 'Reset all craft & skill defaults?',
       confirmResetAllDesc:
-        'This will restore the built-in Foundational Craft and skill defaults, and remove all custom skills stored in this browser.',
+        'This will permanently delete all custom skills and restore built-in Foundational Craft and skill defaults stored in this browser. Export your Agent Context first if you want a backup.',
+      confirmResetAllDetailedDesc: (
+        hasCraftOverride: boolean,
+        customSkillCount: number,
+        overrideCount: number
+      ) => {
+        const parts: string[] = [];
+        if (customSkillCount > 0) {
+          parts.push(
+            `permanently delete ${customSkillCount} custom ${customSkillCount === 1 ? 'skill' : 'skills'}`
+          );
+        }
+        if (hasCraftOverride) {
+          parts.push('revert your Foundational Craft edit');
+        }
+        if (overrideCount > 0) {
+          parts.push(
+            `reset ${overrideCount} built-in skill ${overrideCount === 1 ? 'override' : 'overrides'}`
+          );
+        }
+        const actionSummary =
+          parts.length > 0
+            ? parts.join(', ')
+            : 'restore built-in Foundational Craft and skill defaults';
+        return `This will ${actionSummary} stored in this browser. Custom skills cannot be recovered after reset — export your Agent Context first if you want a backup.`;
+      },
       confirmResetAllAction: 'Reset All',
+      exportBackupBeforeResetButton: 'Export Agent Context first',
+      exportBackupBeforeResetDone: 'Backup JSON exported',
+      exportImport: {
+        exportButton: 'Export JSON',
+        exportAria: 'Export unified Agent Context, Skills, and Quick Scan Rules as JSON',
+        exportTitle:
+          'Export Foundational Craft override, skill pin/body overrides, custom skills, and Quick Scan rules as one JSON file',
+        importButton: 'Import JSON',
+        importAria: 'Import Agent Context, Skills, and Quick Scan Rules from a JSON file',
+        importTitle: 'Import an exported Agent Context JSON pack (choose exact items & Merge or Replace)',
+        dismissNoticeAria: 'Dismiss import notice',
+        exportedNotice: (filename: string) => `Exported ${filename}`,
+        exportFailedNotice: 'Unable to download the Agent Context JSON file in this environment.',
+        importReadError: 'Unable to read the selected JSON file.',
+        importedSuccessNotice: (summary: string) => `Import applied: ${summary}`,
+        dialogAria: 'Import Agent Context & Skills',
+        dialogTitle: 'Import Agent Context & Skills',
+        closeDialogAria: 'Close import dialog',
+        exportedAtMeta: (date: string) => `Exported ${date}`,
+        packVersionMeta: (version: number) => `Pack v${version}`,
+        warningsHeading: 'Sanitizer notes',
+        modeHeading: 'Import Strategy',
+        modeMergeTitle: 'Merge (Keep existing)',
+        modeMergeDesc:
+          'Apply only the checked items below on top of your current setup. Unchecked local overrides and custom items stay untouched.',
+        modeReplaceTitle: 'Replace (Switch profile)',
+        modeReplaceDesc:
+          'Replace each checked section below with only the selected items. Local custom items and overrides in checked sections not selected here will be removed.',
+        selectAllButton: 'Select all',
+        selectNoneButton: 'None',
+        domainSkillsTitle: 'Foundational Craft & Skills',
+        domainSkillsToggleAria: 'Include Foundational Craft & Skills section in import',
+        domainSkillsEmptyNote:
+          'This file contains no Foundational Craft or Skill customizations (default baseline).',
+        domainQuickScanTitle: 'Quick Scan Rules',
+        domainQuickScanToggleAria: 'Include Quick Scan Rules section in import',
+        domainQuickScanEmptyNote:
+          'This file contains no Quick Scan Rule customizations (default baseline).',
+        groupFoundationalCraft: 'Foundational Craft Override',
+        groupBuiltInSkillOverrides: (count: number) => `Built-in Skill Overrides (${count})`,
+        groupCustomSkills: (count: number) => `Custom Skills (${count})`,
+        groupBuiltInRuleOverrides: (count: number) => `Built-in Rule Overrides (${count})`,
+        groupCustomRules: (count: number) => `Custom Quick Scan Rules (${count})`,
+        badgeNew: 'New',
+        badgeOverwrites: 'Overwrites local',
+        badgeEditedBody: 'Edited body',
+        badgeEnabled: 'Enabled',
+        badgeDisabled: 'Disabled',
+        badgeEditedCriteria: 'Edited criteria',
+        scopeShortDocument: 'Doc',
+        scopeShortMacroState: 'S#',
+        scopeShortSubState: 'S#.#',
+        impactHeading: 'Import Summary',
+        impactNoSelectionMerge: 'Select at least one item above to merge.',
+        impactNoDomainReplace: 'Check at least one section above to replace.',
+        impactWillApplyPrefix: 'Will apply: ',
+        impactNoItemsReplaceBaseline: 'Restores checked section(s) to clean built-in defaults.',
+        impactDestructiveWarning: (details: string) =>
+          `Replace will permanently remove/reset: ${details}.`,
+        exportCurrentBeforeReplace: 'Export current backup first',
+        exportCurrentBeforeReplaceDone: 'Current backup exported',
+        cancelButton: 'Cancel',
+        confirmMergeButton: (count: number) =>
+          count > 0 ? `Merge ${count} ${count === 1 ? 'Item' : 'Items'}` : 'Merge Selected',
+        confirmReplaceButton: 'Replace Selected',
+      },
     },
     traceModal: {
       dialogAria: 'AI Trace Inspector',

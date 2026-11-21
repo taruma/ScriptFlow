@@ -599,6 +599,7 @@ export function AiAssistantSidebar({
     resetSkill,
     saveCustomSkill,
     removeCustomSkill,
+    replaceSkillsState,
     resetAll,
     acknowledgeUpdate,
   } = useAiSkills();
@@ -613,6 +614,7 @@ export function AiAssistantSidebar({
     resetRule: resetQuickScanRule,
     saveCustomRule: saveCustomQuickScanRule,
     deleteCustomRule: deleteCustomQuickScanRule,
+    replaceRulesState: replaceQuickScanRulesState,
     resetAllRules: resetAllQuickScanRules,
     acknowledgeRulesUpdate: acknowledgeQuickScanRulesUpdate,
   } = useQuickScanRulesStore();
@@ -2395,6 +2397,7 @@ export function AiAssistantSidebar({
             onResetSkill={resetSkill}
             onSaveCustomSkill={saveCustomSkill}
             onDeleteCustomSkill={removeCustomSkill}
+            onReplaceSkillsState={replaceSkillsState}
             onResetAll={resetAll}
             onAcknowledgeUpdate={acknowledgeUpdate}
             quickScanRulesState={quickScanRulesState}
@@ -2406,6 +2409,7 @@ export function AiAssistantSidebar({
             onResetQuickScanRule={resetQuickScanRule}
             onSaveCustomQuickScanRule={saveCustomQuickScanRule}
             onDeleteCustomQuickScanRule={deleteCustomQuickScanRule}
+            onReplaceQuickScanRulesState={replaceQuickScanRulesState}
             onResetAllQuickScanRules={resetAllQuickScanRules}
             onAcknowledgeQuickScanUpdate={acknowledgeQuickScanRulesUpdate}
           />

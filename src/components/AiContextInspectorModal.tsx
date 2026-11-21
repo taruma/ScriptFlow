@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Download,
   FileCode2,
   Layers,
   Lock,
@@ -14,6 +15,7 @@ import {
   RotateCcw,
   ScanSearch,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -25,6 +27,15 @@ import {
 } from '../services/auteurKnowledge.ts';
 import type {CustomQuickScanRule} from '../services/geminiDecisions.ts';
 import {
+  applyAgentContextImport,
+  buildAgentContextPackExport,
+  parseAgentContextPack,
+  type AgentContextImportMode,
+  type AgentContextImportSelection,
+  type AuteurAgentContextPack,
+} from '../ui/agentContextCodec.ts';
+import {
+  isBuiltinSkillId,
   slugifyCustomSkillId,
   validateCustomSkillInput,
   type AiSkillsState,
@@ -32,8 +43,14 @@ import {
 } from '../ui/aiSkillsStore.ts';
 import {copyTextToClipboard} from '../ui/clipboard.ts';
 import {UI_LABELS} from '../ui/labels.ts';
-import type {QuickScanRulesState} from '../ui/quickScanRulesStore.ts';
+import {
+  DEFAULT_QUICK_SCAN_RULES_STATE,
+  isBuiltinQuickScanRuleId,
+  type QuickScanRulesState,
+} from '../ui/quickScanRulesStore.ts';
+import {triggerTextFileDownload} from '../ui/scriptFileIO.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {AgentContextImportDialog} from './AgentContextImportDialog.tsx';
 import {ConfirmDialog, type ConfirmDialogRequest} from './ConfirmDialog.tsx';
 import {QuickScanRulesTabPanel} from './QuickScanRulesTabPanel.tsx';
 
@@ -56,6 +73,7 @@ export interface AiContextInspectorModalProps {
   onResetSkill: (skillId: string) => void;
   onSaveCustomSkill: (skill: CustomAuteurSkill, editingId?: string) => void;
   onDeleteCustomSkill: (skillId: string) => void;
+  onReplaceSkillsState?: (nextState: AiSkillsState) => void;
   onResetAll: () => void;
   onAcknowledgeUpdate: () => void;
   quickScanRulesState?: QuickScanRulesState;
@@ -74,6 +92,7 @@ export interface AiContextInspectorModalProps {
   onResetQuickScanRule?: (ruleId: string) => void;
   onSaveCustomQuickScanRule?: (rule: CustomQuickScanRule, editingId?: string) => void;
   onDeleteCustomQuickScanRule?: (ruleId: string) => void;
+  onReplaceQuickScanRulesState?: (nextState: QuickScanRulesState) => void;
   onResetAllQuickScanRules?: () => void;
   onAcknowledgeQuickScanUpdate?: () => void;
 }
@@ -130,6 +149,7 @@ export function AiContextInspectorModal({
   onResetSkill,
   onSaveCustomSkill,
   onDeleteCustomSkill,
+  onReplaceSkillsState,
   onResetAll,
   onAcknowledgeUpdate,
   quickScanRulesState,
@@ -141,6 +161,7 @@ export function AiContextInspectorModal({
   onResetQuickScanRule,
   onSaveCustomQuickScanRule,
   onDeleteCustomQuickScanRule,
+  onReplaceQuickScanRulesState,
   onResetAllQuickScanRules,
   onAcknowledgeQuickScanUpdate,
 }: AiContextInspectorModalProps) {
@@ -150,29 +171,42 @@ export function AiContextInspectorModal({
   const [customForm, setCustomForm] = useState<CustomSkillFormState | null>(null);
   const [formErrors, setFormErrors] = useState<CustomSkillValidationResult['errors']>({});
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
+  const [pendingImport, setPendingImport] = useState<{
+    filename: string;
+    pack: AuteurAgentContextPack;
+    warnings: string[];
+  } | null>(null);
+  const [transferNotice, setTransferNotice] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+    details?: string[];
+  } | null>(null);
 
   const copyTimeoutRef = useRef<number | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const labels = UI_LABELS.ai.contextInspector;
+  const effectiveQuickScanRulesState = quickScanRulesState ?? DEFAULT_QUICK_SCAN_RULES_STATE;
 
   // Sync active tab whenever the modal opens with a requested initialTab
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab);
+      setTransferNotice(null);
     }
   }, [isOpen, initialTab]);
 
-  // Close on Escape unless nested ConfirmDialog is open
+  // Close on Escape unless nested ConfirmDialog or ImportDialog is open
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !confirmRequest) {
+      if (event.key === 'Escape' && !confirmRequest && !pendingImport) {
         event.preventDefault();
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, confirmRequest]);
+  }, [isOpen, onClose, confirmRequest, pendingImport]);
 
   useEffect(() => {
     return () => {
@@ -290,16 +324,135 @@ export function AiContextInspectorModal({
     });
   };
 
+  const handleExportAgentContext = (showNotice = true): boolean => {
+    const exported = buildAgentContextPackExport(skillsState, effectiveQuickScanRulesState);
+    const ok = triggerTextFileDownload(exported.filename, exported.content, exported.mimeType);
+    if (showNotice) {
+      setTransferNotice(
+        ok
+          ? {
+              tone: 'success',
+              message: labels.exportImport.exportedNotice(exported.filename),
+            }
+          : {
+              tone: 'error',
+              message: labels.exportImport.exportFailedNotice,
+            }
+      );
+    }
+    return ok;
+  };
+
+  const handleImportFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+      const parsed = parseAgentContextPack(content);
+      if (!parsed.ok) {
+        setTransferNotice({
+          tone: 'error',
+          message: parsed.error,
+          details: parsed.issues?.slice(0, 4).map((issue) =>
+            issue.path ? `${issue.path}: ${issue.message}` : issue.message
+          ),
+        });
+        return;
+      }
+      setTransferNotice(null);
+      setPendingImport({
+        filename: file.name,
+        pack: parsed.pack,
+        warnings: parsed.warnings,
+      });
+    } catch {
+      setTransferNotice({
+        tone: 'error',
+        message: labels.exportImport.importReadError,
+      });
+    }
+  };
+
+  const handleConfirmImport = (
+    selection: AgentContextImportSelection,
+    mode: AgentContextImportMode,
+    impactSummaryText: string
+  ) => {
+    if (!pendingImport) return;
+    const applied = applyAgentContextImport(
+      pendingImport.pack,
+      selection,
+      mode,
+      skillsState,
+      effectiveQuickScanRulesState
+    );
+    if (applied.skillsChanged) {
+      onReplaceSkillsState?.(applied.skills);
+      setCustomForm(null);
+      setFormErrors({});
+    }
+    if (applied.quickScanChanged) {
+      onReplaceQuickScanRulesState?.(applied.quickScanRules);
+    }
+    setPendingImport(null);
+    setTransferNotice({
+      tone: 'success',
+      message: labels.exportImport.importedSuccessNotice(impactSummaryText),
+    });
+  };
+
   const requestResetAll = () => {
+    const builtInOverrideCount = Object.keys(skillsState.skillOverrides).filter((id) =>
+      isBuiltinSkillId(id)
+    ).length;
     setConfirmRequest({
       title: labels.confirmResetAllTitle,
-      description: labels.confirmResetAllDesc,
+      description: labels.confirmResetAllDetailedDesc(
+        skillsState.foundationalCraftOverride !== null,
+        skillsState.customSkills.length,
+        builtInOverrideCount
+      ),
       confirmLabel: labels.confirmResetAllAction,
       tone: 'danger',
+      auxiliaryAction: {
+        label: labels.exportBackupBeforeResetButton,
+        completedLabel: labels.exportBackupBeforeResetDone,
+        onAction: () => {
+          handleExportAgentContext(false);
+        },
+      },
       onConfirm: () => {
         onResetAll();
         setCustomForm(null);
         setFormErrors({});
+      },
+    });
+  };
+
+  const requestResetAllQuickScanRules = () => {
+    if (!onResetAllQuickScanRules) return;
+    const builtInRuleOverrideCount = Object.keys(
+      effectiveQuickScanRulesState.ruleOverrides
+    ).filter((id) => isBuiltinQuickScanRuleId(id)).length;
+    setConfirmRequest({
+      title: labels.quickScanRules.confirmResetAllTitle,
+      description: labels.quickScanRules.confirmResetAllDetailedDesc(
+        effectiveQuickScanRulesState.customRules.length,
+        builtInRuleOverrideCount
+      ),
+      confirmLabel: labels.quickScanRules.confirmResetAllAction,
+      tone: 'danger',
+      auxiliaryAction: {
+        label: labels.exportBackupBeforeResetButton,
+        completedLabel: labels.exportBackupBeforeResetDone,
+        onAction: () => {
+          handleExportAgentContext(false);
+        },
+      },
+      onConfirm: () => {
+        onResetAllQuickScanRules();
       },
     });
   };
@@ -370,7 +523,7 @@ export function AiContextInspectorModal({
         aria-label={labels.dialogAria}
         className={UI_TOKENS.modal.overlay}
         onClick={(event) => {
-          if (event.target === event.currentTarget && !confirmRequest) {
+          if (event.target === event.currentTarget && !confirmRequest && !pendingImport) {
             onClose();
           }
         }}
@@ -392,15 +545,86 @@ export function AiContextInspectorModal({
               </div>
               <p className="mt-1 text-xs text-text-muted">{labels.subtitle}</p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={labels.closeAria}
-              className={UI_TOKENS.button.iconClose}
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleImportFileSelected}
+              />
+              {onReplaceSkillsState && (
+                <button
+                  type="button"
+                  onClick={() => importInputRef.current?.click()}
+                  aria-label={labels.exportImport.importAria}
+                  title={labels.exportImport.importTitle}
+                  className={UI_TOKENS.button.actionPill}
+                >
+                  <Upload className="h-3 w-3" />
+                  <span>{labels.exportImport.importButton}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleExportAgentContext(true)}
+                aria-label={labels.exportImport.exportAria}
+                title={labels.exportImport.exportTitle}
+                className={UI_TOKENS.button.actionPill}
+              >
+                <Download className="h-3 w-3" />
+                <span>{labels.exportImport.exportButton}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={labels.closeAria}
+                className={UI_TOKENS.button.iconClose}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
+
+          {/* Export / Import Status Banner */}
+          {transferNotice && (
+            <div
+              role="status"
+              className={`border-b px-5 py-2.5 flex items-start justify-between gap-2 shrink-0 ${
+                transferNotice.tone === 'error'
+                  ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+              }`}
+            >
+              <div className="flex items-start gap-2 min-w-0">
+                {transferNotice.tone === 'error' ? (
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                ) : (
+                  <Check className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0 text-[11px] leading-snug space-y-0.5">
+                  <div className="font-medium">{transferNotice.message}</div>
+                  {transferNotice.details && transferNotice.details.length > 0 && (
+                    <ul className="list-disc pl-4 opacity-90 space-y-0.5">
+                      {transferNotice.details.map((detail) => (
+                        <li key={detail} className="font-mono text-[10px]">
+                          {detail}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransferNotice(null)}
+                aria-label={labels.exportImport.dismissNoticeAria}
+                className="shrink-0 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Upstream Knowledge Update Notice */}
           {hasUpstreamUpdate && (
@@ -1007,6 +1231,7 @@ export function AiContextInspectorModal({
                 }
                 onDeleteCustomRule={(ruleId) => onDeleteCustomQuickScanRule?.(ruleId)}
                 onResetAllRules={() => onResetAllQuickScanRules?.()}
+                onRequestResetAllRules={requestResetAllQuickScanRules}
                 onAcknowledgeUpdate={() => onAcknowledgeQuickScanUpdate?.()}
                 onRequestConfirm={setConfirmRequest}
               />
@@ -1019,15 +1244,7 @@ export function AiContextInspectorModal({
               <button
                 type="button"
                 disabled={quickScanCustomizationCount === 0}
-                onClick={() =>
-                  setConfirmRequest({
-                    title: labels.quickScanRules.confirmResetAllTitle,
-                    description: labels.quickScanRules.confirmResetAllDesc,
-                    confirmLabel: labels.quickScanRules.confirmResetAllAction,
-                    tone: 'danger',
-                    onConfirm: () => onResetAllQuickScanRules(),
-                  })
-                }
+                onClick={requestResetAllQuickScanRules}
                 className={`${UI_TOKENS.button.danger} inline-flex items-center gap-1.5 !px-3 !py-1.5 !rounded-lg disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 <RotateCcw className="h-3 w-3" />
@@ -1055,6 +1272,19 @@ export function AiContextInspectorModal({
           </div>
         </div>
       </div>
+
+      {pendingImport && (
+        <AgentContextImportDialog
+          filename={pendingImport.filename}
+          pack={pendingImport.pack}
+          warnings={pendingImport.warnings}
+          currentSkills={skillsState}
+          currentQuickScanRules={effectiveQuickScanRulesState}
+          onExportCurrentBackup={() => handleExportAgentContext(false)}
+          onConfirm={handleConfirmImport}
+          onClose={() => setPendingImport(null)}
+        />
+      )}
 
       <ConfirmDialog
         request={confirmRequest}

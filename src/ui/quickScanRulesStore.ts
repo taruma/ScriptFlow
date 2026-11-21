@@ -572,6 +572,7 @@ export function useQuickScanRulesStore(): {
   resetRule: (ruleId: string) => void;
   saveCustomRule: (rule: CustomQuickScanRule, editingId?: string) => void;
   deleteCustomRule: (ruleId: string) => void;
+  replaceRulesState: (nextState: QuickScanRulesState) => void;
   resetAllRules: () => void;
   acknowledgeRulesUpdate: () => void;
 } {
@@ -632,6 +633,13 @@ export function useQuickScanRulesStore(): {
     [commit]
   );
 
+  const replaceRulesState = useCallback(
+    (nextState: QuickScanRulesState) => {
+      commit(() => nextState);
+    },
+    [commit]
+  );
+
   const resetAllRules = useCallback(() => {
     commit(() => resetAllQuickScanRulesInState());
   }, [commit]);
@@ -650,6 +658,7 @@ export function useQuickScanRulesStore(): {
     resetRule,
     saveCustomRule,
     deleteCustomRule,
+    replaceRulesState,
     resetAllRules,
     acknowledgeRulesUpdate,
   };

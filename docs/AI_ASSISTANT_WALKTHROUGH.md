@@ -258,6 +258,13 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
    - Browse the declarative built-in atomic rule catalog (`src/data/knowledge/quick-scan-rules.json`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc`, `Per S#`, `Per S#.#`) and AST `when` condition tags.
    - Toggle any built-in or custom rule On/Off (or use **`Enable all`** / **`Disable all`** to toggle every rule in one click without deleting custom rules or text overrides), expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document`, `Per Macro-State` (`{{STATE_ID}}`), or `Per Sub-State` (`{{SUB_STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
 
+### Unified Export, Selective Import & Reset Backup Safeguards
+- **Unified **`Export JSON`**** (header bar of `AiContextInspectorModal`): Downloads a single human-editable JSON pack (`auteur-agent-context-YYYY-MM-DD.json`, `format: "auteur-agent-context-pack"`, `packVersion: 1`) containing all browser-saved Foundational Craft edits, built-in skill pin/body overrides, custom skills, Quick Scan rule overrides, and custom Quick Scan rules. Never exports locked Grammar Core, API keys, model preferences, or scripts.
+- **Selective **`Import JSON`**** (`AgentContextImportDialog`): Validates full or partial JSON packs via Zod + store sanitizers, surfaces any non-fatal skip notes, and opens a detailed pick-and-choose dialog where you can:
+  - Toggle top-level sections (**Foundational Craft & Skills**, **Quick Scan Rules**) and check/uncheck individual overrides or custom items (each annotated with `New` vs. `Overwrites local` and change badges).
+  - Choose **`Merge (Keep existing)`** (non-destructive: applies only checked items and preserves all other local customizations) or **`Replace (Switch profile)`** (replaces each checked section with only the selected items, displaying exact removal/reset counts and a one-click **`Export current backup first`** button whenever local items would be deleted).
+- **Clear Reset Confirmations**: **`Reset all defaults`** and **`Reset Quick Scan rules`** permanently remove custom skills/rules and reset overrides in their respective stores; both `ConfirmDialog` prompts display exact counts of custom items and overrides that will be removed and include a one-click **`Export Agent Context first`** backup button.
+
 ---
 
 ## 7. Reading Responses, Applying Cards & Debugging Traces

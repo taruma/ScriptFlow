@@ -535,6 +535,7 @@ export function useAiSkills(): {
   resetSkill: (skillId: string) => void;
   saveCustomSkill: (skill: CustomAuteurSkill, editingId?: string) => void;
   removeCustomSkill: (skillId: string) => void;
+  replaceSkillsState: (nextState: AiSkillsState) => void;
   resetAll: () => void;
   acknowledgeUpdate: () => void;
 } {
@@ -568,6 +569,10 @@ export function useAiSkills(): {
     setSkillsState((prev) => saveStoredAiSkills(deleteCustomSkill(prev, skillId)));
   }, []);
 
+  const replaceSkillsState = useCallback((nextState: AiSkillsState) => {
+    setSkillsState(() => saveStoredAiSkills(nextState));
+  }, []);
+
   const resetAll = useCallback(() => {
     setSkillsState(() => saveStoredAiSkills(resetAllAiSkills()));
   }, []);
@@ -587,6 +592,7 @@ export function useAiSkills(): {
     resetSkill,
     saveCustomSkill,
     removeCustomSkill,
+    replaceSkillsState,
     resetAll,
     acknowledgeUpdate,
   };

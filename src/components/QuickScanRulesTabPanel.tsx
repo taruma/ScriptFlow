@@ -48,6 +48,7 @@ export interface QuickScanRulesTabPanelProps {
   onSaveCustomRule: (rule: CustomQuickScanRule, editingId?: string) => void;
   onDeleteCustomRule: (ruleId: string) => void;
   onResetAllRules: () => void;
+  onRequestResetAllRules?: () => void;
   onAcknowledgeUpdate: () => void;
   onRequestConfirm: (request: ConfirmDialogRequest) => void;
 }
@@ -76,6 +77,7 @@ export function QuickScanRulesTabPanel({
   onSaveCustomRule,
   onDeleteCustomRule,
   onResetAllRules,
+  onRequestResetAllRules,
   onAcknowledgeUpdate,
   onRequestConfirm,
 }: QuickScanRulesTabPanelProps) {
@@ -225,6 +227,10 @@ export function QuickScanRulesTabPanel({
   };
 
   const requestResetAll = () => {
+    if (onRequestResetAllRules) {
+      onRequestResetAllRules();
+      return;
+    }
     onRequestConfirm({
       title: qsRuleLabels.confirmResetAllTitle,
       description: qsRuleLabels.confirmResetAllDesc,
