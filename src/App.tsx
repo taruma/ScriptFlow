@@ -87,6 +87,7 @@ export default function App() {
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
+  const [hasOpenedAi, setHasOpenedAi] = useState<boolean>(false);
   const [activeAiPatches, setActiveAiPatches] = useState<ActiveAiPatchItem[]>([]);
   const [activeQuickScan, setActiveQuickScan] = useState<QuickScanResult | null>(null);
   const livePatchActionsRef = useRef<AiLivePatchActionHandlers | null>(null);
@@ -126,6 +127,16 @@ export default function App() {
       livePatchActionsRef.current = null;
     }
   }, [isAiOpen]);
+
+  const handleToggleAi = useCallback(() => {
+    setIsAiOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setHasOpenedAi(true);
+      }
+      return next;
+    });
+  }, []);
 
   const handleSwitchToLive = useCallback(() => {
     setViewMode('live');
@@ -656,7 +667,7 @@ export default function App() {
         onCopyJsonEnvelope={handleCopyJsonEnvelope}
         copiedKind={copiedKind}
         onOpenDebug={() => setIsDebugOpen(true)}
-        onToggleAi={() => setIsAiOpen((prev) => !prev)}
+        onToggleAi={handleToggleAi}
         isAiOpen={isAiOpen}
         canUndo={canUndo}
         canRedo={canRedo}
@@ -709,9 +720,10 @@ export default function App() {
           )}
         </div>
 
-        {isAiOpen && (
+        {hasOpenedAi && (
           <Suspense fallback={null}>
             <AiAssistantSidebar
+              isOpen={isAiOpen}
               scriptSessionKey={aiScriptSessionKey}
               rawText={rawText}
               doc={doc}

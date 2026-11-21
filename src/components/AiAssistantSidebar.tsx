@@ -151,6 +151,7 @@ const ASSISTANT_FOCUSES: readonly AssistantFocus[] = ['auto', 'draft', 'refine',
 const EMPTY_TOOL_CALLS: readonly AiToolCallItem[] = [];
 const EMPTY_LOADED_SKILLS: readonly AiLoadedSkillItem[] = [];
 const EMPTY_REFERENCE_HANDLES: readonly string[] = [];
+const EMPTY_ACTIVE_PATCHES: ActiveAiPatchItem[] = [];
 const MIN_SIDEBAR_WIDTH = 340;
 const MAX_SIDEBAR_WIDTH = 580;
 const DEFAULT_SIDEBAR_WIDTH = 410;
@@ -162,6 +163,7 @@ export interface AiLivePatchActionHandlers {
 }
 
 export interface AiAssistantSidebarProps {
+  isOpen?: boolean;
   scriptSessionKey: string;
   rawText: string;
   doc: AuteurDocument;
@@ -562,6 +564,7 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
 });
 
 export function AiAssistantSidebar({
+  isOpen = true,
   scriptSessionKey,
   rawText,
   doc,
@@ -655,22 +658,25 @@ export function AiAssistantSidebar({
   const effectivePreviewAskMode: AskQuestionMode =
     askFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
 
-  // Compose live agent context lazily inside sidebar so closed sidebar incurs zero composition cost
+  // Compose live agent context lazily only while sidebar is open so closed typing incurs zero composition cost
   const previewComposedContext = useMemo(
     () =>
-      composeAgentContext({
-        focus,
-        rawText,
-        ruleOverrides,
-        previousSnapshotHash: lastTurnSnapshotHash,
-        foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
-        skillOverrides: skillsState.skillOverrides,
-        customSkills: skillsState.customSkills,
-        referenceHandles: activeReferenceHandles,
-        briefContext: activeBriefContext,
-        askQuestionMode: effectivePreviewAskMode,
-      }),
+      isOpen
+        ? composeAgentContext({
+            focus,
+            rawText,
+            ruleOverrides,
+            previousSnapshotHash: lastTurnSnapshotHash,
+            foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
+            skillOverrides: skillsState.skillOverrides,
+            customSkills: skillsState.customSkills,
+            referenceHandles: activeReferenceHandles,
+            briefContext: activeBriefContext,
+            askQuestionMode: effectivePreviewAskMode,
+          })
+        : null,
     [
+      isOpen,
       focus,
       rawText,
       ruleOverrides,
@@ -684,32 +690,32 @@ export function AiAssistantSidebar({
     ]
   );
 
-  const isEmpty = previewComposedContext.editorState.isEmpty;
-  const currentSnapshotHash = previewComposedContext.editorState.snapshotHash;
+  const isEmpty = previewComposedContext?.editorState.isEmpty ?? rawText.trim().length === 0;
+  const currentSnapshotHash = previewComposedContext?.editorState.snapshotHash ?? '';
 
   const activePatches = useMemo(
-    () => collectActiveAiPatches(messages, currentSnapshotHash),
-    [messages, currentSnapshotHash]
+    () => (isOpen ? collectActiveAiPatches(messages, currentSnapshotHash) : EMPTY_ACTIVE_PATCHES),
+    [isOpen, messages, currentSnapshotHash]
   );
 
   const activeQuickScan = useMemo(
-    () => getLatestActiveQuickScan(messages, currentSnapshotHash),
-    [messages, currentSnapshotHash]
+    () => (isOpen ? getLatestActiveQuickScan(messages, currentSnapshotHash) : null),
+    [isOpen, messages, currentSnapshotHash]
   );
 
   useEffect(() => {
-    onActivePatchesChange?.(activePatches);
-  }, [activePatches, onActivePatchesChange]);
+    onActivePatchesChange?.(isOpen ? activePatches : EMPTY_ACTIVE_PATCHES);
+  }, [isOpen, activePatches, onActivePatchesChange]);
 
   useEffect(() => {
     return () => {
-      onActivePatchesChange?.([]);
+      onActivePatchesChange?.(EMPTY_ACTIVE_PATCHES);
     };
   }, [onActivePatchesChange]);
 
   useEffect(() => {
-    onActiveQuickScanChange?.(activeQuickScan);
-  }, [activeQuickScan, onActiveQuickScanChange]);
+    onActiveQuickScanChange?.(isOpen ? activeQuickScan : null);
+  }, [isOpen, activeQuickScan, onActiveQuickScanChange]);
 
   useEffect(() => {
     return () => {
@@ -937,14 +943,15 @@ export function AiAssistantSidebar({
 
   // Sticky-bottom auto-scroll: follows live streaming updates unless the user scrolled up to read earlier messages
   useEffect(() => {
-    if (!shouldAutoScrollRef.current) return;
+    if (!isOpen || !shouldAutoScrollRef.current) return;
     const el = scrollContainerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [streamingScrollKey]);
+  }, [isOpen, streamingScrollKey]);
 
   // Auto-grow composer textarea smoothly unless the user manually dragged its height
   useLayoutEffect(() => {
+    if (!isOpen) return;
     const textarea = composerRef.current;
     if (!textarea) return;
     if (manualComposerHeight !== null) {
@@ -957,7 +964,7 @@ export function AiAssistantSidebar({
       Math.min(AUTO_GROW_MAX_COMPOSER_HEIGHT, textarea.scrollHeight)
     );
     textarea.style.height = `${nextHeight}px`;
-  }, [inputValue, manualComposerHeight, sidebarWidth]);
+  }, [isOpen, inputValue, manualComposerHeight, sidebarWidth]);
 
   // Subtle desktop drag-to-resize left edge handler
   const handleResizePointerDown = useCallback(
@@ -1526,6 +1533,10 @@ export function AiAssistantSidebar({
   // Sync live-editor Apply / Dismiss popover actions directly into the sidebar state & Audit rebase flow
   useEffect(() => {
     if (!onRegisterLivePatchActions) return;
+    if (!isOpen) {
+      onRegisterLivePatchActions(null);
+      return;
+    }
     const handlers: AiLivePatchActionHandlers = {
       applyPatchById: (patchId: string) => {
         const target = activePatches.find((item) => item.id === patchId);
@@ -1564,6 +1575,7 @@ export function AiAssistantSidebar({
       onRegisterLivePatchActions(null);
     };
   }, [
+    isOpen,
     activePatches,
     activeQuickScan,
     handleApplyPatch,
@@ -1615,6 +1627,10 @@ export function AiAssistantSidebar({
         ? UI_LABELS.ai.focuses.autoEmpty
         : UI_LABELS.ai.focuses.autoActive
       : UI_LABELS.ai.focuses[focus];
+
+  if (!isOpen || !previewComposedContext) {
+    return null;
+  }
 
   return (
     <>
