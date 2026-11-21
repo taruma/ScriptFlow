@@ -12,7 +12,7 @@ import {BUNDLED_EXAMPLES} from '../data/examples/index.ts';
  * Monotonic version tag for built-in Auteur craft defaults and skill bodies.
  * Future UI override persistence uses this to detect upstream knowledge updates.
  */
-export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k1';
+export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k2';
 
 export type AssistantMode = 'refine' | 'check' | 'draft';
 export type AssistantFocus = 'auto' | 'draft' | 'refine' | 'audit';
@@ -181,22 +181,30 @@ export const DEFAULT_FOUNDATIONAL_CRAFT = [
   'You are an expert Pure Auteur Script (v0.4.0) director and Script Supervisor.',
   'Keep every script 100% platform- and model-agnostic: never mention video vendors, engines, or model names.',
   '',
+  'Canonical Vocabulary & Addressing:',
+  '- Always use Pure Auteur Script terms with strict structural precision:',
+  '  - Macro-Block (`MB0`, `MB1`, ...): document-level section (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, `[EXECUTION]`, etc.).',
+  '  - Macro-State (`S1`, `S2`, ...; Staging baseline is `S0`): a single non-empty line inside the `[EXECUTION]` Macro-Block.',
+  '  - Sub-State (`S1.0`, `S1.1`, ...): every `->`-chained single-dimension unit inside a Macro-State line (`[CAM]`, `[ACT]`, `[BLOCK]`, `[LIGHT]`, `{dialogue}`, `<foley>`, etc.). Anything inside a Macro-State line is a Sub-State.',
+  '- Never refer to `[EXECUTION]` lines as "beats" or chained Sub-States as "steps", and never abbreviate Macro-State as "MS" (which means Medium Shot).',
+  '- A narrative beat (story unit) or camera shot may span multiple Macro-State lines via camera persistence (`[CAM 01] ->`) for readability and temporal calibration.',
+  '',
   'Directorial Principles:',
   '- Boundaries, not handcuffs: supply clear spatial, optical, and physical state coordinates without rigid timestamp handcuffs so natural weight and momentum flow cleanly.',
   '- Static once, volatile always: lock world, lens stock, palette, wardrobe, and ambience once in Phase 1 STAGING; never repeat static lookbook traits inside Phase 2 EXECUTION (zero lookbook bleed).',
-  '- State inheritance (S_n = f(S_{n-1} | STAGING)): in continuous scenes, each Macro-State inherits camera framing, posture, hand grips, and wear from the prior beat until explicitly mutated.',
+  '- State inheritance (S_n = f(S_{n-1} | STAGING)): in continuous scenes, each Macro-State line inherits camera framing, posture, hand grips, and wear from the prior Macro-State until explicitly mutated by a Sub-State.',
   '- Literal over literary: direct concrete observable optics, posture, grips, eyelines, and physical motion—never vague literary metaphors or invisible inner thoughts.',
-  '- Acting is reacting: chain observable physical reactions and counter-beats rather than isolated poses.',
-  '- Sustained compound action (anti-twitch): group purposeful continuous movement into grounded compound gestures instead of fragmented micro-twitches.',
-  '- Repetition mandate: restate continuity-critical volatile conditions (exact left/right/both hand grips, core posture, accumulated wear like sweat/blood/mud, and key placement) in [ACT] on every visible beat.',
+  '- Acting is reacting: chain observable physical reactions and counter-actions across `[ACT]` Sub-States rather than isolated poses.',
+  '- Sustained compound action (anti-twitch): group purposeful continuous movement into grounded compound gestures inside `[ACT]` Sub-States instead of fragmented micro-twitches.',
+  '- Repetition mandate: restate continuity-critical volatile conditions (exact left/right/both hand grips, core posture, accumulated wear like sweat/blood/mud, and key placement) in an `[ACT]` Sub-State on every Macro-State line where the subject is visible.',
   '',
   'Canonical v0.4.0 Structure & Inline Syntax:',
   '- Phase 1 STAGING ([INTENT], [LOGIC], [AESTHETIC], [OPENING], plus optional [CHARACTERS], [REFERENCES], [CONTINUITY PROTOCOL]) establishes static pre-roll setup (S_0).',
-  '- Phase 2 EXECUTION ([EXECUTION]) runs one Macro-State beat (S1, S2, ...) per line, chaining single-dimension Sub-States with `->` (Single-Dimension Law: never mix camera motion and actor choreography inside one tag).',
+  '- Phase 2 EXECUTION ([EXECUTION]) runs one Macro-State (`S1`, `S2`, ...) per line, chaining single-dimension Sub-States (`S1.0`, `S1.1`, ...) with `->` (Single-Dimension Law: each Sub-State governs strictly one dimension—never mix camera motion and actor choreography inside one Sub-State).',
   '- Frozen [OPENING]: write strictly 2-4 sentences of motionless plain prose locking t=0 (optical canvas, viewport placement, pre-loaded hand grips, eyelines). Zero `[TAG]` tokens, zero motion verbs, zero audio cues.',
   '- Viewport coordinates: use `frame-left`, `frame-center`, `frame-right` (or `screen-left`/`screen-right`) + depth (`FG`, `MG`, `BG`) separated from yaw (`facing screen-left/right`, `in profile-left/right`, `back to camera`). Never use `stage-left` or `stage-right`.',
-  '- Core inline dimensions: spoken dialogue uses curly braces `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`—never quotation marks or legacy `[DIAL]`/`[AUDIO]`); selective diegetic foley uses `<sound>`; opt-in score uses `(score)`; opt-in on-screen text uses `【text】`.',
-  '- Macro-State resolution: never end a beat on spoken `{dialogue}`—always chain an immediate physical `[ACT]` follow-through or `<foley>` trigger.',
+  '- Core Sub-State dimensions: spoken dialogue uses curly braces `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`—never quotation marks or legacy `[DIAL]`/`[AUDIO]`); selective diegetic foley uses `<sound>`; opt-in score uses `(score)`; opt-in on-screen text uses `【text】`.',
+  '- Macro-State resolution: never make spoken `{dialogue}` the final Sub-State of a Macro-State line—always chain an immediate `[ACT]` or `<foley>` Sub-State after it.',
   '- Camera continuity: in continuous oners and coverage, establish numbered slots (`[CAM 01]`, `[CAM 02]`), hold or recall via bare `[CAM 01] ->`, or move via operator verbs (`PAN`, `TRACKING`, `CRANING`, `PUSHING`, `TILTING`, `ARCING`)—never re-declare static shot scales on an established slot. In discontinuous montage, use plain unnumbered `[CAM]`.',
   '- Multimodal reference isolation: declare `@image`/`@audio`/`@video` bindings only in `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, or `[CONTINUITY PROTOCOL]`; use canonical character names downstream in `[EXECUTION]`.',
 ].join('\n');
@@ -222,12 +230,12 @@ function formatCuratedExample(exampleId: string): string {
 
 const DRAFT_CRAFT_CORE_RULES = [
   'Block-by-Block Drafting Craft (Pure Auteur Script v0.4.0):',
-  '- [INTENT]: one flowing directorial sentence starting with "Create ..." covering format/genre, setting container, primary subjects, dramatic stakes, and any `@ref as Name (voice: @audio)` bindings. Never write a beat-by-beat shot list here.',
+  '- [INTENT]: one flowing directorial sentence starting with "Create ..." covering format/genre, setting container, primary subjects, dramatic stakes, and any `@ref as Name (voice: @audio)` bindings. Never write a shot-by-shot list here.',
   '- [LOGIC]: 1-3 dense affirmative prose sentences (zero bullet lists) locking the 180-degree axis, screen direction, hand-prop permanence, physical surface/momentum laws, or montage independence. End with `No subtitles appear on screen.` whenever spoken dialogue exists and on-screen captions are unwanted.',
   '- [AESTHETIC]: tactile `Category: Value` rows (`Medium`, `Palette`, `Lighting`, `Location`, `Wardrobe`, `Audio`) describing physical lens stock, light falloff, materials, and continuous room tone. Zero kinetic action or camera moves.',
   '- [OPENING]: 2-4 motionless plain-prose sentences locking the 4 essential t=0 coordinates—(1) optical canvas/framing, (2) viewport placement (`frame-left/center/right`, `FG/MG/BG`), (3) pre-loaded hand grips (`left`/`right`/`both`), and (4) eyeline heading (`facing screen-*`). Strictly zero `[TAG]` tokens, motion verbs, or audio cues.',
-  '- [EXECUTION]: one Macro-State line per beat (`S1`, `S2`, ...). Line 1 (`S1`) must match `[OPENING]` exactly. Chain single-dimension Sub-States with `->`, restate volatile grips/posture/wear on visible beats, and never end a line on `{dialogue}`.',
-  '- Silent Pre-Flight Ledger (verify mentally before compiling JSON draft): confirm (a) every held prop has an explicit hand with zero collisions, (b) `S1` inherits `S_0` cleanly, (c) zero `stage-left`/`stage-right` or `@ref` tokens in `[EXECUTION]`, (d) zero `[TAG]` tokens in `[OPENING]`, and (e) beat count fits the target tempo.',
+  '- [EXECUTION]: one Macro-State per line (`S1`, `S2`, ...). Line 1 (`S1`) must match `[OPENING]` exactly. Chain single-dimension Sub-States with `->`, restate volatile grips/posture/wear on visible Macro-States, and never end a line on `{dialogue}`.',
+  '- Silent Pre-Flight Ledger (verify mentally before compiling JSON draft): confirm (a) every held prop has an explicit hand with zero collisions, (b) `S1` inherits `S_0` cleanly, (c) zero `stage-left`/`stage-right` or `@ref` tokens in `[EXECUTION]`, (d) zero `[TAG]` tokens in `[OPENING]`, and (e) Macro-State count fits the target tempo.',
 ].join('\n');
 
 function buildDraftCraftBody(includeMontageExample: boolean): string {
@@ -295,7 +303,7 @@ export const BUILTIN_AUTEUR_SKILLS: readonly AuteurSkillDefinition[] = [
       'Multimodal Character & Voice Reference Craft:',
       '- Declare all multimodal bindings strictly inside Phase 1 Staging (`[INTENT]`, `[CHARACTERS]`, or `[REFERENCES]`) using `@image1 as Name` or `@image1 as Name (voice: @audio1)` (and `@actor1` when applicable).',
       '- Separate locked facial/vocal identity from scene-specific styling: let `@image1` carry identity while specifying fresh scene wardrobe, hair wear, or grime cleanly in `[AESTHETIC]` under `Wardrobe:` using canonical names (never `@image1` in `[AESTHETIC]` `Wardrobe:`).',
-      '- Downstream in `[OPENING]` and `[EXECUTION]`, refer exclusively to canonical character names—never leak `@image`, `@audio`, or `@actor` tokens into `[EXECUTION]` beats.',
+      '- Downstream in `[OPENING]` and `[EXECUTION]`, refer exclusively to canonical character names—never leak `@image`, `@audio`, or `@actor` tokens into Sub-States inside `[EXECUTION]`.',
       '- When multiple speakers share a scene with bound voice references, preserve unambiguous speaker attribution (`Name says (delivery) {line}`).',
     ].join('\n'),
     builtIn: true,
@@ -305,16 +313,16 @@ export const BUILTIN_AUTEUR_SKILLS: readonly AuteurSkillDefinition[] = [
     name: 'Temporal Calibration & Tempo Table',
     category: 'module',
     triggerHint:
-      'Calibrating beat count, target seconds per Macro-State, anti-float spacing, and cut-latency floors across combat, tactical, dialogue, and horror tempos.',
+      'Calibrating Macro-State count, target seconds per Macro-State, anti-float spacing, and cut-latency floors across combat, tactical, dialogue, and horror tempos.',
     body: [
       'Temporal Calibration & Pacing Ledger:',
-      '- Match Macro-State density to target clip duration so beats neither float in low-gravity slack nor overcrowd cuts:',
+      '- Match Macro-State density to target clip duration so states neither float in low-gravity slack nor overcrowd cuts:',
       '  1. Close-Quarters Combat / Chase (Continuous Oner): 0.8s-1.2s per Macro-State (~4-5 lines per 5s; ~8-10 lines per 10s); max 1 cut per 2.0s-2.5s. Violating this causes Temporal Slack (floaty low-gravity motion).',
       '  2. Tactical Gunplay / Standoff (Hybrid Coverage): 1.5s-2.0s per Macro-State; max 1 cut per 2.5s-3.0s. Violating this causes mannequin freeze behind cover.',
       '  3. Dramatic Dialogue / Interrogation (Multi-Cam Coverage): 2.5s-4.0s per Macro-State; max 1 cut per 3.0s-5.0s. Violating this causes accelerated robotic lip-sync.',
       '  4. Horror / Mystery / Noir (Slow Creep Oner): 4.0s-6.0s+ per Macro-State; max 1 cut per 5.0s-8.0s. Violating this rushes tension and clips acoustic decay.',
       '- Cut-Latency Floor: in cut-based coverage or montage, total cuts must not exceed `Duration(s) / 2.0` (each cut needs ~1.5s-2.5s to optically stabilize).',
-      '- Anti-Float Rule: pack high-velocity combat/chase oners with continuous kinetic cause-and-effect rather than sparse beats stretched over long durations.',
+      '- Anti-Float Rule: pack high-velocity combat/chase oners with continuous kinetic cause-and-effect rather than sparse Macro-States stretched over long durations.',
     ].join('\n'),
     builtIn: true,
   },
@@ -327,17 +335,17 @@ export const BUILTIN_AUTEUR_SKILLS: readonly AuteurSkillDefinition[] = [
     body: [
       'Spatial Fences & Tier-2 Precision Tags:',
       '- `[BLOCK]` (inline Sub-State, not a Macro-Block): deploy whenever 3+ subjects share the frame or characters cross/swap marks. Lock 2D viewport coordinates + depth + yaw cleanly: `[BLOCK] Miller frame-left FG facing screen-right; Park frame-left BG facing screen-right; Ray frame-right MG facing screen-left`.',
-      '- `[STATE IN]` / `[STATE OUT]`: clamp difficult posture, hand-off, or kinetic transitions explicitly at beat entry or exit when state inheritance alone is ambiguous.',
-      '- `[LIGHT]`: direct dynamic in-shot illumination changes (patrol strobes, muzzle flash, opening shutter, power cut) without repeating static `[AESTHETIC]` lighting.',
-      '- Tier-2 single-dimension tags (opt-in only when a beat genuinely needs precision control):',
+      '- `[STATE IN]` / `[STATE OUT]` (boundary Sub-States): clamp difficult posture, hand-off, or kinetic transitions explicitly as leading or trailing Sub-States of a Macro-State line when state inheritance alone is ambiguous.',
+      '- `[LIGHT]` (dynamic light Sub-State): direct in-shot illumination changes (patrol strobes, muzzle flash, opening shutter, power cut) without repeating static `[AESTHETIC]` lighting.',
+      '- Tier-2 single-dimension Sub-States (opt-in Sub-States inside a Macro-State line only when precision control is needed):',
       '  - `[FOCUS]`: rack focus or depth-of-field pull between foreground and background planes.',
       '  - `[SPEED]`: deliberate speed ramp (e.g., momentary slow-motion impact or return to real-time).',
       '  - `[PROP]`: isolated hero object state or mechanical reaction.',
       '  - `[ENV]`: dynamic environmental shift (gust, door slam, debris fall, rising fog).',
       '  - `[CROWD]`: background group choreography or directional flow.',
       '  - `[VFX]`: physicalized visual effects integrated into scene lighting.',
-      '  - `[TRANS]`: intentional optical or match-cut transition bridge between beats.',
-      '- Honor the Single-Dimension Law: keep each tag focused on one dimension separated by `->`.',
+      '  - `[TRANS]`: intentional optical or match-cut transition Sub-State bridging Macro-States.',
+      '- Honor the Single-Dimension Law: keep each Sub-State focused on one dimension separated by `->`.',
     ].join('\n'),
     builtIn: true,
   },
@@ -364,15 +372,15 @@ export function getLensAuditChecklist(
           topologyNote:
             'Discontinuous montage topology: cross-cut inheritance is severed; evaluate each Macro-State as a self-contained visual shot.',
           suppressedChecks: [
-            'Cross-cut 180-degree eyeline parity between consecutive montage beats',
+            'Cross-cut 180-degree eyeline parity between consecutive montage Macro-States',
             'S0 -> S1 posture/prop carryover across independent montage cuts',
             'Numbered camera slot recall/hold continuity ([CAM 01] ->)',
           ],
           checks: [
             'Viewport coordinate purity: zero banned `stage-left`/`stage-right` terms; separate screen placement (`frame-left/center/right` + `FG/MG/BG`) from yaw (`facing screen-*`) within each shot.',
             'Plain unnumbered `[CAM]` tags: montage cuts use unnumbered `[CAM]` descriptors rather than persistent numbered camera slots.',
-            'Self-contained shot anchoring: every Macro-State explicitly establishes its subject, setting (or declared `LOC##` token), and light cue.',
-            'Within-shot action visibility & direction: every `[ACT]` gesture is physically visible from that beat’s active `[CAM]` framing with coherent internal screen direction.',
+            'Self-contained shot anchoring: every Macro-State line explicitly establishes its subject, setting (or declared `LOC##` token), and light cue via its Sub-States.',
+            'Within-shot action visibility & direction: every `[ACT]` Sub-State is physically visible from that Macro-State line’s `[CAM]` Sub-State framing with coherent internal screen direction.',
           ],
         };
       }
@@ -381,7 +389,7 @@ export function getLensAuditChecklist(
         'Viewport coordinate purity: zero banned `stage-left`/`stage-right` terms; separate position (`frame-left/center/right` + `FG/MG/BG`) from anatomical yaw (`facing screen-left/right`, `in profile-left/right`, `back to camera`).',
         '180-degree axis & eyeline parity: if Subject A is `frame-left` facing `screen-right`, reverse coverage places Subject B `frame-right` facing `screen-left` unless crossed via a neutral frontal/POV shot or arcing camera move.',
         'Action visibility vs. active `resolvedCamera.effectiveFraming`: confirm every `[ACT]` detail (eye glance, palm press, hand gesture) is physically visible from the active camera angle.',
-        'Clean S0 -> S1 handoff: Beat S1 opens with the exact camera framing, viewport layout, posture, and hand grips locked in `[OPENING]`.',
+        'Clean S0 -> S1 handoff: Macro-State S1 opens with the exact camera framing, viewport layout, posture, and hand grips locked in `[OPENING]`.',
         isOner
           ? 'Continuous oner camera discipline: maintain a single numbered `[CAM 01]` slot throughout; lines 2+ must hold (`[CAM 01] ->`) or use operator motion verbs (`PAN`, `TRACKING`, `CRANING`, `PUSHING`), never static shot-scale re-declarations.'
           : 'Camera numbering & oner continuity: established numbered camera slots (`[CAM 01]`, `[CAM 02]`) hold/recall via bare `[CAM 01] ->` or move via operator verbs, never re-declaring static shot scales.',
@@ -407,15 +415,15 @@ export function getLensAuditChecklist(
           lens: 'Lens 2: Temporal, Pacing & Wear',
           topology,
           topologyNote:
-            'Discontinuous montage topology: beats represent independent moments with no cross-beat wear or kinetic carryover.',
+            'Discontinuous montage topology: Macro-States represent independent moments with no cross-state wear or kinetic carryover.',
           suppressedChecks: [
-            'Cross-beat physical wear persistence (sweat/blood/mud repetition across unrelated shots)',
+            'Cross-state physical wear persistence (sweat/blood/mud repetition across unrelated shots)',
             'Continuous S_{n-1} -> S_n posture/kinetic carryover between cuts',
           ],
           checks: [
             'Cut-latency floor: total montage cuts must not exceed `Duration(s) / 2.0` (each cut needs ~1.5s-2.5s to visually stabilize and read).',
-            'Self-contained shot readability: each montage Macro-State packs a single clear visual beat without cramming multiple incompatible time jumps into one line.',
-            'Within-shot kinetic plausibility: motion described inside a single beat is physically continuous and achievable within its brief shot window.',
+            'Self-contained shot readability: each montage Macro-State line packs a single clear visual moment without cramming multiple incompatible time jumps into its Sub-States.',
+            'Within-shot kinetic plausibility: motion across the `[ACT]` Sub-States of a single Macro-State line is physically continuous and achievable within its brief shot window.',
           ],
         };
       }
@@ -425,13 +433,13 @@ export function getLensAuditChecklist(
         lens: 'Lens 2: Temporal, Pacing & Wear',
         topology,
         topologyNote:
-          'Continuous scene topology: check beat-to-duration tempo calibration, kinetic continuity, and physical wear repetition.',
+          'Continuous scene topology: check Macro-State-to-duration tempo calibration, kinetic continuity, and physical wear repetition.',
         suppressedChecks: [],
         checks: [
           'Cut-latency floor: editorial cut count must not exceed `Duration(s) / 2.0` (~1.5s-2.5s per cut to stabilize).',
-          'Anti-float beat-to-duration calibration: combat/chase oners target 0.8s-1.2s per beat; tactical standoffs 1.5s-2.0s; dramatic dialogue 2.5s-4.0s; slow horror/noir 4.0s-6.0s+.',
-          'Physical wear persistence (Repetition Mandate): accumulated baggage (sweat, blood, mud, bruises, soaked fabric, fatigue) is restated in `[ACT]` on visible beats until cleaned or resolved.',
-          'Plausible kinetic transitions: posture and location changes (`seated -> standing`, `crouching -> lunging`) follow physically connected momentum with zero teleporting between beats.',
+          'Anti-float Macro-State-to-duration calibration: combat/chase oners target 0.8s-1.2s per Macro-State; tactical standoffs 1.5s-2.0s; dramatic dialogue 2.5s-4.0s; slow horror/noir 4.0s-6.0s+.',
+          'Physical wear persistence (Repetition Mandate): accumulated baggage (sweat, blood, mud, bruises, soaked fabric, fatigue) is restated in an `[ACT]` Sub-State on every visible Macro-State line until cleaned or resolved.',
+          'Plausible kinetic transitions: posture and location changes (`seated -> standing`, `crouching -> lunging`) follow physically connected momentum with zero teleporting between consecutive Macro-State lines.',
         ],
       };
     }
@@ -445,12 +453,12 @@ export function getLensAuditChecklist(
           topologyNote:
             'Discontinuous montage topology: props do not persist across independent shots; verify within-shot hand clarity only.',
           suppressedChecks: [
-            'Cross-beat prop persistence and carryover across montage cuts',
+            'Cross-state prop persistence and carryover across montage cuts',
             'Cross-cut prop repetition on camera recalls',
           ],
           checks: [
-            'Within-shot explicit hand allocation: any prop held or manipulated in a montage beat names the exact hand (`left hand`, `right hand`, `both hands`).',
-            'Zero within-shot hand collisions: a subject cannot grip two conflicting props in the same hand within a single beat.',
+            'Within-shot explicit hand allocation: any prop held or manipulated in an `[ACT]` or `[PROP]` Sub-State of a montage Macro-State line names the exact hand (`left hand`, `right hand`, `both hands`).',
+            'Zero within-shot hand collisions: a subject cannot grip two conflicting props in the same hand across the Sub-States of a single Macro-State line.',
             'Self-contained prop & wardrobe anchoring: each independent montage shot clearly states the hero prop or wardrobe cue visible in that moment.',
           ],
         };
@@ -478,13 +486,13 @@ export function getLensAuditChecklist(
         lens: 'Lens 4: Acoustics & Voice',
         topology,
         topologyNote: isMontage
-          ? 'Discontinuous montage topology: keep each beat’s selective `<foley>` punchy and self-contained while isolating continuous ambience in `[AESTHETIC]`.'
-          : 'Verify curly-brace dialogue syntax, beat resolution, selective `<foley>`, and room tone isolation.',
+          ? 'Discontinuous montage topology: keep each `<foley>` Sub-State punchy and self-contained while isolating continuous ambience in `[AESTHETIC]`.'
+          : 'Verify curly-brace dialogue Sub-State syntax, Macro-State resolution, selective `<foley>` Sub-States, and room tone isolation.',
         suppressedChecks: [],
         checks: [
-          'Macro-State resolution rule: no `[EXECUTION]` line terminates on spoken `{dialogue}`—always chain a physical `[ACT]` follow-through or `<foley>` trigger.',
-          'Curly-brace dialogue lock: spoken lines strictly use `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`), never quotation marks or legacy `[DIAL]`/`[AUDIO]`.',
-          'Room tone isolation: continuous background ambience (rain, ballast hum, wind, traffic) stays in `[AESTHETIC]` (`Audio:`) and is not spammed as `<foley>` on every beat.',
+          'Macro-State resolution rule: no `[EXECUTION]` Macro-State line has spoken `{dialogue}` as its final Sub-State—always chain an `[ACT]` or `<foley>` Sub-State after it.',
+          'Curly-brace dialogue lock: spoken dialogue Sub-States strictly use `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`), never quotation marks or legacy `[DIAL]`/`[AUDIO]`.',
+          'Room tone isolation: continuous background ambience (rain, ballast hum, wind, traffic) stays in `[AESTHETIC]` (`Audio:`) and is not spammed as a `<foley>` Sub-State on every Macro-State line.',
           'Selective diegetic `<foley>`: use `<sound>` only for distinct physical friction, impacts, or off-screen triggers (restate persistent discrete sounds explicitly).',
           'Subtitle guard: when spoken dialogue exists and captions are unwanted, `[LOGIC]` ends with `No subtitles appear on screen.`',
           'Opt-in score & on-screen text: `(score)` and `【text】` appear only when explicitly intended.',
@@ -503,7 +511,7 @@ export function getLensAuditChecklist(
 
       if (isMontage) {
         checks.push(
-          'Montage contract alignment: confirm `[LOGIC]` states independent-shot montage behavior and `[EXECUTION]` beats use plain unnumbered `[CAM]` tags with self-contained subject/light/location cues.'
+          'Montage contract alignment: confirm `[LOGIC]` states independent-shot montage behavior and each `[EXECUTION]` Macro-State line uses a plain unnumbered `[CAM]` Sub-State with self-contained subject/light/location cues.'
         );
       }
 
@@ -512,7 +520,7 @@ export function getLensAuditChecklist(
         lens: 'Lens 5: Blocks & Grammar',
         topology,
         topologyNote: isMontage
-          ? 'Discontinuous montage topology: allow concise per-beat subject/light/location anchoring (or `LOC##` tokens) while preventing static lookbook bleed.'
+          ? 'Discontinuous montage topology: allow concise per-state subject/light/location anchoring (or `LOC##` tokens) while preventing static lookbook bleed.'
           : 'Verify Phase Partition Law, Block Orthogonality, Single-Dimension Law, and canonical v0.4.0 syntax purity.',
         suppressedChecks: [],
         checks,
@@ -556,7 +564,7 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
     );
   } else if (hasTool('get_script_overview') && !isEmpty) {
     lines.push(
-      '- Call `get_script_overview` first if you need to inspect existing blocks before staging a new draft.'
+      '- Call `get_script_overview` first if you need to inspect existing Macro-Blocks before staging a new draft.'
     );
   }
 
@@ -591,7 +599,7 @@ function buildLiveEditorStateText(state: LiveEditorStateSummary): string {
     `- Empty document: ${state.isEmpty ? 'yes' : 'no'}`,
     `- Snapshot hash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — do not rely on prior turn memory for IDs or lines' : 'current'})`,
     `- Scene topology: \`${state.sceneTopology}\` | Continuation context: ${state.hasContinuationContext ? 'yes' : 'no'}`,
-    `- Structure: ${state.stagingBlockCount} Staging Macro-Block(s), ${state.beatCount} Execution Beat(s), ${state.referenceBindingCount} Reference Binding(s), ${state.tokenMappingCount} Token Mapping(s)`,
+    `- Structure: ${state.stagingBlockCount} Staging Macro-Block(s), ${state.beatCount} Execution Macro-State(s), ${state.referenceBindingCount} Reference Binding(s), ${state.tokenMappingCount} Token Mapping(s)`,
     `- Deterministic Script Supervisor lint: ${state.diagnosticsSummary.errors} error(s), ${state.diagnosticsSummary.warnings} warning(s)`,
   ];
 

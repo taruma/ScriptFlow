@@ -117,7 +117,7 @@ export function lintMacroStateResolution(doc: AuteurDocument): LintDiagnostic[] 
         severity: 'warning',
         message: `S${beat.index} terminates on spoken dialogue (${last.dialogue?.speaker ?? 'Speaker'}).`,
         repairHint:
-          'Chain an immediate physical follow-through in [ACT] or an acoustic trigger <sound> after the spoken line so the beat never ends on dialogue.',
+          'Chain an immediate [ACT] or <foley> Sub-State after the spoken dialogue Sub-State so the Macro-State line never terminates on dialogue.',
         target: {
           phase: 'execution',
           beatIndex: beat.index,
@@ -165,7 +165,7 @@ export function lintMultimodalReferenceIsolation(doc: AuteurDocument): LintDiagn
         severity: 'warning',
         message: `Reference tag (${refs}) used in [${block.name}]. As a rule of thumb, keep @ref declarations in [INTENT], [CHARACTERS], or [REFERENCES].`,
         repairHint:
-          'Declare @reference bindings in [INTENT], [CHARACTERS], [REFERENCES], or [CONTINUITY PROTOCOL], then use canonical character names in other Staging blocks.',
+          'Declare @reference bindings in [INTENT], [CHARACTERS], [REFERENCES], or [CONTINUITY PROTOCOL], then use canonical character names in other Staging Macro-Blocks.',
         target: {
           phase: 'staging',
           blockIndex,
@@ -190,7 +190,7 @@ export function lintMultimodalReferenceIsolation(doc: AuteurDocument): LintDiagn
         ruleName: 'Multimodal Reference Isolation',
         lens: 'Lens 5: Blocks & Grammar',
         severity: 'error',
-        message: `Reference tag (${refs}) leaked into Execution beat S${beat.index}.`,
+        message: `Reference tag (${refs}) leaked into a Sub-State of Macro-State S${beat.index}.`,
         repairHint:
           'Replace @reference tokens in [EXECUTION] with the established character name declared in [INTENT] or [CHARACTERS].',
         target: {
@@ -345,7 +345,7 @@ export const LINT_RULE_REGISTRY: readonly LintRuleDefinition[] = [
     lens: 'Lens 4: Acoustics & Voice',
     defaultSeverity: 'warning',
     description:
-      'Flags [EXECUTION] beats ending on spoken {dialogue} without [ACT] or <foley> follow-through.',
+      'Flags [EXECUTION] Macro-States whose final Sub-State is spoken {dialogue} without a trailing [ACT] or <foley> Sub-State.',
     run: (doc) => lintMacroStateResolution(doc),
   },
   {
@@ -354,7 +354,7 @@ export const LINT_RULE_REGISTRY: readonly LintRuleDefinition[] = [
     lens: 'Lens 5: Blocks & Grammar',
     defaultSeverity: 'error',
     description:
-      'Warn in Staging blocks outside [INTENT]/[CHARACTERS]/[REFERENCES]; error in [EXECUTION].',
+      'Warn in Staging Macro-Blocks outside [INTENT]/[CHARACTERS]/[REFERENCES]; error in [EXECUTION].',
     run: (doc) => lintMultimodalReferenceIsolation(doc),
   },
   {

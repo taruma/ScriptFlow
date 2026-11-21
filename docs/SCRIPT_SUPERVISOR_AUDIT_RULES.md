@@ -35,8 +35,8 @@ These **5 declarative rules** live in `LINT_RULE_REGISTRY` inside `src/core/lint
 | # | Rule ID | Status | Lens | Default Severity | Overridable Behavior | What It Checks & How to Fix |
 |---|---|---|---|---|---|---|
 | **1** | `viewport-coordinate-purity` | Active · Configurable | **Lens 1: Spatial & Optics** | `error` | `off` \| `warning` \| `error` | Flags banned theatrical directions (`stage-left` / `stage-right`) in `[LOGIC]`, `[OPENING]`, or `[EXECUTION]`. **Fix:** Use camera-viewport coordinates (`frame-left` / `frame-right` or `screen-left` / `screen-right`) and separate position from `facing screen-*` orientation. |
-| **2** | `camera-redefinition-guard` | Active · Configurable | **Lens 1: Spatial & Optics** | `warning` | `off` \| `warning` \| `error` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`) re-declares a static shot-scale token (`WS`, `MS`, `CU`, `OTS`, `POV`, `low-angle`, etc.) on a later beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `PUSHING`, `TILTING`, `ARCING`, etc.). **Fix:** Use a bare hold/recall (`[CAM 01] ->`), an operator motion transition (`[CAM 01] PAN LEFT ->`), or cut to a new camera slot (`[CAM 02]`). *(First appearances in continuation scripts with `[CONTINUITY PROTOCOL]` / `@video1` are allowed.)* |
-| **3** | `macro-state-resolution` | Active · Configurable | **Lens 4: Acoustics & Voice** | `warning` | `off` \| `warning` \| `error` | Flags any `[EXECUTION]` Macro-State whose final Sub-State is spoken `{dialogue}`. **Fix:** Always chain an immediate physical `[ACT]` follow-through or `<foley>` trigger after the spoken line. |
+| **2** | `camera-redefinition-guard` | Active · Configurable | **Lens 1: Spatial & Optics** | `warning` | `off` \| `warning` \| `error` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`) re-declares a static shot-scale token (`WS`, `MS`, `CU`, `OTS`, `POV`, `low-angle`, etc.) on a later Macro-State without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `PUSHING`, `TILTING`, `ARCING`, etc.). **Fix:** Use a bare hold/recall (`[CAM 01] ->`), an operator motion transition (`[CAM 01] PAN LEFT ->`), or cut to a new camera slot (`[CAM 02]`). *(First appearances in continuation scripts with `[CONTINUITY PROTOCOL]` / `@video1` are allowed.)* |
+| **3** | `macro-state-resolution` | Active · Configurable | **Lens 4: Acoustics & Voice** | `warning` | `off` \| `warning` \| `error` | Flags any `[EXECUTION]` Macro-State line whose final Sub-State is spoken `{dialogue}`. **Fix:** Always chain an immediate `[ACT]` or `<foley>` Sub-State after the dialogue Sub-State. |
 | **4** | `multimodal-reference-isolation` | Active · Configurable | **Lens 5: Blocks & Grammar** | Staging: `warning`<br>Execution: `error` | `off` \| `warning` \| `error` | Flags `@ref` tags (`@image1`, `@audio1`, etc.) outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. Defaults to a soft **rule-of-thumb `warning`** inside other Phase 1 Staging blocks (`[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, custom blocks) and a strict **`error`** inside `[EXECUTION]`. **Fix:** Declare `@ref as Name` in `[INTENT]`, `[CHARACTERS]`, or `[REFERENCES]`, then use canonical character names downstream. |
 | **5** | `frozen-first-frame-purity` | Active · Configurable | **Lens 5: Blocks & Grammar** | `error` | `off` \| `warning` \| `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. **Fix:** Write `[OPENING]` strictly as 2–4 sentences of motionless plain prose locking $t = 0$. |
 
@@ -67,12 +67,12 @@ Use this checklist when reviewing a script manually or configuring an automated 
 ---
 
 ### Lens 2 — Temporal, Pacing & Wear (`lens2_temporal_pacing_wear`)
-*Focus: Beat-to-duration calibration, cut density, plausible velocity, and physical baggage persistence.*
+*Focus: Macro-State-to-duration calibration, cut density, plausible velocity, and physical baggage persistence.*
 
 - [ ] **Cut-Latency Floor**: In cut-based coverage or montage, cut count does not exceed $\text{Duration (s)} \div 2.0$ (each cut needs ~1.5s–2.5s to stabilize).
 - [ ] **Anti-Float Calibration (Temporal Slack)**: Action oners target **0.8s–1.2s per Macro-State** (~4–5 lines per 5s; ~8–10 lines per 10s). Dramatic dialogue targets **2.5s–4.0s per Macro-State**.
-- [ ] **Physical Wear Persistence (The Repetition Mandate)**: Accumulated physical baggage—sweat, blood, mud, bruises, soaked clothing, exhaustion—is restated in `[ACT]` on visible beats until cleaned or resolved.
-- [ ] **Plausible Kinetic Transitions**: Posture changes (`seated -> standing`, `crouching -> lunging`) follow physically connected momentum with no teleporting across the room between beats.
+- [ ] **Physical Wear Persistence (The Repetition Mandate)**: Accumulated physical baggage—sweat, blood, mud, bruises, soaked clothing, exhaustion—is restated in an `[ACT]` Sub-State on every visible Macro-State line until cleaned or resolved.
+- [ ] **Plausible Kinetic Transitions**: Posture changes (`seated -> standing`, `crouching -> lunging`) follow physically connected momentum with no teleporting across the room between consecutive Macro-State lines.
 
 | Genre / Tempo | Recommended Mode | Target Interval per Macro-State | Max Cut Cadence | Failure Mode if Violated |
 |---|---|---|---|---|
@@ -94,11 +94,11 @@ Use this checklist when reviewing a script manually or configuring an automated 
 ---
 
 ### Lens 4 — Acoustics & Voice (`lens4_acoustics_voice`)
-*Focus: Dialogue formatting, selective `<foley>`, room tone isolation, and beat resolution.*
+*Focus: Dialogue formatting, selective `<foley>`, room tone isolation, and Macro-State resolution.*
 
 - [ ] **Macro-State Resolution Rule** *(Automated · Default `warning`)*: No Macro-State line ends on spoken `{dialogue}`; always follow with `[ACT]` physical reaction or `<foley>` trigger.
 - [ ] **Curly-Brace Dialogue Lock**: Spoken lines strictly use `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`), never quotation marks and never legacy `[DIAL]`/`[AUDIO]` tags.
-- [ ] **Room Tone Isolation**: Continuous background ambience (rain, ballast hum, wind, traffic) stays in `[AESTHETIC]` (`Audio:`) and is not spammed as `<foley>` on every `[EXECUTION]` line.
+- [ ] **Room Tone Isolation**: Continuous background ambience (rain, ballast hum, wind, traffic) stays in `[AESTHETIC]` (`Audio:`) and is not spammed as a `<foley>` Sub-State on every `[EXECUTION]` Macro-State line.
 - [ ] **Selective Diegetic `<foley>`**: Use `<sound>` only for distinct physical friction, impacts, or off-screen triggers; restate persistent discrete sounds explicitly (`<low growl continues>`).
 - [ ] **Subtitle Guard**: When spoken dialogue is present and on-screen captions are unwanted, `[LOGIC]` ends with `No subtitles appear on screen.`
 - [ ] **Opt-In Score & On-Screen Text**: `(score)` and `【on-screen text】` appear only when explicitly intended.

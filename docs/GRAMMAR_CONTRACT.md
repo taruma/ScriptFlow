@@ -12,7 +12,7 @@ An Auteur Script is plain text partitioned into **Macro-Blocks** separated by a 
 - **Phase 1 — Staging ($S_0$)**: `[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, plus custom staging extensions (`[CHARACTERS]`, `[CONTINUITY PROTOCOL]`, `[REFERENCES]`, `[STAGE]`).
 - **Phase 2 — Execution ($S_1 \dots S_n$)**: Opened by `[EXECUTION]` (or aliases `[TIMELINE]`, `[BEATS]`, `[SHOTLIST]`).
   - Once Phase 2 begins, **subsequent `[TAG]` tokens are Sub-State tags, never new Macro-Blocks**.
-  - Every non-empty line in Phase 2 is one **Macro-State ($S_n$)**. Blank lines inside `[EXECUTION]` are treated as harmless visual spacers and never merge adjacent beats or corrupt beat counts.
+  - Every non-empty line in Phase 2 is one **Macro-State ($S_n$)**. Blank lines inside `[EXECUTION]` are treated as harmless visual spacers and never merge adjacent Macro-States or corrupt Macro-State counts.
 
 ---
 
@@ -45,7 +45,7 @@ An Auteur Script is plain text partitioned into **Macro-Blocks** separated by a 
 ## 4. Tagless Export Contract (`exportTagless`)
 
 - Preserves Staging Macro-Blocks intact.
-- For each `[EXECUTION]` beat:
+- For each `[EXECUTION]` Macro-State:
   1. Splits on `/\s*(?:->|→)\s*/`.
   2. Strips leading bracketed Sub-State tags (`/^\[[A-Z0-9 _-]+\]\s*/`).
   3. Drops empty segments (such as bare camera holds `[CAM 01] ->`) so the exported line never starts with a dangling `->`.
@@ -60,8 +60,8 @@ All 5 rules are registered declaratively in `LINT_RULE_REGISTRY` and executed vi
 | # | Rule ID | Audit Lens | Default Severity | Contract |
 |---|---|---|---|---|
 | **1** | `viewport-coordinate-purity` | `Lens 1: Spatial & Optics` | `error` | Flags `stage-left` / `stage-right` (case-insensitive) in `[LOGIC]`, `[OPENING]`, and `[EXECUTION]`. Recommends `frame-left/right` or `screen-left/right`. |
-| **2** | `camera-redefinition-guard` | `Lens 1: Spatial & Optics` | `warning` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`, ...) re-declares a static shot-scale token (`WS`, `EWS`, `FS`, `MS`, `MWS`, `MLS`, `MCU`, `CU`, `ECU`, `OTS`, `POV`, `INS`, `two-shot`, `low-angle`, `high-angle`) on a subsequent beat without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `TILTING`, `PUSHING`, `ARCING`, etc.). Bare holds/recalls (`[CAM 01] ->`) and first appearances in continuation scripts (`[CONTINUITY PROTOCOL]` / `@video1`) are never flagged. |
-| **3** | `macro-state-resolution` | `Lens 4: Acoustics & Voice` | `warning` | Flags any `[EXECUTION]` beat whose final non-empty Sub-State is spoken `{dialogue}` without trailing `[ACT]` follow-through or `<foley>` trigger. |
+| **2** | `camera-redefinition-guard` | `Lens 1: Spatial & Optics` | `warning` | Flags when an already-established numbered camera slot (`[CAM 01]`, `[CAM 02]`, ...) re-declares a static shot-scale token (`WS`, `EWS`, `FS`, `MS`, `MWS`, `MLS`, `MCU`, `CU`, `ECU`, `OTS`, `POV`, `INS`, `two-shot`, `low-angle`, `high-angle`) on a subsequent Macro-State without an operator motion verb (`PAN`, `CRANING`, `TRACKING`, `TILTING`, `PUSHING`, `ARCING`, etc.). Bare holds/recalls (`[CAM 01] ->`) and first appearances in continuation scripts (`[CONTINUITY PROTOCOL]` / `@video1`) are never flagged. |
+| **3** | `macro-state-resolution` | `Lens 4: Acoustics & Voice` | `warning` | Flags any `[EXECUTION]` Macro-State whose final non-empty Sub-State is spoken `{dialogue}` without trailing `[ACT]` follow-through or `<foley>` trigger. |
 | **4** | `multimodal-reference-isolation` | `Lens 5: Blocks & Grammar` | Staging: `warning` / Execution: `error` | Flags `@ref` tokens appearing outside `[INTENT]`, `[CHARACTERS]`, `[REFERENCES]`, `[CONTINUITY PROTOCOL]`, `[GOAL]`, or `[UNUSED MATERIALS]`. Defaults to a soft `warning` in other Phase 1 Staging blocks (`[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, custom blocks) and `error` inside `[EXECUTION]`. |
 | **5** | `frozen-first-frame-purity` | `Lens 5: Blocks & Grammar` | `error` | Flags any square-bracketed `[TAG]` token inside `[OPENING]`. |
 

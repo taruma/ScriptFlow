@@ -53,7 +53,7 @@ export const MACRO_BLOCK_META: Record<MacroBlockKind, MacroBlockMeta> = {
     badgeClass: 'auteur-phase-execution',
   },
   CUSTOM: {
-    caption: 'Staging Block',
+    caption: 'Staging Macro-Block',
     badgeClass: 'auteur-phase-slate',
   },
 };
@@ -65,7 +65,7 @@ export function getMacroBlockMeta(kind: MacroBlockKind): MacroBlockMeta {
 export const UI_LABELS = {
   topBar: {
     sceneTitleAria: 'Scene title',
-    beatUnit: (count: number) => (count === 1 ? 'beat' : 'beats'),
+    beatUnit: (count: number) => (count === 1 ? 'Macro-State' : 'Macro-States'),
     errorShort: (count: number) => `${count} err`,
     warningShort: (count: number) => `${count} warn`,
     jumpToFirstDiagnostic: 'Jump to first Script Supervisor diagnostic',
@@ -159,39 +159,41 @@ export const UI_LABELS = {
     phase2Name: 'Execution',
     phase1Title: 'Phase 1 — Staging',
     phase2Title: 'Phase 2 — Execution',
-    stagingBlockCount: (count: number) => `S0 · ${count} ${count === 1 ? 'block' : 'blocks'}`,
+    stagingBlockCount: (count: number) =>
+      `S0 · ${count} ${count === 1 ? 'Macro-Block' : 'Macro-Blocks'}`,
     noStagingBlocks:
-      'No staging blocks yet. Add a macro-block below, paste a script, or draft with AI.',
+      'No Staging Macro-Blocks yet. Add a Macro-Block below, paste a script, or draft with AI.',
     expandAll: 'Expand all',
     collapseAll: 'Collapse all',
-    noBeatsYet: 'No beats yet',
-    beatRange: (count: number) => (count === 0 ? 'No beats yet' : count === 1 ? 'S1' : `S1 → S${count}`),
+    noBeatsYet: 'No Macro-States yet',
+    beatRange: (count: number) =>
+      count === 0 ? 'No Macro-States yet' : count === 1 ? 'S1' : `S1 → S${count}`,
     cutMarker: 'cut',
     cutRecallMarker: 'cut · recall',
-    addMacroBlock: 'Add macro-block',
-    insertMacroBlockBeforeFirst: 'Insert macro-block before first block',
+    addMacroBlock: 'Add Macro-Block',
+    insertMacroBlockBeforeFirst: 'Insert Macro-Block before first Macro-Block',
     insertMacroBlockBetween: (prevName: string, nextName: string) =>
-      `Insert macro-block between [${prevName}] and [${nextName}]`,
-    addBeat: 'Add beat',
-    insertBeatBeforeFirst: 'Insert beat before S1',
+      `Insert Macro-Block between [${prevName}] and [${nextName}]`,
+    addBeat: 'Add Macro-State',
+    insertBeatBeforeFirst: 'Insert Macro-State before S1',
     insertBeatBetween: (prevIndex: number, nextIndex: number) =>
-      `Insert beat between S${prevIndex} and S${nextIndex}`,
+      `Insert Macro-State between S${prevIndex} and S${nextIndex}`,
     footerHint:
-      'Click any block or step to edit live · Paste any plain-text Auteur Script anywhere to hydrate',
+      'Click any Macro-Block or Sub-State to edit live · Paste any plain-text Auteur Script anywhere to hydrate',
     footerHintReadOnly:
       'Read-only reference example · Click Fork to Edit to make changes, or switch to Source to inspect raw text',
   },
 
   staging: {
-    emptySummary: 'Empty staging block — click to author',
-    editAria: (name: string) => `Edit [${name}] block`,
+    emptySummary: 'Empty Staging Macro-Block — click to author',
+    editAria: (name: string) => `Edit [${name}] Macro-Block`,
     editPlaceholder: (name: string) => `Write [${name}] content...`,
     castBindings: (count: number) => `${count} ${count === 1 ? '@ref' : '@refs'}`,
     mappedTokens: (count: number) => `${count} ${count === 1 ? 'token' : 'tokens'}`,
     lookbookLines: (count: number) => `${count} lookbook ${count === 1 ? 'line' : 'lines'}`,
     keysCount: (count: number) => `${count} ${count === 1 ? 'key' : 'keys'}`,
     linesCount: (count: number) => `${count} ${count === 1 ? 'line' : 'lines'}`,
-    expandPreviewTitle: (name: string) => `Expand [${name}] block`,
+    expandPreviewTitle: (name: string) => `Expand [${name}] Macro-Block`,
     aestheticKeyPlaceholder: 'Key',
     aestheticValuePlaceholder: 'Describe lookbook detail or -> TOKEN...',
     addAestheticKey: 'Add key',
@@ -201,30 +203,30 @@ export const UI_LABELS = {
       key ? `Aesthetic value for ${key}` : `Aesthetic value ${index + 1}`,
     pickerHeader: 'Add Staging Macro-Block',
     alreadyAdded: 'Added',
-    customHeaderPlaceholder: 'Custom block (e.g. PROPS, AUDIO NOTES)',
+    customHeaderPlaceholder: 'Custom Macro-Block (e.g. PROPS, AUDIO NOTES)',
     customHeaderAdd: 'Add',
     customHeaderReservedError: 'Reserved for Phase 2 Execution',
-    dragReorderTitle: 'Drag to reorder macro-block',
+    dragReorderTitle: 'Drag to reorder Macro-Block',
     deleteBlockTitle: (name: string) => `Delete [${name}]`,
   },
 
   execution: {
     holdFraming: 'hold framing',
-    emptySummary: 'Empty macro-state — click to author',
+    emptySummary: 'Empty Macro-State — click to author',
     collapseBeatTitle: (index: number) => `Collapse S${index}`,
     expandBeatTitle: (index: number) => `Expand S${index}`,
-    addStep: 'Add step',
+    addStep: 'Add Sub-State',
     chainHintLead: 'Type',
     chainHintArrow: '->',
-    chainHintTail: 'or press Enter to chain next step',
-    dragReorderTitle: 'Drag to reorder beat',
-    stepsCount: (count: number) => `${count} ${count === 1 ? 'step' : 'steps'}`,
+    chainHintTail: 'or press Enter to chain next Sub-State',
+    dragReorderTitle: 'Drag to reorder Macro-State',
+    stepsCount: (count: number) => `${count} ${count === 1 ? 'Sub-State' : 'Sub-States'}`,
     deleteBeatTitle: (index: number) => `Delete S${index}`,
-    removeStepTitle: 'Remove step',
+    removeStepTitle: 'Remove Sub-State',
     removeStepAria: (stepNumber: number, beatIndex: number) =>
-      `Remove step ${stepNumber} from S${beatIndex}`,
-    leadStepAria: (beatIndex: number) => `S${beatIndex} lead step`,
-    stepAria: (beatIndex: number, stepNumber: number) => `S${beatIndex} step ${stepNumber}`,
+      `Remove Sub-State ${stepNumber} from S${beatIndex}`,
+    leadStepAria: (beatIndex: number) => `S${beatIndex} lead Sub-State`,
+    stepAria: (beatIndex: number, stepNumber: number) => `S${beatIndex} Sub-State ${stepNumber}`,
     newStepAria: (beatIndex: number) => `New Sub-State in S${beatIndex}`,
     leadPlaceholder: '[CAM 01] MS, eye level',
     stepPlaceholder: '[ACT] ..., Speaker says {line}, or <foley>',
@@ -392,7 +394,7 @@ export const UI_LABELS = {
     sortOptions: {
       recent: 'Recent',
       title: 'A–Z',
-      beats: 'Beats',
+      beats: 'Macro-States',
     },
     selectModeButton: 'Select',
     selectModeDone: 'Done',
@@ -440,11 +442,13 @@ export const UI_LABELS = {
     previewModeSource: 'Source',
     previewStagingHeading: 'Phase 1 — Staging',
     previewExecutionHeading: 'Phase 2 — Execution',
-    previewNoStaging: 'No staging macro-blocks yet.',
-    previewNoBeats: 'No execution beats yet.',
-    previewMoreBeats: (count: number) => `+ ${count} more ${count === 1 ? 'beat' : 'beats'} in full script`,
+    previewNoStaging: 'No Staging Macro-Blocks yet.',
+    previewNoBeats: 'No Execution Macro-States yet.',
+    previewMoreBeats: (count: number) =>
+      `+ ${count} more ${count === 1 ? 'Macro-State' : 'Macro-States'} in full script`,
     previewEmptyTitle: 'Select a script to preview',
-    previewEmptyDesc: 'Choose any script or reference example on the left to inspect its staging setup, beats, and metadata.',
+    previewEmptyDesc:
+      'Choose any script or reference example on the left to inspect its Staging setup, Macro-States, and metadata.',
     previewReadOnlyNote: 'Read-only reference example · Fork to edit or organize',
     emptySearch: 'No scripts match your search or filters.',
     emptyCustom: 'No custom scripts yet. Fork an example, import a file, or create a blank script.',
@@ -461,12 +465,12 @@ export const UI_LABELS = {
     dialogAria: 'Confirm action',
     cancel: 'Cancel',
     delete: 'Delete',
-    deleteMacroBlockTitle: (name: string) => `Delete [${name}] macro-block?`,
+    deleteMacroBlockTitle: (name: string) => `Delete [${name}] Macro-Block?`,
     deleteMacroBlockDesc:
-      'This will remove this staging macro-block and its content from the script.',
-    deleteMacroStateTitle: (beatIndex: number) => `Delete S${beatIndex} macro-state?`,
+      'This will remove this Staging Macro-Block and its content from the script.',
+    deleteMacroStateTitle: (beatIndex: number) => `Delete S${beatIndex} Macro-State?`,
     deleteMacroStateDesc:
-      'This will remove this beat and all of its chained sub-states from the execution timeline.',
+      'This will remove this Macro-State and all of its chained Sub-States from the execution timeline.',
     deleteScriptTitle: (title: string) => `Delete "${title}"?`,
     deleteScriptDesc:
       'This will permanently remove this script from your browser library.',
@@ -538,7 +542,8 @@ export const UI_LABELS = {
           'Describe the premise, cast, and look—or open Brief below for @ref handles, specs, and subtext. Drafts compile with live lint checks before applying.',
       },
       autoActive: {
-        placeholder: 'Ask to refine beats, audit continuity, draft a fresh scene, or discuss craft...',
+        placeholder:
+          'Ask to refine Macro-States or Sub-States, audit continuity, draft a fresh scene, or discuss craft...',
         emptyTitle: 'Unified Auteur Assistant',
         emptyDesc:
           'Ask for targeted edits, run a Script Supervisor audit, draft from a brief, or discuss camera and blocking. Every script change is staged with a diff before applying.',
@@ -628,7 +633,7 @@ export const UI_LABELS = {
       noteAria: 'Reference note',
       removeRefAria: 'Remove reference',
       specsLabel: 'Format & Specs',
-      specsPlaceholder: 'Camera topology, beat cadence, dialogue or acoustic constraints...',
+      specsPlaceholder: 'Camera topology, Macro-State cadence, dialogue or acoustic constraints...',
       specsAria: 'Format and specifications',
       subtextLabel: 'Subtext & Context',
       subtextPlaceholder: 'Unspoken tension, backstory, or emotional arc not spoken verbatim...',
@@ -693,7 +698,7 @@ export const UI_LABELS = {
       lintWarnings: (count: number) => `${count} ${count === 1 ? 'warn' : 'warns'}`,
       lintErrors: (count: number) => `${count} ${count === 1 ? 'err' : 'errs'}`,
       draftStats: (blocks: number, beats: number) =>
-        `${blocks} ${blocks === 1 ? 'block' : 'blocks'} · ${beats} ${beats === 1 ? 'beat' : 'beats'}`,
+        `${blocks} MB · ${beats} ${beats === 1 ? 'Macro-State' : 'Macro-States'}`,
       auditNoIssues: 'No issues found across the inspected lenses.',
       auditCounts: (errors: number, warnings: number) => {
         if (errors === 0 && warnings === 0) return 'Clean';
@@ -793,7 +798,8 @@ export const UI_LABELS = {
       fieldIdPlaceholder: 'action_choreography_polish',
       fieldIdHint: 'Unique lowercase identifier used by load_auteur_skill. Cannot match built-in IDs.',
       fieldTriggerLabel: 'Trigger Hint',
-      fieldTriggerPlaceholder: 'When the user asks to choreograph fight beats or kinetic camera passes.',
+      fieldTriggerPlaceholder:
+        'When the user asks to choreograph combat [ACT] Sub-States or kinetic camera passes.',
       fieldBodyLabel: 'Skill Instructions',
       fieldBodyPlaceholder: 'Write clear, Pure Auteur Script v0.4.0 guidelines for this skill...',
       saveSkillButton: 'Save Skill',

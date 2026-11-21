@@ -162,7 +162,7 @@ MS, Miller sits frame-left facing screen-right.
   });
 
   describe('Rule 2 — Macro-State Resolution Discipline (Lens 4)', () => {
-    it('flags any [EXECUTION] beat whose final Sub-State is spoken dialogue', () => {
+    it('flags any [EXECUTION] Macro-State whose final Sub-State is spoken dialogue', () => {
       const raw = `[EXECUTION]
 [CAM 01] MS -> [ACT] Miller taps the folder -> Miller says {Look at the dates.}
 [CAM 02] CU -> [ACT] Ray narrows his eyes -> Ray says (flat) {Nothing there.} -> [ACT] Ray taps ash`;
@@ -171,6 +171,8 @@ MS, Miller sits frame-left facing screen-right.
       expect(diags).toHaveLength(1);
       expect(diags[0].lens).toBe('Lens 4: Acoustics & Voice');
       expect(diags[0].target).toMatchObject({phase: 'execution', beatIndex: 1});
+      expect(diags[0].repairHint).toContain('Macro-State');
+      expect(diags[0].repairHint).not.toMatch(/\bbeat\b/i);
     });
 
     it('passes when dialogue is followed by [ACT] or <foley>', () => {
@@ -214,6 +216,8 @@ Check @actor2 coat collar.
 
       expect(execDiags).toHaveLength(1);
       expect(execDiags[0].severity).toBe('error');
+      expect(execDiags[0].message).toContain('Sub-State of Macro-State S1');
+      expect(execDiags[0].message).not.toMatch(/\bbeat\b/i);
     });
 
     it('permits @ref tokens inside [INTENT], [CHARACTERS], [REFERENCES], and [CONTINUITY PROTOCOL]', () => {

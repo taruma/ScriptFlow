@@ -398,7 +398,7 @@ function buildStaticToolDeclarationsMap(): Record<
       type: 'function',
       name: 'get_script_overview',
       description:
-        'Returns a compact read-only overview of the current Auteur Script: snapshotHash, sceneTopology, staging Macro-Blocks (MB#), beat count, camera slots, reference/token counts, and active Script Supervisor diagnostics.',
+        'Returns a compact read-only overview of the current Auteur Script: snapshotHash, sceneTopology, staging Macro-Blocks (MB#), Macro-State count, camera slots, reference/token counts, and active Script Supervisor diagnostics.',
       parameters: {
         type: 'object',
         properties: {},
@@ -573,11 +573,11 @@ export function getToolDeclarationsForMode(mode: AssistantMode): GeminiFunctionT
 const CORE_AUTEUR_RULES_BLOCK = [
   'You are an expert Pure Auteur Script (v0.4.0) directorial assistant. Keep scripts 100% platform- and model-agnostic (never mention generative video vendors or model names in script text).',
   'Core v0.4.0 syntax invariants:',
-  '- Phase 1 STAGING ([INTENT], [LOGIC], [AESTHETIC], [OPENING], etc.) is static pre-roll setup; Phase 2 EXECUTION ([EXECUTION]) is one Macro-State beat (S1, S2, ...) per line chained with `->`.',
+  '- Phase 1 STAGING ([INTENT], [LOGIC], [AESTHETIC], [OPENING], etc.) is static pre-roll setup; Phase 2 EXECUTION ([EXECUTION]) is one Macro-State (S1, S2, ...) per line chained with `->`.',
   '- [OPENING] is frozen t=0 plain prose with zero `[TAG]` tokens, zero motion verbs, and zero audio cues.',
   '- Keep `@ref` bindings (`@image1 as Name`) inside [INTENT]/[CHARACTERS]/[REFERENCES]/[CONTINUITY PROTOCOL]; never put `@ref` in [EXECUTION].',
   '- Use camera viewport coordinates (`frame-left`, `frame-right`, `screen-left`, `screen-right`, `facing screen-*`); never use `stage-left` or `stage-right`.',
-  '- Dialogue uses curly braces `Speaker says (delivery) {line}` (never quotes), foley uses `<sound>`, opt-in score uses `(score)`, opt-in on-screen text uses `【text】`. Never end a beat on dialogue—chain a physical `[ACT]` follow-through or `<foley>` trigger.',
+  '- Dialogue uses curly braces `Speaker says (delivery) {line}` (never quotes), foley uses `<sound>`, opt-in score uses `(score)`, opt-in on-screen text uses `【text】`. Never end a Macro-State on dialogue—chain a physical `[ACT]` follow-through or `<foley>` trigger.',
   '- In continuous oners/coverage, hold established numbered cameras via `[CAM 01] ->` or operator motion verbs (`PAN`, `TRACKING`, `CRANING`), not repeated static shot scales.',
 ].join('\n');
 
@@ -605,7 +605,7 @@ const MODE_INSTRUCTIONS: Record<AssistantMode, string> = {
     '',
     'Mode: DRAFT (New Scene Generation).',
     '- Call `get_script_overview` if you need context about the current open script before drafting.',
-    '- Build a complete, well-structured `AuteurScriptDraft` ([INTENT], [LOGIC], [AESTHETIC] as key_value, [OPENING], and [EXECUTION] beats) and stage it via `propose_script_draft`.',
+    '- Build a complete, well-structured `AuteurScriptDraft` ([INTENT], [LOGIC], [AESTHETIC] as key_value, [OPENING], and [EXECUTION] Macro-States) and stage it via `propose_script_draft`.',
     '- If `propose_script_draft` returns schema validation errors or lint errors, repair them and call `propose_script_draft` again so the staged draft is clean.',
     '- Keep your response concise once the draft is staged.',
   ].join('\n'),
@@ -819,8 +819,8 @@ function runGetScriptOverview(
             }
       ),
       executionHeader: document.executionMacroBlock?.header ?? null,
-      beatCount: beats.length,
-      beats: beats.map((ms) => {
+      macroStateCount: beats.length,
+      macroStates: beats.map((ms) => {
         const cont = continuityById.get(ms.id);
         return {
           id: ms.id,
@@ -1075,7 +1075,7 @@ function runProposeScriptDraft(
     ...(title ? {title} : {}),
     summary:
       summaryInput ??
-      `Drafted ${compiled.ir.stagingMacroBlocks.length} Staging block(s) and ${beatCount} Execution beat(s)`,
+      `Drafted ${compiled.ir.stagingMacroBlocks.length} Staging Macro-Block(s) and ${beatCount} Execution Macro-State(s)`,
     baseSnapshotHash: baseEnvelope.snapshotHash,
     nextSnapshotHash: compiled.envelope.snapshotHash,
     sceneTopology: compiled.envelope.derived.sceneTopology,
@@ -1103,7 +1103,7 @@ function runProposeScriptDraft(
       nextSnapshotHash: suggestion.nextSnapshotHash,
       sceneTopology: suggestion.sceneTopology,
       stagingBlockCount: suggestion.stagingBlockCount,
-      beatCount: suggestion.beatCount,
+      macroStateCount: suggestion.beatCount,
       diagnosticsSummary: {
         total: suggestion.diagnostics.length,
         errors: suggestion.errorCount,

@@ -237,7 +237,10 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
     expect(overview.ok).toBe(true);
     expect(typeof overview.result.snapshotHash).toBe('string');
     expect(overview.result.sceneTopology).toBe('multi_camera_coverage');
-    expect(Number(overview.result.beatCount)).toBeGreaterThan(0);
+    expect(Number(overview.result.macroStateCount)).toBeGreaterThan(0);
+    expect(Array.isArray(overview.result.macroStates)).toBe(true);
+    expect(overview.result).not.toHaveProperty('beatCount');
+    expect(overview.result).not.toHaveProperty('beats');
 
     const sliceResult = executeScriptToolCall(
       {name: 'inspect_lens_slice', arguments: {preset: 'lens1_spatial_optics'}},
@@ -1348,7 +1351,8 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
 
     expect(buildScopedRefinePrompt('Tighten pacing.', options[0])).toBe('Tighten pacing.');
     expect(buildScopedRefinePrompt('Clarify tone.', mb0!)).toContain('Staging Macro-Block MB0');
-    expect(buildScopedRefinePrompt('Sharpen blocking.', s1!)).toContain('Execution Beat S1');
+    expect(buildScopedRefinePrompt('Sharpen blocking.', s1!)).toContain('Execution Macro-State S1');
+    expect(buildScopedRefinePrompt('Sharpen blocking.', s1!)).not.toContain('Execution Beat');
   });
 
   it('resolves MB#, MB#.#, S#, S#.#, and header names to editor jump targets and checks staleness', () => {
@@ -1667,8 +1671,18 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(ctx.editorState.diagnosticsSummary.warnings).toBe(1);
     expect(ctx.sections.liveEditorState.text).toContain(ctx.editorState.snapshotHash);
     expect(ctx.sections.liveEditorState.text).toContain('CHANGED since last turn');
+    expect(ctx.sections.liveEditorState.text).toContain('Execution Macro-State(s)');
+    expect(ctx.sections.liveEditorState.text).not.toContain('Execution Beat(s)');
     expect(ctx.sections.liveEditorState.text).toContain('viewport-coordinate-purity');
     expect(ctx.sections.liveEditorState.text).toContain('macro-state-resolution');
+
+    const defaultCraftCtx = composeAgentContext({
+      focus: 'refine',
+      rawText: scriptWithLint,
+    });
+    expect(defaultCraftCtx.sections.foundationalCraft.text).toContain('Macro-State');
+    expect(defaultCraftCtx.sections.foundationalCraft.text).not.toContain('Execution Beat');
+    expect(defaultCraftCtx.sections.foundationalCraft.text).not.toContain('Macro-State beat');
 
     const sameHashCtx = composeAgentContext({
       focus: 'refine',

@@ -36,12 +36,12 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 
 | Layer | Path | Responsibility |
 |---|---|---|
-| **Core AST Types** | `src/core/types.ts` | Pure TypeScript interfaces for `AuteurDocument`, `StagingBlock`, `ExecutionBeat`, `SubStateNode`, `ExtractedMetadata`, and `LintDiagnostic`. Zero React/DOM imports. |
+| **Core AST Types** | `src/core/types.ts` | Pure TypeScript interfaces for `AuteurDocument`, `StagingBlock`, `ExecutionBeat` *(legacy internal code alias for **Macro-State**)*, `SubStateNode`, `ExtractedMetadata`, and `LintDiagnostic`. Zero React/DOM imports. |
 | **Core Parser & Headers** | `src/core/parser.ts` | Lossless `v0.4.0` parser, `CANONICAL_STAGING_HEADERS` / `EXECUTION_HEADERS` catalogs, and `isMultiBlockAuteurScript()` paste detector. |
 | **Core Lookbook Codec** | `src/core/aesthetic.ts` | Single Source of Truth for `[AESTHETIC]` `Key: Value` row parsing, lossless serialization, and key counting shared by IR, `AestheticBlockEditor`, and collapsed cards. |
 | **Core Live Tokenizer** | `src/core/highlighter.ts` | Pure character-for-character lossless lexical & clause-underline tokenizer (`segmentClauseText`, `tokenizeExecutionLine`, `tokenizeStagingBody`, `tokenizeAestheticValue`, `tokenizeSourceDocument`). |
-| **Core Extractor** | `src/core/extractor.ts` | Pure extraction of `@ref as NAME (voice: @audio)` character bindings, `[AESTHETIC]` `Description -> TOKEN` lookup dictionaries, continuation context detection, and beat-to-beat camera transitions (`ESTABLISH`, `HOLD`, `CUT`, `RECALL`, `MONTAGE`). |
-| **Core Serializer** | `src/core/serializer.ts` | Lossless pure string mutation functions (`insertStagingBlock`, `updateStagingBlock`, `deleteStagingBlock`, `reorderStagingBlocks`, Execution beat/sub-state CRUD & reorder) plus `exportPlainText()` and `exportTagless()`. |
+| **Core Extractor** | `src/core/extractor.ts` | Pure extraction of `@ref as NAME (voice: @audio)` character bindings, `[AESTHETIC]` `Description -> TOKEN` lookup dictionaries, continuation context detection, and Macro-State-to-Macro-State camera transitions (`ESTABLISH`, `HOLD`, `CUT`, `RECALL`, `MONTAGE`). |
+| **Core Serializer** | `src/core/serializer.ts` | Lossless pure string mutation functions (`insertStagingBlock`, `updateStagingBlock`, `deleteStagingBlock`, `reorderStagingBlocks`, Execution Macro-State/Sub-State CRUD & reorder) plus `exportPlainText()` and `exportTagless()`. |
 | **Core Linter** | `src/core/linter.ts` | Declarative deterministic Script Supervisor engine (`LINT_RULE_REGISTRY`, `lintDocument(doc, meta?, ruleOverrides?)`) with 5 isolated pure rule functions mapped to `Lens 1`–`Lens 5` and per-rule `'off' \| 'warning' \| 'error'` overrides. |
 | **Core History** | `src/core/history.ts` | Pure document-level Undo/Redo stack over `rawText` with coalesced typing bursts, structural checkpoints, and a monotonic `revision` counter for active-draft resyncs. |
 | **JSON IR & Schemas** | `src/core/irSchemas.ts`, `src/core/ir.ts` | Zod-validated glossary-aligned JSON IR (`toAuteurIR`, `fromAuteurIR`, `toAuteurEnvelope`, `compileAuteurDraft`), Camera `identifier` separation, `[AESTHETIC]` `key: value` parsing, and standard JSON Schema registry (`getAuteurJsonSchemas`). See `docs/JSON_IR_SPEC.md`. |
@@ -64,8 +64,8 @@ The editor treats the **canonical plain-text Auteur Script** as the single sourc
 
 Every mutation function in `src/core/serializer.ts` obeys three invariants:
 1. **Immutability**: Takes `(raw: string, ...args)` and returns a new canonical `string` without mutating inputs.
-2. **Block Orthogonality**: Inserting (`insertStagingBlock`), editing (`updateStagingBlock`), deleting (`deleteStagingBlock`), or reordering (`reorderStagingBlocks`) a Staging block preserves every other Staging block and all Execution beats untouched; editing, inserting, deleting, or reordering Execution beats never alters Staging blocks. `insertStagingBlock` also rejects reserved Execution headers (`EXECUTION`, `TIMELINE`, `BEATS`, `SHOTLIST`).
-3. **Single-Line Beat Guarantee**: `updateExecutionBeat` and `insertExecutionBeat` normalize accidental internal newlines into single spaces so each Macro-State remains one clean line inside `[EXECUTION]`.
+2. **Block Orthogonality**: Inserting (`insertStagingBlock`), editing (`updateStagingBlock`), deleting (`deleteStagingBlock`), or reordering (`reorderStagingBlocks`) a Staging Macro-Block preserves every other Staging Macro-Block and all Execution Macro-States untouched; editing, inserting, deleting, or reordering Execution Macro-States never alters Staging Macro-Blocks. `insertStagingBlock` also rejects reserved Execution headers (`EXECUTION`, `TIMELINE`, `BEATS`, `SHOTLIST`).
+3. **Single-Line Macro-State Guarantee**: `updateExecutionBeat` and `insertExecutionBeat` normalize accidental internal newlines into single spaces so each Macro-State remains one clean line inside `[EXECUTION]`.
 
 ---
 
@@ -78,8 +78,8 @@ Uses `isMultiBlockAuteurScript()` from `src/core/parser.ts`:
 - **Modals & AI Sidebar (`isDebugOpen`, `isLibraryOpen`, `confirmRequest`, `[aria-modal="true"]`, or `[data-ai-sidebar="true"]`)**: Ignored so modal inputs (including `AiSettingsModal` API key entry) and AI chat composer pastes never trigger script hydration.
 - **Read-only bundled examples**: Intercepts document-level pastes without mutating the read-only example and displays a gentle toast guiding the user to click **Fork to Edit** or create a **New Blank Script**.
 - **Pasting outside any focused input/textarea (custom script)**: Immediately replaces `rawText` in place (as an undoable `'checkpoint'` history entry), parses the script, switches to Live Mode, and displays a subtle toast.
-- **Pasting a multi-block Auteur Script (2+ canonical Macro-Block headers)** while inside a focused single-block or beat editor in Live Mode: Blurs the active field and hydrates the entire script.
-- **Pasting a normal inline snippet** while focused inside a Staging block, Execution beat, Scene Title, or Source Mode editor: Passes through natively without interception.
+- **Pasting a multi-block Auteur Script (2+ canonical Macro-Block headers)** while inside a focused single Macro-Block or Macro-State editor in Live Mode: Blurs the active field and hydrates the entire script.
+- **Pasting a normal inline snippet** while focused inside a Staging Macro-Block, Execution Macro-State, Scene Title, or Source Mode editor: Passes through natively without interception.
 
 ### Document-Level Undo / Redo Guard
 Uses `matchHistoryShortcut()` (`src/ui/historyShortcuts.ts`) and `src/core/history.ts`:

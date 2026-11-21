@@ -88,7 +88,7 @@ To prevent unnecessary token cost and accidental whole-script overwrites, the co
 *\*`load_auteur_skill` is automatically omitted if zero skills are in the `available` state (for example, if all remaining skills are pinned or muted).*
 
 ### Contextual Focus Controls
-- **Target Scope Selector (`Auto` / `Refine` on non-empty scripts):** Choose `Whole Script`, any Staging Macro-Block (`MB0 · [INTENT]`, `MB2 · [AESTHETIC]`, etc.), or any Execution Beat (`S1`, `S2`, ...). When a specific target is chosen, your prompt is automatically prefixed with `[Target Scope: ... — focus edits on <ID> unless adjacent context requires minimal continuity alignment.]`.
+- **Target Scope Selector (`Auto` / `Refine` on non-empty scripts):** Choose `Whole Script`, any Staging Macro-Block (`MB0 · [INTENT]`, `MB2 · [AESTHETIC]`, etc.), or any Execution Macro-State (`S1`, `S2`, ...). When a specific target is chosen, your prompt is automatically prefixed with `[Target Scope: ... — focus edits on <ID> unless adjacent context requires minimal continuity alignment.]`.
 - **One-Click `Audit All` Pill (`Auto` on non-empty scripts):** Runs a full 5-lens Script Supervisor audit (`overrideFocus: 'audit'`) without switching your active Focus pill away from `Auto`.
 - **6 Quick Audit Lens Pills (`Audit` focus):** One-click triggers for **`All Lenses`** or any individual lens (**`Lens 1 · Spatial`**, **`Lens 2 · Pacing`**, **`Lens 3 · Props`**, **`Lens 4 · Acoustics`**, **`Lens 5 · Grammar`**).
 
@@ -147,7 +147,7 @@ All 6 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptToo
   - `snapshotHash` (optimistic concurrency token required for patches)
   - `schemaVersion`, `sceneTopology` (`continuous_oner` | `multi_camera_coverage` | `discontinuous_montage` | `mixed` | `empty`), `hasContinuationContext`
   - `stagingMacroBlocks`: every `MB#` ID, header, kind, format (`prose` vs. `key_value`), and `[AESTHETIC]` key list
-  - `beats`: every `S#` ID, Sub-State count, `activeCameraIdentifier`, and `cameraTransition`
+  - `macroStateCount` and `macroStates`: every `S#` ID, Sub-State count, `activeCameraIdentifier`, and `cameraTransition`
   - `cameraSlots`, `referenceBindingCount`, `tokenMappingCount`
   - `diagnosticsSummary` and full `diagnostics[]` from the 5 deterministic linter rules
 
@@ -164,7 +164,7 @@ All 6 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptToo
   - `spec` *(optional)*: Custom composable `LensSliceSpec` (`macroBlocks`, `aestheticKeys`, `dimensions`, `subStateTags`, `includeAllSubStates`, `includeResolvedCamera`, `includeTokenMappings`, `includeReferenceBindings`, `includeSceneTopology`, `includeTrailingResolution`, `includeAllDiagnostics`), or combined with `preset` as overrides.
 - **Co-Located Topology-Filtered Checklist:** Whenever called with a built-in `preset`, the tool attaches a `checklist` object (`getLensAuditChecklist(preset, topology)`) directly alongside `slice`:
   - On **continuous oners / coverage**, enforces 180° eyeline parity, $S_0 \to S_1$ handoff, camera holds/operator verbs, prop lifecycles, and wear repetition.
-  - On **`discontinuous_montage`**, explicitly suppresses cross-cut 180° eyelines, $S_0 \to S_1$ carryover, and cross-beat prop/wear persistence, switching to montage self-contained anchoring, plain `[CAM]` tags, and the cut-latency floor (`Duration / 2.0`).
+  - On **`discontinuous_montage`**, explicitly suppresses cross-cut 180° eyelines, $S_0 \to S_1$ carryover, and cross-state prop/wear persistence, switching to montage self-contained anchoring, plain `[CAM]` tags, and the cut-latency floor (`Duration / 2.0`).
 - **Parallel Execution:** The model can call multiple `inspect_lens_slice` presets in parallel within a single round for fast multi-lens audits.
 
 ### 3. `propose_script_patch` *(Transactional Dry-Run & Staging)*
@@ -183,7 +183,7 @@ All 6 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptToo
 - **Validation & Self-Repair Gate:**
   - Compiles via `compileAuteurDraft(draft, ruleOverrides)` into canonical `v0.4.0` plain text.
   - **If schema validation fails or any deterministic lint `error` is present** (respecting active `ruleOverrides`): withholds staging and returns `ok: false`, `staged: false`, `diagnostics[]`, and `repairHint` so the model fixes the draft before showing it to you.
-  - **If lint-error-free:** stages a **`DraftSuggestionCard`** with topology, block/beat counts, diagnostics summary, and full preview/diff.
+  - **If lint-error-free:** stages a **`DraftSuggestionCard`** with topology, Macro-Block/Macro-State counts, diagnostics summary, and full preview/diff.
 
 ### 5. `report_audit_review` *(Structured Multi-Lens Audit & Fix Dry-Run)*
 - **UI Badge:** `Stage audit review`
@@ -218,7 +218,7 @@ Every turn's `system_instruction` is assembled deterministically by `composeAgen
 | Section | Editable? | What It Contains |
 |---|---|---|
 | **1. Foundational Craft** | **Editable** | Core Pure Auteur Script `v0.4.0` directorial craft (*boundaries not handcuffs*, *static once / volatile always*, *state inheritance*, *literal over literary*, *acting is reacting*, *anti-twitch*, *repetition mandate*, and canonical inline syntax invariants). |
-| **2. Live Editor State** | Read-Only (Code-Owned) | Authoritative current snapshot: `isEmpty`, `snapshotHash`, `changedSinceLastTurn` warning, `sceneTopology`, `hasContinuationContext`, block/beat/ref/token counts, and active deterministic linter diagnostics so the AI focuses on semantic continuity. |
+| **2. Live Editor State** | Read-Only (Code-Owned) | Authoritative current snapshot: `isEmpty`, `snapshotHash`, `changedSinceLastTurn` warning, `sceneTopology`, `hasContinuationContext`, Macro-Block/Macro-State/ref/token counts, and active deterministic linter diagnostics so the AI focuses on semantic continuity. |
 | **3. Active Skills** | Read-Only (Computed) | Full bodies of every skill currently in the **`active`** state (pinned by you or passively matched from your script/brief). |
 | **4. Available Skill Directory** | Read-Only (Computed) | Compact 1-line `id: triggerHint` menu for **`available`** skills that the model may load on demand via `load_auteur_skill`. |
 | **5. Tool & Safety Protocol** | Read-Only (Code-Owned) | Allowed tool list for this turn, optimistic concurrency (`expectedSnapshotHash`), staging-first rule, self-repair rule, and parallel lens slicing instructions. Kept read-only so craft edits can never break tool execution. |
@@ -239,7 +239,7 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 | `video_continuation` | Module | Script has `@video1` / `[CONTINUITY PROTOCOL]` **OR** Brief has `@video*` handle on a drafting turn | Terminal-frame `[OPENING]` handoff, `[CONTINUITY PROTOCOL]` placement, reduced delta-only `[AESTHETIC]`, and `S1` camera continuation rules. |
 | `token_mapping` | Module | Script has declared `Description -> TOKEN` mappings in `[AESTHETIC]` | Shorthand dictionary authoring (`LOC01`, `EV01`, `PROP01`) and downstream reuse without lookbook bleed. |
 | `character_reference` | Module | Script has `@ref` bindings **OR** Brief has `@image*`/`@actor*`/`@audio*` handle on a drafting turn | Phase 1 reference isolation, separating facial/vocal identity from fresh scene wardrobe in `[AESTHETIC]`, and canonical name usage downstream. |
-| `temporal_calibration` | Module | On demand *(or Pin)* | Beat-to-duration tempo table (combat oner `0.8s–1.2s`, tactical `1.5s–2.0s`, dialogue `2.5s–4.0s`, slow horror `4.0s–6.0s+`), anti-float rule, and cut-latency floor (`Duration / 2.0`). |
+| `temporal_calibration` | Module | On demand *(or Pin)* | Macro-State-to-duration tempo table (combat oner `0.8s–1.2s`, tactical `1.5s–2.0s`, dialogue `2.5s–4.0s`, slow horror `4.0s–6.0s+`), anti-float rule, and cut-latency floor (`Duration / 2.0`). |
 | `spatial_fences` | Module | On demand *(or Pin)* | Inline `[BLOCK]` for 3+ subjects/mark swaps, `[STATE IN]`/`[STATE OUT]` boundary clamps, dynamic `[LIGHT]`, and Tier-2 single-dimension tags (`[FOCUS]`, `[SPEED]`, `[PROP]`, `[ENV]`, `[CROWD]`, `[VFX]`, `[TRANS]`). |
 
 ### Inside the 3 Tabs of `AiContextInspectorModal`
@@ -265,8 +265,8 @@ Each assistant turn renders a compact collapsible **Reasoning & Tools** bar (ope
 Suggestion cards are inspectable immediately while streaming, while **Apply** buttons unlock once the assistant finishes its turn:
 
 - **`PatchSuggestionCard`**: Shows summary, affected IDs (`S2`, `MB1`), lint delta (`Lint clean`, `-1 resolved`, warning count), and toggleable **Diff** / **Preview** views. If you manually edited the script after the patch was staged, a stale-snapshot warning disables **Apply** so manual edits are never clobbered.
-- **`DraftSuggestionCard`**: Shows title, scene topology, block/beat counts, lint status, and **Preview** / **Diff** toggle. Clicking **Apply** commits a checkpoint, automatically sets the Scene Title if currently untitled, and collapses the Brief tray.
-- **`AuditReviewSuggestionCard`**: Shows overall summary, error/warning counts, and grouped lens issues. Click any **`targetId`** badge (`MB0`, `S2`, `S2.1`, `[OPENING]`) to scroll directly to and highlight that block/beat in Live Mode. Issues with a dry-run-verified `suggestedPatch` include a 1-click **`Apply Fix`** (or **`Fork & Apply`**) button.
+- **`DraftSuggestionCard`**: Shows title, scene topology, Macro-Block/Macro-State counts, lint status, and **Preview** / **Diff** toggle. Clicking **Apply** commits a checkpoint, automatically sets the Scene Title if currently untitled, and collapses the Brief tray.
+- **`AuditReviewSuggestionCard`**: Shows overall summary, error/warning counts, and grouped lens issues. Click any **`targetId`** badge (`MB0`, `S2`, `S2.1`, `[OPENING]`) to scroll directly to and highlight that Macro-Block/Macro-State in Live Mode. Issues with a dry-run-verified `suggestedPatch` include a 1-click **`Apply Fix`** (or **`Fork & Apply`**) button.
 
 ### Troubleshooting with the AI Trace Inspector (`AiTraceModal`)
 Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on any completed, stopped, or errored turn to examine:

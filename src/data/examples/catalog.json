@@ -11,7 +11,7 @@
     "id": "subway-train-oner",
     "title": "Subway Train Fight Oner",
     "topology": "Continuous Moving Oner",
-    "summary": "High-tempo 5-beat combat oner with @image bindings, operator transitions, and centrifugal physics.",
+    "summary": "High-tempo 5-state combat oner with @image bindings, operator transitions, and centrifugal physics.",
     "file": "subway-train-oner.txt",
     "category": "Action"
   },

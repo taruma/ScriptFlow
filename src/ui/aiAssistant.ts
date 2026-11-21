@@ -192,7 +192,7 @@ export function buildScopedRefinePrompt(userPrompt: string, scope: AiTargetScope
   }
 
   if (scope.kind === 'macro_state') {
-    return `[Target Scope: Execution Beat ${scope.id} — focus edits on ${scope.id} unless adjacent beats require minimal continuity alignment.]\n\n${trimmed}`;
+    return `[Target Scope: Execution Macro-State ${scope.id} — focus edits on ${scope.id} unless adjacent Macro-States require minimal continuity alignment.]\n\n${trimmed}`;
   }
 
   return trimmed;
@@ -203,7 +203,7 @@ const AUDIT_QUICK_PROMPTS: Record<AuditQuickCheckId, string> = {
   lens1_spatial_optics:
     'Run a focused Script Supervisor audit on Lens 1: Spatial & Optics (camera framing, viewport coordinate purity, blocking sightlines, and continuity). Inspect the lens1_spatial_optics slice first and call report_audit_review with clickable target IDs and clean suggestedPatch fixes where appropriate.',
   lens2_temporal_pacing_wear:
-    'Run a focused Script Supervisor audit on Lens 2: Temporal, Pacing & Wear (physical continuity, state evolution, beat pacing, and scene topology compliance). Inspect the lens2_temporal_pacing_wear slice first and call report_audit_review with clickable target IDs and clean suggestedPatch fixes where appropriate.',
+    'Run a focused Script Supervisor audit on Lens 2: Temporal, Pacing & Wear (physical continuity, state evolution, Macro-State pacing, and scene topology compliance). Inspect the lens2_temporal_pacing_wear slice first and call report_audit_review with clickable target IDs and clean suggestedPatch fixes where appropriate.',
   lens3_props_inventory:
     'Run a focused Script Supervisor audit on Lens 3: Props & Inventory (prop persistence, object handoffs, aesthetic token usage, and reference bindings). Inspect the lens3_props_inventory slice first and call report_audit_review with clickable target IDs and clean suggestedPatch fixes where appropriate.',
   lens4_acoustics_voice:

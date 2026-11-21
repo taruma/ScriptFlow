@@ -9,7 +9,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 - **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, module map, pure serializer mutation contracts, and global paste/history guards.
 - **`docs/JSON_IR_SPEC.md`**: Programmatic JSON IR (`AuteurScriptIR`, `AuteurEnvelope`), Zod/JSON Schema contracts, transactional `AuteurPatch` engine, and composable Script Supervisor Lens Slicer (`AUDIT_LENS_PRESETS`).
 - **`docs/UI_PHILOSOPHY.md`**: Asymmetric `40/60` Live workspace & single-document Source mode principles, Undo/Redo & crash recovery, 2-column Lookbook & Waterfall editing, shared DnD, unified Settings popover, and 4-mode theme system.
-- **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces, domain-to-UI vocabulary bridge, and theme labels).
+- **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces, Pure Auteur UI vocabulary contract, and theme labels).
 - **`docs/AI_ASSISTANT_WALKTHROUGH.md`**: End-to-end user & operator walkthrough for the Unified Transparent AI Assistant (BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus routing, collapsible `Brief / Refs` tray & Draft Wrapper Template, all 6 local AI tools, 3-state skill machine, pre-send Context Inspector, suggestion cards, and Trace Inspector).
 
 ---
@@ -54,6 +54,13 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 6. **Canonical `v0.4.0` Syntax Lock**:
    - Spoken dialogue uses curly braces (`Speaker says (delivery) {line}`), never quotation marks.
    - Foley uses `<sound>`, opt-in score uses `(score)`, opt-in on-screen text uses `【text】`. Never reintroduce legacy `[AUDIO]` or `[DIAL]`.
+7. **Pure Auteur Terminology & Agent Shorthand Lock**:
+   - Always enforce the strict 3-level hierarchy in UI labels, linter messages, AI prompts/tools, documentation, and user communication:
+     - **Macro-Block** (`MB`, IDs `MB0`, `MB1`, …): document-level section (`[INTENT]`, `[EXECUTION]`, etc.).
+     - **Macro-State** (`S` / `State`, IDs `S1`, `S2`, …; Staging = `S0`): strictly a single non-empty line inside the `[EXECUTION]` Macro-Block.
+     - **Sub-State** (dotted IDs `S1.0`, `S1.1`, …): every `->`-chained, single-dimension unit *inside* a Macro-State line (`[CAM]`, `[ACT]`, `{dialogue}`, `<foley>`, `[BLOCK]`, etc.).
+   - **Never** label `[EXECUTION]` lines as `"beats"` or Sub-States as `"steps"`, and **never** abbreviate Macro-State as `"MS"` (collides with cinematography **Medium Shot**).
+   - Map conversational shorthand (`MB`, `S`/`State`, `SS`) cleanly to **Macro-Block**, **Macro-State**, and **Sub-State**; recognize that internal TypeScript symbols (`ExecutionBeat`, `ExecutionBeatRow`, `beatIndex`) remain legacy code aliases for **Macro-State** (see `docs/GLOSSARY.md`).
 
 ---
 
