@@ -584,6 +584,11 @@ export const UI_LABELS = {
       pinned: 'Pinned',
       tool: 'Loaded',
     } as const,
+    skillSourceDescriptions: {
+      passive: 'Auto-activated from current script or Scene Brief',
+      pinned: 'Pinned in Context & Skills',
+      tool: 'Loaded on demand during this turn',
+    } as const,
     modesAria: 'Assistant mode',
     modes: {
       refine: {
@@ -729,11 +734,14 @@ export const UI_LABELS = {
     stopButton: 'Stop',
     stopAria: 'Cancel active request',
     composerHint: 'Enter to send · Shift+Enter for newline',
-    reasoningToggleLabel: 'Reasoning & Tools',
+    reasoningToggleLabel: 'Thinking',
     reasoningRunning: 'Thinking…',
     reasoningToolCount: (count: number) => `${count} ${count === 1 ? 'tool' : 'tools'}`,
     reasoningSkillCount: (count: number) => `${count} ${count === 1 ? 'skill' : 'skills'}`,
     reasoningNoSummary: 'Reasoning summary hidden in AI Settings.',
+    toolsSkillsRegionAria: 'Active skills and tool calls for this turn',
+    jumpToLatestButton: 'Latest',
+    jumpToLatestAria: 'Scroll to latest assistant output',
     inspectTraceButton: 'Inspect',
     inspectTraceTitle: 'Inspect sanitized Gemini Interactions API trace for this turn',
     inspectTraceAria: 'Inspect AI debug trace for this turn',

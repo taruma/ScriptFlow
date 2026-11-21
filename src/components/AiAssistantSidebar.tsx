@@ -10,10 +10,13 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import {createPortal} from 'react-dom';
 import {
   AlertCircle,
+  ArrowDown,
   ArrowUp,
   Brain,
   Check,
@@ -57,11 +60,12 @@ import {
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
   formatSceneBriefContext,
-  formatToolDisplayName,
+  formatToolCallTooltip,
   getBriefReferenceHandles,
   getNextReferenceHandle,
   hasDraftBriefContent,
   isDraftBriefActive,
+  isNearScrollBottom,
   isSuggestionStale,
   MIN_COMPOSER_HEIGHT,
   reconcileTargetScope,
@@ -141,6 +145,15 @@ export interface AiAssistantSidebarProps {
   onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
 }
 
+interface ActivityHoverTooltip {
+  title: string;
+  subtitle: string;
+  badge?: string;
+  detail?: string;
+  top: number;
+  left: number;
+}
+
 interface ReasoningAccordionProps {
   isStreaming: boolean;
   showThinkingSummary: boolean;
@@ -165,9 +178,12 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
   onInspectTrace,
 }: ReasoningAccordionProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
+  const [tooltip, setTooltip] = useState<ActivityHoverTooltip | null>(null);
   const wasStreamingRef = useRef(isStreaming);
+  const thoughtBodyRef = useRef<HTMLDivElement | null>(null);
+  const thoughtStickyRef = useRef<boolean>(true);
 
-  // Auto-collapse once a streaming turn completes
+  // Auto-collapse thinking summary once a streaming turn completes
   useEffect(() => {
     if (wasStreamingRef.current && !isStreaming) {
       setUserOverride(null);
@@ -176,120 +192,156 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
   }, [isStreaming]);
 
   const hasVisibleThought = showThinkingSummary && thoughtSummary.trim().length > 0;
+  const showThinkingCard = (showThinkingSummary && isStreaming) || hasVisibleThought;
   const hasTools = toolCalls.length > 0;
   const hasSkills = loadedSkills.length > 0;
-  const hasAccordionContent = isStreaming || hasVisibleThought || hasTools || hasSkills;
+  const hasActivity = hasTools || hasSkills;
   const canInspect = showDebugTrace && !isStreaming && Boolean(trace);
-  const showTraceOnlyBar = canInspect && !hasAccordionContent && !hasError;
+  const showTraceOnlyBar = canInspect && !showThinkingCard && !hasActivity && !hasError;
 
-  if (!hasAccordionContent && !showTraceOnlyBar) {
+  const isOpen = showThinkingCard && (userOverride !== null ? userOverride : isStreaming);
+
+  // Keep long streaming thought summaries pinned to the bottom unless the user scrolled up inside the box
+  useEffect(() => {
+    if (!isOpen || !isStreaming || !thoughtStickyRef.current) return;
+    const el = thoughtBodyRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [thoughtSummary.length, isOpen, isStreaming]);
+
+  if (!showThinkingCard && !hasActivity && !showTraceOnlyBar) {
     return null;
   }
 
-  const isOpen = hasAccordionContent && (userOverride !== null ? userOverride : isStreaming);
+  const openPillTooltip = (
+    event: ReactMouseEvent<HTMLElement>,
+    content: Omit<ActivityHoverTooltip, 'top' | 'left'>
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 260;
+    const pad = 12;
+    const left = Math.max(
+      pad,
+      Math.min(rect.left, window.innerWidth - tooltipWidth - pad)
+    );
+    const placeAbove = rect.top > 110;
+    const top = placeAbove ? rect.top - 8 : rect.bottom + 8;
+    setTooltip({...content, top, left});
+  };
+
+  const renderInspectButton = () =>
+    canInspect && trace ? (
+      <button
+        type="button"
+        onClick={() => onInspectTrace(trace)}
+        title={UI_LABELS.ai.inspectTraceTitle}
+        aria-label={UI_LABELS.ai.inspectTraceAria}
+        className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer shrink-0"
+      >
+        <Terminal className="h-2.5 w-2.5 text-text-faint" />
+        <span>{UI_LABELS.ai.inspectTraceButton}</span>
+      </button>
+    ) : null;
 
   return (
-    <div className="rounded-xl border border-border-subtle bg-surface-subtle overflow-hidden">
-      <div className="flex items-center justify-between gap-1">
-        {hasAccordionContent ? (
-          <button
-            type="button"
-            onClick={() => setUserOverride(!isOpen)}
-            aria-expanded={isOpen}
-            className="flex flex-1 min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-medium text-text-muted hover:bg-surface-hover/50 hover:text-text-main transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-1.5 min-w-0">
-              {isStreaming ? (
-                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--phase-logic-text)]" />
+    <div className="space-y-1.5">
+      {/* Part 1: Dedicated Thinking Summary Accordion */}
+      {showThinkingCard && (
+        <div className="rounded-xl border border-border-subtle bg-surface-subtle overflow-hidden">
+          <div className="flex items-center justify-between gap-1">
+            <button
+              type="button"
+              onClick={() => setUserOverride(!isOpen)}
+              aria-expanded={isOpen}
+              className="flex flex-1 min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-medium text-text-muted hover:bg-surface-hover/50 hover:text-text-main transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                {isStreaming ? (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--phase-logic-text)]" />
+                ) : (
+                  <Brain className="h-3 w-3 shrink-0 text-text-faint" />
+                )}
+                <span className="truncate">
+                  {isStreaming ? UI_LABELS.ai.reasoningRunning : UI_LABELS.ai.reasoningToggleLabel}
+                </span>
+              </div>
+              {isOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-faint" />
               ) : (
-                <Brain className="h-3 w-3 shrink-0 text-text-faint" />
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
               )}
-              <span className="truncate">
-                {isStreaming ? UI_LABELS.ai.reasoningRunning : UI_LABELS.ai.reasoningToggleLabel}
-              </span>
-              {hasSkills && (
-                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums shrink-0">
-                  {UI_LABELS.ai.reasoningSkillCount(loadedSkills.length)}
-                </span>
-              )}
-              {hasTools && (
-                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-text-faint tabular-nums shrink-0">
-                  {UI_LABELS.ai.reasoningToolCount(toolCalls.length)}
-                </span>
-              )}
-            </div>
-            {isOpen ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-faint" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
-            )}
-          </button>
-        ) : (
-          <div className="flex flex-1 min-w-0 items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-text-faint">
-            <Brain className="h-3 w-3 shrink-0" />
-            <span className="truncate">{UI_LABELS.ai.reasoningToggleLabel}</span>
+            </button>
+            {canInspect && <div className="pr-1.5 shrink-0">{renderInspectButton()}</div>}
           </div>
-        )}
 
-        {canInspect && trace && (
-          <button
-            type="button"
-            onClick={() => onInspectTrace(trace)}
-            title={UI_LABELS.ai.inspectTraceTitle}
-            aria-label={UI_LABELS.ai.inspectTraceAria}
-            className="mr-1.5 inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer shrink-0"
-          >
-            <Terminal className="h-2.5 w-2.5 text-text-faint" />
-            <span>{UI_LABELS.ai.inspectTraceButton}</span>
-          </button>
-        )}
-      </div>
-
-      {isOpen && (
-        <div className="border-t border-border-subtle px-2.5 py-2 space-y-2">
-          {showThinkingSummary ? (
-            thoughtSummary.trim().length > 0 ? (
-              <MarkdownContent content={thoughtSummary} compact />
-            ) : isStreaming ? (
-              <p className="text-[11px] italic text-text-faint">{UI_LABELS.ai.reasoningRunning}</p>
-            ) : null
-          ) : (
-            !hasTools &&
-            !hasSkills && (
-              <p className="text-[11px] italic text-text-faint">
-                {UI_LABELS.ai.reasoningNoSummary}
-              </p>
-            )
-          )}
-
-          {hasSkills && (
-            <div className="flex flex-wrap gap-1.5">
-              {loadedSkills.map((skill) => (
-                <span
-                  key={skill.id}
-                  title={skill.id}
-                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${
-                    skill.source === 'tool'
-                      ? 'auteur-phase-logic'
-                      : skill.source === 'pinned'
-                        ? 'auteur-phase-continuity'
-                        : 'auteur-phase-aesthetic'
-                  }`}
-                >
-                  <Layers className="h-2.5 w-2.5 shrink-0 opacity-80" />
-                  <span>{skill.name}</span>
-                  <span className="opacity-70">· {UI_LABELS.ai.skillSources[skill.source]}</span>
-                </span>
-              ))}
+          {isOpen && (
+            <div
+              ref={thoughtBodyRef}
+              onScroll={(event) => {
+                thoughtStickyRef.current = isNearScrollBottom(event.currentTarget);
+              }}
+              className="border-t border-border-subtle px-2.5 py-2 max-h-56 overflow-y-auto auteur-pane-scroll"
+            >
+              {thoughtSummary.trim().length > 0 ? (
+                <MarkdownContent content={thoughtSummary} compact />
+              ) : (
+                <p className="text-[11px] italic text-text-faint">
+                  {UI_LABELS.ai.reasoningRunning}
+                </p>
+              )}
             </div>
           )}
+        </div>
+      )}
 
-          {hasTools && (
-            <div className="flex flex-wrap gap-1.5">
-              {toolCalls.map((tool) => (
+      {/* Part 2: Separated Skills & Tools Activity Strip (Always Scannable + Hover Tooltips) */}
+      {(hasActivity || showTraceOnlyBar) && (
+        <div
+          aria-label={UI_LABELS.ai.toolsSkillsRegionAria}
+          className="flex flex-wrap items-center justify-between gap-1.5 px-0.5"
+        >
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            {loadedSkills.map((skill) => (
+              <span
+                key={skill.id}
+                onMouseEnter={(event) =>
+                  openPillTooltip(event, {
+                    title: skill.name,
+                    subtitle: skill.id,
+                    badge: UI_LABELS.ai.skillSources[skill.source],
+                    detail: UI_LABELS.ai.skillSourceDescriptions[skill.source],
+                  })
+                }
+                onMouseLeave={() => setTooltip(null)}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] cursor-default select-none ${
+                  skill.source === 'tool'
+                    ? 'auteur-phase-logic'
+                    : skill.source === 'pinned'
+                      ? 'auteur-phase-continuity'
+                      : 'auteur-phase-aesthetic'
+                }`}
+              >
+                <Layers className="h-2.5 w-2.5 shrink-0 opacity-80" />
+                <span>{skill.name}</span>
+                <span className="opacity-70">· {UI_LABELS.ai.skillSources[skill.source]}</span>
+              </span>
+            ))}
+
+            {toolCalls.map((tool) => {
+              const info = formatToolCallTooltip(tool);
+              return (
                 <span
                   key={tool.callId}
-                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] ${
+                  onMouseEnter={(event) =>
+                    openPillTooltip(event, {
+                      title: info.title,
+                      subtitle: info.toolName,
+                      badge: info.statusLabel,
+                      detail: info.detail,
+                    })
+                  }
+                  onMouseLeave={() => setTooltip(null)}
+                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] cursor-default select-none ${
                     tool.status === 'running'
                       ? 'auteur-phase-logic'
                       : tool.status === 'error'
@@ -306,13 +358,48 @@ const ReasoningAccordion = memo(function ReasoningAccordion({
                   ) : (
                     <Check className="h-2.5 w-2.5 text-[var(--phase-aesthetic-text)]" />
                   )}
-                  <span>{formatToolDisplayName(tool.name)}</span>
+                  <span>{info.title}</span>
                 </span>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
+
+          {!showThinkingCard && canInspect && renderInspectButton()}
         </div>
       )}
+
+      {/* Portal Hover Tooltip for Tool & Skill Pills */}
+      {tooltip &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              top: `${tooltip.top}px`,
+              left: `${tooltip.left}px`,
+              transform: tooltip.top > 110 ? 'translateY(-100%)' : undefined,
+            }}
+            className="pointer-events-none z-[120] w-[260px] max-w-[calc(100vw-24px)] rounded-lg border border-border-main bg-surface px-2.5 py-2 shadow-xl text-text-main space-y-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-text-main truncate">
+                {tooltip.title}
+              </span>
+              {tooltip.badge && (
+                <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[9px] text-text-muted shrink-0">
+                  {tooltip.badge}
+                </span>
+              )}
+            </div>
+            <div className="font-mono text-[10px] text-text-faint truncate">{tooltip.subtitle}</div>
+            {tooltip.detail && (
+              <p className="text-[11px] leading-snug text-text-body break-words">
+                {tooltip.detail}
+              </p>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 });
@@ -366,6 +453,7 @@ export function AiAssistantSidebar({
   const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
   const [manualComposerHeight, setManualComposerHeight] = useState<number | null>(null);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
+  const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
 
   const previousInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
@@ -373,6 +461,8 @@ export function AiAssistantSidebar({
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
   const sidebarRef = useRef<HTMLElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef<boolean>(true);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
@@ -548,6 +638,8 @@ export function AiAssistantSidebar({
     previousInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
     sentAttachmentFingerprintsRef.current.clear();
+    shouldAutoScrollRef.current = true;
+    setIsScrolledUp(false);
     setLastTurnSnapshotHash(undefined);
     setMessages([]);
   }, []);
@@ -574,10 +666,30 @@ export function AiAssistantSidebar({
     };
   }, []);
 
-  // Keep message list scrolled cleanly to latest update
-  useEffect(() => {
+  const handleThreadScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const nearBottom = isNearScrollBottom(el);
+    shouldAutoScrollRef.current = nearBottom;
+    setIsScrolledUp((prev) => (prev === !nearBottom ? prev : !nearBottom));
+  }, []);
+
+  const handleJumpToLatest = useCallback(() => {
+    shouldAutoScrollRef.current = true;
+    setIsScrolledUp(false);
     threadEndRef.current?.scrollIntoView({behavior: 'smooth', block: 'end'});
-  }, [messages.length, isRunning]);
+  }, []);
+
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : undefined;
+  const streamingScrollKey = `${messages.length}:${isRunning ? 1 : 0}:${lastMessage?.thoughtSummary?.length ?? 0}:${lastMessage?.text.length ?? 0}:${lastMessage?.toolCalls?.length ?? 0}:${lastMessage?.loadedSkills?.length ?? 0}:${lastMessage?.suggestions?.length ?? 0}:${lastMessage?.error?.code ?? ''}`;
+
+  // Sticky-bottom auto-scroll: follows live streaming updates unless the user scrolled up to read earlier messages
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [streamingScrollKey]);
 
   // Auto-grow composer textarea smoothly unless the user manually dragged its height
   useLayoutEffect(() => {
@@ -722,6 +834,8 @@ export function AiAssistantSidebar({
         isStreaming: true,
       };
 
+      shouldAutoScrollRef.current = true;
+      setIsScrolledUp(false);
       setMessages((prev) => [...prev, userMessage, initialAssistantMessage]);
       setIsRunning(true);
 
@@ -1118,7 +1232,12 @@ export function AiAssistantSidebar({
           </div>
 
           {/* Scrollable Message Stream */}
-          <div className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll px-3 py-3 space-y-3 bg-app/50">
+          <div className="relative flex-1 min-h-0 flex flex-col">
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleThreadScroll}
+              className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll px-3 py-3 space-y-3 bg-app/50"
+            >
             {!hasApiKey && (
               <div className="rounded-xl border border-border-main bg-surface p-3.5 space-y-2.5 shadow-2xs">
                 <div className="flex items-start gap-2.5">
@@ -1346,6 +1465,21 @@ export function AiAssistantSidebar({
               })
             )}
             <div ref={threadEndRef} />
+            </div>
+
+            {isScrolledUp && messages.length > 0 && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-2.5 flex justify-center z-20">
+                <button
+                  type="button"
+                  onClick={handleJumpToLatest}
+                  aria-label={UI_LABELS.ai.jumpToLatestAria}
+                  className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border-main bg-surface/95 backdrop-blur-xs px-2.5 py-1 text-[11px] font-medium text-text-main shadow-md hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  <ArrowDown className="h-3 w-3 text-text-muted" />
+                  <span>{UI_LABELS.ai.jumpToLatestButton}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Bottom Composer Dock (Resizable Prompt + Focus / Scope / Brief / Model Controls) */}

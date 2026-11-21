@@ -606,6 +606,115 @@ export function buildBriefSummaryBadge(brief: DraftBriefState): string | undefin
 export const MIN_COMPOSER_HEIGHT = 56;
 export const AUTO_GROW_MAX_COMPOSER_HEIGHT = 180;
 export const MAX_COMPOSER_HEIGHT = 360;
+export const STREAM_STICKY_BOTTOM_THRESHOLD_PX = 48;
+
+/**
+ * Returns true when a scrollable container is within `thresholdPx` of its bottom edge,
+ * used by sticky-bottom streaming auto-scroll so manual upward scrolling is never overridden.
+ */
+export function isNearScrollBottom(metrics: {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  thresholdPx?: number;
+}): boolean {
+  const threshold = metrics.thresholdPx ?? STREAM_STICKY_BOTTOM_THRESHOLD_PX;
+  const distanceFromBottom = metrics.scrollHeight - (metrics.scrollTop + metrics.clientHeight);
+  return distanceFromBottom <= threshold;
+}
+
+export interface ToolCallTooltipInfo {
+  title: string;
+  toolName: string;
+  statusLabel: string;
+  detail?: string;
+}
+
+/**
+ * Builds concise human-readable hover tooltip details for an AI tool call pill.
+ */
+export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo {
+  const title = formatToolDisplayName(tool.name);
+  const statusLabel =
+    tool.status === 'running'
+      ? 'Running'
+      : tool.status === 'error'
+        ? 'Retrying after validation feedback'
+        : tool.status === 'stopped'
+          ? 'Stopped'
+          : 'Done';
+
+  const args = tool.arguments ?? {};
+  let detail: string | undefined;
+
+  switch (tool.name) {
+    case 'get_script_overview': {
+      detail = 'Reads Macro-Block & Macro-State structure, topology, snapshot hash, and lint counts.';
+      break;
+    }
+    case 'inspect_lens_slice': {
+      const preset = typeof args.preset === 'string' ? args.preset : undefined;
+      const spec =
+        args.spec && typeof args.spec === 'object' && !Array.isArray(args.spec)
+          ? (args.spec as Record<string, unknown>)
+          : undefined;
+      if (preset) {
+        detail = `Preset: ${preset}`;
+      } else if (spec && Array.isArray(spec.dimensions) && spec.dimensions.length > 0) {
+        detail = `Custom slice: ${(spec.dimensions as unknown[]).map(String).join(', ')}`;
+      } else {
+        detail = 'Inspects targeted Script Supervisor lens slice.';
+      }
+      break;
+    }
+    case 'propose_script_patch': {
+      const opsCount = Array.isArray(args.ops) ? args.ops.length : 0;
+      const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
+      const parts: string[] = [];
+      if (opsCount > 0) parts.push(`${opsCount} ${opsCount === 1 ? 'op' : 'ops'}`);
+      if (summary) parts.push(truncatePreview(summary, 90));
+      detail = parts.length > 0 ? parts.join(' · ') : 'Dry-runs and stages targeted script patch.';
+      break;
+    }
+    case 'propose_script_draft': {
+      const titleArg = typeof args.title === 'string' ? args.title.trim() : '';
+      const summaryArg = typeof args.summary === 'string' ? args.summary.trim() : '';
+      const parts: string[] = [];
+      if (titleArg) parts.push(`"${truncatePreview(titleArg, 50)}"`);
+      if (summaryArg) parts.push(truncatePreview(summaryArg, 80));
+      detail = parts.length > 0 ? parts.join(' · ') : 'Compiles and lint-checks a full v0.4.0 draft.';
+      break;
+    }
+    case 'report_audit_review': {
+      const issueCount = Array.isArray(args.issues) ? args.issues.length : 0;
+      const summary = typeof args.overallSummary === 'string' ? args.overallSummary.trim() : '';
+      const parts: string[] = [];
+      parts.push(`${issueCount} ${issueCount === 1 ? 'issue' : 'issues'}`);
+      if (summary) parts.push(truncatePreview(summary, 80));
+      detail = parts.join(' · ');
+      break;
+    }
+    case 'load_auteur_skill': {
+      const skillId = typeof args.skillId === 'string' ? args.skillId.trim() : '';
+      detail = skillId ? `Skill: ${skillId}` : 'Loads an on-demand Auteur craft skill.';
+      break;
+    }
+    default: {
+      const keys = Object.keys(args);
+      if (keys.length > 0) {
+        detail = `Args: ${keys.join(', ')}`;
+      }
+      break;
+    }
+  }
+
+  return {
+    title,
+    toolName: tool.name,
+    statusLabel,
+    ...(detail ? {detail} : {}),
+  };
+}
 
 /**
  * Clamps a requested composer textarea height within safe minimum/maximum bounds,

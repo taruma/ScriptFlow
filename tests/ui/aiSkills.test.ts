@@ -19,11 +19,13 @@ import {
   focusToLegacyMode,
   formatReferenceEntriesForPrompt,
   formatSceneBriefContext,
+  formatToolCallTooltip,
   formatToolDisplayName,
   getBriefReferenceHandles,
   getNextReferenceHandle,
   hasDraftBriefContent,
   isDraftBriefActive,
+  isNearScrollBottom,
   MAX_COMPOSER_HEIGHT,
   MIN_COMPOSER_HEIGHT,
   upsertLoadedSkill,
@@ -482,6 +484,40 @@ describe('Phase 3 unified Focus & mode-agnostic Scene Brief / References helpers
     // Short sidebar caps height at 48% of available sidebar height while respecting MIN_COMPOSER_HEIGHT
     expect(clampComposerHeight(300, 400)).toBe(192);
     expect(clampComposerHeight(300, 100)).toBe(MIN_COMPOSER_HEIGHT);
+  });
+
+  it('detects sticky-bottom scroll proximity and formats concise tool call hover tooltips', () => {
+    expect(isNearScrollBottom({scrollTop: 500, clientHeight: 300, scrollHeight: 800})).toBe(true);
+    expect(isNearScrollBottom({scrollTop: 460, clientHeight: 300, scrollHeight: 800})).toBe(true);
+    expect(isNearScrollBottom({scrollTop: 300, clientHeight: 300, scrollHeight: 800})).toBe(false);
+
+    const lensTip = formatToolCallTooltip({
+      callId: 'c1',
+      name: 'inspect_lens_slice',
+      arguments: {preset: 'lens1_spatial_optics'},
+      status: 'ok',
+    });
+    expect(lensTip.title).toBe('Inspect lens slice');
+    expect(lensTip.statusLabel).toBe('Done');
+    expect(lensTip.detail).toBe('Preset: lens1_spatial_optics');
+
+    const patchTip = formatToolCallTooltip({
+      callId: 'c2',
+      name: 'propose_script_patch',
+      arguments: {ops: [{op: 'replace_macro_state'}, {op: 'insert_sub_state'}], summary: 'Tighten S2 framing'},
+      status: 'running',
+    });
+    expect(patchTip.statusLabel).toBe('Running');
+    expect(patchTip.detail).toBe('2 ops · Tighten S2 framing');
+
+    const skillTip = formatToolCallTooltip({
+      callId: 'c3',
+      name: 'load_auteur_skill',
+      arguments: {skillId: 'temporal_calibration'},
+      status: 'error',
+    });
+    expect(skillTip.statusLabel).toContain('Retrying');
+    expect(skillTip.detail).toBe('Skill: temporal_calibration');
   });
 });
 
