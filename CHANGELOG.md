@@ -1,0 +1,54 @@
+# Changelog
+
+All notable changes to the **ScriptFlow** application (**Auteur Script Editor**) are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **Versioning Scope Note**
+> - This file tracks **ScriptFlow application releases** (`1.0.0` pre-release UI/UX polish phase). `package.json` intentionally remains at `"0.4.0"` until the final `1.0.0` release tag is cut.
+> - Changes to the platform- and model-agnostic **Pure Auteur Script (`v0.4.0`)** canonical inline grammar, deterministic Script Supervisor linter, and programmatic JSON IR specification are tracked separately in [`docs/SPEC_CHANGELOG.md`](docs/SPEC_CHANGELOG.md).
+
+---
+
+## [1.0.0] - Unreleased
+
+### Added
+
+#### Live & Source Auteur Script Editor
+- **Asymmetric `40/60` Two-Column Live Workspace**: Independently scrollable **Phase 1 — Staging (`S0`)** and **Phase 2 — Execution (`S1` → `SN`)** columns on desktop (`lg:`) with slim sticky headers and responsive single-column stacking on narrower viewports.
+- **Structured `[AESTHETIC]` Lookbook & Pluggable Block Registry**: 2-column live-highlighted `Key: Value` editor (`AestheticBlockEditor`) registered via `src/components/stagingBlockRegistry.ts`, with hanging-indent token highlighting and clean collapsed header counts (`X keys`).
+- **Always-Formatted `↳` Waterfall Sub-State Editing**: Live `->` / `→` / `Enter` Sub-State splitting, `Backspace`-at-start merging, `ArrowUp`/`ArrowDown` cross-Sub-State navigation, `Alt+↑`/`Alt+↓` (`Option+↑`/`Option+↓`) undoable keyboard Sub-State reordering with caret preservation, and camera continuity rails vs. dotted `cut` / `cut · recall` hairlines.
+- **Surgical Management & Drag-and-Drop Reordering**: Hover-revealed `+` insertion seams, canonical/custom Macro-Block picker, collapsible Staging cards and Execution Macro-States with bulk `Collapse all` / `Expand all`, and keyboard-accessible `@dnd-kit` drag-and-drop reordering (`SortableList`) preserving per-item collapse state.
+- **Global Paste-and-Hydrate & Document Undo/Redo**: Automatic multi-block Auteur Script paste hydration guarded against modals, read-only examples, and AI sidebar inputs; pure plain-text Undo/Redo stack (`src/core/history.ts`) with coalesced typing bursts, structural checkpoints, and active-draft `historyRevision` resync.
+- **Source Mode, Quick Format & Multi-Format Exports**: Centered single-document Source editor (`~820px`, `JetBrains Mono`), non-destructive whitespace **Format Script** (`formatAuteurScript()`), and streamlined top slate bar with split **`Copy | ▾`** and **`File ▾`** export actions for **Canonical Plain Text** (`.txt`), **Tagless** (`.txt`), and **JSON Envelope** (`.json`).
+
+#### Canonical `v0.4.0` Grammar & Live Script Supervisor
+- **Lossless Parser, Highlighter & Metadata Extractor**: Full `v0.4.0` parser (`src/core/parser.ts`), character-for-character lossless lexical & clause-underline tokenizer (`src/core/highlighter.ts`), and pure metadata extractor (`src/core/extractor.ts`) resolving `@ref` character bindings, `[AESTHETIC]` shorthand token dictionaries, continuation context, and camera transitions.
+- **Live Deterministic Script Supervisor Linter**: 5 declarative pure rules in `LINT_RULE_REGISTRY` (`src/core/linter.ts`) covering `Lens 1`, `Lens 4`, and `Lens 5` (`viewport-coordinate-purity`, `camera-redefinition-guard`, `macro-state-resolution`, `multimodal-reference-isolation`, `frozen-first-frame-purity`), configurable per rule to `'off' | 'warning' | 'error'` in **Settings → Supervisor rules** and surfaced via zero-shift right-margin `DiagnosticDot` popovers.
+- **4 Bundled Canonical Worked Examples**: File-based catalog (`src/data/examples/catalog.json`) shipping *Interrogation Room Coverage*, *Subway Train Fight Oner*, *POV Forest Horror*, and *1970s Heist Montage* strictly read-only until explicitly forked via **Fork to Edit**.
+
+#### Script Library & Version History
+- **IndexedDB `v2` Multi-Script Persistence**: Zero-dependency IndexedDB store (`auteur-script-library-v1`, `scripts` + `snapshots` stores) with automatic `localStorage` fallback backend, legacy single-script migration, debounced autosave with `visibilitychange`/`pagehide` unload flush, and continuous `localStorage` crash-recovery mirror.
+- **Two-Pane Editorial Script Library**: Instantaneous modal browser (`ScriptLibraryModal`) with full-text search & match excerpts, `All` / `My Scripts` / `Examples` tabs, sort popover (`Recent`, `A–Z`, `Macro-States`, pinned first), folder/tag facet filters, pagination, keyboard navigation, live read-only Preview/Source pane, inline Rename/Pin/Folder/Tag editing, opt-in bulk Select (export/delete), safe **Clear Library** confirmation with inline backup download, and full-library versioned JSON backup & smart non-destructive merge restore.
+- **Persistent Version History & Manual Milestones**: Lazy-loaded two-pane `VersionHistoryModal` (`File ▾ → Version History…`) automatically capturing pre-AI (`ai_draft`, `ai_patch`, `ai_fix`) and `pre_restore` checkpoints (deduplicated, 30-item per-script FIFO cap on unprotected auto-snapshots) alongside permanent manual **Milestones** and pinned snapshots with diff inspection, single-step undoable restore, and fork-as-new-script.
+
+#### Unified BYOK AI Assistant & Quick Scan
+- **Streaming Interactions API Canvas Sidebar**: Lazy-loaded resizable right-side AI Canvas (`AiAssistantSidebar`) running browser-direct `@google/genai` streaming turns (`previous_interaction_id` chaining, 8-round tool loop, `AbortSignal` stop) across Gemini 4 (`gemini-4-hydrogen`, `gemini-4-neon`, `gemini-4-carbon`) and `gemini-3.5-flash-lite`, with `Low`/`Medium`/`High` reasoning and `localStorage` vs. tab-scoped `sessionStorage` BYOK API key management.
+- **Unified Focus Bar & 7 Local Browser Tools**: Single continuous thread anchored by `Auto` / `Draft` / `Refine` / `Audit` focus with editor-state-aware tool pruning, contextual Target Scope (`Whole Script`, `MB#`, `S#`), and 7 strictly read-only/staging tools (`get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `propose_script_draft`, `report_audit_review`, dynamic `load_auteur_skill`, and opt-in multi-select `ask_question` via **`Ask First`**).
+- **Layer 2.5 Decisions API Quick Scan**: Optional single-pass semantic pre-check (`gemini-decision-1` on `v1beta`) with `Strict`/`Balanced`/`Lenient` sensitivity across AST-filtered document, per-`S#`, and per-`S#.#` atomic rules, interactive `QuickScanCard` with click-to-expand rule question/criteria details, and 1-click **Deep Audit** escalation into Gemini 4.
+- **Multimodal Scene Brief & References Modal**: Mode-agnostic `AiBriefModal` with explicit `Include in AI context` toggle, drag-and-drop local image compression & inline text files, drag-and-drop multi-file browser-direct Gemini Files API uploads & 48-hour cloud file browser, public YouTube URLs with `Static`/`Agentic` video mode, passive skill activation across all focuses, and send-once-per-thread attachment delivery.
+- **4-Tab Context Inspector & Unified Agent Context Packs**: Pre-send `AiContextInspectorModal` (**Live Prompt Preview**, **Foundational Craft**, **Skills & Extensions** with 3-state `Auto`/`Pin`/`Mute` + bulk **`Auto all`** / **`Mute all`** + custom skills, and **Quick Scan Rules** with bulk **`Enable all`** / **`Disable all`** + custom rules), plus unified JSON Export (`auteur-agent-context-pack`) and selective **Merge** / **Replace** Import (`AgentContextImportDialog`) with backup safeguards on destructive resets.
+- **Actionable Live Mode Indicators, Cost Tracking & Trace Inspector**: 2-way synced Live Mode hover-to-diff `AiPatchIndicator`, `AiPatchInsertionSeam`, and `AiQuickScanIndicator` margin indicators; exact `S#.#` Sub-State jump & highlight; smart sibling Audit Fix rebasing and transactional **Apply All** batching; one-click **Fork & Apply** on read-only examples; sticky-bottom streaming auto-scroll with separated Thinking and Skills/Tools strips; per-turn & cumulative USD cost estimator (`src/ui/aiPricing.ts`); and opt-in sanitized `AiTraceModal` with secret redaction.
+
+#### Programmatic JSON IR & Debug Inspector
+- **Zod-Validated JSON Engine**: `AuteurScriptIR`, `AuteurEnvelope`, `toAuteurIR()` / `fromAuteurIR()`, `compileAuteurDraft()`, transactional `applyAuteurPatch()` (with `expectedSnapshotHash` concurrency check and `rejectOnNewErrors` lint gate), non-mutating `projectAuteurPatchPreview()`, Composable Lens Slicer (`sliceAuteurEnvelope()` / `sliceAuteurScript()` + 5 `AUDIT_LENS_PRESETS`), `validateAuteurReview()`, and `getAuteurJsonSchemas()`.
+- **Zero-Cost-When-Closed Debug Inspector**: Lazy-loaded 5-tab `JsonIrDebugDrawer` (`Envelope`, `Slicer`, `Patch Sandbox`, `Draft Compiler`, `Schema Explorer`) respecting active `ruleOverrides` and read-only example guards.
+
+#### Appearance, Accessibility & Safeguards
+- **4-Mode Semantic Theme System & Display Controls**: **Light** (*Clean Warm Stone*), **Warm** (*Drafting Paper*), **Dark** (*Warm Obsidian Studio*, default), and **Pure Black** (*OLED Blueprint Void*) powered exclusively by semantic CSS variables and `UI_TOKENS`, plus script text-size presets (`13px`–`16px`) and toggleable monochrome clause underlines.
+- **Accessibility & Crash Recovery**: Custom `ConfirmDialog` for all destructive actions, top-level `ErrorBoundary` recovery card with direct saved-script copy, and strict `aria-modal="true"` / `data-native-undo="true"` keyboard and paste isolation.
+
+### Architecture & Engineering Notes
+- **Zero-React Pure Core & Plain-Text-as-Truth Pipeline**: Every module under `src/core/` is 100% pure TypeScript with zero React, DOM, `localStorage`, or CSS dependencies, deriving AST, extracted metadata, deterministic diagnostics, highlights, and JSON envelopes synchronously from `rawText`.
+- **Modular Facade Architecture**: Codebase decomposed cleanly beneath preserved top-level `.ts`/`.tsx` facades across `src/core/patch/`, `src/services/knowledge/`, `src/services/tools/`, `src/services/gemini/`, `src/services/decisions/`, `src/ui/labels/`, `src/ui/library/`, `src/ui/ai/`, `src/ui/agentContext/`, `src/components/ai/`, `src/components/library/`, `src/components/execution/`, and `src/components/debug/`, maintaining zero source files over 800 lines and 7 lazy-loaded Vite chunks (`AiAssistantSidebar`, `AiBriefModal`, `AiContextInspectorModal`, `AiSettingsModal`, `AiTraceModal`, `VersionHistoryModal`, and `JsonIrDebugDrawer`).
+- **Verification Baseline**: Verified against `28` Vitest test files / `268` passing tests (`npm test`), strict TypeScript checking (`npm run lint` / `tsc --noEmit`), and Vite production bundling (`npm run build`).

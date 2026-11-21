@@ -2,15 +2,18 @@
 
 This document is the operational Single Source of Truth (SSOT) for AI agents and engineers maintaining the **Auteur Script Editor** (`v0.4.0` Canonical Inline Syntax, 100% platform- and model-agnostic).
 
-### Canonical Workspace Documentation (`docs/`)
+### Canonical Workspace Documentation (`docs/` & Root)
+- **`README.md`**: Project overview, feature tour, quick start, architecture highlights, and documentation map.
+- **`CHANGELOG.md`**: User-facing application release history (Keep a Changelog format, tracking `1.0.0` Unreleased features and engineering milestones).
 - **`docs/GLOSSARY.md`**: Authoritative Pure Auteur Script vocabulary (explicit disambiguation of **Macro-Block**, **Macro-State**, **Sub-State**, **Sub-State Tag**, and inline `[BLOCK]`, plus all 27 grounded framework terms mapped to `src/core/types.ts`). **Read first** when interpreting user domain terminology.
 - **`docs/GRAMMAR_CONTRACT.md`**: Locked `v0.4.0` regexes, parsing edge cases, Tagless export rules, and deterministic linter contracts.
 - **`docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`**: Human-readable checklist of all 4 Scene Topologies, all 5 live deterministic linter rules, all 5 Script Supervisor Audit Lenses (`Lens 1`–`Lens 5`), temporal calibration, and pass/fail examples.
-- **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, module map, pure serializer mutation contracts, and global paste/history guards.
+- **`docs/SPEC_CHANGELOG.md`**: Canonical Pure Auteur Script specification history (`v0.4.0` grammar, deterministic linter, and JSON IR / Patch / Slicer schema evolution & migration notes).
+- **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, modular facade map, pure serializer mutation contracts, and global paste/history guards.
 - **`docs/JSON_IR_SPEC.md`**: Programmatic JSON IR (`AuteurScriptIR`, `AuteurEnvelope`), Zod/JSON Schema contracts, transactional `AuteurPatch` engine, and composable Script Supervisor Lens Slicer (`AUDIT_LENS_PRESETS`).
 - **`docs/UI_PHILOSOPHY.md`**: Asymmetric `40/60` Live workspace & single-document Source mode principles, Undo/Redo & crash recovery, 2-column Lookbook & Waterfall editing, shared DnD, unified Settings popover, and 4-mode theme system.
-- **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces, Pure Auteur UI vocabulary contract, and theme labels).
-- **`docs/AI_ASSISTANT_WALKTHROUGH.md`**: End-to-end user & operator walkthrough for the Unified Transparent AI Assistant (BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus routing, collapsible `Brief / Refs` tray & Draft Wrapper Template, all 6 local AI tools, 3-state skill machine, pre-send Context Inspector, suggestion cards, and Trace Inspector).
+- **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces across `src/ui/labels/*.ts`, Pure Auteur UI vocabulary contract, and theme labels).
+- **`docs/AI_ASSISTANT_WALKTHROUGH.md`**: End-to-end user & operator walkthrough for the Unified Transparent AI Assistant (BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus routing, `Ask First` clarifying workflow, multimodal `Scene Brief & References` modal, all 7 local AI tools, Layer 2.5 Quick Scan, 3-state skill machine, 4-tab Context Inspector with JSON Pack Export/Import, suggestion cards & Live Mode indicators, cost estimator, and Trace Inspector).
 
 ---
 
@@ -26,29 +29,29 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 | Directory | Ownership & Rules |
 |---|---|
-| **`src/core/`** | **100% pure TypeScript** domain engine: AST types, parser, `[AESTHETIC]` codec, live/clause tokenizer, metadata extractor, lossless serializer, deterministic linter, Undo/Redo history, and Zod JSON IR / Patch / Lens Slicer. **Zero** React, DOM, `localStorage`, or CSS imports. |
-| **`src/ui/`** | Pure UI state helpers, browser adapters, IndexedDB script library & File I/O hook/codecs (`useScriptLibrary.ts`, `scriptLibraryDb.ts`, `scriptStorage.ts`, `scriptLibraryCodec.ts`, `scriptFileIO.ts`, `scriptLibraryView.ts`), settings/theme/token/AI-skills stores (`aiSettings.ts`, `aiSkillsStore.ts`), labeling SSOT (`labels.ts`), keyboard matchers (`historyShortcuts.ts`), focus/collapse transitions (`beatFocus.ts`, `stagingCollapse.ts`), and structural reference stabilization (`referenceStability.ts`, `useStableValue.ts`). |
-| **`src/components/`** | Thin, `memo()`-friendly React + Tailwind presentational views (`LiveDocument` → `StagingPane` / `ExecutionPane`, `StagingBlockCard`, `ExecutionBeatRow`, `SortableList`, `LiveHighlightedEditor`, `TopSlateBar`, `FileMenuDropdown`, `SettingsPopover`, lazy `ScriptLibraryModal`, lazy `AiAssistantSidebar` / `AiContextInspectorModal` / `AiSettingsModal` / `AiTraceModal`, `ConfirmDialog`, `ErrorBoundary`, optional `debug/`). |
-| **`src/services/`** | AI knowledge registry & context composer (`auteurKnowledge.ts`, zero React/DOM/`localStorage`), local staging/read-only script tools & dynamic skill loader (`scriptTools.ts`), and streaming provider client (`geminiInteractions.ts`). Keeps prompt craft, tool orchestration, and SDK adapters decoupled from `src/core/` (pure domain) and `src/components/` (thin UI). |
+| **`src/core/`** | **100% pure TypeScript** domain engine: AST types (`types.ts`), parser (`parser.ts`), `[AESTHETIC]` codec (`aesthetic.ts`), live/clause tokenizer (`highlighter.ts`), metadata extractor (`extractor.ts`), lossless serializer (`serializer.ts`), deterministic linter (`linter.ts`), Undo/Redo history (`history.ts`), Zod JSON IR (`irSchemas.ts`, `ir.ts`), Lens Slicer (`slicer.ts`), barrel (`index.ts`), and modular transactional Patch engine (`patch.ts` facade + `src/core/patch/` with `applyOp.ts`, `diagnostics.ts`, `irHelpers.ts`, `preview.ts`, `types.ts`, and `src/core/patch/ops/stagingOps.ts` / `executionOps.ts`). **Zero** React, DOM, `localStorage`, or CSS imports. |
+| **`src/ui/`** | Pure UI state helpers, browser adapters, keyboard/mutation hooks (`subStateKeyboard.ts`, `useGlobalEditorShortcuts.ts`, `useDocumentMutations.ts`, `historyShortcuts.ts`), IndexedDB script library, File I/O & Version History (`useScriptLibrary.ts`, `scriptLibraryDb.ts`, `scriptStorage.ts`, `scriptLibraryCodec.ts`, `scriptFileIO.ts`, `scriptLibraryView.ts`, `scriptSnapshots.ts`, plus internal `src/ui/library/`), AI assistant state, pricing, media & context packs (`aiSettings.ts`, `aiPricing.ts`, `aiSkillsStore.ts`, `quickScanRulesStore.ts`, `briefMedia.ts`, `patchIndicators.ts`, `quickScanIndicators.ts`, `aiAssistant.ts` + `src/ui/ai/`, `agentContextCodec.ts` + `src/ui/agentContext/`), display/theme/lint/token modules (`editorSettings.ts`, `theme.ts`, `textSize.ts`, `clauseGuides.ts`, `lintRules.ts`, `tokens/ui.ts`), labeling SSOT (`labels.ts` facade + `src/ui/labels/meta.ts`, `src/ui/labels/editor.ts`, `src/ui/labels/library.ts`, `src/ui/labels/debug.ts`, `src/ui/labels/ai.ts`), focus/collapse transitions (`beatFocus.ts`, `stagingCollapse.ts`), and structural reference stabilization (`referenceStability.ts`, `useStableValue.ts`). |
+| **`src/components/`** | Thin, `memo()`-friendly React + Tailwind presentational views (`LiveDocument` → `StagingPane` / `ExecutionPane`, `StagingBlockCard`, `ExecutionBeatRow` + `src/components/execution/`, `SortableList`, `LiveHighlightedEditor`, `TopSlateBar`, `FileMenuDropdown`, `SettingsPopover`, `ConfirmDialog`, `ErrorBoundary`, `ScriptLibraryModal` + `src/components/library/`, AI views `AgentContextImportDialog` / `QuickScanRulesTabPanel` / `AiSuggestionCards` / `QuickScanCard` / `AiPatchIndicator` / `AiQuickScanIndicator` + `src/components/ai/`, and the 7 `React.lazy` chunks: `VersionHistoryModal`, `AiAssistantSidebar`, `AiBriefModal`, `AiContextInspectorModal`, `AiSettingsModal`, `AiTraceModal`, and `JsonIrDebugDrawer` in `src/components/debug/` + `src/components/debug/tabs/`). |
+| **`src/services/`** | AI knowledge registry & context composer (`auteurKnowledge.ts` facade + `src/services/knowledge/`, zero React/DOM/`localStorage`), local staging/read-only script tools, audit rebasing & dynamic skill loader (`scriptTools.ts` facade + `src/services/tools/`), streaming Gemini Interactions client (`geminiInteractions.ts` facade + `src/services/gemini/`), Layer 2.5 Decisions API Quick Scan client (`geminiDecisions.ts` facade + `src/services/decisions/`), and Gemini Files API upload/browser client (`geminiFiles.ts`). Keeps prompt craft, tool orchestration, and SDK adapters decoupled from `src/core/` (pure domain) and `src/components/` (thin UI). |
 
 ---
 
 ## 3. Non-Negotiable Architecture Invariants
 
 1. **Zero-React Core (`src/core/`)**:
-   - Every file in `src/core/` (`types.ts`, `parser.ts`, `aesthetic.ts`, `highlighter.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `history.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`) MUST remain pure TypeScript with zero React, DOM (`window`, `document`, `localStorage`), or CSS imports. Inject clock values (`timestamp`) from callers.
+   - Every file in `src/core/` (`types.ts`, `parser.ts`, `aesthetic.ts`, `highlighter.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `history.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts`, `slicer.ts`, `index.ts`, plus every module under `src/core/patch/` including `applyOp.ts`, `diagnostics.ts`, `irHelpers.ts`, `preview.ts`, `types.ts`, `ops/stagingOps.ts`, and `ops/executionOps.ts`) MUST remain pure TypeScript with zero React, DOM (`window`, `document`, `localStorage`), or CSS imports. Inject clock values (`timestamp`) from callers.
 2. **Plain-Text-as-Truth & Undo/Redo History (`src/core/history.ts`)**:
    - `history.present` (`rawText` in `src/App.tsx`) is the sole reactive source of truth; AST, metadata, continuity links, diagnostics, and JSON envelopes derive synchronously via pure functions. Never introduce a parallel mutable UI document tree.
-   - Every Live Mode edit flows through `src/core/serializer.ts` (and programmatic/AI edits through `applyAuteurPatch()` / `compileAuteurDraft()`), committed via `commitRawText` with explicit history semantics:
+   - Every Live Mode edit flows through `src/core/serializer.ts` (via `src/ui/useDocumentMutations.ts`, and programmatic/AI edits through `applyAuteurPatch()` / `compileAuteurDraft()`), committed via `commitRawText` with explicit history semantics:
      - **`mode: 'coalesce'`** (with a scoped `groupKey` such as `'staging:<idx>'`, `'beat:<n>:step:<i>'`, `'source'`) for rapid typing bursts (bulk deltas > 32 chars or pauses > 800ms auto-checkpoint).
-     - **`mode: 'checkpoint'`** for structural mutations (splits, merges, inserts, deletes, drag-reorders, preset/blank switches, paste-hydrate, Debug IR commits).
-   - **Active-Draft Resync (`historyRevision`)**: `history.revision` increments strictly on Undo/Redo. Any stateful Live Mode editor holding local draft state (`StagingBlockCard`, `AestheticBlockEditor`, `ExecutionBeatRow`, or future plugins) MUST accept `historyRevision` and resync its local draft whenever `historyRevision` changes—even while focused.
+     - **`mode: 'checkpoint'`** for structural mutations (splits, merges, inserts, deletes, drag-reorders, preset/blank switches, paste-hydrate, Debug IR commits, AI draft/patch applies).
+   - **Active-Draft Resync (`historyRevision`)**: `history.revision` increments strictly on Undo/Redo. Any stateful Live Mode editor holding local draft state (`StagingBlockCard`, `AestheticBlockEditor`, `ExecutionBeatRow` via `src/components/execution/useSubStateDrafts.ts`, or future plugins) MUST accept `historyRevision` and resync its local draft whenever `historyRevision` changes—even while focused.
 3. **Memoization & Reference-Stability Discipline (`src/ui/referenceStability.ts`)**:
    - Pure derivations return fresh arrays/maps on every keystroke. Reconcile derived collections with `useStableValue` + stabilizers (`stabilizeStagingBlocks`, `stabilizeExecutionBeats`, `stabilizeBeatLinks`, `stabilizeAestheticTokens`, `stabilizeCharacters`, `stabilizeDiagnosticsMap`, `stabilizeStringArray`) and reuse shared `EMPTY_*` constants (`EMPTY_DIAGNOSTICS`, `EMPTY_AESTHETIC_TOKENS`, `EMPTY_BEATS`).
-   - Never pass freshly allocated `[]` or unmemoized inline handlers into `memo()`'d rows (`StagingBlockCard`, `ExecutionBeatRow`, `AestheticBlockEditor`, `SortableRow`).
-4. **Keyboard & Modal Guards**:
-   - Every modal/dialog MUST carry `aria-modal="true"` so global document Undo/Redo (`Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z`, `Ctrl+Y`) and Paste-and-Hydrate handlers never intercept modal interactions.
-   - Every non-document text input (e.g., Scene Title, custom Macro-Block header input) MUST set `data-native-undo="true"` so native browser input undo stays intact instead of triggering document-level Undo/Redo.
+   - Never pass freshly allocated `[]` or unmemoized inline handlers into `memo()`'d rows (`StagingBlockCard`, `ExecutionBeatRow`, `SubStateWaterfallItem`, `AestheticBlockEditor`, `SortableRow`).
+4. **Keyboard & Modal Guards (`src/ui/useGlobalEditorShortcuts.ts`)**:
+   - Every modal/dialog MUST carry `aria-modal="true"` (and the AI sidebar carries `data-ai-sidebar="true"`) so global document Undo/Redo (`Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z`, `Ctrl+Y`) and Paste-and-Hydrate handlers never intercept modal or sidebar interactions.
+   - Every non-document text input (e.g., Scene Title, custom Macro-Block header input, AI composer, Brief inputs, Settings/Context/Question Card inputs) MUST set `data-native-undo="true"` so native browser input undo stays intact instead of triggering document-level Undo/Redo.
 5. **100% Platform- & Model-Agnostic Purity**:
    - Never add generative video vendor names, model identifiers, or external wrapper dialects anywhere in source code, presets, UI copy, tests, or documentation.
 6. **Canonical `v0.4.0` Syntax Lock**:
@@ -61,6 +64,9 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
      - **Sub-State** (dotted IDs `S1.0`, `S1.1`, …): every `->`-chained, single-dimension unit *inside* a Macro-State line (`[CAM]`, `[ACT]`, `{dialogue}`, `<foley>`, `[BLOCK]`, etc.).
    - **Never** label `[EXECUTION]` lines as `"beats"` or Sub-States as `"steps"`, and **never** abbreviate Macro-State as `"MS"` (collides with cinematography **Medium Shot**).
    - Map conversational shorthand (`MB`, `S`/`State`, `SS`) cleanly to **Macro-Block**, **Macro-State**, and **Sub-State**; recognize that internal TypeScript symbols (`ExecutionBeat`, `ExecutionBeatRow`, `beatIndex`) remain legacy code aliases for **Macro-State** (see `docs/GLOSSARY.md`).
+8. **Explicit `.ts`/`.tsx` Facade Rule (`tsconfig.json` `allowImportingTsExtensions: true`)**:
+   - Always include explicit `.ts` / `.tsx` extensions on relative imports.
+   - Preserve top-level domain facade files (`src/core/index.ts`, `src/core/patch.ts`, `src/ui/labels.ts`, `src/ui/aiAssistant.ts`, `src/ui/agentContextCodec.ts`, `src/ui/scriptLibraryDb.ts`, `src/ui/useScriptLibrary.ts`, `src/services/auteurKnowledge.ts`, `src/services/scriptTools.ts`, `src/services/geminiInteractions.ts`, `src/services/geminiDecisions.ts`) as the stable public surface. Cross-domain consumers MUST import from the top-level facade rather than reaching directly into internal implementation subfolders (`patch/`, `labels/`, `library/`, `ai/`, `agentContext/`, `knowledge/`, `tools/`, `gemini/`, `decisions/`).
 
 ---
 
@@ -78,11 +84,11 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 ### Adding a New Persisted Display / Editor Setting
 1. Add the option/DOM applier primitive under `src/ui/` (following `theme.ts`, `textSize.ts`, or `clauseGuides.ts`) and wire it into `EditorSettings`, `loadEditorSettings`, `applyEditorSettings`, and `useEditorSettings` in `src/ui/editorSettings.ts`.
-2. Add user-facing labels under `UI_LABELS.topBar` in `src/ui/labels.ts` and render the control inside `src/components/SettingsPopover.tsx`.
+2. Add user-facing labels to the matching namespace module under `src/ui/labels/` (e.g., `UI_LABELS.topBar` in `src/ui/labels/editor.ts`, automatically re-exported via `src/ui/labels.ts`) and render the control inside `src/components/SettingsPopover.tsx`.
 
 ### Extending the Programmatic JSON IR, Patch Engine, or Lens Slicer
 1. Update the Zod source-of-truth schemas in `src/core/irSchemas.ts` (`getAuteurJsonSchemas()` derives JSON Schema automatically—never hand-maintain duplicate JSON Schemas).
-2. Implement pure codecs, transactional patch ops, or slicer presets in `src/core/ir.ts`, `src/core/patch.ts`, or `src/core/slicer.ts`, keeping field names strictly aligned with `docs/GLOSSARY.md`.
+2. Implement pure IR codecs or slicer presets in `src/core/ir.ts` or `src/core/slicer.ts`. For new transactional patch ops, implement the handler in `src/core/patch/ops/stagingOps.ts` or `src/core/patch/ops/executionOps.ts`, wire dispatch in `src/core/patch/applyOp.ts` (plus live preview projection in `src/core/patch/preview.ts` when applicable), and keep `src/core/patch.ts` as the public facade. Keep field names strictly aligned with `docs/GLOSSARY.md`.
 
 ### Adding a New Deterministic Linter Rule
 1. Implement an **isolated, exported pure function** in `src/core/linter.ts` returning `LintDiagnostic[]` tagged with `Lens 1`–`Lens 5`, `severity` (`'error'` | `'warning'`), `message`, and `repairHint`, then compose it inside `lintDocument()`.
@@ -93,7 +99,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 ## 5. UI Minimalism, Labels & Theme Guardrails
 
 - Preserve the calm asymmetric `40/60` Live Mode (`StagingPane` / `ExecutionPane`) and centered `~820px` Source Mode—**zero** permanent sidebars, telemetry dashboards, or cluttered IDE chrome.
-- **UI Labeling SSOT (`src/ui/labels.ts`)**: Never hardcode user-facing copy, Macro-Block captions, placeholders, tooltips, or `aria-label`s in JSX. Define all strings in `APP_META`, `MACRO_BLOCK_META`, or `UI_LABELS`.
+- **UI Labeling SSOT (`src/ui/labels.ts` + `src/ui/labels/*.ts`)**: Never hardcode user-facing copy, Macro-Block captions, placeholders, tooltips, or `aria-label`s in JSX. Define all strings in the appropriate namespace module (`src/ui/labels/meta.ts`, `editor.ts`, `library.ts`, `debug.ts`, `ai.ts`) and import them via `src/ui/labels.ts` (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS`).
 - Centralize reusable UI chrome classes in `src/ui/tokens/ui.ts` (`UI_TOKENS`) and reference semantic CSS variables (`bg-surface`, `border-border-main`, `text-text-main`) so all 4 themes (`Light`, `Warm`, `Dark`, `Pure Black OLED`) maintain full contrast parity.
 - Route every destructive confirmation through `ConfirmDialog`—never `window.confirm` or `window.alert`. Keep top-level crash recovery inside `ErrorBoundary` and quiet right-margin diagnostics inside `DiagnosticDot` with zero horizontal layout shift.
 
@@ -103,19 +109,20 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 Before concluding any task, update every affected doc and test suite mapped below, then run all verification commands:
 
-| Category of Change | Required `docs/*.md` Updates | Required Test Suite |
+| Category of Change | Required `docs/*.md` & Changelog Updates | Required Test Suite |
 |---|---|---|
-| **Core modules / history / serializer / extractor / paste & undo guards** | `docs/ARCHITECTURE.md` (and `docs/GLOSSARY.md` if new domain terms) | `tests/core/` (`history`, `serializer`, `extractor`, `aesthetic`, etc.) |
-| **Grammar / regex / inline tags / Tagless export / highlighting** | `docs/GRAMMAR_CONTRACT.md`, `docs/GLOSSARY.md` | `tests/core/parser.test.ts`, `highlighter.test.ts`, `serializer.test.ts`, `ir.test.ts` |
-| **Deterministic linter rules / audit lenses** | `docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`, `docs/GRAMMAR_CONTRACT.md` | `tests/core/linter.test.ts` (positive, negative & 4 presets clean) |
-| **JSON IR / Patch Engine / Lens Slicer / Zod schemas** | `docs/JSON_IR_SPEC.md` (and `docs/ARCHITECTURE.md` if new workflows) | `tests/core/ir.test.ts`, `patch.test.ts`, `slicer.test.ts` |
-| **UI interactions / layout / settings / DnD / focus / collapse / recovery** | `docs/UI_PHILOSOPHY.md` (and `docs/ARCHITECTURE.md` if new module/guard) | `tests/ui/uiState.test.ts` (for pure UI state, shortcuts & stability helpers) |
+| **Core modules / history / serializer / extractor / paste & undo guards** | `docs/ARCHITECTURE.md` (and `docs/GLOSSARY.md` if new domain terms); `CHANGELOG.md` if user-facing | `tests/core/` (`history`, `serializer`, `extractor`, `aesthetic`, etc.) |
+| **Grammar / regex / inline tags / Tagless export / highlighting** | `docs/GRAMMAR_CONTRACT.md`, `docs/GLOSSARY.md`, `docs/SPEC_CHANGELOG.md` | `tests/core/parser.test.ts`, `highlighter.test.ts`, `serializer.test.ts`, `ir.test.ts` |
+| **Deterministic linter rules / audit lenses** | `docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`, `docs/GRAMMAR_CONTRACT.md`, `docs/SPEC_CHANGELOG.md` | `tests/core/linter.test.ts` (positive, negative & 4 presets clean) |
+| **JSON IR / Patch Engine / Lens Slicer / Zod schemas** | `docs/JSON_IR_SPEC.md`, `docs/SPEC_CHANGELOG.md` (and `docs/ARCHITECTURE.md` if new workflows) | `tests/core/ir.test.ts`, `patch.test.ts`, `slicer.test.ts` |
+| **UI interactions / layout / settings / DnD / focus / collapse / library / snapshots / recovery** | `docs/UI_PHILOSOPHY.md`, `CHANGELOG.md` (and `docs/ARCHITECTURE.md` if new module/guard) | `tests/ui/uiState.test.ts`, `subStateKeyboard.test.ts`, `scriptLibrary.test.ts`, `scriptSnapshots.test.ts` |
+| **AI Assistant / knowledge / tools / Quick Scan / Brief media / agent context packs** | `docs/AI_ASSISTANT_WALKTHROUGH.md`, `CHANGELOG.md` (and `docs/ARCHITECTURE.md` if architecture changes) | `tests/ui/` (`aiSettings`, `aiPricing`, `aiSkills`, `auteurKnowledge`, `scriptTools`, `auditBatchRebase`, `geminiInteractions`, `geminiDecisions`, `quickScanRulesStore`, `agentContextCodec`, `briefMedia`, `patchIndicators`, `aiAssistantHelpers`, `aiMessageReducers`) |
 | **`UI_LABELS` / `MACRO_BLOCK_META` / theme labels** | `docs/UI_LABELING.md` | `npm run lint` + `npm run build` |
 
 ### Verification Commands (All Must Exit `0`)
 
 ```bash
-npm test          # Runs the Vitest unit suite for src/core/ and src/ui/
+npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (28 files, 268 tests)
 npm run lint      # Runs strict TypeScript type-checking (tsc --noEmit)
 npm run build     # Runs tsc --noEmit && vite build
 ```

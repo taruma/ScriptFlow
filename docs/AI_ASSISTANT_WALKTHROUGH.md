@@ -1,9 +1,9 @@
 # AI Assistant Walkthrough & Tools Guide
 
-This guide explains how the **Auteur Script Editor AI Assistant** works end-to-end—from BYOK setup and unified `Auto` focus routing to every local script tool, passive/on-demand skill, pre-send prompt customization, review card workflow, and debug trace inspection.
+This guide explains how the **Auteur Script Editor AI Assistant** works end-to-end—from BYOK setup and unified `Auto` focus routing to every local script tool, passive/on-demand skill, Layer 2.5 Quick Scan, multimodal Scene Brief, pre-send prompt customization, review card & Live Mode indicator workflow, and debug trace inspection.
 
 > **Related References**
-> - **Architecture & Data Flow**: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) (§6)
+> - **Architecture & Data Flow**: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
 > - **Script Supervisor Rules & 5 Audit Lenses**: [`docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`](SCRIPT_SUPERVISOR_AUDIT_RULES.md)
 > - **Programmatic JSON IR, Patches & Slicer**: [`docs/JSON_IR_SPEC.md`](JSON_IR_SPEC.md)
 > - **Canonical `v0.4.0` Syntax Contract**: [`docs/GRAMMAR_CONTRACT.md`](GRAMMAR_CONTRACT.md)
@@ -15,14 +15,14 @@ This guide explains how the **Auteur Script Editor AI Assistant** works end-to-e
 The AI Assistant is **multi-turn, agentic, and strictly suggestions-first**—not a one-shot text generator and never an unchecked auto-editor.
 
 ### Core Principles
-1. **Plain-Text-as-Truth & Zero Direct Mutation**: None of the AI tools can directly overwrite your editor text. Every draft, targeted edit, or audit fix is validated against Zod schemas and the deterministic Script Supervisor linter, then staged as a reviewable card (`Apply`, `Apply Fix`, `Fork & Apply`, or `Dismiss`). Clicking **Apply** commits a single undoable history checkpoint (`Cmd/Ctrl+Z`).
+1. **Plain-Text-as-Truth & Zero Direct Mutation**: None of the AI tools can directly overwrite your editor text. Every draft, targeted edit, or audit fix is validated against Zod schemas and the deterministic Script Supervisor linter, then staged as a reviewable card (`Apply`, `Apply Fix`, `Apply All`, `Fork & Apply`, or `Dismiss`). Clicking **Apply** saves a persistent pre-apply Version History snapshot in IndexedDB and commits a single undoable history checkpoint (`Cmd/Ctrl+Z`).
 2. **Multi-Turn Memory (`previous_interaction_id`)**: Conversation continuity is maintained across user messages via the Gemini Interactions API (`client.interactions.create` with `stream: true`), while a fresh **Live Editor State** summary (`snapshotHash`, `changedSinceLastTurn`, `sceneTopology`, active lint counts) is injected on every turn so manual edits or clicked Apply actions never leave the model working on stale memory.
-3. **Agentic Tool Loop (Up to 8 Rounds per Turn)**: Round 1 never dumps your entire script into the chat prompt. Instead, the model receives your craft rules, live editor summary, skill directory, and pruned tool schemas, then pulls only the overview, lens slices, or craft skills it needs locally in your browser before staging its result.
+3. **Agentic Tool Loop (Up to 8 Rounds per Turn)**: Round 1 never dumps your entire script into the chat prompt. Instead, the model receives your craft rules, live editor summary, active Scene Brief, skill directory, and pruned tool schemas, then pulls only the overview, lens slices, or craft skills it needs locally in your browser before staging its result.
 4. **3.5-Layer Verification Stack**:
-   - **Layer 1 — Grammar & Schema Integrity** (`src/core/parser.ts`, `irSchemas.ts`, `patch.ts`): Structural validity, snapshot concurrency (`expectedSnapshotHash`), and valid target IDs (`MB#`, `S#`).
+   - **Layer 1 — Grammar & Schema Integrity** (`src/core/parser.ts`, `src/core/irSchemas.ts`, `src/core/patch.ts`): Structural validity, snapshot concurrency (`expectedSnapshotHash`), and valid target IDs (`MB#`, `MB#.#`, `S#`, `S#.#`).
    - **Layer 2 — Deterministic Code Linter** (`src/core/linter.ts`): 5 instant, zero-token rules enforced on every keystroke and every AI dry-run (`rejectOnNewErrors: true`).
-   - **Layer 2.5 — Decisions API Quick Scan** (`src/services/geminiDecisions.ts` + `gemini-decision-1` on `v1beta`): Optional, single-pass (~400ms, `$0` output tokens, `~$0.0003` text scan) AST-filtered atomic `noul` matrix evaluating declarative document-level and per-`S#` semantic craft & Brief rules, merging Layer 2 lint, surfacing suspect `S#` dots in Live Mode, and handing off selected lenses + unverified leads to Layer 3.
-   - **Layer 3 — AI Semantic Script Supervisor** (`src/core/slicer.ts` + selected Gemini 4 model): Evaluates spatial 180° eyelines, camera visibility, prop hand-tracking, temporal pacing, physical wear, and lookbook bleed across the 5 lenses, staging verified `suggestedPatch` fixes.
+   - **Layer 2.5 — Decisions API Quick Scan** (`src/services/geminiDecisions.ts` + `gemini-decision-1` on `v1beta`): Optional, single-pass (~400ms, `$0` output tokens, `~$0.0003` text scan; auto-chunked at `1000` checks per batch) AST-filtered atomic `noul` matrix evaluating 15 built-in declarative document-level, per-`S#`, and per-`S#.#` semantic craft & Scene Brief rules (plus any custom user rules), merging Layer 2 lint, surfacing suspect `S#` margin indicators (`AiQuickScanIndicator`) in Live Mode, and handing off selected lenses + unverified leads to Layer 3.
+   - **Layer 3 — AI Semantic Script Supervisor** (`src/core/slicer.ts` + selected Gemini model): Evaluates spatial 180° eyelines, camera visibility, prop hand-tracking, temporal pacing, physical wear, and lookbook bleed across the 5 lenses, staging verified `suggestedPatch` fixes.
 
 ### Turn Execution Lifecycle
 
@@ -33,16 +33,16 @@ You send a prompt (in Auto / Draft / Refine / Audit focus)
 [Pre-Send Composer] composeAgentContext() runs locally:
   • Parses current rawText -> snapshotHash, sceneTopology, deterministic lint
   • Resolves every built-in & custom skill into: active | available | muted
-  • Prunes allowed tools by Focus + editor emptiness
+  • Prunes allowed tools by Focus, editor emptiness, and Ask First state
   • Assembles system_instruction (Editable Craft + Live State + Active Scene Brief + Active Skills + Directory + Code-Owned Protocol)
    │
    ▼
 [Round 1] Streamed request to Gemini Interactions API (previous_interaction_id chained)
    │
-   ├─► Model emits function_call step(s) (e.g. get_script_overview, parallel inspect_lens_slice, load_auteur_skill)
+   ├─► Model emits function_call step(s) (e.g. get_script_overview, parallel inspect_lens_slice, load_auteur_skill, ask_question)
    │     └─► Browser executes executeScriptToolCall() locally against rawText (zero mutation)
    │         • If validation or lint fails -> returns ok: false + errors + repairHint (is_error: true)
-   │         • If clean -> stages reviewable card (Patch / Draft / Audit) or returns slice/skill data
+   │         • If clean -> stages reviewable card (Patch / Draft / Audit / Question) or returns slice/skill data
    │
    ├─► [Round 2..N, max 8] Browser sends function_result payloads back -> Model self-repairs or synthesizes
    │
@@ -54,22 +54,22 @@ You send a prompt (in Auto / Draft / Refine / Audit focus)
 
 ## 2. Getting Started & AI Settings (BYOK)
 
-Click **`AI`** in the top bar (`TopSlateBar`) to open the right-side AI Canvas sidebar. When closed, the AI module is lazy-loaded and incurs zero runtime or bundle overhead. On desktop, drag the sidebar's left border to resize between `340px` and `580px`.
+Click **`AI`** in the top bar (`TopSlateBar`) to open the right-side AI Canvas sidebar. When closed, the AI module is lazy-loaded and incurs zero runtime or bundle overhead. On desktop, drag the sidebar's left border to resize between `340px` and `580px` (default `410px`).
 
 ### Configuring Your API Key & Model
-Click the **`Model · Level`** status chip at the bottom-right of the sidebar composer dock (or **Open AI Settings** on the setup card) to configure:
+Click the **`Model · Level`** status chip at the bottom-right of the sidebar composer dock (or **Open AI Settings** on the setup card) to open **`AiSettingsModal`** and configure:
 
 | Setting | Options & Default | Notes |
 |---|---|---|
 | **Gemini API Key (BYOK)** | Your personal key (`AIza...`) | Stored strictly in this browser and sent directly to the Gemini API. Never read from server environment variables. |
-| **Session only** | Off (`localStorage`) / On (`sessionStorage`) | Toggle on to keep your key only until the browser tab closes. **Clear Key** purges both stores immediately. |
-| **Gemini Model** | `Gemini 4 Hydrogen` *(default, fast)*<br>`Gemini 4 Neon` *(frontier speed)*<br>`Gemini 4 Carbon` *(strongest reasoning)*<br>`Gemini 3.5 Flash-Lite` *(budget / ultra-fast)* | All four share a 1M unified context window and can be switched anytime between turns. Use Hydrogen for fast everyday edits and multimodal briefs, Neon for frontier-level rewrites and coverage, Carbon for complex multi-lens audits or dense drafts, and 3.5 Flash-Lite for ultra-low-cost, low-latency iterations. |
+| **Session only** | Off (`localStorage`) / On (`sessionStorage`) | Toggle on to keep your key only until the browser tab closes (migrates and purges the inactive store automatically). **Clear Key** purges both stores immediately. |
+| **Gemini Model** | `Gemini 4 Hydrogen` (`gemini-4-hydrogen`) *(default, fast)*<br>`Gemini 4 Neon` (`gemini-4-neon`) *(frontier speed)*<br>`Gemini 4 Carbon` (`gemini-4-carbon`) *(strongest reasoning)*<br>`Gemini 3.5 Flash-Lite` (`gemini-3.5-flash-lite`) *(budget / ultra-fast)* | All four share a 1M unified context window and can be switched anytime between turns. Use Hydrogen for fast everyday edits and multimodal briefs, Neon for frontier-level rewrites and coverage, Carbon for complex multi-lens audits or dense drafts, and 3.5 Flash-Lite for ultra-low-cost, low-latency iterations. Each option displays its compact per-1M input/output rate directly in the picker. |
 | **Reasoning Level** | `Low` / `Medium` *(default)* / `High` | Maps directly to `generation_config.thinking_level` (`thinking_summaries: 'auto'`). |
 | **Quick Scan Sensitivity** | `Strict` / `Balanced` *(default)* / `Lenient` | Calibrated `gemini-decision-1` (`v1beta`, `$0.10 / $0` per 1M) probability cutoffs for `Flagged` and `Borderline` badges (`Strict`: `>=35% / >=20%`, `Balanced`: `>=50% / >=28%`, `Lenient`: `>=65% / >=42%`). |
 | **Show reasoning summary** | On *(default)* / Off | Controls whether streamed thought summaries appear inside the **Thinking** accordion. |
-| **Show estimated cost** | On *(default)* / Off | Displays a quiet approximate USD badge (`~$0.0042`) on completed turns and a cumulative session total to the left of the **`Model · Level`** pill below the prompt box (with hover token & USD breakdown tooltips). |
-| **Show Debug Trace** | Off *(default)* / On | Surfaces a quiet **`Inspect`** button on completed, stopped, and failed turns to open the **AI Trace Inspector** modal. |
-| **Reset to defaults** | Footer action | Restores default model (`Hydrogen`), reasoning level (`Medium`), and display toggles (`Show reasoning summary` On, `Show estimated cost` On, `Show Debug Trace` Off) **without clearing your BYOK API key or `Session only` storage mode**. |
+| **Show estimated cost** | On *(default)* / Off | Displays a quiet approximate USD badge (`~$0.0042`) on completed turns and a cumulative session total to the left of the **`Model · Level`** chip below the prompt box (with hover token & USD breakdown tooltips covering both Interactions API turns and Decisions API Quick Scans). |
+| **Show Debug Trace** | Off *(default)* / On | Surfaces a quiet **`Inspect`** button on completed, stopped, failed, and Quick Scan turns to open **`AiTraceModal`**. |
+| **Reset to defaults** | Footer action | Restores default model (`Hydrogen`), reasoning level (`Medium`), Quick Scan sensitivity (`Balanced`), and display toggles (`Show reasoning summary` On, `Show estimated cost` On, `Show Debug Trace` Off) **without clearing your BYOK API key or `Session only` storage mode**. |
 
 ---
 
@@ -79,48 +79,51 @@ The sidebar runs **one continuous conversation thread** anchored by a 4-tab **Fo
 
 ### Focus Modes & Editor-State-Aware Tool Pruning
 
-To prevent unnecessary token cost and accidental whole-script overwrites, the context composer dynamically prunes which tools the model sees based on **Focus** and **whether the editor is currently empty**:
+To prevent unnecessary token cost and accidental whole-script overwrites, the context composer dynamically prunes which tools the model sees based on **Focus**, **whether the editor is currently empty**, and whether **`Ask First`** is active:
 
 | Focus | Editor State | Exposed Tools | Passive `draft_craft`? | Primary Use Case |
 |---|---|---|---|---|
-| **`Auto`** *(default)* | **Empty** | `propose_script_draft`, `load_auteur_skill`* | **Yes** | Describe a scene idea (with optional Brief / Refs) → compiles and stages a full `v0.4.0` draft immediately. |
-| **`Auto`** *(default)* | **Has Script** | `get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `report_audit_review`, `load_auteur_skill`* | No *(available on demand)* | Seamless post-draft workflow: ask for targeted edits, run audits, or ask directorial questions in the same thread—`propose_script_draft` is omitted so the model cannot accidentally replace the entire script. |
-| **`Draft`** | Empty or Has Script | `propose_script_draft`, `get_script_overview` *(if non-empty)*, `load_auteur_skill`* | **Yes** | Force full-scene generation or re-draft a replacement scene from scratch on a non-empty editor. |
-| **`Refine`** | Has Script | `get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `load_auteur_skill`* | No | Constrain the assistant strictly to targeted, ID-addressed script edits. |
+| **`Auto`** *(default)* | **Empty** | `propose_script_draft`, `ask_question`†, `load_auteur_skill`* | **Yes** | Describe a scene idea (with optional Scene Brief) → compiles and stages a full `v0.4.0` draft immediately. |
+| **`Auto`** *(default)* | **Has Script** | `get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `report_audit_review`, `ask_question`†, `load_auteur_skill`* | No *(available on demand)* | Seamless post-draft workflow: ask for targeted edits, run audits, or ask directorial questions in the same thread—`propose_script_draft` is omitted so the model cannot accidentally replace the entire script. |
+| **`Draft`** | Empty or Has Script | `propose_script_draft`, `get_script_overview` *(if non-empty)*, `ask_question`†, `load_auteur_skill`* | **Yes** | Force full-scene generation or re-draft a replacement scene from scratch on a non-empty editor. |
+| **`Refine`** | Has Script | `get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `ask_question`†, `load_auteur_skill`* | No | Constrain the assistant strictly to targeted, ID-addressed script edits. |
 | **`Audit`** | Has Script | `get_script_overview`, `inspect_lens_slice`, `report_audit_review`, `load_auteur_skill`* | No | Constrain the assistant strictly to Script Supervisor continuity evaluation and clickable fix suggestions. |
 
-*\*`load_auteur_skill` is automatically omitted if zero skills are in the `available` state (for example, if all remaining skills are pinned or muted).*
+*\*`load_auteur_skill` is automatically omitted if zero skills are in the `available` state (for example, if all remaining skills are pinned or muted).*  
+*†`ask_question` is physically omitted by default and exposed in `Auto`, `Draft`, and `Refine` only when you toggle **`Ask First`** ON (auto-resets after sending) or on the follow-up turn after submitting answers from a Question Card. Always omitted in `Audit`.*
 
 ### Contextual Focus Controls
 - **Target Scope Selector (`Auto` / `Refine` on non-empty scripts):** Choose `Whole Script`, any Staging Macro-Block (`MB0 · [INTENT]`, `MB2 · [AESTHETIC]`, etc.), or any Execution Macro-State (`S1`, `S2`, ...). When a specific target is chosen, your prompt is automatically prefixed with `[Target Scope: ... — focus edits on <ID> unless adjacent context requires minimal continuity alignment.]`.
-- **One-Click `Quick Scan` & `Audit All` Pills (`Auto` on non-empty scripts):** Click **`Quick Scan`** for a ~400ms, zero-output-token Decisions API pre-check (`gemini-decision-1`) across AST-filtered atomic rules + active Brief fidelity without touching `previous_interaction_id`, or click **`Audit All`** to run a full 5-lens Gemini 4 Script Supervisor audit (`overrideFocus: 'audit'`) without leaving `Auto`.
-- **Quick Scan + 6 Quick Audit Lens Pills (`Audit` focus):** One-click triggers for **`Quick Scan`** (Layer 2.5 screening) alongside **`All Lenses`** or any individual lens (**`Lens 1 · Spatial`**, **`Lens 2 · Pacing`**, **`Lens 3 · Props`**, **`Lens 4 · Acoustics`**, **`Lens 5 · Grammar`**).
-  - *Quick Scan Escalation:* Results render in an interactive **`QuickScanCard`** with pre-checked flagged/borderline lenses, expandable atomic rule probabilities (click any finding row to inspect the exact **Question** and **Flagged if** criteria inline), clickable suspect `S#` jump pills, a stale-script `Re-scan` banner, a 1-click **`Deep Audit Selected (N)`** handoff (forwarding tripped checks & suspect `S#` IDs as unverified System-1 leads to Gemini 4), and a 1-click **`Run Standard Audit All instead`** fallback if `v1beta` errors. *(Note: Decisions API has no context caching and omits YouTube video streams—YouTube Brief refs gracefully downgrade to text `@handle` labels.)*
+- **`Ask First` Toggle (`Auto`, `Draft`, `Refine`):** Sits next to **`Brief`** in the utility bar below the Focus tabs. Toggle it ON before sending to invite 1–4 structured multi-select clarifying questions (`QuestionSuggestionCard`) before the model drafts or edits; it automatically resets to Off once sent.
+- **One-Click `Quick Scan` & `Audit All` Pills (`Auto` on non-empty scripts):** Click **`Quick Scan`** for a ~400ms, zero-output-token Decisions API pre-check (`gemini-decision-1`) across AST-filtered atomic rules + active Scene Brief fidelity without touching `previous_interaction_id`, or click **`Audit All`** to run a full 5-lens Gemini 4 Script Supervisor audit (`overrideFocus: 'audit'`) without leaving `Auto`.
+- **Quick Scan + 6 Quick Audit Lens Pills (`Audit` focus):** One-click triggers for **`Quick Scan`** (Layer 2.5 screening, shown on non-empty scripts) alongside **`All Lenses`** or any individual lens (**`Lens 1 · Spatial`**, **`Lens 2 · Pacing`**, **`Lens 3 · Props`**, **`Lens 4 · Acoustics`**, **`Lens 5 · Grammar`**).
+  - *Quick Scan Escalation:* Results render in an interactive **`QuickScanCard`** with pre-checked flagged/borderline lenses, expandable atomic rule probabilities (click any finding row to inspect the exact **Question** and **Flagged if** criteria inline), clickable suspect `S#` jump pills, a stale-script **`Re-scan`** banner, a 1-click **`Deep Audit Selected (N)`** (or **`Run Full Deep Audit`**) handoff forwarding tripped checks & suspect `S#` IDs as unverified System-1 leads to Gemini 4, and a 1-click **`Run Standard Audit All instead`** fallback if `v1beta` errors. *(Note: Decisions API has no context caching and omits YouTube video streams—YouTube Brief refs gracefully downgrade to text `@handle` labels.)*
 
 ### Chat Session Lifecycle & Read-Only Examples
 - Conversations are kept **in memory per open script** and persist across closing and reopening the **`AI`** sidebar (only clearing on **`New Chat`**, page refresh, or switching scripts). Click **`New Chat`** (reset icon in the sidebar header) to clear messages, reset `previous_interaction_id`, and start a fresh thread.
-- Switching scripts in the Script Library automatically resets the chat thread, Target Scope, and Brief tray.
-- **Bundled Examples (`Fork & Apply`):** Bundled examples are read-only until forked. When you click **`Fork & Apply`** on an AI Draft, Patch, or Audit Fix card while viewing a bundled example, the app forks the example into *My Scripts* (IndexedDB), applies the suggestion, and **preserves your active AI conversation thread** so you can keep iterating seamlessly.
+- Switching scripts in the Script Library automatically resets the chat thread, Target Scope, and Scene Brief.
+- **Bundled Examples (`Fork & Apply`):** Bundled examples are read-only until forked. When you click **`Fork & Apply`** (or **`Fork & Apply All`**) on an AI Draft, Patch, or Audit Fix card while viewing a bundled example, the app forks the example into *My Scripts* (IndexedDB), applies the suggestion, and **preserves your active AI conversation thread** so you can keep iterating seamlessly.
 
 ---
 
 ## 4. Resizable Prompt Box & Dedicated `Scene Brief & References` Modal
 
-At the bottom of the sidebar sits a **resizable prompt box** (`Enter` to send, `Shift+Enter` for a newline) that auto-grows cleanly as you type and includes a top drag-resize handle (double-click to reset to auto-grow), with the 4-tab Focus bar, Target Scope selector, **`Brief`** button, and **`Model · Level`** settings chip neatly arranged underneath.
+At the bottom of the sidebar sits a **resizable prompt box** (`Enter` to send, `Shift+Enter` for a newline) that auto-grows cleanly as you type and includes a top drag-resize handle (double-click to reset to auto-grow), with the 4-tab Focus bar, Target Scope / Quick Audit row, **`Brief`** and **`Ask First`** buttons on the left, and the cumulative **Session Cost** badge + **`Model · Level`** settings chip on the right.
 
 ### Editing `Scene Brief & References` (`AiBriefModal`)
-Click **`Brief`** at the bottom-left to open the dedicated **Scene Brief & References** modal (unobstructed by the prompt box and modeled as a mode-agnostic Reference Pack for cast handles, constraints, and future multimodal attachments):
+Click **`Brief`** at the bottom-left to open the dedicated **Scene Brief & References** modal (unobstructed by the prompt box and modeled as a mode-agnostic multimodal Reference Pack for cast handles, media attachments, and production constraints):
 
 1. **Include in AI context (On/Off toggle)**:
    - Enabled by default as soon as you populate any Brief field, and can be toggled off anytime without clearing your references or notes (the bottom button shows **`Brief · Off`** while paused).
    - **Carries across all modes (`Auto`, `Draft`, `Refine`, `Audit`):** When active, your Brief is injected as a dedicated **`Scene Brief & References`** context section inside `system_instruction` (visible live inside **Context → Live Prompt Preview**), never rewriting or wrapping what you type in the prompt box.
    - When the Brief is empty or toggled off, **nothing** is injected and your prompt box message is sent verbatim.
-2. **Cast & References (PromptLab-style Visual Card Grid + Multimodal Attachments)**:
-   - **Drag & Drop / Local Upload (Images & Text):** Drop or pick local **images** (`.jpg`, `.png`, `.webp` — automatically downscaled in-browser to max `1600px` longest edge at `85%` quality) or small **text documents** (`.txt`, `.md`, `.json`, `.csv`, `≤ 256 KB`). Each card shows a visual preview tile, editable top-left handle badge (`@image1`, `@doc1`, ...), and **Label** + **Note** inputs directly underneath.
-   - **Gemini Files API (Video, Audio, PDF, or Full-Fidelity Originals up to 2 GB):** Click **`Files API`** to drag-and-drop or pick one or multiple files to upload directly from the browser via `@google/genai` (auto-polling `PROCESSING` → `ACTIVE`) or attach/delete active **48-hour Gemini Cloud files** on your API key. Dropping a video/audio/PDF onto the local dropzone also surfaces a 1-click **`Upload via Files API`** shortcut.
-   - **Public YouTube URLs:** Click **`YouTube`** to paste any public YouTube URL with instant thumbnail preview (`@video1`, zero upload required). Video cards also include a **`Static` / `Agentic`** toggle for Interactions API video processing mode.
+2. **Cast & References (Visual Card Strip + Multimodal Attachments)**:
+   - **Drag & Drop / Local Upload (Images & Text):** Drop or pick local **images** (`.jpg`, `.png`, `.webp`, etc. — automatically downscaled in-browser to max `1600px` longest edge at `85%` quality) or small **text documents** (`.txt`, `.md`, `.json`, `.csv`, `.srt`, `.vtt`, etc., `≤ 256 KB`). Each card shows an aspect-ratio-aware preview tile, editable top-left handle badge (`@image1`, `@doc1`, ...), and **Label** + **Note** inputs directly underneath.
+   - **Gemini Files API (Video, Audio, PDF, or Full-Fidelity Originals up to `2 GB`):** Click **`Files API`** to open the inline **`GeminiFilesPanel`**, where you can drag-and-drop or pick one or multiple files for sequential multi-file batch upload directly from the browser via `@google/genai` (`src/services/geminiFiles.ts`, auto-polling `PROCESSING` → `ACTIVE`), or browse, refresh, attach, and delete active **48-hour Gemini Cloud files** stored on your API key. Dropping a video, audio, PDF, or `> 256 KB` text file onto the local dropzone also surfaces a 1-click **`Upload via Files API`** shortcut.
+   - **Public YouTube URLs:** Click **`YouTube`** to paste any public YouTube URL (`watch`, `shorts`, `embed`, `live`, `youtu.be`) with instant thumbnail preview (`@video1`, zero upload required). Video cards also include a **`Static` / `Agentic`** toggle for Interactions API video processing mode.
+   - **Hover Preview & Click-to-Inspect Lightbox (`BriefMediaLightbox`):** Hover over any attached reference card to see a viewport-aware floating preview portal (scaled image, text excerpt, or file/URI metadata). Click the preview tile to open a full-screen lightbox (`aria-modal="true"`) with full-resolution image inspection, inline `<video>` / `<audio>` playback (for files uploaded during the current session), embedded YouTube playback (plus an **`Open on YouTube`** link), or a scrollable full-text viewer with line and character counts (`Esc` closes the lightbox without closing `AiBriefModal`).
    - **Text-only handles (`+ Text handle`):** Keep lightweight manual `@handle` rows without attaching media.
-   - **Send-Once-Per-Thread Efficiency:** Because ScriptFlow chains server-side state via `previous_interaction_id`, each multimodal attachment is delivered **once** on the first turn it appears (not re-uploaded on follow-up turns in the same thread), while the lightweight `@handle` manifest stays live in `system_instruction`.
+   - **Send-Once-Per-Thread Efficiency:** Because ScriptFlow chains server-side state via `previous_interaction_id`, each multimodal attachment is fingerprinted (`buildAttachmentFingerprint`) and delivered **once** on the first turn it appears (not re-uploaded on follow-up turns in the same thread), while the lightweight `@handle` manifest stays live in `system_instruction`.
    - **Automatic Passive Skill Triggers (All Modes):** Whenever the Brief is active, declaring any `@video*` handle passively activates the **`video_continuation`** skill, and declaring any `@image*`, `@actor*`, or `@audio*` handle (including `@audio1` inside a note) passively activates **`character_reference`**—even on a blank script and across `Auto`, `Draft`, `Refine`, and `Audit`.
 3. **Format & Specs**: Concise production constraints (e.g., *"short sequence, continuous handheld oner, Robert has only one line, Japanese kissaten cafe"*).
 4. **Subtext & Additional Instructions**: Background directorial intent, unspoken tension, or extra instructions carried across turns.
@@ -135,7 +138,7 @@ Your message in the composer box is **always sent verbatim** (except for an expl
 
 ## 5. Complete Local AI Tools Reference
 
-All 7 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptTools.ts) and execute **locally in the browser** against your current `rawText` and active `Settings → Supervisor rules` (`ruleOverrides`).
+All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/services/scriptTools.ts) (backed by modular declarations and handlers under `src/services/tools/`) and execute **locally in the browser** against your current `rawText` and active `Settings → Supervisor rules` (`ruleOverrides`).
 
 ### 1. `get_script_overview` *(Read-Only)*
 - **UI Badge:** `Inspect overview`
@@ -189,7 +192,7 @@ All 7 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptToo
 - **Arguments:** Validated against `AuteurReviewSchema` (`overallSummary` and `issues[]`, each carrying `lens`, `severity`, `targetLevel`, `targetId`, `message`, `rationale`, `repairHint`, and optional `suggestedPatch`).
 - **Per-Issue Fix Verification:**
   - Every embedded `suggestedPatch` is individually dry-run with `rejectOnNewErrors: true` and active `ruleOverrides`.
-  - Clean fixes attach a 1-click **`Apply Fix`** button directly inside that audit issue row.
+  - Clean fixes attach a 1-click **`Apply Fix`** button directly inside that audit issue row (and enable header **`Apply All (N)`** batching when 2+ fixes are non-conflicting).
   - Any broken or lint-violating `suggestedPatch` is withheld from staging and reported back in `invalidSuggestedPatches` with a `repairHint` so the model can repair it.
   - Stages an **`AuditReviewSuggestionCard`** with clickable `targetId` jump links.
 
@@ -213,7 +216,7 @@ All 7 AI tools live in [`src/services/scriptTools.ts`](../src/services/scriptToo
 
 ## 6. Knowledge Registry, Skills & Pre-Send Transparency (`Context` Modal)
 
-Click **`Context`** in the sidebar header (shows active skill count and an indicator dot when customizations or upstream knowledge updates exist) to open **`AiContextInspectorModal`**.
+Click **`Context`** in the sidebar header (shows active skill count and an indicator dot when customizations or upstream knowledge/rule updates exist) to open **`AiContextInspectorModal`**.
 
 ### How `system_instruction` Is Structured (Anti-Override-Rot Design)
 
@@ -248,19 +251,19 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 | `spatial_fences` | Module | On demand *(or Pin)* | Inline `[BLOCK]` for 3+ subjects/mark swaps, `[STATE IN]`/`[STATE OUT]` boundary clamps, dynamic `[LIGHT]`, and Tier-2 single-dimension tags (`[FOCUS]`, `[SPEED]`, `[PROP]`, `[ENV]`, `[CROWD]`, `[VFX]`, `[TRANS]`). |
 
 ### Inside the 4 Tabs of `AiContextInspectorModal`
-1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
+1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`, currently `0.4.0-k2`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
 2. **Foundational Craft**: Edit **Foundational Auteur Craft** directly (persisted in `localStorage` under `auteur-editor-ai-skills-v1`), with a **`Modified`** indicator and **`Reset to default`**.
 3. **Skills & Extensions**:
    - Toggle any built-in or custom skill between **`Auto`**, **`Pin`**, and **`Mute`** (or use **`Auto all`** / **`Mute all`** to update every skill in one click without losing custom skills or body overrides) and immediately see its resolved status (`Active · Passive`, `Active · Pinned`, `Available`, `Muted`).
    - Expand any skill to read or override its instruction body (`Reset` restores built-in text).
    - Click **`+ Add Custom Skill`** to create your own reusable extension skills (`Name`, auto-slugified `snake_case` `ID` validated against built-in collisions, `Trigger Hint`, and `Instruction Body`), plus edit or delete them (destructive deletes and **Reset all defaults** confirm via `ConfirmDialog`).
-4. **Quick Scan Rules**:
-   - Browse the declarative built-in atomic rule catalog (`src/data/knowledge/quick-scan-rules.json`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc`, `Per S#`, `Per S#.#`) and AST `when` condition tags.
+4. **Quick Scan Rules** (`QuickScanRulesTabPanel`):
+   - Browse the 15 built-in declarative atomic rules (`src/data/knowledge/quick-scan-rules.json`, `QUICK_SCAN_RULES_VERSION = '0.4.0-qs2'`) grouped by Audit Lens (`Lens 1`–`Lens 5`, `Scene Brief & Media`) with scope badges (`Doc`, `Per S#`, `Per S#.#`) and AST `when` condition tags.
    - Toggle any built-in or custom rule On/Off (or use **`Enable all`** / **`Disable all`** to toggle every rule in one click without deleting custom rules or text overrides), expand built-in rules to override `instructions` / `True` / `False` criteria (`Reset` restores built-in wording), or click **`+ Add Custom Rule`** to create project-specific `Document`, `Per Macro-State` (`{{STATE_ID}}`), or `Per Sub-State` (`{{SUB_STATE_ID}}`) checks evaluated in the exact same single Decisions API pass (persisted under `auteur-editor-quick-scan-rules-v1`).
 
 ### Unified Export, Selective Import & Reset Backup Safeguards
-- **Unified **`Export JSON`**** (header bar of `AiContextInspectorModal`): Downloads a single human-editable JSON pack (`auteur-agent-context-YYYY-MM-DD.json`, `format: "auteur-agent-context-pack"`, `packVersion: 1`) containing all browser-saved Foundational Craft edits, built-in skill pin/body overrides, custom skills, Quick Scan rule overrides, and custom Quick Scan rules. Never exports locked Grammar Core, API keys, model preferences, or scripts.
-- **Selective **`Import JSON`**** (`AgentContextImportDialog`): Validates full or partial JSON packs via Zod + store sanitizers, surfaces any non-fatal skip notes, and opens a detailed pick-and-choose dialog where you can:
+- **Unified `Export JSON`** (header bar of `AiContextInspectorModal`): Downloads a single human-editable JSON pack (`auteur-agent-context-YYYY-MM-DD.json`, `format: "auteur-agent-context-pack"`, `packVersion: 1`) containing all browser-saved Foundational Craft edits, built-in skill pin/body overrides, custom skills, Quick Scan rule overrides, and custom Quick Scan rules. Never exports locked Grammar Core, API keys, model preferences, or scripts.
+- **Selective `Import JSON`** (`AgentContextImportDialog`): Validates full or partial JSON packs via Zod (`src/ui/agentContextCodec.ts`) + store sanitizers, surfaces any non-fatal skip notes, and opens a detailed pick-and-choose dialog where you can:
   - Toggle top-level sections (**Foundational Craft & Skills**, **Quick Scan Rules**) and check/uncheck individual overrides or custom items (each annotated with `New` vs. `Overwrites local` and change badges).
   - Choose **`Merge (Keep existing)`** (non-destructive: applies only checked items and preserves all other local customizations) or **`Replace (Switch profile)`** (replaces each checked section with only the selected items, displaying exact removal/reset counts and a one-click **`Export current backup first`** button whenever local items would be deleted).
 - **Clear Reset Confirmations**: **`Reset all defaults`** and **`Reset Quick Scan rules`** permanently remove custom skills/rules and reset overrides in their respective stores; both `ConfirmDialog` prompts display exact counts of custom items and overrides that will be removed and include a one-click **`Export Agent Context first`** backup button.
@@ -278,35 +281,40 @@ Each assistant turn separates **Thinking** from **Tools & Skills** so long reaso
 - **Sticky-Bottom Auto-Scroll:** The message stream follows streamed output automatically while you are near the bottom, immediately pauses if you scroll up to read earlier turns, and surfaces a quiet **`↓ Latest`** pill to jump back down and resume auto-scrolling.
 - Click **`Stop`** in the composer footer at any time to abort an in-flight turn cleanly via `AbortSignal`.
 
-### Reviewing & Applying Staged Cards
+### Reviewing & Applying Staged Cards & Live Mode Indicators
 Suggestion cards are inspectable immediately while streaming, while **Apply** buttons unlock once the assistant finishes its turn:
 
 - **`PatchSuggestionCard`**: Shows summary, affected IDs (`S2`, `MB1`), lint delta (`Lint clean`, `-1 resolved`, warning count), and toggleable **Diff** / **Preview** views. If you manually edited the script after the patch was staged, a stale-snapshot warning disables **Apply** so manual edits are never clobbered. Once applied or dismissed, it auto-collapses into a compact single-line receipt (clickable to re-expand anytime).
 - **`DraftSuggestionCard`**: Shows title, scene topology, Macro-Block/Macro-State counts, lint status, and **Preview** / **Diff** toggle. Clicking **Apply** commits a checkpoint, automatically sets the Scene Title if currently untitled, and auto-collapses the card to a compact receipt.
-- **`AuditReviewSuggestionCard`**: Shows overall summary, error/warning counts, and **`Apply All (N)`** (or **`Fork & Apply All (N)`**) right in the header whenever 2+ unapplied, non-conflicting fixes can be committed together in a single transactional Undo checkpoint. Multi-issue audits (`2+` issues) start **collapsed** (`Show N issues ▸`) so the assistant's text reply stays visible without scrolling; expanding shows full rationales, clickable **`targetId`** jump links (`MB0`, `S2`, `S2.1`), diff previews, and 1-click **`Apply Fix`** buttons (auto-collapsing once all fixes are applied). Applying an individual fix (from either the sidebar or Live Mode) automatically rebases any provably non-conflicting sibling fixes onto the updated script so you can apply independent fixes one by one without re-running the audit (while genuinely overlapping or index-shifted siblings stay safely marked stale).
+- **`AuditReviewSuggestionCard`**: Shows overall summary, error/warning counts, and **`Apply All (N)`** (or **`Fork & Apply All (N)`**) right in the header whenever 2+ unapplied, non-conflicting fixes can be committed together in a single transactional Undo checkpoint. Multi-issue audits (`2+` issues) start **collapsed** (`Show N issues ▸`) so the assistant's text reply stays visible without scrolling; expanding shows full rationales, clickable **`targetId`** jump links (`MB0`, `S2`, `S2.1`), diff previews, and 1-click **`Apply Fix`** buttons (auto-collapsing once all fixes are applied). Applying an individual fix (from either the sidebar or Live Mode) automatically rebases any provably non-conflicting sibling fixes (`rebaseAuditReviewAfterFix`) onto the updated script so you can apply independent fixes one by one without re-running the audit (while genuinely overlapping or index-shifted siblings stay safely marked stale).
 - **Actionable Hover-to-Diff Popovers in Live Mode (`AiPatchIndicator`, `AiPatchInsertionSeam`)**: While any patch or Audit Review fix is pending and non-stale, affected Staging Macro-Blocks (`MB#`) and Execution Macro-States (`S#`) show a subtle inset accent border and a quiet margin dot right next to `DiagnosticDot` (and proposed insertions show a thin dashed `+ AI Insert` pill between rows). Hover any indicator to peek a word-level diff right in Live Mode—or click to pin it open—and click **`Apply`** / **`Apply Fix`** (or **`Fork & Apply`** on examples, plus **`Dismiss`** for Refine patches) directly inside the popover. Actions sync 2-way with the AI sidebar (updating `Applied`/`Dismissed` receipts and rebasing sibling audit fixes) and commit as a single `Cmd/Ctrl+Z` Undo checkpoint. Indicators automatically clear once applied, dismissed, stale, or when the sidebar closes.
+- **Quick Scan Suspect Indicators in Live Mode (`AiQuickScanIndicator`)**: Whenever an active Layer 2.5 Quick Scan flags or marks a Macro-State (`S#`) borderline, a quiet scan icon appears in that row's right margin (red for flagged, amber for borderline). Hover or click to pin a popover listing each tripped atomic rule (including sub-state `S#.#` badges, calibrated probability `%` or `Lint` badge, lens label, and rule question/diagnostic message) alongside a 1-click **`Audit S#`** button that launches a targeted Gemini 4 deep audit for that Macro-State.
 
 ### Troubleshooting with the AI Trace Inspector (`AiTraceModal`)
-Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on any completed, stopped, or errored turn to examine:
-- **Summary Strip:** Status badge (`Completed`, `Round Limit`, `Stopped`, `Error`), Model, Reasoning Level, **`Focus`** + `Mode`, Duration, Tool Rounds, **`Skills`** (`Active` + `Loaded`), `Interaction Chain` (`previous_interaction_id` progression), aggregated `Token Usage`, and estimated USD cost breakdown (`Est. Cost` split by Input, Cached, Output, and Thinking tokens).
-- **Round-by-Round Timeline (`Round 1..N`):** Expand any round to inspect the exact `Request Sent` (`model`, `previous_interaction_id`, `generation_config`, `tools`, `input`, full `system_instruction`) and every `Tool Calls & Results` entry (arguments, `ok`/`error`, staged suggestion ID, `Repair Hint`, and full JSON result).
+Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on any completed, stopped, failed, or Quick Scan turn to examine:
+- **Agent Turn Trace (`AgentTurnTrace`):**
+  - **Summary Strip:** Status badge (`Completed`, `Round Limit`, `Stopped`, `Error`), Model, Reasoning Level, **`Focus`** + `Mode`, Duration, Tool Rounds, **`Skills`** (`Active` + `Loaded`), `Interaction Chain` (`previous_interaction_id` progression), aggregated `Token Usage`, and estimated USD cost breakdown (`Est. Cost` split by Input, Cached, Output, and Thinking tokens, plus rate card & promo badge when active).
+  - **Round-by-Round Timeline (`Round 1..N`):** Expand any round to inspect the exact `Request Sent` (`model`, `previous_interaction_id`, `generation_config`, `tools`, `input`, full `system_instruction`) and every `Tool Calls & Results` entry (arguments, `ok`/`error`, staged suggestion ID, `Repair Hint`, and full JSON result).
+- **Quick Scan Trace (`QuickScanTrace`):**
+  - **Summary Strip:** Model (`gemini-decision-1 (v1beta)`), Sensitivity (`strict` / `balanced` / `lenient`), Duration, Total Questions, Batch Count, Estimated Cost (`in / $0 out`), and Usage telemetry.
+  - **Calibrated Answers & Payloads:** Sorted probability table (`P=%`, `conf=%`, `flagged` / `borderline` / `clean` badge for every evaluated rule key) plus collapsible **Input Sent** and **Questions Sent** JSON accordions.
 - **`Copy Trace JSON`:** Copies the entire sanitized trace to clipboard. API keys and auth headers are strictly excluded and any echoed secret is redacted as `[REDACTED]`.
 
 ---
 
 ## 8. End-to-End Walkthrough Recipes
 
-### Walkthrough A: Blank Script → Draft → Surgical Refine → 5-Lens Audit (Zero Tab Switching)
+### Walkthrough A: Blank Script → Draft → Surgical Refine → Quick Scan & 5-Lens Audit (Zero Tab Switching)
 1. Create a **Blank Script** from the File menu and open the **`AI`** sidebar (defaults to **`Auto`**).
-2. Click **`Brief`**, add `@image1` → `Mark` and `@image2` → `Robert`, add Specs (e.g., *"continuous handheld oner in a quiet Japanese cafe, Robert has 1 line"*), and add Subtext notes.
+2. Click **`Brief`**, add `@image1` → `Mark` and `@image2` → `Robert` (or drop reference images directly), add Specs (e.g., *"continuous handheld oner in a quiet Japanese cafe, Robert has 1 line"*), and add Subtext notes.
 3. Click **`Context`** if you want to verify pre-send that `draft_craft` and `character_reference` are **Active** and `propose_script_draft` is ready.
-4. Type your scene idea in the composer and press `Enter`. Review the staged **Proposed Draft** card and click **Apply**.
-5. Notice the Focus bar now shows **Scope** (`Whole Script`, `MB#`, `S#`) plus **`Audit All`**—still in **`Auto`**, while your active **Brief** carries across as reference context for refinement and audits (or can be paused anytime via **Brief → Include in AI context**).
-6. Pick `Scope: S4` and type *"Have Mark set the pen down before shutting the notebook"*. Review the line diff on the **Proposed Patch** card and click **Apply** (undoable via `Cmd/Ctrl+Z`).
-7. Click **`Audit All`** to run a parallel 5-lens Script Supervisor audit, click any issue's `targetId` to jump to it, and click **Apply Fix** on any verified patch.
+4. Type your scene idea in the composer (optionally toggling **`Ask First`** ON if you want clarifying questions first) and press `Enter`. Review the staged **Proposed Draft** card and click **Apply**.
+5. Notice the Focus bar now shows **Scope** (`Whole Script`, `MB#`, `S#`) plus **`Quick Scan`** and **`Audit All`**—still in **`Auto`**, while your active **Brief** carries across as reference context for refinement and audits (or can be paused anytime via **Brief → Include in AI context**).
+6. Pick `Scope: S4` and type *"Have Mark set the pen down before shutting the notebook"*. Review the line diff on the **Proposed Patch** card (or hover the Live Mode margin dot) and click **Apply** (undoable via `Cmd/Ctrl+Z`).
+7. Click **`Quick Scan`** for an instant Layer 2.5 screening—then click **`Deep Audit Selected (N)`** (or **`Audit All`** directly) to run a parallel Script Supervisor audit, jump to any `targetId`, and apply individual fixes or **`Apply All (N)`**.
 
 ### Walkthrough B: Continuing an Existing Video Clip (`@video1`)
-1. On a blank script (or with **`Focus = Draft`**), open **`Brief`** and add a reference with Handle `@video1` and Label *"Clip 1 final frame — Mark gripping the overhead rail"*.
+1. On a blank script (or with **`Focus = Draft`**), open **`Brief`** and upload a reference clip via **`Files API`** or paste a YouTube URL (assigned `@video1`), or add a manual text handle `@video1` → *"Clip 1 final frame — Mark gripping the overhead rail"*.
 2. Open **`Context`** → **Skills & Extensions** to confirm **`video_continuation`** is automatically **Active · Passive**.
 3. Describe what happens next in the composer. The assistant will include `[CONTINUITY PROTOCOL]` before `[OPENING]`, keep `[AESTHETIC]` delta-only, and anchor `[OPENING]` to `@video1`'s terminal frame.
 
@@ -318,17 +326,18 @@ Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on a
 
 ### Walkthrough D: Diagnosing an Unexpected AI Result
 1. Open **AI Settings** and enable **`Show Debug Trace`**.
-2. Click **`Inspect`** on the turn in question.
-3. Check **Round 1** `system_instruction` and `tools` to confirm which skills were active and which tools were exposed, then check subsequent rounds' `Tool Calls & Results` for any `Repair Hint`, `SNAPSHOT_MISMATCH`, or `LINT_ERROR_INTRODUCED` self-repair steps.
+2. Click **`Inspect`** on the turn (or Quick Scan) in question.
+3. Check **Round 1** `system_instruction` and `tools` to confirm which skills were active and which tools were exposed, then check subsequent rounds' `Tool Calls & Results` for any `Repair Hint`, `SNAPSHOT_MISMATCH`, or `LINT_ERROR_INTRODUCED` self-repair steps (or check the calibrated probability table on Quick Scan traces).
 
 ---
 
 ## 9. Keyboard, Undo & Privacy Quick Reference
 
 - **Composer shortcuts:** `Enter` sends; `Shift+Enter` inserts a newline.
-- **Safe native Undo inside AI inputs:** Every `<input>` and `<textarea>` inside the composer, `Brief / Refs` tray, **AI Settings**, and **Context Inspector** carries `data-native-undo="true"`, and all AI modals carry `aria-modal="true"`—so pressing `Cmd/Ctrl+Z` while editing prompts or skills undoes your text input without undoing the Auteur Script behind it.
-- **Document Undo & Persistent Version History after Apply:** Every applied Draft, Patch, or Audit Fix automatically saves a persistent **pre-apply snapshot** in IndexedDB (`File ▾ → Version History…`, surviving page reloads and script switches) AND commits a single in-memory history `'checkpoint'`, so you can either press `Cmd/Ctrl+Z` immediately or compare/restore/fork any prior checkpoint later.
+- **Safe native Undo inside AI inputs:** Every `<input>` and `<textarea>` inside the composer, **`Scene Brief & References`** modal (`AiBriefModal`), **Question Card** comments, **AI Settings**, and **Context Inspector** carries `data-native-undo="true"`, and all AI modals carry `aria-modal="true"`—so pressing `Cmd/Ctrl+Z` while editing prompts, references, or skills undoes your text input without undoing the Auteur Script behind it.
+- **Document Undo & Persistent Version History after Apply:** Every applied Draft, Patch, or Audit Fix (including **`Apply All`** batches) automatically saves a persistent **pre-apply snapshot** in IndexedDB (`File ▾ → Version History…`, surviving page reloads and script switches) AND commits a single in-memory history `'checkpoint'`, so you can either press `Cmd/Ctrl+Z` immediately or compare/restore/fork any prior checkpoint later.
 - **Local-only persistence:**
   - API key: `auteur-editor-ai-api-key-v1` (`localStorage` or tab-scoped `sessionStorage` when `Session only` is on).
-  - Model/reasoning/trace settings: `auteur-editor-ai-settings-v1` (`localStorage`).
-  - Craft/template/skill overrides & custom skills: `auteur-editor-ai-skills-v1` (`localStorage`).
+  - Model, reasoning, Quick Scan sensitivity & display settings: `auteur-editor-ai-settings-v1` (`localStorage`).
+  - Foundational Craft edits, skill pin/body overrides & custom skills: `auteur-editor-ai-skills-v1` (`localStorage`).
+  - Quick Scan rule overrides & custom atomic rules: `auteur-editor-quick-scan-rules-v1` (`localStorage`).
