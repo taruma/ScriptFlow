@@ -159,6 +159,7 @@ export interface RunAgentTurnOptions {
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
   referenceHandles?: readonly string[];
+  briefContext?: string;
   signal?: AbortSignal;
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;
@@ -642,6 +643,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     skillOverrides: options.skillOverrides,
     customSkills: options.customSkills,
     referenceHandles: options.referenceHandles,
+    briefContext: options.briefContext,
   });
 
   activeSkillIds = composedContext.activeSkills.map((skill) => skill.id);

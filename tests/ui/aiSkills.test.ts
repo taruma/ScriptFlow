@@ -1,7 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
   BUNDLED_KNOWLEDGE_SKILLS,
-  DRAFT_WRAPPER_TEMPLATE_MD,
   FOUNDATIONAL_CRAFT_MD,
   KNOWLEDGE_SKILL_MANIFEST,
   normalizeMarkdownContent,
@@ -11,7 +10,6 @@ import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
   composeAgentContext,
-  DEFAULT_DRAFT_WRAPPER_TEMPLATE,
   DEFAULT_FOUNDATIONAL_CRAFT,
 } from '../../src/services/auteurKnowledge.ts';
 import {
@@ -19,15 +17,15 @@ import {
   clampComposerHeight,
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
-  formatDraftBriefPrompt,
   formatReferenceEntriesForPrompt,
+  formatSceneBriefContext,
   formatToolDisplayName,
   getBriefReferenceHandles,
   getNextReferenceHandle,
   hasDraftBriefContent,
+  isDraftBriefActive,
   MAX_COMPOSER_HEIGHT,
   MIN_COMPOSER_HEIGHT,
-  shouldApplyDraftWrapperTemplate,
   upsertLoadedSkill,
   type DraftBriefState,
 } from '../../src/ui/aiAssistant.ts';
@@ -46,7 +44,6 @@ import {
   resetSkillOverride,
   sanitizeAiSkillsState,
   saveStoredAiSkills,
-  setDraftWrapperTemplateOverride,
   setFoundationalCraftOverride,
   setSkillBodyOverride,
   setSkillPinMode,
@@ -84,7 +81,6 @@ describe('aiSkillsStore persistence & sanitization', () => {
     const storage = createMemoryStorage();
     let state = DEFAULT_AI_SKILLS_STATE;
     state = setFoundationalCraftOverride(state, 'Custom directorial craft rules.');
-    state = setDraftWrapperTemplateOverride(state, 'Scene: {{idea}}');
     state = setSkillPinMode(state, 'draft_craft', 'pinned');
     state = setSkillBodyOverride(state, 'temporal_calibration', 'Tight 4s cadence.');
     state = upsertCustomSkill(state, {
@@ -98,22 +94,21 @@ describe('aiSkillsStore persistence & sanitization', () => {
     const loaded = loadStoredAiSkills(storage);
 
     expect(loaded.foundationalCraftOverride).toBe('Custom directorial craft rules.');
-    expect(loaded.draftWrapperTemplateOverride).toBe('Scene: {{idea}}');
     expect(loaded.skillOverrides.draft_craft).toEqual({pinMode: 'pinned'});
     expect(loaded.skillOverrides.temporal_calibration).toEqual({
       bodyOverride: 'Tight 4s cadence.',
     });
     expect(loaded.customSkills).toHaveLength(1);
     expect(loaded.customSkills[0]?.id).toBe('noir_lighting');
-    expect(countCustomizations(loaded)).toBe(5);
+    expect(countCustomizations(loaded)).toBe(4);
   });
 
-  it('drops custom skills colliding with built-in IDs and strips orphaned overrides on sanitize', () => {
+  it('drops custom skills colliding with built-in IDs, strips orphaned overrides, and ignores legacy template keys on sanitize', () => {
     const builtInId = BUILTIN_AUTEUR_SKILLS[0]!.id;
     const sanitized = sanitizeAiSkillsState({
       knowledgeVersion: '0.3.9-old',
       foundationalCraftOverride: DEFAULT_FOUNDATIONAL_CRAFT,
-      draftWrapperTemplateOverride: DEFAULT_DRAFT_WRAPPER_TEMPLATE,
+      draftWrapperTemplateOverride: 'Legacy template override',
       customSkills: [
         {
           id: builtInId,
@@ -142,7 +137,7 @@ describe('aiSkillsStore persistence & sanitization', () => {
     });
 
     expect(sanitized.foundationalCraftOverride).toBeNull();
-    expect(sanitized.draftWrapperTemplateOverride).toBeNull();
+    expect('draftWrapperTemplateOverride' in sanitized).toBe(false);
     expect(sanitized.customSkills.map((s) => s.id)).toEqual(['valid_custom']);
     expect(Object.keys(sanitized.skillOverrides)).toEqual(['valid_custom']);
   });
@@ -227,11 +222,6 @@ describe('aiSkillsStore mutations & upstream version detection', () => {
     expect(state.foundationalCraftOverride).toBe('Custom craft');
     state = setFoundationalCraftOverride(state, DEFAULT_FOUNDATIONAL_CRAFT);
     expect(state.foundationalCraftOverride).toBeNull();
-
-    state = setDraftWrapperTemplateOverride(state, 'Custom template');
-    expect(state.draftWrapperTemplateOverride).toBe('Custom template');
-    state = setDraftWrapperTemplateOverride(state, DEFAULT_DRAFT_WRAPPER_TEMPLATE);
-    expect(state.draftWrapperTemplateOverride).toBeNull();
   });
 
   it('migrates pin overrides when renaming a custom skill and removes them on delete', () => {
@@ -341,7 +331,7 @@ describe('aiAssistant Phase 2 skill helpers', () => {
   });
 });
 
-describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers', () => {
+describe('Phase 3 unified Focus & mode-agnostic Scene Brief / References helpers', () => {
   it('maps AssistantFocus to legacy AssistantMode accurately for empty and non-empty scripts', () => {
     expect(focusToLegacyMode('draft', false)).toBe('draft');
     expect(focusToLegacyMode('audit', false)).toBe('check');
@@ -352,6 +342,7 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
 
   it('extracts normalized reference handles, formats reference lines, and computes next @imageN handle', () => {
     const brief: DraftBriefState = {
+      enabled: true,
       references: [
         {id: 'r1', handle: 'image1', kind: 'text', label: 'Mark', note: 'voice: @audio1'},
         {id: 'r2', handle: '@video1', kind: 'text', label: 'Clip 1 terminal frame'},
@@ -362,7 +353,9 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
     };
 
     expect(hasDraftBriefContent(EMPTY_DRAFT_BRIEF)).toBe(false);
+    expect(isDraftBriefActive(EMPTY_DRAFT_BRIEF)).toBe(false);
     expect(hasDraftBriefContent(brief)).toBe(true);
+    expect(isDraftBriefActive(brief)).toBe(true);
     expect(getBriefReferenceHandles(brief)).toEqual(['@image1', '@audio1', '@video1']);
     expect(getNextReferenceHandle(brief.references)).toBe('@image2');
     expect(formatReferenceEntriesForPrompt(brief.references)).toBe(
@@ -370,50 +363,74 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
     );
     expect(buildBriefSummaryBadge(EMPTY_DRAFT_BRIEF)).toBeUndefined();
     expect(buildBriefSummaryBadge(brief)).toBe('Brief · 2 refs');
-    expect(buildBriefSummaryBadge({references: [], specs: '1-take oner', subtext: ''})).toBe(
-      'Brief'
-    );
+    expect(
+      buildBriefSummaryBadge({enabled: true, references: [], specs: '1-take oner', subtext: ''})
+    ).toBe('Brief');
+
+    // Pausing Brief suppresses active state and badge while keeping stored content intact
+    const pausedBrief: DraftBriefState = {...brief, enabled: false};
+    expect(hasDraftBriefContent(pausedBrief)).toBe(true);
+    expect(isDraftBriefActive(pausedBrief)).toBe(false);
+    expect(buildBriefSummaryBadge(pausedBrief)).toBeUndefined();
+    expect(formatSceneBriefContext(pausedBrief)).toBe('');
   });
 
-  it('determines when to apply the Draft Wrapper Template strictly on drafting turns so leftover Brief content never hijacks Refine/Audit', () => {
-    expect(shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: true})).toBe(true);
-    expect(shouldApplyDraftWrapperTemplate({focus: 'auto', isEmpty: false})).toBe(false);
-    expect(shouldApplyDraftWrapperTemplate({focus: 'draft', isEmpty: true})).toBe(true);
-    expect(shouldApplyDraftWrapperTemplate({focus: 'draft', isEmpty: false})).toBe(true);
-    expect(shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: false})).toBe(false);
-    expect(shouldApplyDraftWrapperTemplate({focus: 'refine', isEmpty: true})).toBe(false);
-    expect(shouldApplyDraftWrapperTemplate({focus: 'audit', isEmpty: false})).toBe(false);
-  });
+  it('formats Scene Brief context cleanly when active and returns empty string when empty or paused', () => {
+    expect(formatSceneBriefContext(EMPTY_DRAFT_BRIEF)).toBe('');
 
-  it('interpolates Draft Wrapper Template cleanly, omits empty optional lines, and preserves idea fallback', () => {
-    // Empty optional brief fields omit Cast/Specs/Subtext lines completely
-    const minimalPrompt = formatDraftBriefPrompt('A tense elevator standoff.', EMPTY_DRAFT_BRIEF);
-    expect(minimalPrompt).toContain('Scene Idea: A tense elevator standoff.');
-    expect(minimalPrompt).not.toContain('Cast & References:');
-    expect(minimalPrompt).not.toContain('Format & Specs:');
-    expect(minimalPrompt).not.toContain('Subtext & Tone:');
-
-    // Populated brief fills all placeholders cleanly
     const richBrief: DraftBriefState = {
+      enabled: true,
       references: [{id: 'r1', handle: '@image1', kind: 'text', label: 'Elena', note: 'voice: @audio1'}],
       specs: 'Handheld 35mm oner, no music',
       subtext: 'She knows he hid the key',
     };
-    const fullPrompt = formatDraftBriefPrompt('Confrontation in the lobby.', richBrief);
-    expect(fullPrompt).toContain('Scene Idea: Confrontation in the lobby.');
-    expect(fullPrompt).toContain('Cast & References: @image1 as Elena (voice: @audio1)');
-    expect(fullPrompt).toContain('Format & Specs: Handheld 35mm oner, no music');
-    expect(fullPrompt).toContain('Subtext & Tone: She knows he hid the key');
+    const formatted = formatSceneBriefContext(richBrief);
+    expect(formatted).toContain('### Cast & References\n- @image1 as Elena (voice: @audio1)');
+    expect(formatted).toContain('### Format & Specs\nHandheld 35mm oner, no music');
+    expect(formatted).toContain('### Subtext & Additional Instructions\nShe knows he hid the key');
 
-    // Custom template override works and falls back to appending idea if {{idea}} is omitted
-    const customWithoutIdea = formatDraftBriefPrompt(
-      'Rooftop rain pursuit.',
-      {references: [], specs: 'Continuous oner', subtext: ''},
-      'Director Specs: {{specs}}\nHidden Tension: {{subtext}}'
-    );
-    expect(customWithoutIdea).toContain('Director Specs: Continuous oner');
-    expect(customWithoutIdea).not.toContain('Hidden Tension:');
-    expect(customWithoutIdea.endsWith('Rooftop rain pursuit.')).toBe(true);
+    // Partial brief omits empty sections cleanly
+    const partial = formatSceneBriefContext({
+      enabled: true,
+      references: [],
+      specs: 'Continuous oner',
+      subtext: '',
+    });
+    expect(partial).toBe('### Format & Specs\nContinuous oner');
+    expect(partial).not.toContain('Cast & References');
+    expect(partial).not.toContain('Subtext & Additional Instructions');
+  });
+
+  it('injects Scene Brief into system_instruction across all focus modes when provided and omits it when empty', () => {
+    const briefContext = formatSceneBriefContext({
+      enabled: true,
+      references: [{id: 'r1', handle: '@image1', kind: 'text', label: 'Mark'}],
+      specs: 'Single handheld take',
+      subtext: 'Robert only speaks once',
+    });
+
+    for (const focus of ['auto', 'draft', 'refine', 'audit'] as const) {
+      const withBrief = composeAgentContext({
+        focus,
+        rawText: '[OPENING]\nRainy cafe.\n\n[EXECUTION]\n1. Mark waits.',
+        briefContext,
+        referenceHandles: ['@image1'],
+      });
+      expect(withBrief.sections.sceneBrief.isActive).toBe(true);
+      expect(withBrief.sections.sceneBrief.text).toContain('Scene Brief & References');
+      expect(withBrief.sections.sceneBrief.text).toContain('@image1 as Mark');
+      expect(withBrief.sections.sceneBrief.text).toContain('Robert only speaks once');
+      expect(withBrief.systemInstruction).toContain(withBrief.sections.sceneBrief.text);
+      expect(withBrief.activeSkills.map((s) => s.id)).toContain('character_reference');
+
+      const withoutBrief = composeAgentContext({
+        focus,
+        rawText: '[OPENING]\nRainy cafe.\n\n[EXECUTION]\n1. Mark waits.',
+      });
+      expect(withoutBrief.sections.sceneBrief.isActive).toBe(false);
+      expect(withoutBrief.sections.sceneBrief.text).toBe('');
+      expect(withoutBrief.systemInstruction).not.toContain('Scene Brief & References');
+    }
   });
 
   it('passively activates video_continuation and character_reference from referenceHandles on an empty script while respecting muted overrides', () => {
@@ -444,14 +461,13 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
 
   it('keeps Phase 2/3 craft prompts and UI labels 100% platform- and model-agnostic', () => {
     const serialized = JSON.stringify({
-      defaultTemplate: DEFAULT_DRAFT_WRAPPER_TEMPLATE,
       focuses: UI_LABELS.ai.focuses,
       briefTray: UI_LABELS.ai.briefTray,
       contextInspector: {
         title: UI_LABELS.ai.contextInspector.title,
         subtitle: UI_LABELS.ai.contextInspector.subtitle,
         foundationalCraftDesc: UI_LABELS.ai.contextInspector.foundationalCraftDesc,
-        draftTemplateDesc: UI_LABELS.ai.contextInspector.draftTemplateDesc,
+        emptySceneBrief: UI_LABELS.ai.contextInspector.emptySceneBrief,
       },
     });
 
@@ -470,15 +486,12 @@ describe('Phase 3 unified Focus, Brief / Refs & Draft Wrapper Template helpers',
 });
 
 describe('src/data/knowledge markdown catalog loader', () => {
-  it('loads foundational craft, draft template, and all 6 built-in skills cleanly from markdown', () => {
+  it('loads foundational craft and all 6 built-in skills cleanly from markdown', () => {
     expect(FOUNDATIONAL_CRAFT_MD).toBe(DEFAULT_FOUNDATIONAL_CRAFT);
     expect(FOUNDATIONAL_CRAFT_MD).not.toContain('\r');
     expect(FOUNDATIONAL_CRAFT_MD).toContain('Macro-Block');
     expect(FOUNDATIONAL_CRAFT_MD).toContain('Macro-State');
     expect(FOUNDATIONAL_CRAFT_MD).toContain('Sub-State');
-
-    expect(DRAFT_WRAPPER_TEMPLATE_MD).toBe(DEFAULT_DRAFT_WRAPPER_TEMPLATE);
-    expect(DRAFT_WRAPPER_TEMPLATE_MD).toContain('{{idea}}');
 
     expect(BUNDLED_KNOWLEDGE_SKILLS).toHaveLength(KNOWLEDGE_SKILL_MANIFEST.length);
     expect(BUNDLED_KNOWLEDGE_SKILLS.map((s) => s.id)).toEqual(

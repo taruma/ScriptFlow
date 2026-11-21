@@ -7,11 +7,7 @@ import {
   type SceneTopology,
 } from '../core/index.ts';
 import {BUNDLED_EXAMPLES} from '../data/examples/index.ts';
-import {
-  BUNDLED_KNOWLEDGE_SKILLS,
-  DRAFT_WRAPPER_TEMPLATE_MD,
-  FOUNDATIONAL_CRAFT_MD,
-} from '../data/knowledge/index.ts';
+import {BUNDLED_KNOWLEDGE_SKILLS, FOUNDATIONAL_CRAFT_MD} from '../data/knowledge/index.ts';
 
 /**
  * Monotonic version tag for built-in Auteur craft defaults and skill bodies.
@@ -124,6 +120,11 @@ export interface ComposedSystemSections {
     text: string;
     editable: false;
   };
+  sceneBrief: {
+    text: string;
+    isActive: boolean;
+    editable: false;
+  };
   activeSkills: {
     text: string;
     skillIds: string[];
@@ -149,6 +150,7 @@ export interface ComposeAgentContextOptions {
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
   referenceHandles?: readonly string[];
+  briefContext?: string;
 }
 
 export interface ComposedAgentContext {
@@ -179,12 +181,10 @@ export function assistantModeToFocus(mode: AssistantMode): AssistantFocus {
 }
 
 // ---------------------------------------------------------------------------
-// Editable Craft Foundation & Draft Wrapper Template (Loaded from Markdown)
+// Editable Craft Foundation (Loaded from Markdown)
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_FOUNDATIONAL_CRAFT = FOUNDATIONAL_CRAFT_MD;
-
-export const DEFAULT_DRAFT_WRAPPER_TEMPLATE = DRAFT_WRAPPER_TEMPLATE_MD;
 
 // ---------------------------------------------------------------------------
 // Built-in Extension Skills Registry (Loaded from src/data/knowledge/skills/)
@@ -487,6 +487,18 @@ function buildLiveEditorStateText(state: LiveEditorStateSummary): string {
   return lines.join('\n');
 }
 
+function buildSceneBriefSectionText(briefContext?: string): string {
+  const trimmed = briefContext?.trim() ?? '';
+  if (trimmed.length === 0) return '';
+
+  return [
+    '## Scene Brief & References (Active Reference Context)',
+    'Treat these cast/media references, format specs, and additional directorial notes as active reference context across drafting, refinement, and Script Supervisor audits unless the user explicitly overrides them in chat.',
+    '',
+    trimmed,
+  ].join('\n');
+}
+
 function buildActiveSkillsSectionText(activeSkills: readonly ResolvedAuteurSkill[]): string {
   if (activeSkills.length === 0) return '';
 
@@ -714,6 +726,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     : DEFAULT_FOUNDATIONAL_CRAFT;
 
   const liveEditorStateText = buildLiveEditorStateText(editorState);
+  const sceneBriefText = buildSceneBriefSectionText(options.briefContext);
   const activeSkillsText = buildActiveSkillsSectionText(activeSkills);
   const skillDirectoryText = buildSkillDirectorySectionText(availableSkills);
   const toolProtocolText = buildToolProtocolBlock({
@@ -732,6 +745,11 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     },
     liveEditorState: {
       text: liveEditorStateText,
+      editable: false,
+    },
+    sceneBrief: {
+      text: sceneBriefText,
+      isActive: sceneBriefText.length > 0,
       editable: false,
     },
     activeSkills: {
@@ -753,6 +771,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   const systemInstruction = [
     sections.foundationalCraft.text,
     sections.liveEditorState.text,
+    sections.sceneBrief.text,
     sections.activeSkills.text,
     sections.skillDirectory.text,
     sections.toolProtocol.text,

@@ -33,7 +33,7 @@ You send a prompt (in Auto / Draft / Refine / Audit focus)
   • Parses current rawText -> snapshotHash, sceneTopology, deterministic lint
   • Resolves every built-in & custom skill into: active | available | muted
   • Prunes allowed tools by Focus + editor emptiness
-  • Assembles system_instruction (Editable Craft + Live State + Active Skills + Directory + Code-Owned Protocol)
+  • Assembles system_instruction (Editable Craft + Live State + Active Scene Brief + Active Skills + Directory + Code-Owned Protocol)
    │
    ▼
 [Round 1] Streamed request to Gemini Interactions API (previous_interaction_id chained)
@@ -104,34 +104,24 @@ To prevent unnecessary token cost and accidental whole-script overwrites, the co
 At the bottom of the sidebar sits a **resizable prompt box** (`Enter` to send, `Shift+Enter` for a newline) that auto-grows cleanly as you type and includes a top drag-resize handle (double-click to reset to auto-grow), with the 4-tab Focus bar, Target Scope selector, **`Brief`** button, and **`Model · Level`** settings chip neatly arranged underneath.
 
 ### Editing `Scene Brief & References` (`AiBriefModal`)
-Click **`Brief`** at the bottom-left to open the dedicated **Scene Brief & References** modal (unobstructed by the prompt box and modeled for repeatable scene briefs and future multimodal attachments):
+Click **`Brief`** at the bottom-left to open the dedicated **Scene Brief & References** modal (unobstructed by the prompt box and modeled as a mode-agnostic Reference Pack for cast handles, constraints, and future multimodal attachments):
 
-1. **Cast & References (`+ Add ref`)**:
+1. **Include in AI context (On/Off toggle)**:
+   - Enabled by default as soon as you populate any Brief field, and can be toggled off anytime without clearing your references or notes (the bottom button shows **`Brief · Off`** while paused).
+   - **Carries across all modes (`Auto`, `Draft`, `Refine`, `Audit`):** When active, your Brief is injected as a dedicated **`Scene Brief & References`** context section inside `system_instruction` (visible live inside **Context → Live Prompt Preview**), never rewriting or wrapping what you type in the prompt box.
+   - When the Brief is empty or toggled off, **nothing** is injected and your prompt box message is sent verbatim.
+2. **Cast & References (`+ Add ref`)**:
    - Adds structured reference rows with **Handle** (auto-increments `@image1`, `@image2`, ...; editable to `@video1`, `@audio1`, `@actor1`), **Subject / Label** (e.g., `Mark` or `Clip 1 terminal frame`), and optional **Note** (e.g., `voice: @audio1`).
-   - **Automatic Passive Skill Triggers:** Even on a completely blank script, declaring any `@video*` handle passively activates the **`video_continuation`** skill, and declaring any `@image*`, `@actor*`, or `@audio*` handle (including `@audio1` inside a note) passively activates **`character_reference`**.
-   - **Multimodal-Ready Data Model:** Internally backed by `ReferenceEntry` (`kind: 'text' | 'image' | 'video' | 'audio'`) so future file uploads can attach directly to the same handles without changing the script grammar.
-2. **Format & Specs**: Concise production constraints (e.g., *"short sequence, continuous handheld oner, Robert has only one line, Japanese kissaten cafe"*).
-3. **Subtext & Context**: Background directorial intent not meant to be spoken verbatim as exposition.
-4. **Modal Actions**:
-   - **`Edit template`**: Closes the Brief modal and opens the **Context & Skills** inspector directly on the **Craft & Template** tab to customize the **Draft Wrapper Template**.
-   - **`Clear`**: Clears all Brief fields and reference rows.
-   - **`Done`** (or `Esc`): Closes the modal while the **`Brief`** button retains a live badge (e.g., `Brief · 2 refs`) whenever brief content is active.
+   - **Automatic Passive Skill Triggers (All Modes):** Whenever the Brief is active, declaring any `@video*` handle passively activates the **`video_continuation`** skill, and declaring any `@image*`, `@actor*`, or `@audio*` handle (including `@audio1` inside a note) passively activates **`character_reference`**—even on a blank script and across `Auto`, `Draft`, `Refine`, and `Audit`.
+   - **Multimodal-Ready Data Model:** Internally backed by `ReferenceEntry` (`kind: 'text' | 'image' | 'video' | 'audio'`) so future file/link uploads can attach directly to the same handles without changing the script grammar.
+3. **Format & Specs**: Concise production constraints (e.g., *"short sequence, continuous handheld oner, Robert has only one line, Japanese kissaten cafe"*).
+4. **Subtext & Additional Instructions**: Background directorial intent, unspoken tension, or extra instructions carried across turns.
+5. **Modal Actions**:
+   - **`Clear`**: Clears all Brief fields and reference rows (and resets the toggle to enabled).
+   - **`Done`** (or `Esc`): Closes the modal while the **`Brief`** button shows its live status (`Brief`, `Brief · 2 refs`, or `Brief · Off` when paused).
 
-### How the Draft Wrapper Template Works
-On drafting turns (**`Focus = Draft`**, or **`Focus = Auto` on an empty script**), your message is formatted through the editable **Draft Wrapper Template** (authored in `src/data/knowledge/draft-wrapper-template.md` and exported from `src/services/auteurKnowledge.ts`):
-
-```text
-Draft a complete Pure Auteur Script (v0.4.0) from this director brief:
-
-Scene Idea: {{idea}}
-Cast & References: {{cast}}
-Format & Specs: {{specs}}
-Subtext & Tone: {{subtext}}
-```
-
-- **Clean empty-line omission:** Any template line whose optional placeholder (`{{cast}}`, `{{specs}}`, `{{subtext}}`) is empty is omitted completely so no blank labels leak into the prompt.
-- **Idea fallback guard:** If you write a custom template and forget `{{idea}}`, the app appends your composer message automatically so your request is never dropped.
-- **Zero interference with Refine / Audit:** Once you click **Apply** on a Draft card, the Brief tray automatically collapses (while keeping your brief data if you switch Focus back to `Draft`). Follow-up messages in `Auto`, `Refine`, or `Audit` on a non-empty script **never** wrap your prompt in the Draft template and always honor your selected Target Scope.
+### Verbatim Prompt Box (Zero Hidden Wrapping)
+Your message in the composer box is **always sent verbatim** (except for an explicit `[Target Scope: ...]` prefix when you select a specific `MB#` or `S#` scope in `Auto` / `Refine` on a non-empty script). Leaving the Brief empty or paused lets you brainstorm, ask craft questions, or draft directly from the prompt box without any automatic template wrapper.
 
 ---
 
@@ -213,15 +203,16 @@ Click **`Context`** in the sidebar header (shows active skill count and an indic
 
 ### How `system_instruction` Is Structured (Anti-Override-Rot Design)
 
-Every turn's `system_instruction` is assembled deterministically by `composeAgentContext()` ([`src/services/auteurKnowledge.ts`](../src/services/auteurKnowledge.ts)) from **5 distinct sections**:
+Every turn's `system_instruction` is assembled deterministically by `composeAgentContext()` ([`src/services/auteurKnowledge.ts`](../src/services/auteurKnowledge.ts)) from **6 distinct sections** (omitting empty sections cleanly):
 
 | Section | Editable? | What It Contains |
 |---|---|---|
 | **1. Foundational Craft** | **Editable** | Core Pure Auteur Script `v0.4.0` directorial craft (*boundaries not handcuffs*, *static once / volatile always*, *state inheritance*, *literal over literary*, *acting is reacting*, *anti-twitch*, *repetition mandate*, and canonical inline syntax invariants). |
 | **2. Live Editor State** | Read-Only (Code-Owned) | Authoritative current snapshot: `isEmpty`, `snapshotHash`, `changedSinceLastTurn` warning, `sceneTopology`, `hasContinuationContext`, Macro-Block/Macro-State/ref/token counts, and active deterministic linter diagnostics so the AI focuses on semantic continuity. |
-| **3. Active Skills** | Read-Only (Computed) | Full bodies of every skill currently in the **`active`** state (pinned by you or passively matched from your script/brief). |
-| **4. Available Skill Directory** | Read-Only (Computed) | Compact 1-line `id: triggerHint` menu for **`available`** skills that the model may load on demand via `load_auteur_skill`. |
-| **5. Tool & Safety Protocol** | Read-Only (Code-Owned) | Allowed tool list for this turn, optimistic concurrency (`expectedSnapshotHash`), staging-first rule, self-repair rule, and parallel lens slicing instructions. Kept read-only so craft edits can never break tool execution. |
+| **3. Scene Brief & References** *(when active)* | Controlled via `Brief` modal | Mode-agnostic active reference context (`Cast & References`, `Format & Specs`, `Subtext & Additional Instructions`) carried across `Auto`, `Draft`, `Refine`, and `Audit` whenever populated and toggled on. Omitted completely when empty or paused. |
+| **4. Active Skills** | Read-Only (Computed) | Full bodies of every skill currently in the **`active`** state (pinned by you or passively matched from your script/brief). |
+| **5. Available Skill Directory** | Read-Only (Computed) | Compact 1-line `id: triggerHint` menu for **`available`** skills that the model may load on demand via `load_auteur_skill`. |
+| **6. Tool & Safety Protocol** | Read-Only (Code-Owned) | Allowed tool list for this turn, optimistic concurrency (`expectedSnapshotHash`), staging-first rule, self-repair rule, and parallel lens slicing instructions. Kept read-only so craft edits can never break tool execution. |
 
 ### The 3-State Skill Machine (`active | available | muted`)
 
@@ -236,15 +227,15 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 | Skill ID | Category | Passive Auto-Activation Trigger | What It Provides |
 |---|---|---|---|
 | `draft_craft` | Workflow | Editor is empty **OR** `Focus = Draft` | Block-by-block drafting specs (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]` 4 coordinates, `[EXECUTION]`), silent pre-flight ledger, and curated canonical examples from `src/data/examples/` (`forest-pov-horror`, `interrogation-coverage`, plus `heist-montage` on montage topology). |
-| `video_continuation` | Module | Script has `@video1` / `[CONTINUITY PROTOCOL]` **OR** Brief has `@video*` handle on a drafting turn | Terminal-frame `[OPENING]` handoff, `[CONTINUITY PROTOCOL]` placement, reduced delta-only `[AESTHETIC]`, and `S1` camera continuation rules. |
+| `video_continuation` | Module | Script has `@video1` / `[CONTINUITY PROTOCOL]` **OR** active Brief has `@video*` handle | Terminal-frame `[OPENING]` handoff, `[CONTINUITY PROTOCOL]` placement, reduced delta-only `[AESTHETIC]`, and `S1` camera continuation rules. |
 | `token_mapping` | Module | Script has declared `Description -> TOKEN` mappings in `[AESTHETIC]` | Shorthand dictionary authoring (`LOC01`, `EV01`, `PROP01`) and downstream reuse without lookbook bleed. |
-| `character_reference` | Module | Script has `@ref` bindings **OR** Brief has `@image*`/`@actor*`/`@audio*` handle on a drafting turn | Phase 1 reference isolation, separating facial/vocal identity from fresh scene wardrobe in `[AESTHETIC]`, and canonical name usage downstream. |
+| `character_reference` | Module | Script has `@ref` bindings **OR** active Brief has `@image*`/`@actor*`/`@audio*` handle | Phase 1 reference isolation, separating facial/vocal identity from fresh scene wardrobe in `[AESTHETIC]`, and canonical name usage downstream. |
 | `temporal_calibration` | Module | On demand *(or Pin)* | Macro-State-to-duration tempo table (combat oner `0.8s–1.2s`, tactical `1.5s–2.0s`, dialogue `2.5s–4.0s`, slow horror `4.0s–6.0s+`), anti-float rule, and cut-latency floor (`Duration / 2.0`). |
 | `spatial_fences` | Module | On demand *(or Pin)* | Inline `[BLOCK]` for 3+ subjects/mark swaps, `[STATE IN]`/`[STATE OUT]` boundary clamps, dynamic `[LIGHT]`, and Tier-2 single-dimension tags (`[FOCUS]`, `[SPEED]`, `[PROP]`, `[ENV]`, `[CROWD]`, `[VFX]`, `[TRANS]`). |
 
 ### Inside the 3 Tabs of `AiContextInspectorModal`
-1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable` vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
-2. **Craft & Template**: Edit **Foundational Craft** and **Draft Wrapper Template** directly (persisted in `localStorage` under `auteur-editor-ai-skills-v1`), each with a **`Modified`** indicator and **`Reset to default`**.
+1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
+2. **Foundational Craft**: Edit **Foundational Auteur Craft** directly (persisted in `localStorage` under `auteur-editor-ai-skills-v1`), with a **`Modified`** indicator and **`Reset to default`**.
 3. **Skills & Extensions**:
    - Toggle any built-in or custom skill between **`Auto`**, **`Pin`**, and **`Mute`** and immediately see its resolved status (`Active · Passive`, `Active · Pinned`, `Available`, `Muted`).
    - Expand any skill to read or override its instruction body (`Reset` restores built-in text).
@@ -284,7 +275,7 @@ Turn on **`Show Debug Trace`** in **AI Settings**, then click **`Inspect`** on a
 2. Click **`Brief`**, add `@image1` → `Mark` and `@image2` → `Robert`, add Specs (e.g., *"continuous handheld oner in a quiet Japanese cafe, Robert has 1 line"*), and add Subtext notes.
 3. Click **`Context`** if you want to verify pre-send that `draft_craft` and `character_reference` are **Active** and `propose_script_draft` is ready.
 4. Type your scene idea in the composer and press `Enter`. Review the staged **Proposed Draft** card and click **Apply**.
-5. Notice the Brief tray collapses automatically and the Focus bar now shows **Scope** (`Whole Script`, `MB#`, `S#`) plus **`Audit All`**—still in **`Auto`**.
+5. Notice the Focus bar now shows **Scope** (`Whole Script`, `MB#`, `S#`) plus **`Audit All`**—still in **`Auto`**, while your active **Brief** carries across as reference context for refinement and audits (or can be paused anytime via **Brief → Include in AI context**).
 6. Pick `Scope: S4` and type *"Have Mark set the pen down before shutting the notebook"*. Review the line diff on the **Proposed Patch** card and click **Apply** (undoable via `Cmd/Ctrl+Z`).
 7. Click **`Audit All`** to run a parallel 5-lens Script Supervisor audit, click any issue's `targetId` to jump to it, and click **Apply Fix** on any verified patch.
 

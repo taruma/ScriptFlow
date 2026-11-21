@@ -2,7 +2,6 @@ import {useCallback, useState} from 'react';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
-  DEFAULT_DRAFT_WRAPPER_TEMPLATE,
   DEFAULT_FOUNDATIONAL_CRAFT,
   type CustomAuteurSkill,
   type SkillOverride,
@@ -19,7 +18,6 @@ const CUSTOM_SKILL_ID_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 export interface AiSkillsState {
   knowledgeVersion: string;
   foundationalCraftOverride: string | null;
-  draftWrapperTemplateOverride: string | null;
   skillOverrides: Record<string, SkillOverride>;
   customSkills: CustomAuteurSkill[];
 }
@@ -27,7 +25,6 @@ export interface AiSkillsState {
 export const DEFAULT_AI_SKILLS_STATE: AiSkillsState = {
   knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
   foundationalCraftOverride: null,
-  draftWrapperTemplateOverride: null,
   skillOverrides: {},
   customSkills: [],
 };
@@ -210,13 +207,6 @@ export function sanitizeAiSkillsState(input: unknown): AiSkillsState {
       ? record.foundationalCraftOverride
       : null;
 
-  const draftWrapperTemplateOverride =
-    typeof record.draftWrapperTemplateOverride === 'string' &&
-    record.draftWrapperTemplateOverride.trim().length > 0 &&
-    record.draftWrapperTemplateOverride.trim() !== DEFAULT_DRAFT_WRAPPER_TEMPLATE.trim()
-      ? record.draftWrapperTemplateOverride
-      : null;
-
   const customSkills: CustomAuteurSkill[] = [];
   const seenCustomIds = new Set<string>();
   if (Array.isArray(record.customSkills)) {
@@ -273,7 +263,6 @@ export function sanitizeAiSkillsState(input: unknown): AiSkillsState {
   return {
     knowledgeVersion,
     foundationalCraftOverride,
-    draftWrapperTemplateOverride,
     skillOverrides,
     customSkills,
   };
@@ -329,24 +318,6 @@ export function setFoundationalCraftOverride(
     ...state,
     knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
     foundationalCraftOverride: nextValue,
-  };
-}
-
-export function setDraftWrapperTemplateOverride(
-  state: AiSkillsState,
-  value: string | null
-): AiSkillsState {
-  const nextValue =
-    value !== null &&
-    value.trim().length > 0 &&
-    value.trim() !== DEFAULT_DRAFT_WRAPPER_TEMPLATE.trim()
-      ? value
-      : null;
-
-  return {
-    ...state,
-    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
-    draftWrapperTemplateOverride: nextValue,
   };
 }
 
@@ -484,7 +455,6 @@ export function acknowledgeUpstreamKnowledgeUpdate(state: AiSkillsState): AiSkil
 export function countCustomizations(state: AiSkillsState): number {
   let count = 0;
   if (state.foundationalCraftOverride !== null) count += 1;
-  if (state.draftWrapperTemplateOverride !== null) count += 1;
 
   for (const override of Object.values(state.skillOverrides)) {
     const hasCustomPin = Boolean(override.pinMode && override.pinMode !== 'auto');
@@ -518,7 +488,6 @@ export function useAiSkills(): {
   customizationCount: number;
   hasUpstreamUpdate: boolean;
   setFoundationalCraft: (value: string | null) => void;
-  setDraftWrapperTemplate: (value: string | null) => void;
   setPinMode: (skillId: string, pinMode: SkillPinMode) => void;
   setBodyOverride: (skillId: string, bodyOverride: string | null) => void;
   resetSkill: (skillId: string) => void;
@@ -531,10 +500,6 @@ export function useAiSkills(): {
 
   const setFoundationalCraft = useCallback((value: string | null) => {
     setSkillsState((prev) => saveStoredAiSkills(setFoundationalCraftOverride(prev, value)));
-  }, []);
-
-  const setDraftWrapperTemplate = useCallback((value: string | null) => {
-    setSkillsState((prev) => saveStoredAiSkills(setDraftWrapperTemplateOverride(prev, value)));
   }, []);
 
   const setPinMode = useCallback((skillId: string, pinMode: SkillPinMode) => {
@@ -570,7 +535,6 @@ export function useAiSkills(): {
     customizationCount: countCustomizations(skillsState),
     hasUpstreamUpdate: hasUpstreamKnowledgeUpdate(skillsState),
     setFoundationalCraft,
-    setDraftWrapperTemplate,
     setPinMode,
     setBodyOverride,
     resetSkill,

@@ -1,5 +1,4 @@
 import foundationalCraftRaw from './foundational-craft.md?raw';
-import draftWrapperTemplateRaw from './draft-wrapper-template.md?raw';
 import skillCatalogManifest from './skills/catalog.json';
 
 export type KnowledgeSkillCategory = 'workflow' | 'module';
@@ -72,8 +71,6 @@ export function resolveSkillCatalog(
 }
 
 export const FOUNDATIONAL_CRAFT_MD: string = normalizeMarkdownContent(foundationalCraftRaw);
-
-export const DRAFT_WRAPPER_TEMPLATE_MD: string = normalizeMarkdownContent(draftWrapperTemplateRaw);
 
 export const KNOWLEDGE_SKILL_MANIFEST: readonly KnowledgeSkillCatalogEntry[] =
   skillCatalogManifest as KnowledgeSkillCatalogEntry[];

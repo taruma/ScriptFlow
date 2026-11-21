@@ -55,15 +55,15 @@ import {
   clampComposerHeight,
   EMPTY_DRAFT_BRIEF,
   focusToLegacyMode,
-  formatDraftBriefPrompt,
+  formatSceneBriefContext,
   formatToolDisplayName,
   getBriefReferenceHandles,
   getNextReferenceHandle,
   hasDraftBriefContent,
+  isDraftBriefActive,
   isSuggestionStale,
   MIN_COMPOSER_HEIGHT,
   reconcileTargetScope,
-  shouldApplyDraftWrapperTemplate,
   shouldShowSettingsLinkForError,
   upsertLoadedSkill,
   type AiChatMessage,
@@ -341,7 +341,6 @@ export function AiAssistantSidebar({
     customizationCount,
     hasUpstreamUpdate,
     setFoundationalCraft,
-    setDraftWrapperTemplate,
     setPinMode,
     setBodyOverride,
     resetSkill,
@@ -375,13 +374,11 @@ export function AiAssistantSidebar({
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
 
-  const isScriptEmpty =
-    rawText.trim().length === 0 ||
-    (doc.stagingBlocks.length === 0 && (doc.execution?.beats.length ?? 0) === 0);
-  const isDraftingContext = shouldApplyDraftWrapperTemplate({focus, isEmpty: isScriptEmpty});
-  const referenceHandles = useMemo(() => getBriefReferenceHandles(brief), [brief]);
-  const activeReferenceHandles = isDraftingContext ? referenceHandles : EMPTY_REFERENCE_HANDLES;
   const briefHasContent = useMemo(() => hasDraftBriefContent(brief), [brief]);
+  const briefIsActive = useMemo(() => isDraftBriefActive(brief), [brief]);
+  const referenceHandles = useMemo(() => getBriefReferenceHandles(brief), [brief]);
+  const activeReferenceHandles = briefIsActive ? referenceHandles : EMPTY_REFERENCE_HANDLES;
+  const activeBriefContext = useMemo(() => formatSceneBriefContext(brief), [brief]);
   const briefSummaryLabel = useMemo(() => buildBriefSummaryBadge(brief), [brief]);
 
   // Compose live agent context lazily inside sidebar so closed sidebar incurs zero composition cost
@@ -396,6 +393,7 @@ export function AiAssistantSidebar({
         skillOverrides: skillsState.skillOverrides,
         customSkills: skillsState.customSkills,
         referenceHandles: activeReferenceHandles,
+        briefContext: activeBriefContext,
       }),
     [
       focus,
@@ -406,6 +404,7 @@ export function AiAssistantSidebar({
       skillsState.skillOverrides,
       skillsState.customSkills,
       activeReferenceHandles,
+      activeBriefContext,
     ]
   );
 
@@ -486,6 +485,10 @@ export function AiAssistantSidebar({
     setBrief(EMPTY_DRAFT_BRIEF);
   }, []);
 
+  const handleSetBriefEnabled = useCallback((enabled: boolean) => {
+    setBrief((prev) => ({...prev, enabled}));
+  }, []);
+
   const handleUpdateBriefSpecs = useCallback((specs: string) => {
     setBrief((prev) => ({...prev, specs}));
   }, []);
@@ -493,11 +496,6 @@ export function AiAssistantSidebar({
   const handleUpdateBriefSubtext = useCallback((subtext: string) => {
     setBrief((prev) => ({...prev, subtext}));
   }, []);
-
-  const handleEditBriefTemplate = useCallback(() => {
-    setIsBriefOpen(false);
-    handleOpenContext('craft');
-  }, [handleOpenContext]);
 
   const handleStopRun = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -639,29 +637,18 @@ export function AiAssistantSidebar({
         return;
       }
 
-      const isDraftingTurn = shouldApplyDraftWrapperTemplate({
-        focus: activeFocus,
-        isEmpty,
-      });
-
-      const useDraftWrapper = !options?.displayText && isDraftingTurn;
-      const turnReferenceHandles = isDraftingTurn ? referenceHandles : EMPTY_REFERENCE_HANDLES;
-
       const useTargetScope =
         !options?.displayText &&
-        !useDraftWrapper &&
         !isEmpty &&
         (activeFocus === 'auto' || activeFocus === 'refine') &&
         activeTarget.kind !== 'whole';
 
-      const effectivePrompt = useDraftWrapper
-        ? formatDraftBriefPrompt(trimmed, brief, skillsState.draftWrapperTemplateOverride)
-        : useTargetScope
-          ? buildScopedRefinePrompt(trimmed, activeTarget)
-          : trimmed;
+      const effectivePrompt = useTargetScope
+        ? buildScopedRefinePrompt(trimmed, activeTarget)
+        : trimmed;
 
       const scopeLabel = options?.scopeLabel ?? (useTargetScope ? activeTarget.label : undefined);
-      const briefSummary = useDraftWrapper ? buildBriefSummaryBadge(brief) : undefined;
+      const briefSummary = briefIsActive ? briefSummaryLabel : undefined;
 
       const userMessageId = `msg-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       const assistantMessageId = `msg-a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -715,7 +702,8 @@ export function AiAssistantSidebar({
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
-          referenceHandles: turnReferenceHandles,
+          referenceHandles: activeReferenceHandles,
+          briefContext: activeBriefContext,
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -838,8 +826,10 @@ export function AiAssistantSidebar({
     [
       focus,
       isEmpty,
-      brief,
-      referenceHandles,
+      briefIsActive,
+      briefSummaryLabel,
+      activeReferenceHandles,
+      activeBriefContext,
       isRunning,
       hasApiKey,
       activeTarget,
@@ -850,7 +840,6 @@ export function AiAssistantSidebar({
       rawText,
       ruleOverrides,
       skillsState.foundationalCraftOverride,
-      skillsState.draftWrapperTemplateOverride,
       skillsState.skillOverrides,
       skillsState.customSkills,
       updateAssistantMessage,
@@ -1464,17 +1453,24 @@ export function AiAssistantSidebar({
                 type="button"
                 aria-haspopup="dialog"
                 aria-expanded={isBriefOpen}
-                aria-label={UI_LABELS.ai.briefToggleAria(isBriefOpen, briefHasContent)}
+                aria-label={UI_LABELS.ai.briefToggleAria(
+                  isBriefOpen,
+                  briefHasContent,
+                  briefIsActive
+                )}
                 title={UI_LABELS.ai.briefToggleTitle}
                 onClick={() => setIsBriefOpen(true)}
                 className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors cursor-pointer shrink-0 ${
-                  isBriefOpen || briefHasContent
+                  isBriefOpen || briefIsActive
                     ? 'auteur-phase-aesthetic'
                     : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
                 }`}
               >
                 <FileText className="h-3 w-3" />
-                <span>{briefSummaryLabel ?? UI_LABELS.ai.briefToggle}</span>
+                <span>
+                  {briefSummaryLabel ??
+                    (briefHasContent ? UI_LABELS.ai.briefPausedLabel : UI_LABELS.ai.briefToggle)}
+                </span>
               </button>
 
               <button
@@ -1510,13 +1506,13 @@ export function AiAssistantSidebar({
             brief={brief}
             briefHasContent={briefHasContent}
             onClose={() => setIsBriefOpen(false)}
+            onSetEnabled={handleSetBriefEnabled}
             onAddReference={handleAddReference}
             onUpdateReference={handleUpdateReference}
             onRemoveReference={handleRemoveReference}
             onUpdateSpecs={handleUpdateBriefSpecs}
             onUpdateSubtext={handleUpdateBriefSubtext}
             onClearBrief={handleClearBrief}
-            onEditTemplate={handleEditBriefTemplate}
           />
         </Suspense>
       )}
@@ -1547,7 +1543,6 @@ export function AiAssistantSidebar({
             customizationCount={customizationCount}
             hasUpstreamUpdate={hasUpstreamUpdate}
             onSetFoundationalCraft={setFoundationalCraft}
-            onSetDraftWrapperTemplate={setDraftWrapperTemplate}
             onSetPinMode={setPinMode}
             onSetBodyOverride={setBodyOverride}
             onResetSkill={resetSkill}

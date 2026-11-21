@@ -31,7 +31,6 @@ import {
 import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
-  DEFAULT_DRAFT_WRAPPER_TEMPLATE,
   DEFAULT_FOUNDATIONAL_CRAFT,
   assistantModeToFocus,
   composeAgentContext,
@@ -1827,7 +1826,6 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     const bannedTerms = ['gemini', 'seedance', 'runway', 'kling', 'sora', 'veo', 'openai', 'claude'];
     const textsToCheck: string[] = [
       DEFAULT_FOUNDATIONAL_CRAFT,
-      DEFAULT_DRAFT_WRAPPER_TEMPLATE,
       ...BUILTIN_AUTEUR_SKILLS.map((s) => `${s.name}\n${s.triggerHint}\n${s.body}`),
     ];
 
@@ -1932,6 +1930,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       prompt: 'Check blocking with our studio rule.',
       rawText: INTERROGATION_SCRIPT,
       previousSnapshotHash: 'prior-hash',
+      briefContext: '### Format & Specs\nSingle continuous handheld take.',
       skillOverrides: {
         temporal_calibration: {pinMode: 'pinned'},
       },
@@ -1975,6 +1974,11 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       'load_auteur_skill',
     ]);
     expect(String(capturedRequests[0].system_instruction)).toContain('CHANGED since last turn');
+    expect(String(capturedRequests[0].system_instruction)).toContain('Scene Brief & References');
+    expect(String(capturedRequests[0].system_instruction)).toContain(
+      'Single continuous handheld take.'
+    );
+    expect(capturedRequests[0].input).toBe('Check blocking with our studio rule.');
 
     // Trace never contains apiKey
     const serialized = JSON.stringify(result.trace);

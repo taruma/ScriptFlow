@@ -1,8 +1,5 @@
 import type {AuditLens, AuteurDocument, AuteurLensPresetId, SceneTopology} from '../core/index.ts';
-import {
-  DEFAULT_DRAFT_WRAPPER_TEMPLATE,
-  type AssistantFocus,
-} from '../services/auteurKnowledge.ts';
+import type {AssistantFocus} from '../services/auteurKnowledge.ts';
 import type {AgentTurnTrace, GeminiErrorCode} from '../services/geminiInteractions.ts';
 import type {AssistantMode, StagedSuggestion} from '../services/scriptTools.ts';
 
@@ -52,12 +49,15 @@ export interface ReferenceEntry {
 }
 
 export interface DraftBriefState {
+  /** Whether populated Brief fields are actively injected into AI context across all modes. */
+  enabled: boolean;
   references: ReferenceEntry[];
   specs: string;
   subtext: string;
 }
 
 export const EMPTY_DRAFT_BRIEF: DraftBriefState = {
+  enabled: true,
   references: [],
   specs: '',
   subtext: '',
@@ -364,6 +364,10 @@ export function hasDraftBriefContent(brief: DraftBriefState): boolean {
   );
 }
 
+export function isDraftBriefActive(brief: DraftBriefState): boolean {
+  return brief.enabled && hasDraftBriefContent(brief);
+}
+
 /**
  * Extracts normalized `@handle` references from the Brief / Refs tray (including
  * explicit `@...` tokens in notes such as `voice: @audio1`) for passive skill activation.
@@ -449,76 +453,39 @@ export function formatReferenceEntriesForPrompt(references: readonly ReferenceEn
   return lines.join('\n');
 }
 
-export function shouldApplyDraftWrapperTemplate(options: {
-  focus: AssistantFocus;
-  isEmpty: boolean;
-}): boolean {
-  return options.focus === 'draft' || (options.focus === 'auto' && options.isEmpty);
-}
-
-const BRIEF_PLACEHOLDER_REGEX = /\{\{\s*(idea|cast|specs|subtext)\s*\}\}/g;
-
 /**
- * Interpolates the editable Draft Wrapper Template with the user's idea and optional
- * Brief / Refs fields, cleanly omitting lines whose optional placeholders resolve empty
- * and guaranteeing the user's idea is never silently dropped if a custom template omits `{{idea}}`.
+ * Formats populated Scene Brief & References fields into a clean, mode-neutral
+ * reference context block for `system_instruction`. Returns an empty string when
+ * the Brief is empty or paused (`enabled: false`).
  */
-export function formatDraftBriefPrompt(
-  idea: string,
-  brief: DraftBriefState,
-  templateOverride?: string | null
-): string {
-  const trimmedIdea = idea.trim();
-  const template = templateOverride?.trim() || DEFAULT_DRAFT_WRAPPER_TEMPLATE;
+export function formatSceneBriefContext(brief: DraftBriefState): string {
+  if (!isDraftBriefActive(brief)) return '';
 
-  const values: Record<'idea' | 'cast' | 'specs' | 'subtext', string> = {
-    idea: trimmedIdea,
-    cast: formatReferenceEntriesForPrompt(brief.references),
-    specs: brief.specs.trim(),
-    subtext: brief.subtext.trim(),
-  };
-
-  let templateContainedIdea = false;
-  const outputLines: string[] = [];
-
-  for (const line of template.split(/\r?\n/)) {
-    const matches = Array.from(line.matchAll(BRIEF_PLACEHOLDER_REGEX));
-    if (matches.length === 0) {
-      outputLines.push(line);
-      continue;
-    }
-
-    const keys = matches.map((m) => m[1] as keyof typeof values);
-    if (keys.includes('idea')) {
-      templateContainedIdea = true;
-    }
-
-    // Omit lines where every placeholder on the line resolved to empty
-    const allEmpty = keys.every((key) => values[key].length === 0);
-    if (allEmpty) {
-      continue;
-    }
-
-    const substituted = line.replace(BRIEF_PLACEHOLDER_REGEX, (_, key: keyof typeof values) => {
-      return values[key];
-    });
-    outputLines.push(substituted);
+  const sections: string[] = [];
+  const castLines = formatReferenceEntriesForPrompt(brief.references);
+  if (castLines.length > 0) {
+    const bulletedCast = castLines
+      .split('\n')
+      .map((line) => `- ${line}`)
+      .join('\n');
+    sections.push(`### Cast & References\n${bulletedCast}`);
   }
 
-  let assembled = outputLines
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  if (!templateContainedIdea && trimmedIdea.length > 0) {
-    assembled = assembled.length > 0 ? `${assembled}\n\n${trimmedIdea}` : trimmedIdea;
+  const specs = brief.specs.trim();
+  if (specs.length > 0) {
+    sections.push(`### Format & Specs\n${specs}`);
   }
 
-  return assembled;
+  const subtext = brief.subtext.trim();
+  if (subtext.length > 0) {
+    sections.push(`### Subtext & Additional Instructions\n${subtext}`);
+  }
+
+  return sections.join('\n\n');
 }
 
 export function buildBriefSummaryBadge(brief: DraftBriefState): string | undefined {
-  if (!hasDraftBriefContent(brief)) return undefined;
+  if (!isDraftBriefActive(brief)) return undefined;
   const refCount = brief.references.filter(isNonEmptyReference).length;
   if (refCount > 0) {
     return `Brief · ${refCount} ${refCount === 1 ? 'ref' : 'refs'}`;

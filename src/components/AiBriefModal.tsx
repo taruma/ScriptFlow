@@ -9,6 +9,7 @@ export interface AiBriefModalProps {
   brief: DraftBriefState;
   briefHasContent: boolean;
   onClose: () => void;
+  onSetEnabled: (enabled: boolean) => void;
   onAddReference: () => void;
   onUpdateReference: (
     refId: string,
@@ -18,7 +19,6 @@ export interface AiBriefModalProps {
   onUpdateSpecs: (specs: string) => void;
   onUpdateSubtext: (subtext: string) => void;
   onClearBrief: () => void;
-  onEditTemplate: () => void;
 }
 
 export function AiBriefModal(props: AiBriefModalProps) {
@@ -30,13 +30,13 @@ function AiBriefModalContent({
   brief,
   briefHasContent,
   onClose,
+  onSetEnabled,
   onAddReference,
   onUpdateReference,
   onRemoveReference,
   onUpdateSpecs,
   onUpdateSubtext,
   onClearBrief,
-  onEditTemplate,
 }: Omit<AiBriefModalProps, 'isOpen'>) {
   const labels = UI_LABELS.ai.briefTray;
 
@@ -97,6 +97,39 @@ function AiBriefModalContent({
           aria-label={labels.regionAria}
           className="overflow-y-auto auteur-pane-scroll px-5 py-4 space-y-5"
         >
+          {/* Include in AI Context Toggle */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-surface-subtle/60 px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-text-main">{labels.enableLabel}</div>
+                <div className="text-[11px] text-text-muted">{labels.enableDesc}</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={brief.enabled}
+                aria-label={labels.enableAria}
+                onClick={() => onSetEnabled(!brief.enabled)}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
+                  brief.enabled
+                    ? 'border-btn-primary-bg bg-btn-primary-bg'
+                    : 'border-border-main bg-surface-muted'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
+                    brief.enabled
+                      ? 'translate-x-4 bg-btn-primary-text'
+                      : 'translate-x-0.5 bg-text-muted'
+                  }`}
+                />
+              </button>
+            </div>
+            {!brief.enabled && briefHasContent && (
+              <p className="text-[11px] text-text-muted px-1">{labels.pausedHint}</p>
+            )}
+          </div>
+
           {/* Cast & References */}
           <section className="space-y-2.5">
             <div className="flex items-center justify-between gap-2">
@@ -220,15 +253,6 @@ function AiBriefModalContent({
         {/* Footer */}
         <div className="px-5 py-3 border-t border-border-subtle bg-surface-subtle flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onEditTemplate}
-              title={labels.editTemplateTitle}
-              className="text-xs font-medium text-text-muted hover:text-text-main underline underline-offset-2 transition-colors cursor-pointer"
-            >
-              {labels.editTemplateButton}
-            </button>
-
             {briefHasContent && (
               <button
                 type="button"

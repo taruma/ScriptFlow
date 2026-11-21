@@ -16,7 +16,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  DEFAULT_DRAFT_WRAPPER_TEMPLATE,
   DEFAULT_FOUNDATIONAL_CRAFT,
   type ComposedAgentContext,
   type CustomAuteurSkill,
@@ -47,7 +46,6 @@ export interface AiContextInspectorModalProps {
   customizationCount: number;
   hasUpstreamUpdate: boolean;
   onSetFoundationalCraft: (value: string | null) => void;
-  onSetDraftWrapperTemplate: (value: string | null) => void;
   onSetPinMode: (skillId: string, pinMode: SkillPinMode) => void;
   onSetBodyOverride: (skillId: string, bodyOverride: string | null) => void;
   onResetSkill: (skillId: string) => void;
@@ -103,7 +101,6 @@ export function AiContextInspectorModal({
   customizationCount,
   hasUpstreamUpdate,
   onSetFoundationalCraft,
-  onSetDraftWrapperTemplate,
   onSetPinMode,
   onSetBodyOverride,
   onResetSkill,
@@ -166,10 +163,6 @@ export function AiContextInspectorModal({
   const foundationalCraftValue =
     skillsState.foundationalCraftOverride ?? DEFAULT_FOUNDATIONAL_CRAFT;
   const isFoundationalModified = skillsState.foundationalCraftOverride !== null;
-
-  const draftTemplateValue =
-    skillsState.draftWrapperTemplateOverride ?? DEFAULT_DRAFT_WRAPPER_TEMPLATE;
-  const isDraftTemplateModified = skillsState.draftWrapperTemplateOverride !== null;
 
   const handleCopyPrompt = async () => {
     const ok = await copyTextToClipboard(composedContext.systemInstruction);
@@ -282,6 +275,8 @@ export function AiContextInspectorModal({
     key: string;
     title: string;
     editable: boolean;
+    badgeLabel?: string;
+    badgeAccent?: boolean;
     modified?: boolean;
     body: string;
     emptyNote?: string;
@@ -298,6 +293,17 @@ export function AiContextInspectorModal({
       title: labels.sectionLiveEditorState,
       editable: false,
       body: composedContext.sections.liveEditorState.text,
+    },
+    {
+      key: 'sceneBrief',
+      title: labels.sectionSceneBrief,
+      editable: false,
+      badgeLabel: composedContext.sections.sceneBrief.isActive
+        ? labels.briefActiveBadge
+        : labels.briefInactiveBadge,
+      badgeAccent: composedContext.sections.sceneBrief.isActive,
+      body: composedContext.sections.sceneBrief.text,
+      emptyNote: labels.emptySceneBrief,
     },
     {
       key: 'activeSkills',
@@ -547,13 +553,16 @@ export function AiContextInspectorModal({
                         </div>
                         <span
                           className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] shrink-0 ${
-                            section.editable
+                            section.editable || section.badgeAccent
                               ? 'auteur-phase-aesthetic'
                               : 'border-border-subtle bg-surface text-text-faint'
                           }`}
                         >
-                          {!section.editable && <Lock className="h-2.5 w-2.5" />}
-                          <span>{section.editable ? labels.editableBadge : labels.readOnlyBadge}</span>
+                          {!section.editable && !section.badgeLabel && <Lock className="h-2.5 w-2.5" />}
+                          <span>
+                            {section.badgeLabel ??
+                              (section.editable ? labels.editableBadge : labels.readOnlyBadge)}
+                          </span>
                         </span>
                       </div>
                       <div className="px-3.5 py-3">
@@ -571,7 +580,7 @@ export function AiContextInspectorModal({
               </>
             )}
 
-            {/* TAB 2: Craft & Template */}
+            {/* TAB 2: Foundational Craft */}
             {activeTab === 'craft' && (
               <div className="space-y-5">
                 <section className="rounded-xl border border-border-subtle bg-surface p-4 space-y-2.5">
@@ -605,53 +614,11 @@ export function AiContextInspectorModal({
                   <textarea
                     data-native-undo="true"
                     aria-label={labels.foundationalCraftAria}
-                    rows={14}
+                    rows={18}
                     value={foundationalCraftValue}
                     onChange={(event) => onSetFoundationalCraft(event.target.value)}
                     className={`${UI_TOKENS.input.field} font-mono text-[11px] leading-relaxed auteur-pane-scroll resize-y`}
                   />
-                </section>
-
-                <section className="rounded-xl border border-border-subtle bg-surface p-4 space-y-2.5">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xs font-semibold text-text-main">
-                          {labels.draftTemplateHeading}
-                        </h3>
-                        {isDraftTemplateModified && (
-                          <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
-                            {labels.modifiedBadge}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-text-muted leading-relaxed">
-                        {labels.draftTemplateDesc}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={!isDraftTemplateModified}
-                      onClick={() => onSetDraftWrapperTemplate(null)}
-                      className={`${UI_TOKENS.button.actionPill} disabled:opacity-40 disabled:cursor-not-allowed`}
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      <span>{labels.resetToDefaultButton}</span>
-                    </button>
-                  </div>
-
-                  <textarea
-                    data-native-undo="true"
-                    aria-label={labels.draftTemplateAria}
-                    rows={7}
-                    value={draftTemplateValue}
-                    onChange={(event) => onSetDraftWrapperTemplate(event.target.value)}
-                    className={`${UI_TOKENS.input.field} font-mono text-[11px] leading-relaxed auteur-pane-scroll resize-y`}
-                  />
-
-                  <p className="font-mono text-[10px] text-text-faint">
-                    {labels.draftTemplatePlaceholdersHint}
-                  </p>
                 </section>
               </div>
             )}

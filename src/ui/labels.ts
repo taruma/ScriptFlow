@@ -623,20 +623,28 @@ export const UI_LABELS = {
       lens5_blocks_grammar: 'Lens 5 · Grammar',
     } as const,
     briefToggle: 'Brief',
-    briefToggleTitle: 'Open Scene Brief & References for structured drafting',
-    briefToggleAria: (isOpen: boolean, hasContent: boolean) =>
-      `${isOpen ? 'Close' : 'Open'} Scene Brief & References${hasContent ? ' (populated)' : ''}`,
+    briefPausedLabel: 'Brief · Off',
+    briefToggleTitle: 'Open Scene Brief & References (carried across all modes)',
+    briefToggleAria: (isOpen: boolean, hasContent: boolean, isActive: boolean) =>
+      `${isOpen ? 'Close' : 'Open'} Scene Brief & References${
+        hasContent ? (isActive ? ' (active)' : ' (paused)') : ''
+      }`,
     briefTray: {
       dialogAria: 'Scene Brief & References',
       title: 'Scene Brief & References',
-      subtitle: 'Optional cast handles, format specs, and subtext applied on drafting turns.',
+      subtitle: 'Cast handles, format specs, and additional instructions carried across all modes.',
       closeAria: 'Close Scene Brief & References',
       doneButton: 'Done',
       regionAria: 'Scene brief and references',
+      enableLabel: 'Include in AI context',
+      enableDesc: 'Applies as reference context across Auto, Draft, Refine, and Audit turns',
+      enableAria: 'Include Scene Brief and References in AI context',
+      pausedHint: 'Paused — your notes are saved here and will not be sent until turned back on.',
       refsHeading: 'Cast & References',
       addRefButton: 'Add ref',
       addRefAria: 'Add a cast or media reference handle',
-      emptyRefsHint: 'Bind handles like @image1 or @video1 to auto-load matching skills.',
+      emptyRefsHint:
+        'Bind handles like @image1 or @video1 to auto-load matching skills across all modes.',
       handlePlaceholder: '@image1',
       handleAria: 'Reference handle',
       labelPlaceholder: 'Subject (e.g. Mark)',
@@ -647,11 +655,10 @@ export const UI_LABELS = {
       specsLabel: 'Format & Specs',
       specsPlaceholder: 'Camera topology, Macro-State cadence, dialogue or acoustic constraints...',
       specsAria: 'Format and specifications',
-      subtextLabel: 'Subtext & Context',
-      subtextPlaceholder: 'Unspoken tension, backstory, or emotional arc not spoken verbatim...',
-      subtextAria: 'Subtext and context',
-      editTemplateButton: 'Edit template',
-      editTemplateTitle: 'Edit the Draft Wrapper Template in Context & Skills',
+      subtextLabel: 'Subtext & Additional Instructions',
+      subtextPlaceholder:
+        'Unspoken tension, directorial notes, or extra constraints to carry across turns...',
+      subtextAria: 'Subtext and additional instructions',
       clearButton: 'Clear',
       clearAria: 'Clear all brief and reference fields',
     },
@@ -767,7 +774,7 @@ export const UI_LABELS = {
       closeAria: 'Close Agent Context & Skills',
       tabsAria: 'Context inspector sections',
       tabPreview: 'Live Prompt Preview',
-      tabCraft: 'Craft & Template',
+      tabCraft: 'Foundational Craft',
       tabSkills: 'Skills & Extensions',
       upstreamUpdateTitle: 'Built-in Auteur knowledge updated',
       upstreamUpdateDesc:
@@ -785,23 +792,23 @@ export const UI_LABELS = {
       copyPromptAria: 'Copy assembled system prompt to clipboard',
       editableBadge: 'Editable',
       readOnlyBadge: 'Read-Only · Code-Owned',
+      briefActiveBadge: 'Active · From Brief',
+      briefInactiveBadge: 'Not Attached',
       modifiedBadge: 'Modified',
       sectionFoundationalCraft: 'Foundational Auteur Craft',
       sectionLiveEditorState: 'Live Editor State',
+      sectionSceneBrief: 'Scene Brief & References',
       sectionActiveSkills: 'Active Skills (Loaded This Turn)',
       sectionSkillDirectory: 'On-Demand Skill Directory',
       sectionToolProtocol: 'Tool & Safety Protocol',
+      emptySceneBrief:
+        'No active Scene Brief attached. Open Brief in the sidebar to add cast refs, specs, or additional instructions.',
       emptyActiveSkills: 'No extension skills are preloaded for the current script state.',
       emptyAvailableSkills: 'All non-muted skills are currently preloaded.',
       foundationalCraftHeading: 'Foundational Auteur Craft',
       foundationalCraftDesc:
         'Directorial rules sent on every turn. Tool safety and snapshot verification remain code-owned and cannot be disabled here.',
       foundationalCraftAria: 'Foundational Auteur Craft instructions',
-      draftTemplateHeading: 'Draft Wrapper Template',
-      draftTemplateDesc:
-        'Structured brief template used when drafting scenes from creative briefs.',
-      draftTemplatePlaceholdersHint: 'Placeholders: {{cast}}, {{idea}}, {{specs}}, {{subtext}}',
-      draftTemplateAria: 'Draft Wrapper Template',
       resetToDefaultButton: 'Reset to default',
       skillsSummary: (active: number, available: number, muted: number) =>
         `${active} active · ${available} available · ${muted} muted`,
@@ -850,7 +857,7 @@ export const UI_LABELS = {
       confirmDeleteAction: 'Delete Skill',
       confirmResetAllTitle: 'Reset all craft & skill overrides?',
       confirmResetAllDesc:
-        'This will restore the built-in Foundational Craft, Draft Wrapper Template, and skill defaults, and remove all custom skills stored in this browser.',
+        'This will restore the built-in Foundational Craft and skill defaults, and remove all custom skills stored in this browser.',
       confirmResetAllAction: 'Reset All',
     },
     traceModal: {
