@@ -1,4 +1,5 @@
 import {
+  AlignLeft,
   ArchiveRestore,
   Braces,
   ChevronDown,
@@ -18,8 +19,10 @@ export interface FileMenuDropdownProps {
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
+  readOnly?: boolean;
   onNewBlank: () => void;
   onImportFile: () => void;
+  onFormatScript: () => void;
   onVersionHistory: () => void;
   onDownloadCanonical: () => void;
   onDownloadTagless: () => void;
@@ -31,14 +34,17 @@ export interface FileMenuDropdownProps {
 
 /**
  * Quiet left-wing File menu dropdown housing creation, single-file import/export,
- * version history, full-library backup/restore, and library browser navigation.
+ * non-destructive formatting, version history, full-library backup/restore, and
+ * library browser navigation.
  */
 export function FileMenuDropdown({
   isOpen,
   onToggle,
   onClose,
+  readOnly = false,
   onNewBlank,
   onImportFile,
+  onFormatScript,
   onVersionHistory,
   onDownloadCanonical,
   onDownloadTagless,
@@ -91,6 +97,19 @@ export function FileMenuDropdown({
               <span className="inline-flex items-center gap-2">
                 <Upload className="h-3.5 w-3.5 text-text-muted" />
                 <span>{UI_LABELS.topBar.fileMenuImportFile}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={readOnly}
+              title={UI_LABELS.source.formatTitle}
+              onClick={runAndClose(onFormatScript)}
+              className={`${UI_TOKENS.dropdown.item} disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-text-body disabled:cursor-not-allowed`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <AlignLeft className="h-3.5 w-3.5 text-text-muted" />
+                <span>{UI_LABELS.topBar.fileMenuFormatScript}</span>
               </span>
             </button>
             <button

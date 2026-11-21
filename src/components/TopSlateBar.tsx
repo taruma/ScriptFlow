@@ -35,6 +35,7 @@ interface TopSlateBarProps {
   onViewModeChange: (mode: ViewMode) => void;
   onNewBlank: () => void;
   onImportFile: () => void;
+  onFormatScript: () => void;
   onOpenVersionHistory: () => void;
   onDownloadCanonical: () => void;
   onDownloadTagless: () => void;
@@ -72,6 +73,7 @@ export function TopSlateBar({
   onViewModeChange,
   onNewBlank,
   onImportFile,
+  onFormatScript,
   onOpenVersionHistory,
   onDownloadCanonical,
   onDownloadTagless,
@@ -128,8 +130,10 @@ export function TopSlateBar({
           isOpen={openMenu === 'file'}
           onToggle={() => setOpenMenu((prev) => (prev === 'file' ? null : 'file'))}
           onClose={() => setOpenMenu(null)}
+          readOnly={readOnly}
           onNewBlank={onNewBlank}
           onImportFile={onImportFile}
+          onFormatScript={onFormatScript}
           onVersionHistory={onOpenVersionHistory}
           onDownloadCanonical={onDownloadCanonical}
           onDownloadTagless={onDownloadTagless}

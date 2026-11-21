@@ -6,6 +6,7 @@ import {
   deleteStagingBlock,
   exportPlainText,
   exportTagless,
+  formatAuteurScript,
   insertExecutionBeat,
   insertExecutionSubState,
   insertStagingBlock,
@@ -253,6 +254,69 @@ describe('Auteur Script Serializer & Tagless Exporter', () => {
     const canonicalRaw = parseAuteurScript(INTERROGATION).raw;
     for (const reserved of ['EXECUTION', 'timeline', '[BEATS]', '  Shotlist  ']) {
       expect(insertStagingBlock(INTERROGATION, reserved, 'should not insert')).toBe(canonicalRaw);
+    }
+  });
+
+  it('formats whitespace non-destructively: strips empty lines inside blocks, trims trailing spaces, and enforces one blank line between Macro-Blocks without altering inline text', () => {
+    const messy = [
+      '',
+      '  ',
+      '[INTENT]   ',
+      '',
+      'Tense confrontation.   ',
+      '   ',
+      'Zero camera shake.  ',
+      '[AESTHETIC]',
+      'Lighting:   Sodium lamps->ALLEY_KEY  ',
+      '',
+      'Audio: Steady rain\t',
+      '',
+      '',
+      '',
+      '[EXECUTION]  ',
+      '',
+      '[CAM 01] MS->[ACT] Mara turns  ',
+      '',
+      '   ',
+      'Mara says {Stay back.}  ->  <boots crunching gravel>   ',
+      '',
+      '',
+    ].join('\r\n');
+
+    const formatted = formatAuteurScript(messy);
+
+    expect(formatted).toBe(
+      [
+        '[INTENT]',
+        'Tense confrontation.',
+        'Zero camera shake.',
+        '',
+        '[AESTHETIC]',
+        'Lighting:   Sodium lamps->ALLEY_KEY',
+        'Audio: Steady rain',
+        '',
+        '[EXECUTION]',
+        '[CAM 01] MS->[ACT] Mara turns',
+        'Mara says {Stay back.}  ->  <boots crunching gravel>',
+      ].join('\n')
+    );
+
+    // Strictly idempotent
+    expect(formatAuteurScript(formatted)).toBe(formatted);
+
+    // Whitespace-only input formats cleanly to empty string
+    expect(formatAuteurScript('  \r\n\t\n  ')).toBe('');
+
+    // Non-destructive on canonical presets: AST Macro-Blocks and Macro-States remain identical
+    for (const preset of SCRIPT_PRESETS) {
+      const before = parseAuteurScript(preset.content);
+      const after = parseAuteurScript(formatAuteurScript(preset.content));
+      expect(after.stagingBlocks.map((b) => b.name)).toEqual(
+        before.stagingBlocks.map((b) => b.name)
+      );
+      expect(after.execution?.beats.map((b) => b.raw)).toEqual(
+        before.execution?.beats.map((b) => b.raw)
+      );
     }
   });
 });

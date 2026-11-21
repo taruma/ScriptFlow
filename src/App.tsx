@@ -6,6 +6,7 @@ import {
   exportPlainText,
   exportTagless,
   extractMetadata,
+  formatAuteurScript,
   insertExecutionBeat,
   insertExecutionSubState,
   insertStagingBlock,
@@ -445,6 +446,17 @@ export default function App() {
     [commitRawText]
   );
 
+  const handleFormatScript = useCallback(() => {
+    if (isReadOnly) return;
+    const formatted = formatAuteurScript(rawText);
+    if (formatted === rawText) {
+      setToastMessage(UI_LABELS.toasts.scriptAlreadyFormatted);
+      return;
+    }
+    commitRawText(formatted, {mode: 'checkpoint'});
+    setToastMessage(UI_LABELS.toasts.scriptFormatted);
+  }, [isReadOnly, rawText, commitRawText]);
+
   // Clipboard Export & Debug Commit
   const handleCopyPlainText = useCallback(async () => {
     const text = exportPlainText(rawText);
@@ -590,6 +602,7 @@ export default function App() {
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
         onImportFile={library.handleTriggerImportFile}
+        onFormatScript={handleFormatScript}
         onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
         onDownloadCanonical={library.handleDownloadCanonical}
         onDownloadTagless={library.handleDownloadTagless}
@@ -650,6 +663,7 @@ export default function App() {
               aestheticTokens={stableAestheticTokens}
               readOnly={isReadOnly}
               onChange={handleUpdateSource}
+              onFormatScript={handleFormatScript}
             />
           )}
         </div>

@@ -76,6 +76,40 @@ export function updateStagingBlock(raw: string, blockIndex: number, newBody: str
 }
 
 /**
+ * Non-destructive, whitespace-only formatter for canonical Auteur Scripts:
+ * - Normalizes line endings (`\r\n` / `\r` -> `\n`) and strips trailing horizontal spaces.
+ * - Removes empty/whitespace-only lines inside preamble, Staging Macro-Blocks, and Execution.
+ * - Enforces exactly one blank line (`\n\n`) separating each Macro-Block with no leading/trailing blank lines.
+ * - Never alters inline text, dialogue, tags, or `->` arrows.
+ */
+export function formatAuteurScript(raw: string): string {
+  const normalized = normalizeLineEndings(raw);
+  if (normalized.trim().length === 0) {
+    return '';
+  }
+
+  const doc = parseAuteurScript(normalized);
+  const cleanLines = (lines: readonly string[]): string[] =>
+    lines.map((line) => line.replace(/[ \t]+$/, '')).filter((line) => line.trim().length > 0);
+
+  const preamble = cleanLines(doc.preambleLines);
+  const staging = doc.stagingBlocks.map((block) => ({
+    name: block.name,
+    rawBody: cleanLines(block.lines).join('\n'),
+  }));
+  const execution = doc.execution
+    ? {
+        headerName: doc.execution.headerName,
+        beats: doc.execution.beats
+          .map((beat) => beat.raw.replace(/[ \t]+$/, ''))
+          .filter((line) => line.trim().length > 0),
+      }
+    : null;
+
+  return serializeBlocksAndBeats(preamble, staging, execution);
+}
+
+/**
  * Inserts a new Staging Macro-Block at the end of Phase 1 (or immediately after
  * afterBlockIndex when specified), preserving all other blocks and Execution beats losslessly.
  * Ignores empty names or reserved Phase 2 Execution headers.

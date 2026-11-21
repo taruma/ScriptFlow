@@ -76,6 +76,7 @@ export const UI_LABELS = {
     fileMenuAria: 'File actions',
     fileMenuNewBlank: 'New Blank Script',
     fileMenuImportFile: 'Import File (.txt / .json)...',
+    fileMenuFormatScript: 'Format Script',
     fileMenuVersionHistory: 'Version History...',
     fileMenuExportHeader: 'Download Current',
     fileMenuDownloadCanonical: 'Download Canonical .txt',
@@ -237,6 +238,10 @@ export const UI_LABELS = {
     heading: 'Canonical Plain-Text Source',
     linesCount: (count: number) => `${count} ${count === 1 ? 'line' : 'lines'}`,
     charsCount: (count: number) => `${count} ${count === 1 ? 'char' : 'chars'}`,
+    formatButton: 'Format',
+    formatTitle:
+      'Remove empty lines inside blocks, trim trailing spaces, and keep a single blank line between Macro-Blocks',
+    formatAria: 'Format script whitespace',
     ariaLabel: 'Canonical Auteur Script plain-text source',
     placeholder: '[INTENT]\nCreate a cinematic scene...',
   },
@@ -535,6 +540,8 @@ export const UI_LABELS = {
     snapshotForked: (title: string) => `Forked snapshot to "${title}"`,
     snapshotDeleted: 'Deleted snapshot',
     snapshotsCleared: 'Cleared version history for this script',
+    scriptFormatted: 'Script formatted — press Undo to revert',
+    scriptAlreadyFormatted: 'Script is already cleanly formatted',
   },
 
   versionHistory: {
