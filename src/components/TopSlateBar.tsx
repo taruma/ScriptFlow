@@ -3,7 +3,6 @@ import {
   AlertCircle,
   AlertTriangle,
   BookOpen,
-  Braces,
   Check,
   ChevronDown,
   Code2,
@@ -22,6 +21,7 @@ import {FileMenuDropdown} from './FileMenuDropdown.tsx';
 import {SettingsPopover} from './SettingsPopover.tsx';
 
 export type ViewMode = 'live' | 'source';
+export type CopyFormatKind = 'plain' | 'tagless' | 'json';
 
 interface TopSlateBarProps {
   title: string;
@@ -48,9 +48,9 @@ interface TopSlateBarProps {
   onUpdateSettings: (patch: Partial<EditorSettings>) => void;
   onCopyPlainText: () => void;
   onCopyTagless: () => void;
-  copiedKind: 'plain' | 'tagless' | null;
+  onCopyJsonEnvelope: () => void;
+  copiedKind: CopyFormatKind | null;
   onOpenDebug?: () => void;
-  isDebugOpen?: boolean;
   onToggleAi?: () => void;
   isAiOpen?: boolean;
   canUndo: boolean;
@@ -86,9 +86,9 @@ export function TopSlateBar({
   onUpdateSettings,
   onCopyPlainText,
   onCopyTagless,
+  onCopyJsonEnvelope,
   copiedKind,
   onOpenDebug,
-  isDebugOpen = false,
   onToggleAi,
   isAiOpen = false,
   canUndo,
@@ -141,6 +141,8 @@ export function TopSlateBar({
           onBackupAll={onBackupAll}
           onRestoreBackup={onRestoreBackup}
           onBrowseLibrary={onOpenLibrary}
+          onOpenDebug={onOpenDebug}
+          onOpenSettings={() => setOpenMenu('settings')}
         />
 
         <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
@@ -247,7 +249,7 @@ export function TopSlateBar({
         </div>
       </div>
 
-      {/* Right Zone: Quiet Undo/Redo, Optional Debug Inspector, Library, Settings, Copy */}
+      {/* Right Zone: Quiet Undo/Redo, Icon-Only Library & Settings, AI, Split Copy */}
       <div className="flex flex-1 items-center justify-end gap-1.5 pl-2">
         {readOnly && onForkExample ? (
           <button
@@ -295,38 +297,32 @@ export function TopSlateBar({
 
         <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-border-main shrink-0" />
 
-        {onOpenDebug && (
-          <button
-            type="button"
-            onClick={() => {
-              setOpenMenu(null);
-              onOpenDebug();
-            }}
-            aria-label={UI_LABELS.topBar.debugAria}
-            aria-expanded={isDebugOpen}
-            className={isDebugOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
-          >
-            <Braces className="h-3.5 w-3.5 text-text-muted" />
-            <span className="hidden lg:inline">{UI_LABELS.topBar.debugButton}</span>
-          </button>
-        )}
-
-        {/* Quiet Library Button */}
+        {/* Quiet Icon-Only Library Button */}
         <button
           type="button"
           onClick={() => {
             setOpenMenu(null);
             onOpenLibrary();
           }}
+          title={UI_LABELS.topBar.libraryButton}
           aria-label={UI_LABELS.topBar.libraryAria}
           aria-expanded={isLibraryOpen}
-          className={isLibraryOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
+          className={isLibraryOpen ? UI_TOKENS.button.iconPillActive : UI_TOKENS.button.iconPill}
         >
-          <BookOpen className="h-3.5 w-3.5 text-text-muted" />
-          <span className="hidden sm:inline">{UI_LABELS.topBar.libraryButton}</span>
+          <BookOpen className="h-3.5 w-3.5" />
         </button>
 
-        {/* Quiet AI Assistant Sidebar Toggle */}
+        {/* Quiet Icon-Only Settings Button + Popover */}
+        <SettingsPopover
+          settings={settings}
+          onUpdateSettings={onUpdateSettings}
+          isOpen={openMenu === 'settings'}
+          onToggle={() => setOpenMenu((prev) => (prev === 'settings' ? null : 'settings'))}
+          onClose={() => setOpenMenu(null)}
+          onOpenDebug={onOpenDebug}
+        />
+
+        {/* Quiet AI Assistant Sidebar Toggle (left of Copy) */}
         {onToggleAi && (
           <button
             type="button"
@@ -344,41 +340,65 @@ export function TopSlateBar({
           </button>
         )}
 
-        {/* Settings Popover (Text Size, Clause Underlines, Theme, Supervisor Rules) */}
-        <SettingsPopover
-          settings={settings}
-          onUpdateSettings={onUpdateSettings}
-          isOpen={openMenu === 'settings'}
-          onToggle={() => setOpenMenu((prev) => (prev === 'settings' ? null : 'settings'))}
-        />
-
-        {/* Copy Menu */}
+        {/* Split Copy Button: 1-Click Canonical Plain Text + Chevron Format Picker */}
         <div className="relative">
-          <button
-            type="button"
-            onClick={() => setOpenMenu((prev) => (prev === 'copy' ? null : 'copy'))}
-            aria-expanded={openMenu === 'copy'}
+          <div
             className={
-              copiedKind ? UI_TOKENS.button.actionPillActive : UI_TOKENS.button.filePill
+              copiedKind ? UI_TOKENS.button.splitGroupActive : UI_TOKENS.button.splitGroup
             }
           >
-            {copiedKind ? (
-              <Check className="h-3.5 w-3.5" />
-            ) : (
-              <Copy className="h-3.5 w-3.5 text-text-muted" />
-            )}
-            <span>
-              {copiedKind === 'plain'
-                ? UI_LABELS.topBar.copiedPlain
-                : copiedKind === 'tagless'
-                  ? UI_LABELS.topBar.copiedTagless
-                  : UI_LABELS.topBar.copyButton}
-            </span>
-            {!copiedKind && <ChevronDown className="h-3 w-3 text-text-faint" />}
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenu(null);
+                onCopyPlainText();
+              }}
+              title={UI_LABELS.topBar.copyDefaultTitle}
+              aria-label={UI_LABELS.topBar.copyDefaultAria}
+              className={
+                copiedKind ? UI_TOKENS.button.splitPrimaryActive : UI_TOKENS.button.splitPrimary
+              }
+            >
+              {copiedKind ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-text-muted" />
+              )}
+              <span>
+                {copiedKind === 'plain'
+                  ? UI_LABELS.topBar.copiedPlain
+                  : copiedKind === 'tagless'
+                    ? UI_LABELS.topBar.copiedTagless
+                    : copiedKind === 'json'
+                      ? UI_LABELS.topBar.copiedJson
+                      : UI_LABELS.topBar.copyButton}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpenMenu((prev) => (prev === 'copy' ? null : 'copy'))}
+              aria-expanded={openMenu === 'copy'}
+              aria-haspopup="menu"
+              aria-label={UI_LABELS.topBar.copyMenuAria}
+              title={UI_LABELS.topBar.copyMenuTitle}
+              className={
+                copiedKind
+                  ? UI_TOKENS.button.splitChevronActive
+                  : openMenu === 'copy'
+                    ? UI_TOKENS.button.splitChevronOpen
+                    : UI_TOKENS.button.splitChevron
+              }
+            >
+              <ChevronDown className="h-3 w-3" />
+            </button>
+          </div>
 
           {openMenu === 'copy' && (
-            <div className={UI_TOKENS.dropdown.menuRight}>
+            <div
+              role="menu"
+              aria-label={UI_LABELS.topBar.copyMenuAria}
+              className={UI_TOKENS.dropdown.menuWide}
+            >
               <div className={UI_TOKENS.dropdown.header}>
                 <span className={UI_TOKENS.dropdown.headerText}>
                   {UI_LABELS.topBar.copyHeader}
@@ -387,6 +407,7 @@ export function TopSlateBar({
               <div className="py-1">
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     onCopyPlainText();
                     setOpenMenu(null);
@@ -400,6 +421,7 @@ export function TopSlateBar({
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     onCopyTagless();
                     setOpenMenu(null);
@@ -409,6 +431,20 @@ export function TopSlateBar({
                   <span>{UI_LABELS.topBar.copyTaglessTitle}</span>
                   <span className="text-[10px] font-normal text-text-faint">
                     {UI_LABELS.topBar.copyTaglessDesc}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onCopyJsonEnvelope();
+                    setOpenMenu(null);
+                  }}
+                  className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
+                >
+                  <span>{UI_LABELS.topBar.copyJsonTitle}</span>
+                  <span className="text-[10px] font-normal text-text-faint">
+                    {UI_LABELS.topBar.copyJsonDesc}
                   </span>
                 </button>
               </div>

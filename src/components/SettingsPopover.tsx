@@ -1,5 +1,13 @@
 import {useEffect, useState} from 'react';
-import {ArrowLeft, Check, ChevronRight, RotateCcw, Settings} from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Braces,
+  Check,
+  ChevronRight,
+  RotateCcw,
+  Settings,
+} from 'lucide-react';
 import {LINT_RULE_REGISTRY, type LintRuleSeveritySetting} from '../core/index.ts';
 import type {EditorSettings} from '../ui/editorSettings.ts';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -24,6 +32,8 @@ interface SettingsPopoverProps {
   onUpdateSettings: (patch: Partial<EditorSettings>) => void;
   isOpen: boolean;
   onToggle: () => void;
+  onClose: () => void;
+  onOpenDebug?: () => void;
 }
 
 type SettingsPanel = 'main' | 'rules';
@@ -40,14 +50,17 @@ function getSeverityActiveClass(severity: LintRuleSeveritySetting): string {
 }
 
 /**
- * Unified top-bar Settings button (gear icon) and live-preview display popover
- * housing Text Size, Clause Underlines, 4-mode Theme selection, and Script Supervisor Rules.
+ * Unified top-bar Settings button (icon-only gear trigger) and live-preview display popover
+ * housing Text Size, Clause Underlines, 4-mode Theme selection, Script Supervisor Rules,
+ * and JSON IR Inspector launch.
  */
 export function SettingsPopover({
   settings,
   onUpdateSettings,
   isOpen,
   onToggle,
+  onClose,
+  onOpenDebug,
 }: SettingsPopoverProps) {
   const [panel, setPanel] = useState<SettingsPanel>('main');
 
@@ -72,10 +85,9 @@ export function SettingsPopover({
         aria-expanded={isOpen}
         aria-label={UI_LABELS.topBar.settingsAria}
         title={UI_LABELS.topBar.settingsButton}
-        className={isOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
+        className={isOpen ? UI_TOKENS.button.iconPillActive : UI_TOKENS.button.iconPill}
       >
-        <Settings className="h-3.5 w-3.5 text-text-muted" />
-        <span className="hidden md:inline">{UI_LABELS.topBar.settingsButton}</span>
+        <Settings className="h-3.5 w-3.5" />
       </button>
 
       {isOpen && (
@@ -239,6 +251,32 @@ export function SettingsPopover({
                   <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
                 </span>
               </button>
+
+              {/* JSON IR Inspector Action Row */}
+              {onOpenDebug && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDebug();
+                  }}
+                  aria-label={UI_LABELS.topBar.settingsJsonIrOpenAria}
+                  className="w-full px-3 py-2.5 flex items-center justify-between gap-3 text-left hover:bg-surface-subtle transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Braces className="h-3.5 w-3.5 text-text-muted shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-text-body">
+                        {UI_LABELS.topBar.settingsJsonIrLabel}
+                      </span>
+                      <span className="text-[10.5px] text-text-faint leading-tight mt-0.5 truncate">
+                        {UI_LABELS.topBar.settingsJsonIrDesc}
+                      </span>
+                    </div>
+                  </div>
+                  <ArrowUpRight className="h-3.5 w-3.5 text-text-faint shrink-0" />
+                </button>
+              )}
             </>
           ) : (
             <>

@@ -17,6 +17,7 @@ import {
   reorderExecutionBeats,
   reorderExecutionSubStates,
   reorderStagingBlocks,
+  toAuteurEnvelope,
   updateExecutionSubState,
   updateStagingBlock,
   type HistoryCommitMode,
@@ -27,7 +28,7 @@ import {LiveDocument} from './components/LiveDocument.tsx';
 import {ScriptLibraryModal} from './components/ScriptLibraryModal.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import type {StagingBlockCommitOptions} from './components/stagingBlockRegistry.ts';
-import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
+import {TopSlateBar, type CopyFormatKind, type ViewMode} from './components/TopSlateBar.tsx';
 import {BUNDLED_EXAMPLES} from './data/examples/index.ts';
 import type {DraftSuggestion, PatchSuggestion} from './services/scriptTools.ts';
 import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
@@ -79,7 +80,7 @@ function isWritableEditableElement(el: Element | null): boolean {
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const {settings, updateSettings} = useEditorSettings();
-  const [copiedKind, setCopiedKind] = useState<'plain' | 'tagless' | null>(null);
+  const [copiedKind, setCopiedKind] = useState<CopyFormatKind | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
@@ -487,6 +488,15 @@ export default function App() {
     }
   }, [rawText]);
 
+  const handleCopyJsonEnvelope = useCallback(async () => {
+    const envelope = toAuteurEnvelope(rawText, settings.lintRuleOverrides);
+    const text = JSON.stringify(envelope, null, 2);
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopiedKind('json');
+    }
+  }, [rawText, settings.lintRuleOverrides]);
+
   const handleCommitFromDebug = useCallback(
     (nextRawText: string, message?: string) => {
       if (isReadOnly) return;
@@ -628,9 +638,9 @@ export default function App() {
         onUpdateSettings={updateSettings}
         onCopyPlainText={handleCopyPlainText}
         onCopyTagless={handleCopyTagless}
+        onCopyJsonEnvelope={handleCopyJsonEnvelope}
         copiedKind={copiedKind}
         onOpenDebug={() => setIsDebugOpen(true)}
-        isDebugOpen={isDebugOpen}
         onToggleAi={() => setIsAiOpen((prev) => !prev)}
         isAiOpen={isAiOpen}
         canUndo={canUndo}

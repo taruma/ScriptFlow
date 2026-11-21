@@ -10,6 +10,7 @@ import {
   FolderArchive,
   FolderOpen,
   History,
+  Settings,
   Upload,
 } from 'lucide-react';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -30,12 +31,14 @@ export interface FileMenuDropdownProps {
   onBackupAll: () => void;
   onRestoreBackup: () => void;
   onBrowseLibrary: () => void;
+  onOpenDebug?: () => void;
+  onOpenSettings: () => void;
 }
 
 /**
  * Quiet left-wing File menu dropdown housing creation, single-file import/export,
- * non-destructive formatting, version history, full-library backup/restore, and
- * library browser navigation.
+ * non-destructive formatting, version history, full-library backup/restore,
+ * library navigation, JSON IR Inspector, and Settings access.
  */
 export function FileMenuDropdown({
   isOpen,
@@ -52,6 +55,8 @@ export function FileMenuDropdown({
   onBackupAll,
   onRestoreBackup,
   onBrowseLibrary,
+  onOpenDebug,
+  onOpenSettings,
 }: FileMenuDropdownProps) {
   const runAndClose = (action: () => void) => () => {
     onClose();
@@ -208,6 +213,41 @@ export function FileMenuDropdown({
                 <span className="inline-flex items-center gap-2">
                   <FolderOpen className="h-3.5 w-3.5 text-text-muted" />
                   <span>{UI_LABELS.topBar.fileMenuBrowseLibrary}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tools & Settings */}
+          <div>
+            <div className={UI_TOKENS.dropdown.header}>
+              <span className={UI_TOKENS.dropdown.headerText}>
+                {UI_LABELS.topBar.fileMenuToolsHeader}
+              </span>
+            </div>
+            <div className="py-1">
+              {onOpenDebug && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={runAndClose(onOpenDebug)}
+                  className={UI_TOKENS.dropdown.item}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Braces className="h-3.5 w-3.5 text-text-muted" />
+                    <span>{UI_LABELS.topBar.fileMenuJsonIrInspector}</span>
+                  </span>
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={onOpenSettings}
+                className={UI_TOKENS.dropdown.item}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Settings className="h-3.5 w-3.5 text-text-muted" />
+                  <span>{UI_LABELS.topBar.fileMenuSettings}</span>
                 </span>
               </button>
             </div>

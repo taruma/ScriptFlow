@@ -57,6 +57,24 @@ export const UI_TOKENS = {
       'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-surface-subtle text-text-body hover:text-text-main rounded-xl text-xs font-medium transition-colors active:scale-95 border border-border-main shadow-2xs cursor-pointer whitespace-nowrap shrink-0',
     filePillActive:
       'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-muted text-text-main rounded-xl text-xs font-medium transition-colors active:scale-95 border border-border-main shadow-inner cursor-pointer whitespace-nowrap shrink-0',
+    iconPill:
+      'inline-flex items-center justify-center h-[30px] w-[30px] bg-surface hover:bg-surface-subtle text-text-muted hover:text-text-main rounded-xl transition-colors active:scale-95 border border-border-main shadow-2xs cursor-pointer shrink-0',
+    iconPillActive:
+      'inline-flex items-center justify-center h-[30px] w-[30px] bg-surface-muted text-text-main rounded-xl transition-colors active:scale-95 border border-border-main shadow-inner cursor-pointer shrink-0',
+    splitGroup:
+      'inline-flex items-stretch h-[30px] bg-surface rounded-xl border border-border-main shadow-2xs overflow-hidden shrink-0',
+    splitGroupActive:
+      'inline-flex items-stretch h-[30px] bg-btn-primary-bg text-btn-primary-text rounded-xl border border-btn-primary-bg shadow-2xs overflow-hidden shrink-0',
+    splitPrimary:
+      'inline-flex items-center gap-1.5 pl-2.5 pr-2 text-xs font-medium text-text-body hover:text-text-main hover:bg-surface-subtle transition-colors active:bg-surface-muted cursor-pointer whitespace-nowrap',
+    splitPrimaryActive:
+      'inline-flex items-center gap-1.5 pl-2.5 pr-2 text-xs font-medium text-btn-primary-text hover:bg-btn-primary-hover transition-colors cursor-pointer whitespace-nowrap',
+    splitChevron:
+      'inline-flex items-center justify-center px-1.5 border-l border-border-main text-text-faint hover:text-text-main hover:bg-surface-subtle transition-colors cursor-pointer',
+    splitChevronOpen:
+      'inline-flex items-center justify-center px-1.5 border-l border-border-main bg-surface-muted text-text-main transition-colors cursor-pointer',
+    splitChevronActive:
+      'inline-flex items-center justify-center px-1.5 border-l border-btn-primary-text/25 text-btn-primary-text/80 hover:text-btn-primary-text hover:bg-btn-primary-hover transition-colors cursor-pointer',
     forkPill:
       'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-surface-subtle hover:bg-surface-hover text-text-main border border-border-main shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0',
     segmentedGroup:
