@@ -112,7 +112,7 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
           ops: [
             {
               op: 'replace_sub_state',
-              subStateId: 'S1.1',
+              subStateId: 'S1.2',
               subState: {
                 dimension: 'action',
                 subStateTag: 'ACT',
@@ -147,7 +147,7 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
             {
               op: 'insert_sub_state',
               macroStateId: 'S1',
-              afterSubStateId: 'S1.2',
+              afterSubStateId: 'S1.3',
               subState: {dimension: 'foley', sound: 'metal chair scrape'},
             },
           ],
@@ -169,7 +169,7 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
             {
               op: 'insert_sub_state',
               macroStateId: 'S1',
-              afterSubStateId: 'S1.2',
+              afterSubStateId: 'S1.3',
               subState: {dimension: 'foley', sound: 'folder slams shut'},
             },
           ],
@@ -208,7 +208,7 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
           ops: [
             {
               op: 'delete_sub_state',
-              subStateId: 'S1.3',
+              subStateId: 'S1.4',
             },
           ],
         },
@@ -343,7 +343,7 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
                   {
                     op: 'insert_sub_state',
                     macroStateId: 'S1',
-                    afterSubStateId: 'S1.1',
+                    afterSubStateId: 'S1.2',
                     subState: {dimension: 'foley', sound: 'pen click'},
                   },
                 ],
@@ -364,7 +364,7 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
                   {
                     op: 'insert_sub_state',
                     macroStateId: 'S1',
-                    afterSubStateId: 'S1.0',
+                    afterSubStateId: 'S1.1',
                     subState: {
                       dimension: 'action',
                       subStateTag: 'ACT',

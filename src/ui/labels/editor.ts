@@ -38,6 +38,8 @@ export const EDITOR_LABELS = {
     settingsTextSizeLabel: 'Text size',
     settingsClauseGuidesLabel: 'Clause underlines',
     settingsClauseGuidesDesc: 'Dotted phrases · solid sentences',
+    settingsSubStateIdsLabel: 'Sub-State IDs',
+    settingsSubStateIdsDesc: 'S1.1, S1.2 labels in Execution',
     settingsThemeLabel: 'Theme',
     settingsRulesLabel: 'Supervisor rules',
     settingsRulesDesc: 'Tune live linter severities',
@@ -74,6 +76,8 @@ export const EDITOR_LABELS = {
       enabled ? 'Phrase & sentence underlines: On' : 'Phrase & sentence underlines: Off',
     clauseGuidesAria: (enabled: boolean) =>
       `Toggle phrase and sentence underlines (${enabled ? 'currently on' : 'currently off'})`,
+    subStateIdsAria: (enabled: boolean) =>
+      `Toggle Sub-State IDs in Execution (${enabled ? 'currently on' : 'currently off'})`,
     copyButton: 'Copy',
     copyDefaultTitle: 'Copy Canonical Plain Text',
     copyDefaultAria: 'Copy Canonical Plain Text to clipboard',

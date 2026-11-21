@@ -13,6 +13,12 @@ import {
   saveStoredLintRuleOverrides,
 } from './lintRules.ts';
 import {
+  applySubStateIds,
+  DEFAULT_SUBSTATE_IDS,
+  loadStoredSubStateIds,
+  saveStoredSubStateIds,
+} from './subStateIds.ts';
+import {
   applyTextSize,
   DEFAULT_TEXT_SIZE,
   loadStoredTextSize,
@@ -30,6 +36,7 @@ export interface EditorSettings {
   themeMode: ThemeMode;
   textSize: TextSizePreset;
   clauseGuides: boolean;
+  subStateIds: boolean;
   lintRuleOverrides: LintRuleOverrides;
 }
 
@@ -37,6 +44,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   themeMode: 'dark',
   textSize: DEFAULT_TEXT_SIZE,
   clauseGuides: DEFAULT_CLAUSE_GUIDES,
+  subStateIds: DEFAULT_SUBSTATE_IDS,
   lintRuleOverrides: DEFAULT_LINT_RULE_OVERRIDES,
 };
 
@@ -45,6 +53,7 @@ export function loadEditorSettings(): EditorSettings {
     themeMode: loadStoredTheme(),
     textSize: loadStoredTextSize(),
     clauseGuides: loadStoredClauseGuides(),
+    subStateIds: loadStoredSubStateIds(),
     lintRuleOverrides: loadStoredLintRuleOverrides(),
   };
 }
@@ -56,6 +65,7 @@ export function applyEditorSettings(
   applyThemeMode(settings.themeMode, disableThemeTransitions);
   applyTextSize(settings.textSize);
   applyClauseGuides(settings.clauseGuides);
+  applySubStateIds(settings.subStateIds);
 }
 
 /**
@@ -89,6 +99,10 @@ export function useEditorSettings(): {
       if (patch.clauseGuides !== undefined && patch.clauseGuides !== prev.clauseGuides) {
         saveStoredClauseGuides(patch.clauseGuides);
         applyClauseGuides(patch.clauseGuides);
+      }
+      if (patch.subStateIds !== undefined && patch.subStateIds !== prev.subStateIds) {
+        saveStoredSubStateIds(patch.subStateIds);
+        applySubStateIds(patch.subStateIds);
       }
       if (
         patch.lintRuleOverrides !== undefined &&

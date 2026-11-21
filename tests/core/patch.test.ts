@@ -14,12 +14,12 @@ describe('Auteur Script Transactional Patch Engine', () => {
 
     const res = applyAuteurPatch(INTERROGATION, {
       expectedSnapshotHash: before.snapshotHash,
-      summary: 'Delete S1, modify S3.1, and insert a new Macro-State after S2',
+      summary: 'Delete S1, modify S3.2, and insert a new Macro-State after S2',
       ops: [
         {op: 'delete_macro_state', macroStateId: 'S1'},
         {
           op: 'replace_sub_state',
-          subStateId: 'S3.1',
+          subStateId: 'S3.2',
           subState: {
             dimension: 'action',
             subStateTag: 'ACT',
@@ -47,7 +47,7 @@ describe('Auteur Script Transactional Patch Engine', () => {
     const after = res.nextEnvelope!;
     const states = after.document.executionMacroBlock!.macroStates;
     expect(states).toHaveLength(3);
-    // Original S2 is now S1, inserted CAM 03 is S2, original S3 (with edited S3.1) is S3
+    // Original S2 is now S1, inserted CAM 03 is S2, original S3 (with edited S3.2) is S3
     expect(states[0].subStates[0]).toMatchObject({dimension: 'camera', identifier: '02'});
     expect(states[1].subStates[0]).toMatchObject({
       dimension: 'camera',
@@ -140,7 +140,7 @@ describe('Auteur Script Transactional Patch Engine', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.4',
+          afterSubStateId: 'S2.5',
           subState: {dimension: 'foley', sound: 'cigarette ash hiss'},
         },
       ],
@@ -162,7 +162,7 @@ describe('Auteur Script Transactional Patch Engine', () => {
     // Inserted foley on original S2 (now S3)
     const movedS2 = doc.executionMacroBlock!.macroStates[2];
     expect(movedS2.subStates[movedS2.subStates.length - 1]).toEqual({
-      id: 'S3.5',
+      id: 'S3.6',
       dimension: 'foley',
       sound: 'cigarette ash hiss',
     });
@@ -198,7 +198,7 @@ MS on Miller seated frame-left facing screen-right.
         {
           op: 'insert_sub_state',
           macroStateId: 'S1',
-          afterSubStateId: 'S1.1',
+          afterSubStateId: 'S1.2',
           subState: {dimension: 'foley', sound: 'chair legs scraping concrete'},
         },
       ],
@@ -215,7 +215,7 @@ MS on Miller seated frame-left facing screen-right.
         ops: [
           {
             op: 'replace_sub_state',
-            subStateId: 'S1.2',
+            subStateId: 'S1.3',
             subState: {
               dimension: 'action',
               subStateTag: 'ACT',
@@ -378,7 +378,7 @@ MS on Miller seated frame-left facing screen-right.
         {
           op: 'insert_sub_state' as const,
           macroStateId: 'S1',
-          afterSubStateId: 'S1.4',
+          afterSubStateId: 'S1.5',
           subState: {dimension: 'dialogue' as const, speaker: 'Miller', line: 'Not another word.'},
         },
       ],
@@ -409,7 +409,7 @@ MS on Miller seated frame-left facing screen-right.
         ops: [
           {
             op: 'replace_sub_state',
-            subStateId: 'S1.2',
+            subStateId: 'S1.3',
             subState: {
               dimension: 'action',
               subStateTag: 'ACT',
@@ -462,7 +462,7 @@ MS on Miller seated frame-left facing screen-right.
           },
           {
             op: 'replace_sub_state',
-            subStateId: 'S3.1',
+            subStateId: 'S3.2',
             subState: {
               dimension: 'action',
               subStateTag: 'ACT',

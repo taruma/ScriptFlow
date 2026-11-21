@@ -67,7 +67,7 @@ export function buildActionEditSample(envelope: AuteurEnvelope): string {
   const firstAction = envelope.document.executionMacroBlock?.macroStates
     .flatMap((ms) => ms.subStates)
     .find((s) => s.dimension === 'action');
-  const targetSubId = firstAction?.id ?? 'S1.1';
+  const targetSubId = firstAction?.id ?? 'S1.2';
   const currentText =
     firstAction && firstAction.dimension === 'action'
       ? firstAction.content
@@ -116,7 +116,7 @@ export function buildLintGateSample(envelope: AuteurEnvelope): string {
   const firstAction = envelope.document.executionMacroBlock?.macroStates
     .flatMap((ms) => ms.subStates)
     .find((s) => s.dimension === 'action');
-  const targetSubId = firstAction?.id ?? 'S1.1';
+  const targetSubId = firstAction?.id ?? 'S1.2';
   return JSON.stringify(
     {
       expectedSnapshotHash: envelope.snapshotHash,

@@ -34,7 +34,7 @@ describe('Auteur Script Composable Lens Slicer & Review Validator', () => {
       currentDescriptor: '',
       effectiveFraming: 'MS, OTS Miller',
     });
-    expect(slice.macroStates[2].subStates[0].id).toBe('S3.1');
+    expect(slice.macroStates[2].subStates[0].id).toBe('S3.2');
   });
 
   it('supports all 5 built-in Script Supervisor Audit Lens presets', () => {
@@ -105,7 +105,7 @@ Location: dim interrogation room -> LOC01; unused rooftop -> LOC02
           lens: 'Lens 1: Spatial & Optics',
           severity: 'warning',
           targetLevel: 'sub_state',
-          targetId: 'S3.1',
+          targetId: 'S3.2',
           message: 'Clarify Miller hand placement to match LOGIC folder anchor.',
           rationale: 'CAM 01 is OTS Miller; emphasizing palm contact reinforces continuity.',
           repairHint: 'Specify both palms flat on the manila folder.',
@@ -114,7 +114,7 @@ Location: dim interrogation room -> LOC01; unused rooftop -> LOC02
             ops: [
               {
                 op: 'replace_sub_state',
-                subStateId: 'S3.1',
+                subStateId: 'S3.2',
                 subState: {
                   dimension: 'action',
                   subStateTag: 'ACT',

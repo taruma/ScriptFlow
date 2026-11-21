@@ -66,7 +66,7 @@ describe('geminiInteractions streaming agent client', () => {
               ops: [
                 {
                   op: 'replace_sub_state',
-                  subStateId: 'S1.1',
+                  subStateId: 'S1.2',
                   subState: {
                     dimension: 'action',
                     subStateTag: 'ACT',
@@ -104,7 +104,7 @@ describe('geminiInteractions streaming agent client', () => {
               ops: [
                 {
                   op: 'replace_sub_state',
-                  subStateId: 'S1.1',
+                  subStateId: 'S1.2',
                   subState: {
                     dimension: 'action',
                     subStateTag: 'ACT',
@@ -413,7 +413,7 @@ describe('geminiInteractions streaming agent client', () => {
               ops: [
                 {
                   op: 'replace_sub_state',
-                  subStateId: 'S1.1',
+                  subStateId: 'S1.2',
                   subState: {
                     dimension: 'action',
                     subStateTag: 'ACT',
@@ -449,7 +449,7 @@ describe('geminiInteractions streaming agent client', () => {
               ops: [
                 {
                   op: 'replace_sub_state',
-                  subStateId: 'S1.1',
+                  subStateId: 'S1.2',
                   subState: {
                     dimension: 'action',
                     subStateTag: 'ACT',

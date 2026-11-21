@@ -75,7 +75,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller taps the table once'},
         },
       ],
@@ -86,7 +86,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.0',
+          afterSubStateId: 'S2.1',
           subState: {dimension: 'light', subStateTag: 'LIGHT', content: 'overhead tube hums dimly'},
         },
       ],
@@ -142,7 +142,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.0',
+          afterSubStateId: 'S2.1',
           subState: {dimension: 'light', subStateTag: 'LIGHT', content: 'overhead shadow'},
         },
       ],
@@ -177,7 +177,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller leans back'},
         },
       ],
@@ -186,7 +186,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.0',
+          subStateId: 'S1.1',
           subState: {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'CU on Miller'},
         },
       ],
@@ -194,8 +194,8 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
 
     const beforeHash = toAuteurEnvelope(INTERROGATION).snapshotHash;
     const audit0 = makeAudit(INTERROGATION, [
-      {targetId: 'S1.2', patch: fixS1a},
-      {targetId: 'S1.0', patch: fixS1b},
+      {targetId: 'S1.3', patch: fixS1a},
+      {targetId: 'S1.1', patch: fixS1b},
     ]);
 
     const audit1 = rebaseAuditReviewAfterFix(
@@ -217,7 +217,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.0',
+          afterSubStateId: 'S2.1',
           subState: {dimension: 'light', subStateTag: 'LIGHT', content: 'pale doorway glare'},
         },
       ],
@@ -249,7 +249,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller adjusts his collar'},
         },
       ],
@@ -258,7 +258,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller folds his hands'},
         },
       ],
@@ -268,7 +268,7 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.0',
+          afterSubStateId: 'S2.1',
           subState: {dimension: 'light', subStateTag: 'LIGHT', content: 'dim tungsten'},
         },
       ],

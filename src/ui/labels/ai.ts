@@ -463,7 +463,7 @@ export const AI_LABELS = {
         fieldScope: 'Evaluation Scope',
         scopeDocument: 'Document (1 check)',
         scopeMacroState: 'Per Macro-State (S1..Sn)',
-        scopeSubState: 'Per Sub-State (S1.0..Sn.k)',
+        scopeSubState: 'Per Sub-State (S1.1..Sn.k)',
         fieldWhen: 'Run Condition (AST Filter)',
         whenLabels: {
           all: 'Always',

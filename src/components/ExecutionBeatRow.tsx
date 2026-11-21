@@ -346,7 +346,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
           {leadNode && (
             <div
               id={`execution-beat-${beat.index}-substate-0`}
-              className={`relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-12'}`}
+              className={`group/step relative flex items-start gap-1.5 ${readOnly ? '' : 'pr-12'}`}
             >
               <button
                 type="button"
@@ -358,6 +358,13 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
               >
                 <ChevronDown className="h-3.5 w-3.5" />
               </button>
+
+              <span
+                aria-hidden="true"
+                className="auteur-substate-id mt-[3px] shrink-0 select-none font-mono text-[10px] font-medium tabular-nums leading-[1.35] text-text-faint/75 group-hover/step:text-text-muted group-focus-within/step:text-text-muted transition-colors"
+              >
+                S{beat.index}.1
+              </span>
 
               <div className="min-w-0 flex-1 flex items-baseline gap-2">
                 <div className="min-w-0 flex-1">

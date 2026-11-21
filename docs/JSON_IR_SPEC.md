@@ -61,7 +61,7 @@ Every addressable element receives a deterministic snapshot ID derived from the 
 | **Staging Macro-Block** | `MB<0-based index>` | `MB0` (`INTENT`), `MB1` (`LOGIC`), `MB2` (`AESTHETIC`), `MB3` (`OPENING`) |
 | **`[AESTHETIC]` Lookbook Entry** | `MB<blockIndex>.<0-based entryIndex>` | `MB2.0` (`Medium`), `MB2.2` (`Location`) |
 | **Execution Macro-State ($S_n$)** | `S<1-based index>` | `S1`, `S2`, `S3` |
-| **Execution Sub-State ($s_i$)** | `S<macroStateIndex>.<0-based subIndex>` | `S1.0` (`[CAM 01]`), `S1.1` (`[ACT]`), `S1.2` (`<foley>`) |
+| **Execution Sub-State ($s_i$)** | `S<macroStateIndex>.<1-based subIndex>` | `S1.1` (`[CAM 01]`), `S1.2` (`[ACT]`), `S1.3` (`<foley>`) |
 
 ---
 
@@ -113,10 +113,10 @@ Produced by `toAuteurIR(rawText)` and compiled back to canonical `v0.4.0` plain 
       {
         "id": "S1",
         "subStates": [
-          { "id": "S1.0", "dimension": "camera", "subStateTag": "CAM", "identifier": "01", "content": "MS, OTS Miller" },
-          { "id": "S1.1", "dimension": "action", "subStateTag": "ACT", "content": "Miller slides the folder forward with his left palm" },
-          { "id": "S1.2", "dimension": "dialogue", "speaker": "Miller", "modifiers": "(quiet)", "line": "Look at the dates." },
-          { "id": "S1.3", "dimension": "foley", "sound": "paper scrape" }
+          { "id": "S1.1", "dimension": "camera", "subStateTag": "CAM", "identifier": "01", "content": "MS, OTS Miller" },
+          { "id": "S1.2", "dimension": "action", "subStateTag": "ACT", "content": "Miller slides the folder forward with his left palm" },
+          { "id": "S1.3", "dimension": "dialogue", "speaker": "Miller", "modifiers": "(quiet)", "line": "Look at the dates." },
+          { "id": "S1.4", "dimension": "foley", "sound": "paper scrape" }
         ]
       }
     ]
@@ -208,7 +208,7 @@ if (result.ok) {
 
 ### 5.2 Edit — Transactional Semantic Patch Engine (`applyAuteurPatch`)
 
-All patches validate against `AuteurPatchSchema` (`getAuteurJsonSchemas().patch`) and resolve every snapshot ID (`MB#`, `MB#.#`, `S#`, `S#.#`) against the initial snapshot before compiling once back to canonical plain text. Deleting `S1`, editing `S3.1`, and inserting after `S2` in the same batch produces **zero index drift**.
+All patches validate against `AuteurPatchSchema` (`getAuteurJsonSchemas().patch`) and resolve every snapshot ID (`MB#`, `MB#.#`, `S#`, `S#.#`) against the initial snapshot before compiling once back to canonical plain text. Deleting `S1`, editing `S3.2`, and inserting after `S2` in the same batch produces **zero index drift**.
 
 Post-patch diagnostic diffing (`src/core/patch/diagnostics.ts`: `buildAfterToOriginTargetMap` + `diffDiagnostics`) maps surviving post-compilation `MB#` and `S#` IDs back to their pre-patch origin IDs and normalizes `S#` references in diagnostic messages, ensuring index shifts never trigger false `LINT_ERROR_INTRODUCED` rejections or false resolutions.
 

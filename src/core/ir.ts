@@ -92,7 +92,7 @@ function extractCameraIdentifier(slot: string | null): string | null {
 }
 
 function subStateNodeToIR(node: SubStateNode, macroStateId: string): SubStateIR {
-  const id = `${macroStateId}.${node.index}`;
+  const id = `${macroStateId}.${node.index + 1}`;
 
   switch (node.kind) {
     case 'camera': {

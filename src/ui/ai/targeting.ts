@@ -174,8 +174,9 @@ export function resolveEditorJumpTarget(
     if (beat) {
       const beatDomId = `execution-beat-${beatIndex}`;
       if (beatMatch[2] !== undefined) {
-        const subStateIndex = Number.parseInt(beatMatch[2], 10);
-        if (subStateIndex >= 0 && subStateIndex < beat.subStates.length) {
+        const subStateNumber = Number.parseInt(beatMatch[2], 10);
+        const subStateIndex = subStateNumber - 1;
+        if (subStateNumber >= 1 && subStateIndex < beat.subStates.length) {
           return {
             phase: 'execution',
             beatIndex,

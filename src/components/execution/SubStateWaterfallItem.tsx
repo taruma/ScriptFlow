@@ -137,6 +137,12 @@ export const SubStateWaterfallItem = memo(function SubStateWaterfallItem({
         >
           ↳
         </span>
+        <span
+          aria-hidden="true"
+          className="auteur-substate-id mt-[3px] shrink-0 select-none font-mono text-[10px] font-medium tabular-nums leading-[1.35] text-text-faint/75 group-hover/step:text-text-muted group-focus-within/step:text-text-muted transition-colors"
+        >
+          S{beatIndex}.{stepIndex + 1}
+        </span>
         <div className="min-w-0 flex-1">
           <LiveHighlightedEditor
             ref={inputRef}

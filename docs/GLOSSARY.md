@@ -12,7 +12,7 @@ Do not conflate **Macro-Blocks**, **Macro-States**, **Sub-States**, **Sub-State 
 |---|---|---|---|
 | **Macro-Block ($B \in \mathcal{B}$)** | Document-level container separated by blank lines. Partitions the script into **Phase 1: STAGING** or **Phase 2: EXECUTION**. | Standalone header on its own line: `[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, `[EXECUTION]`, `[CONTINUITY PROTOCOL]` | `StagingBlock` / `ExecutionSection` · `StagingMacroBlockIR` (`MB0`…) / `ExecutionMacroBlockIR` |
 | **Macro-State ($S_n$)** | One complete non-empty line inside `[EXECUTION]`, representing one atomic stretch of screen time ($S_1, S_2, \dots, S_n$). | `[CAM 01] MS, OTS Miller -> [ACT] Miller slides the folder -> <paper scrape>` | `ExecutionBeat` (`beat.index` = `1..N`, legacy code alias) · `MacroStateIR` (`id: "S1"`, `"S2"`, …) |
-| **Sub-State ($s_i$)** | One atomic segment inside a Macro-State line, separated by `->` (or `→`). Governs strictly one optical, physical, or acoustic dimension. | `[ACT] Miller slides the folder`, `Miller says {Look at the dates.}`, `<paper scrape>` | `SubStateNode` · `SubStateIR` (`id: "S1.0"`, `"S1.1"`, …, discriminated by `dimension`) |
+| **Sub-State ($s_i$)** | One atomic segment inside a Macro-State line, separated by `->` (or `→`). Governs strictly one optical, physical, or acoustic dimension. | `[ACT] Miller slides the folder`, `Miller says {Look at the dates.}`, `<paper scrape>` | `SubStateNode` · `SubStateIR` (`id: "S1.1"`, `"S1.2"`, …, discriminated by `dimension`) |
 | **Sub-State Tag ($\tau \in \mathcal{T}$)** | The leading uppercase bracketed label on a tagged Sub-State inside `[EXECUTION]`. Never starts a new Macro-Block. | `[CAM 01]`, `[CAM]`, `[ACT]`, `[BLOCK]`, `[LIGHT]`, `[STATE IN]`, `[STATE OUT]`, `[SPEED]`, `[VFX]` | `SubStateNode.tag` · `SubStateIR.subStateTag` (with `CAM` separating `identifier: "01" \| "02A" \| null`) |
 | **`[BLOCK]` Tag** | An **inline Sub-State tag** used inside `[EXECUTION]` to lock 2D viewport coordinates for 3+ subjects or mark swaps. **Not** a Macro-Block container. | `[BLOCK] Miller frame-left FG facing screen-right; Ray frame-right MG facing screen-left` | `SubStateNode` (`kind: 'block'`) · `SubStateIR` (`dimension: 'block'`, `subStateTag: 'BLOCK'`) |
 
@@ -30,7 +30,7 @@ Do not conflate **Macro-Blocks**, **Macro-States**, **Sub-States**, **Sub-State 
   |---|---|---|---|---|
   | `MB` · `MB#` | **Macro-Block** | `Macro-Block` / `MB` | `MB0`, `MB1`, … (`stagingMacroBlocks`) | `StagingBlock` · `StagingBlockCard` |
   | `S` · `State` · `S#` *(never `MS` — collides with Medium Shot)* | **Macro-State** | `Macro-State` · `S1 → SN` | `S1`, `S2`, … (`macroStates`); Staging = `S0` | `ExecutionBeat` · `ExecutionBeatRow` *(legacy code alias)* |
-  | `S#.#` · `SS` *(conversational shorthand)* | **Sub-State** | `Sub-State` / `Sub-States` | `S1.0`, `S1.1`, … (`subStates`) | `SubStateNode` |
+  | `S#.#` · `SS` *(conversational shorthand)* | **Sub-State** | `Sub-State` / `Sub-States` · `S1.1`, `S1.2`, … | `S1.1`, `S1.2`, … (`subStates`) | `SubStateNode` |
 - **Viewport Position vs. Orientation**:
   - **Position** (2D screen space): `frame-left`, `frame-center`, `frame-right` (or `screen-left`, `screen-right`) + depth planes `FG`, `MG`, `BG`.
   - **Orientation / Eyeline** (anatomical yaw): `facing screen-right`, `facing screen-left`, `in profile-left`, `back to camera`.

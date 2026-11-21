@@ -183,7 +183,7 @@ describe('ai messageReducers', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller taps the table once'},
         },
       ],
@@ -251,7 +251,7 @@ describe('ai messageReducers', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller taps the table once'},
         },
       ],
@@ -262,7 +262,7 @@ describe('ai messageReducers', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.0',
+          afterSubStateId: 'S2.1',
           subState: {dimension: 'light', subStateTag: 'LIGHT', content: 'overhead tube hums dimly'},
         },
       ],
@@ -302,7 +302,7 @@ describe('ai messageReducers', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller taps the table once'},
         },
       ],

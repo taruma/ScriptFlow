@@ -512,6 +512,9 @@
   text-decoration-thickness: 1px;
   text-decoration-skip-ink: auto;
 }
+[data-substate-ids="false"] .auteur-substate-id {
+  display: none;
+}
 .auteur-live-mono .auteur-live-tok-foley,
 .auteur-live-mono .auteur-live-tok-score {
   font-style: italic;

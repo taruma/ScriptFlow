@@ -70,7 +70,7 @@ export function SettingsPopover({
     }
   }, [isOpen]);
 
-  const {themeMode, textSize, clauseGuides, lintRuleOverrides} = settings;
+  const {themeMode, textSize, clauseGuides, subStateIds, lintRuleOverrides} = settings;
   const currentTextSize = getTextSizeOption(textSize);
   const canDecreaseText = textSize !== TEXT_SIZE_OPTIONS[0].id;
   const canIncreaseText = textSize !== TEXT_SIZE_OPTIONS[TEXT_SIZE_OPTIONS.length - 1].id;
@@ -178,6 +178,39 @@ export function SettingsPopover({
                     aria-hidden="true"
                     className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
                       clauseGuides
+                        ? 'translate-x-[18px] bg-btn-primary-text'
+                        : 'translate-x-[2px] bg-text-faint'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Sub-State IDs Toggle Row */}
+              <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-medium text-text-body">
+                    {UI_LABELS.topBar.settingsSubStateIdsLabel}
+                  </span>
+                  <span className="text-[10.5px] text-text-faint leading-tight mt-0.5">
+                    {UI_LABELS.topBar.settingsSubStateIdsDesc}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={subStateIds}
+                  aria-label={UI_LABELS.topBar.subStateIdsAria(subStateIds)}
+                  onClick={() => onUpdateSettings({subStateIds: !subStateIds})}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors cursor-pointer ${
+                    subStateIds
+                      ? 'bg-btn-primary-bg border-btn-primary-bg'
+                      : 'bg-surface-muted border-border-main'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`inline-block h-3.5 w-3.5 rounded-full transition-transform ${
+                      subStateIds
                         ? 'translate-x-[18px] bg-btn-primary-text'
                         : 'translate-x-[2px] bg-text-faint'
                     }`}

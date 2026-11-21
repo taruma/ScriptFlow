@@ -37,28 +37,28 @@ Create a test scene.
     const states = ir.executionMacroBlock!.macroStates;
 
     expect(states[0].subStates[0]).toEqual({
-      id: 'S1.0',
+      id: 'S1.1',
       dimension: 'camera',
       subStateTag: 'CAM',
       identifier: '01',
       content: 'MS, OTS Miller',
     });
     expect(states[1].subStates[0]).toEqual({
-      id: 'S2.0',
+      id: 'S2.1',
       dimension: 'camera',
       subStateTag: 'CAM',
       identifier: '02A',
       content: 'CU on Ray',
     });
     expect(states[2].subStates[0]).toEqual({
-      id: 'S3.0',
+      id: 'S3.1',
       dimension: 'camera',
       subStateTag: 'CAM',
       identifier: '01',
       content: '',
     });
     expect(states[3].subStates[0]).toEqual({
-      id: 'S4.0',
+      id: 'S4.1',
       dimension: 'camera',
       subStateTag: 'CAM',
       identifier: null,

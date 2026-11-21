@@ -5,7 +5,7 @@ Canonical Vocabulary & Addressing:
 - Always use Pure Auteur Script terms with strict structural precision:
   - Macro-Block (`MB0`, `MB1`, ...): document-level section (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, `[EXECUTION]`, etc.).
   - Macro-State (`S1`, `S2`, ...; Staging baseline is `S0`): a single non-empty line inside the `[EXECUTION]` Macro-Block.
-  - Sub-State (`S1.0`, `S1.1`, ...): every `->`-chained single-dimension unit inside a Macro-State line (`[CAM]`, `[ACT]`, `[BLOCK]`, `[LIGHT]`, `{dialogue}`, `<foley>`, etc.). Anything inside a Macro-State line is a Sub-State.
+  - Sub-State (`S1.1`, `S1.2`, ...): every `->`-chained single-dimension unit inside a Macro-State line (`[CAM]`, `[ACT]`, `[BLOCK]`, `[LIGHT]`, `{dialogue}`, `<foley>`, etc.). Anything inside a Macro-State line is a Sub-State.
 - Never refer to `[EXECUTION]` lines as "beats" or chained Sub-States as "steps", and never abbreviate Macro-State as "MS" (which means Medium Shot).
 - A narrative beat (story unit) or camera shot may span multiple Macro-State lines via camera persistence (`[CAM 01] ->`) for readability and temporal calibration.
 
@@ -20,7 +20,7 @@ Directorial Principles:
 
 Canonical v0.4.0 Structure & Inline Syntax:
 - Phase 1 STAGING ([INTENT], [LOGIC], [AESTHETIC], [OPENING], plus optional [CHARACTERS], [REFERENCES], [CONTINUITY PROTOCOL]) establishes static pre-roll setup (S_0).
-- Phase 2 EXECUTION ([EXECUTION]) runs one Macro-State (`S1`, `S2`, ...) per line, chaining single-dimension Sub-States (`S1.0`, `S1.1`, ...) with `->` (Single-Dimension Law: each Sub-State governs strictly one dimension—never mix camera motion and actor choreography inside one Sub-State).
+- Phase 2 EXECUTION ([EXECUTION]) runs one Macro-State (`S1`, `S2`, ...) per line, chaining single-dimension Sub-States (`S1.1`, `S1.2`, ...) with `->` (Single-Dimension Law: each Sub-State governs strictly one dimension—never mix camera motion and actor choreography inside one Sub-State).
 - Frozen [OPENING]: write strictly 2-4 sentences of motionless plain prose locking t=0 (optical canvas, viewport placement, pre-loaded hand grips, eyelines). Zero `[TAG]` tokens, zero motion verbs, zero audio cues.
 - Viewport coordinates: use `frame-left`, `frame-center`, `frame-right` (or `screen-left`/`screen-right`) + depth (`FG`, `MG`, `BG`) separated from yaw (`facing screen-left/right`, `in profile-left/right`, `back to camera`). Never use `stage-left` or `stage-right`.
 - Core Sub-State dimensions: spoken dialogue uses curly braces `Speaker says (delivery) {line}` (optional `in Language`, `(O.S.)`, `(V.O.)`—never quotation marks or legacy `[DIAL]`/`[AUDIO]`); selective diegetic foley uses `<sound>`; opt-in score uses `(score)`; opt-in on-screen text uses `【text】`.

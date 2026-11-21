@@ -39,6 +39,12 @@ import {
   toggleAllCollapsedIndices,
   toggleCollapsedIndex,
 } from '../../src/ui/stagingCollapse.ts';
+import {
+  applySubStateIds,
+  DEFAULT_SUBSTATE_IDS,
+  loadStoredSubStateIds,
+  saveStoredSubStateIds,
+} from '../../src/ui/subStateIds.ts';
 
 describe('stagingCollapse helpers', () => {
   it('toggles duplicate-header blocks independently by index', () => {
@@ -460,4 +466,64 @@ describe('lintRules UI state helpers', () => {
     ).toBe(false);
   });
 });
+
+describe('subStateIds display setting helpers', () => {
+  it('defaults to enabled, persists boolean values to localStorage, and sets data-substate-ids attribute', () => {
+    expect(DEFAULT_SUBSTATE_IDS).toBe(true);
+
+    const store = new Map<string, string>();
+    const attrs = new Map<string, string>();
+    const originalWindow = (globalThis as {window?: unknown}).window;
+    const originalDocument = (globalThis as {document?: unknown}).document;
+
+    try {
+      (globalThis as {window?: unknown}).window = {
+        localStorage: {
+          getItem: (key: string) => store.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            store.set(key, value);
+          },
+        },
+      };
+      (globalThis as {document?: unknown}).document = {
+        documentElement: {
+          setAttribute: (name: string, value: string) => {
+            attrs.set(name, value);
+          },
+        },
+      };
+
+      // Empty storage falls back to DEFAULT_SUBSTATE_IDS (true)
+      expect(loadStoredSubStateIds()).toBe(true);
+
+      saveStoredSubStateIds(false);
+      expect(loadStoredSubStateIds()).toBe(false);
+
+      saveStoredSubStateIds(true);
+      expect(loadStoredSubStateIds()).toBe(true);
+
+      // Invalid stored values fall back to default (true)
+      store.set('auteur-editor-substate-ids-v1', 'corrupt');
+      expect(loadStoredSubStateIds()).toBe(true);
+
+      applySubStateIds(false);
+      expect(attrs.get('data-substate-ids')).toBe('false');
+
+      applySubStateIds(true);
+      expect(attrs.get('data-substate-ids')).toBe('true');
+    } finally {
+      if (originalWindow === undefined) {
+        delete (globalThis as {window?: unknown}).window;
+      } else {
+        (globalThis as {window?: unknown}).window = originalWindow;
+      }
+      if (originalDocument === undefined) {
+        delete (globalThis as {document?: unknown}).document;
+      } else {
+        (globalThis as {document?: unknown}).document = originalDocument;
+      }
+    }
+  });
+});
+
 

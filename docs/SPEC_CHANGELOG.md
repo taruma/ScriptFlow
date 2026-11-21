@@ -37,7 +37,7 @@ Locked baseline specification for **Pure Auteur Script `v0.4.0`** (`AUTEUR_IR_SC
   - Per-rule severity override contract (`LintRuleOverrides`: `'off' | 'warning' | 'error'`) applied consistently across live editing, `toAuteurEnvelope()`, `compileAuteurDraft()`, `applyAuteurPatch()`, and `sliceAuteurScript()`.
   - Complete 5-Lens Script Supervisor checklist and genre tempo / cut-latency calibration table.
 - **Programmatic JSON IR, Transactional Patch Engine & Composable Lens Slicer** (`docs/JSON_IR_SPEC.md`):
-  - Lossless `AuteurScriptIR` (`schemaVersion: "0.4.0"`) with 11 discriminated `SubStateIR` dimensions, deterministic snapshot IDs (`MB#`, `MB#.#`, `S#`, `S#.#`), and verified round-trip parity (`fromAuteurIR(toAuteurIR(raw)) === exportPlainText(raw)`).
+  - Lossless `AuteurScriptIR` (`schemaVersion: "0.4.0"`) with 11 discriminated `SubStateIR` dimensions, deterministic snapshot IDs (`MB#`, `MB#.#`, 1-based `S#` Macro-States, and 1-based `S#.#` Execution Sub-States `S1.1`, `S1.2`, …), and verified round-trip parity (`fromAuteurIR(toAuteurIR(raw)) === exportPlainText(raw)`).
   - Read-only `AuteurEnvelope` wrapping `document` with FNV-1a 32-bit `snapshotHash`, extracted `referenceBindings`, `tokenMappings`, `cameraSlots`, inherited `macroStateContinuity` (`effectiveFraming`), `sceneTopology`, and `DerivedDiagnosticIR[]`.
   - Transactional `AuteurPatch` engine (`applyAuteurPatch()`, 14 semantic operations across Staging and Execution) with optimistic concurrency (`expectedSnapshotHash`), origin-ID diagnostic diffing, and optional `rejectOnNewErrors` lint gate.
   - Non-mutating `projectAuteurPatchPreview()` returning `PatchPreviewProjection` across Staging and Execution changes and insertion seams.

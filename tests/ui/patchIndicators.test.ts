@@ -105,7 +105,7 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller leans forward'},
         },
       ],
@@ -131,7 +131,7 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
         {
           op: 'insert_sub_state',
           macroStateId: 'S2',
-          afterSubStateId: 'S2.0',
+          afterSubStateId: 'S2.1',
           subState: {dimension: 'light', subStateTag: 'LIGHT', content: 'overhead flicker'},
         },
       ],
@@ -211,7 +211,7 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
       ops: [
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.2',
+          subStateId: 'S1.3',
           subState: {dimension: 'action', subStateTag: 'ACT', content: 'Miller leans in slowly'},
         },
         {
@@ -231,7 +231,7 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
         {op: 'set_aesthetic_entry', key: 'Lighting', value: 'harsh fluorescent overhead'},
         {
           op: 'replace_sub_state',
-          subStateId: 'S1.0',
+          subStateId: 'S1.1',
           subState: {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'CU on Miller'},
         },
       ],
