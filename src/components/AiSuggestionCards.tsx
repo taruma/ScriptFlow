@@ -1,4 +1,4 @@
-import {memo, useState} from 'react';
+import {memo, useMemo, useState} from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -14,12 +14,14 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import type {
-  AuditReviewIssueItem,
-  AuditReviewSuggestion,
-  DraftSuggestion,
-  PatchSuggestion,
-  ScriptLineDiff,
+import type {LintRuleOverrides} from '../core/index.ts';
+import {
+  composeAuditFixesBatch,
+  type AuditReviewIssueItem,
+  type AuditReviewSuggestion,
+  type DraftSuggestion,
+  type PatchSuggestion,
+  type ScriptLineDiff,
 } from '../services/scriptTools.ts';
 import {
   formatLensShort,
@@ -503,51 +505,133 @@ const AuditIssueRow = memo(function AuditIssueRow({
 
 export interface AuditReviewSuggestionCardProps {
   suggestion: AuditReviewSuggestion;
+  rawText: string;
+  ruleOverrides?: LintRuleOverrides;
   currentSnapshotHash: string;
   readOnly: boolean;
   isStreaming?: boolean;
   appliedIds: readonly string[];
   onJumpToTarget: (targetId: string) => void;
   onApplyIssueFix: (patchSuggestion: PatchSuggestion) => void;
+  onApplyAllFixes: (batchPatch: PatchSuggestion, includedFixIds: string[]) => void;
 }
 
 export const AuditReviewSuggestionCard = memo(function AuditReviewSuggestionCard({
   suggestion,
+  rawText,
+  ruleOverrides,
   currentSnapshotHash,
   readOnly,
   isStreaming = false,
   appliedIds,
   onJumpToTarget,
   onApplyIssueFix,
+  onApplyAllFixes,
 }: AuditReviewSuggestionCardProps) {
   const labels = UI_LABELS.ai.suggestions;
   const hasErrors = suggestion.errorCount > 0;
   const hasWarnings = suggestion.warningCount > 0;
 
+  const {totalFixCount, appliedFixCount} = useMemo(() => {
+    let total = 0;
+    let applied = 0;
+    for (const issue of suggestion.issues) {
+      if (issue.patchSuggestion) {
+        total += 1;
+        if (appliedIds.includes(issue.patchSuggestion.id)) {
+          applied += 1;
+        }
+      }
+    }
+    return {totalFixCount: total, appliedFixCount: applied};
+  }, [suggestion.issues, appliedIds]);
+
+  const allFixesApplied = totalFixCount > 0 && appliedFixCount === totalFixCount;
+
+  const batchPlan = useMemo(
+    () =>
+      composeAuditFixesBatch(
+        rawText,
+        suggestion,
+        appliedIds,
+        currentSnapshotHash,
+        ruleOverrides
+      ),
+    [rawText, suggestion, appliedIds, currentSnapshotHash, ruleOverrides]
+  );
+
+  const canApplyBatch =
+    !allFixesApplied &&
+    batchPlan.combinedPatch !== null &&
+    batchPlan.includedFixIds.length >= 2;
+
   return (
     <div className={UI_TOKENS.ai.suggestionCard}>
       <div className={UI_TOKENS.ai.suggestionHeader}>
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="auteur-phase-intent inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium">
-              <AlertTriangle className="h-2.5 w-2.5" />
-              <span>{labels.auditLabel}</span>
-            </span>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="auteur-phase-intent inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium">
+                <AlertTriangle className="h-2.5 w-2.5" />
+                <span>{labels.auditLabel}</span>
+              </span>
 
-            <span
-              className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
-                hasErrors
-                  ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-                  : hasWarnings
-                    ? 'auteur-phase-intent'
-                    : 'auteur-phase-aesthetic'
-              }`}
-            >
-              {labels.auditCounts(suggestion.errorCount, suggestion.warningCount)}
-            </span>
+              <span
+                className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                  hasErrors
+                    ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+                    : hasWarnings
+                      ? 'auteur-phase-intent'
+                      : 'auteur-phase-aesthetic'
+                }`}
+              >
+                {labels.auditCounts(suggestion.errorCount, suggestion.warningCount)}
+              </span>
+            </div>
+
+            {allFixesApplied ? (
+              <span className="auteur-phase-aesthetic inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold shrink-0">
+                <Check className="h-3 w-3" />
+                <span>{labels.allFixesAppliedBadge}</span>
+              </span>
+            ) : (
+              canApplyBatch &&
+              batchPlan.combinedPatch && (
+                <button
+                  type="button"
+                  disabled={isStreaming}
+                  title={isStreaming ? labels.waitUntilFinishedTitle : undefined}
+                  onClick={() =>
+                    onApplyAllFixes(batchPlan.combinedPatch!, batchPlan.includedFixIds)
+                  }
+                  className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1 px-2.5 py-1 text-[11px] shrink-0 disabled:opacity-45 disabled:cursor-not-allowed`}
+                >
+                  {isStreaming ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : readOnly ? (
+                    <GitFork className="h-3 w-3" />
+                  ) : (
+                    <Wrench className="h-3 w-3" />
+                  )}
+                  <span>
+                    {isStreaming
+                      ? labels.finishingLabel
+                      : readOnly
+                        ? labels.forkAndApplyAllFixesButton(batchPlan.includedFixIds.length)
+                        : labels.applyAllFixesButton(batchPlan.includedFixIds.length)}
+                  </span>
+                </button>
+              )
+            )}
           </div>
 
           <p className="text-xs leading-snug text-text-main">{suggestion.overallSummary}</p>
+
+          {canApplyBatch && batchPlan.skippedCount > 0 && (
+            <p className="text-[10.5px] text-text-faint">
+              {labels.batchPartialNote(batchPlan.includedFixIds.length, batchPlan.eligibleCount)}
+            </p>
+          )}
         </div>
       </div>
 

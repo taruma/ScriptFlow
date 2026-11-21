@@ -39,10 +39,11 @@ import {
   runGeminiAgentTurn,
   type AgentTurnTrace,
 } from '../services/geminiInteractions.ts';
-import type {
-  DraftSuggestion,
-  PatchSuggestion,
-  StagedSuggestion,
+import {
+  rebaseAuditReviewAfterFix,
+  type DraftSuggestion,
+  type PatchSuggestion,
+  type StagedSuggestion,
 } from '../services/scriptTools.ts';
 import {
   AUDIT_QUICK_CHECKS,
@@ -130,7 +131,8 @@ export interface AiAssistantSidebarProps {
   onClose: () => void;
   onApplyPatchSuggestion: (
     suggestion: PatchSuggestion,
-    kind: 'patch' | 'fix'
+    kind: 'patch' | 'fix',
+    options?: {batchCount?: number}
   ) => Promise<boolean> | boolean;
   onApplyDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean> | boolean;
   onJumpToTarget: (targetId: string) => void;
@@ -912,11 +914,66 @@ export function AiAssistantSidebar({
         return;
       }
       const ok = await onApplyPatchSuggestion(suggestion, kind);
-      if (ok) {
+      if (!ok) return;
+
+      if (kind === 'fix') {
+        updateAssistantMessage(messageId, (msg) => {
+          const nextApplied = [...(msg.appliedSuggestionIds ?? []), suggestion.id];
+          const appliedSet = new Set(nextApplied);
+          const nextSuggestions = (msg.suggestions ?? []).map((entry) =>
+            entry.kind === 'audit_review'
+              ? rebaseAuditReviewAfterFix(
+                  entry,
+                  suggestion,
+                  suggestion.candidateRawText,
+                  appliedSet,
+                  ruleOverrides
+                )
+              : entry
+          );
+          return {
+            ...msg,
+            appliedSuggestionIds: nextApplied,
+            suggestions: nextSuggestions,
+          };
+        });
+      } else {
         markSuggestionApplied(messageId, suggestion.id);
       }
     },
-    [currentSnapshotHash, onApplyPatchSuggestion, markSuggestionApplied]
+    [
+      currentSnapshotHash,
+      onApplyPatchSuggestion,
+      updateAssistantMessage,
+      ruleOverrides,
+      markSuggestionApplied,
+    ]
+  );
+
+  const handleApplyAuditFixesBatch = useCallback(
+    async (messageId: string, batchPatch: PatchSuggestion, includedFixIds: string[]) => {
+      if (
+        includedFixIds.length === 0 ||
+        isSuggestionStale(batchPatch.baseSnapshotHash, currentSnapshotHash)
+      ) {
+        return;
+      }
+      const ok = await onApplyPatchSuggestion(batchPatch, 'fix', {
+        batchCount: includedFixIds.length,
+      });
+      if (!ok) return;
+
+      updateAssistantMessage(messageId, (msg) => {
+        const nextApplied = Array.from(
+          new Set([...(msg.appliedSuggestionIds ?? []), ...includedFixIds])
+        );
+        return {
+          ...msg,
+          appliedSuggestionIds: nextApplied,
+        };
+      });
+    },
+    [currentSnapshotHash, onApplyPatchSuggestion, updateAssistantMessage]
   );
 
   const handleApplyDraft = useCallback(
@@ -1167,12 +1224,17 @@ export function AiAssistantSidebar({
                             <AuditReviewSuggestionCard
                               key={suggestion.id}
                               suggestion={suggestion}
+                              rawText={rawText}
+                              ruleOverrides={ruleOverrides}
                               currentSnapshotHash={currentSnapshotHash}
                               readOnly={readOnly}
                               isStreaming={msgStreaming}
                               appliedIds={applied}
                               onJumpToTarget={onJumpToTarget}
                               onApplyIssueFix={(patch) => void handleApplyPatch(msg.id, patch, 'fix')}
+                              onApplyAllFixes={(batchPatch, includedFixIds) =>
+                                void handleApplyAuditFixesBatch(msg.id, batchPatch, includedFixIds)
+                              }
                             />
                           );
                         })}

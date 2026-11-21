@@ -462,14 +462,22 @@ export default function App() {
   );
 
   const handleApplyAiPatchSuggestion = useCallback(
-    async (suggestion: PatchSuggestion, kind: 'patch' | 'fix'): Promise<boolean> => {
+    async (
+      suggestion: PatchSuggestion,
+      kind: 'patch' | 'fix',
+      options?: {batchCount?: number}
+    ): Promise<boolean> => {
       if (isReadOnly) {
         skipNextAiResetRef.current = true;
         return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText);
       }
       commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
       setToastMessage(
-        kind === 'fix' ? UI_LABELS.toasts.aiFixApplied : UI_LABELS.toasts.aiPatchApplied
+        kind === 'fix'
+          ? options?.batchCount && options.batchCount > 1
+            ? UI_LABELS.toasts.aiFixesBatchApplied(options.batchCount)
+            : UI_LABELS.toasts.aiFixApplied
+          : UI_LABELS.toasts.aiPatchApplied
       );
       return true;
     },
