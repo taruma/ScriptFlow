@@ -1,551 +1,71 @@
 import {GoogleGenAI} from '@google/genai';
-import type {LintRuleOverrides} from '../core/index.ts';
-import type {GeminiModelId, ReasoningLevel} from '../ui/aiSettings.ts';
 import {
   assistantModeToFocus,
   composeAgentContext,
-  type AskQuestionMode,
   type AssistantFocus,
-  type CustomAuteurSkill,
-  type SkillOverride,
 } from './auteurKnowledge.ts';
+import {classifyGeminiError, GeminiServiceError} from './gemini/errors.ts';
+import {
+  MAX_AGENT_TOOL_ROUNDS,
+  type AgentRoundRequestTrace,
+  type AgentRoundTrace,
+  type AgentStreamCallbacks,
+  type AgentToolCallTrace,
+  type AgentTraceError,
+  type AgentTurnTrace,
+  type InteractionsClientLike,
+  type InteractionStreamEventLike,
+  type PendingFunctionCall,
+  type RoundStreamOutcome,
+  type RunAgentTurnOptions,
+  type RunAgentTurnResult,
+  type TrackedStreamingFunctionCall,
+} from './gemini/interactionTypes.ts';
+import {
+  aggregateRoundUsage,
+  buildInitialInteractionInput,
+  extractFunctionCallsFromSteps,
+  extractModelOutputTextFromSteps,
+  extractThoughtSummaryText,
+  parseJsonObjectSafe,
+  redactSecret,
+  sanitizeTraceInput,
+} from './gemini/traceUtils.ts';
 import {
   buildToolDeclarationsForContext,
   executeScriptToolCall,
   upsertStagedSuggestion,
-  type AssistantMode,
   type GeminiFunctionToolDeclaration,
   type ScriptToolExecutionResult,
   type StagedSuggestion,
 } from './scriptTools.ts';
 
-export const MAX_AGENT_TOOL_ROUNDS = 8;
-
-export type GeminiErrorCode =
-  | 'missing_api_key'
-  | 'invalid_api_key'
-  | 'quota_exceeded'
-  | 'model_not_found'
-  | 'network_error'
-  | 'aborted'
-  | 'api_error';
-
-export interface AgentTraceError {
-  code: GeminiErrorCode;
-  status?: number;
-  message: string;
-}
-
-export interface AgentToolCallTrace {
-  callId: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  ok: boolean;
-  result: Record<string, unknown>;
-  stagedSuggestionId?: string;
-}
-
-export interface AgentRoundRequestTrace {
-  model: GeminiModelId;
-  previous_interaction_id: string | null;
-  generation_config: {
-    thinking_level: ReasoningLevel;
-    thinking_summaries: 'auto';
-  };
-  toolNames: string[];
-  systemInstruction: string;
-  input: unknown;
-}
-
-export interface AgentRoundTrace {
-  /** 1-based round number within this turn. */
-  roundIndex: number;
-  durationMs: number;
-  interactionId: string | null;
-  status: string | null;
-  usage?: Record<string, unknown>;
-  request: AgentRoundRequestTrace;
-  toolCalls: AgentToolCallTrace[];
-}
-
-export interface AgentTurnTrace {
-  model: GeminiModelId;
-  reasoningLevel: ReasoningLevel;
-  mode: AssistantMode;
-  focus: AssistantFocus;
-  activeSkillIds: string[];
-  loadedSkillIds: string[];
-  startedAt: string;
-  durationMs: number;
-  initialPreviousInteractionId: string | null;
-  finalInteractionId: string | null;
-  toolRounds: number;
-  hitToolRoundLimit: boolean;
-  usage?: Record<string, unknown>;
-  error?: AgentTraceError;
-  rounds: AgentRoundTrace[];
-}
-
-export class GeminiServiceError extends Error {
-  readonly code: GeminiErrorCode;
-  readonly status?: number;
-  readonly causeError?: unknown;
-  readonly trace?: AgentTurnTrace;
-
-  constructor(
-    code: GeminiErrorCode,
-    message: string,
-    options?: {status?: number; cause?: unknown; trace?: AgentTurnTrace}
-  ) {
-    super(message);
-    this.name = 'GeminiServiceError';
-    this.code = code;
-    this.status = options?.status;
-    this.causeError = options?.cause;
-    this.trace = options?.trace;
-  }
-}
-
-export interface AgentStreamCallbacks {
-  onInteractionId?: (interactionId: string) => void;
-  onThoughtSummaryDelta?: (deltaText: string) => void;
-  onTextDelta?: (deltaText: string) => void;
-  onToolCallStart?: (call: {callId: string; name: string; arguments: Record<string, unknown>}) => void;
-  onToolCallResult?: (trace: AgentToolCallTrace) => void;
-  onSuggestionStaged?: (suggestion: StagedSuggestion) => void;
-  onSkillLoaded?: (event: {id: string; name: string; source: 'passive' | 'pinned' | 'tool'}) => void;
-}
-
-export interface InteractionsClientLike {
-  interactions: {
-    create(
-      params: Record<string, unknown>,
-      options?: {signal?: AbortSignal}
-    ): Promise<AsyncIterable<InteractionStreamEventLike>>;
-  };
-}
-
-/**
- * Minimal structural projection of @google/genai InteractionSSEEvent
- * to support strict typing and clean unit-test mocking.
- */
-export interface InteractionStreamEventLike {
-  event_type: string;
-  index?: number;
-  interaction?: {
-    id?: string;
-    status?: string;
-    steps?: Array<Record<string, unknown>>;
-    usage?: Record<string, unknown>;
-  };
-  step?: Record<string, unknown>;
-  delta?: Record<string, unknown>;
-  error?: {
-    code?: string;
-    message?: string;
-  };
-}
-
-export interface AgentMediaAttachment {
-  handle: string;
-  label: string;
-  note?: string;
-  kind: 'image' | 'video' | 'audio' | 'document';
-  source: 'inline' | 'files_api' | 'youtube';
-  mimeType: string;
-  fileName?: string;
-  inlineBase64?: string;
-  inlineText?: string;
-  uri?: string;
-  processingMode?: 'static' | 'agentic';
-  fingerprint: string;
-}
-
-export interface RunAgentTurnOptions {
-  apiKey: string;
-  model: GeminiModelId;
-  reasoningLevel: ReasoningLevel;
-  mode: AssistantMode;
-  focus?: AssistantFocus;
-  prompt: string;
-  rawText: string;
-  ruleOverrides?: LintRuleOverrides;
-  previousInteractionId?: string;
-  previousSnapshotHash?: string;
-  foundationalCraftOverride?: string;
-  skillOverrides?: Record<string, SkillOverride>;
-  customSkills?: readonly CustomAuteurSkill[];
-  referenceHandles?: readonly string[];
-  briefContext?: string;
-  askQuestionMode?: AskQuestionMode;
-  attachments?: readonly AgentMediaAttachment[];
-  signal?: AbortSignal;
-  maxToolRounds?: number;
-  callbacks?: AgentStreamCallbacks;
-  createSuggestionId?: () => string;
-  /** Optional clock DI hook for deterministic trace timing in tests; defaults to `Date.now`. */
-  now?: () => number;
-  /** Optional DI hook for tests; defaults to `new GoogleGenAI({ apiKey })`. */
-  createClient?: (apiKey: string) => InteractionsClientLike;
-}
-
-export interface RunAgentTurnResult {
-  interactionId: string | null;
-  text: string;
-  thoughtSummary: string;
-  toolRounds: number;
-  hitToolRoundLimit: boolean;
-  toolTraces: AgentToolCallTrace[];
-  stagedSuggestions: StagedSuggestion[];
-  trace: AgentTurnTrace;
-}
-
-interface PendingFunctionCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-interface TrackedStreamingFunctionCall {
-  id: string;
-  name: string;
-  initialArguments?: Record<string, unknown>;
-  argumentsBuffer: string;
-}
+export {
+  MAX_AGENT_TOOL_ROUNDS,
+  type AgentMediaAttachment,
+  type AgentRoundRequestTrace,
+  type AgentRoundTrace,
+  type AgentStreamCallbacks,
+  type AgentToolCallTrace,
+  type AgentTraceError,
+  type AgentTurnTrace,
+  type InteractionsClientLike,
+  type InteractionStreamEventLike,
+  type RunAgentTurnOptions,
+  type RunAgentTurnResult,
+} from './gemini/interactionTypes.ts';
+export {
+  classifyGeminiError,
+  GeminiServiceError,
+  type GeminiErrorCode,
+} from './gemini/errors.ts';
+export {
+  buildInitialInteractionInput,
+  sanitizeTraceInput,
+} from './gemini/traceUtils.ts';
 
 function defaultCreateClient(apiKey: string): InteractionsClientLike {
   return new GoogleGenAI({apiKey}) as unknown as InteractionsClientLike;
-}
-
-/**
- * Builds the Round 1 `input` payload for Gemini Interactions API (`v1`).
- * Returns the verbatim prompt string when no multimodal attachments need to be delivered,
- * or a `v1` `UserInputStep` array (`[{ type: 'user_input', content: [...] }]`) pairing each
- * `@handle` label with its inline image/text, Gemini Files API URI, or YouTube video URI.
- */
-export function buildInitialInteractionInput(
-  prompt: string,
-  attachments?: readonly AgentMediaAttachment[]
-): string | Array<{type: 'user_input'; content: Array<Record<string, unknown>>}> {
-  if (!attachments || attachments.length === 0) {
-    return prompt;
-  }
-
-  const blocks: Array<Record<string, unknown>> = [];
-
-  for (const att of attachments) {
-    const labelText = [
-      att.handle || `@${att.kind}`,
-      att.label ? `(${att.label})` : '',
-      att.note ? `— ${att.note}` : '',
-    ]
-      .filter((part) => part.length > 0)
-      .join(' ');
-
-    if (att.source === 'inline' && typeof att.inlineText === 'string') {
-      const fileHeader = att.fileName ? ` · ${att.fileName}` : '';
-      blocks.push({
-        type: 'text',
-        text: `[Reference ${labelText}${fileHeader}]\n${att.inlineText}`,
-      });
-      continue;
-    }
-
-    if (att.source === 'inline' && att.inlineBase64) {
-      blocks.push({type: 'text', text: `[Reference ${labelText}]`});
-      blocks.push({
-        type: att.kind === 'image' ? 'image' : att.kind,
-        data: att.inlineBase64,
-        mime_type: att.mimeType,
-      });
-      continue;
-    }
-
-    if (att.source === 'youtube' && att.uri) {
-      blocks.push({type: 'text', text: `[Reference ${labelText} — YouTube video]`});
-      blocks.push({
-        type: 'video',
-        uri: att.uri,
-        ...(att.processingMode === 'agentic' ? {processing: 'agentic'} : {}),
-      });
-      continue;
-    }
-
-    if (att.source === 'files_api' && att.uri) {
-      blocks.push({type: 'text', text: `[Reference ${labelText}]`});
-      if (att.kind === 'video') {
-        blocks.push({
-          type: 'video',
-          uri: att.uri,
-          mime_type: att.mimeType,
-          ...(att.processingMode === 'agentic' ? {processing: 'agentic'} : {}),
-        });
-      } else if (att.kind === 'image') {
-        blocks.push({
-          type: 'image',
-          uri: att.uri,
-          mime_type: att.mimeType,
-        });
-      } else if (att.kind === 'audio') {
-        blocks.push({
-          type: 'audio',
-          uri: att.uri,
-          mime_type: att.mimeType,
-        });
-      } else {
-        blocks.push({
-          type: 'document',
-          uri: att.uri,
-          mime_type: att.mimeType,
-        });
-      }
-    }
-  }
-
-  if (blocks.length === 0) {
-    return prompt;
-  }
-
-  blocks.push({type: 'text', text: prompt});
-  return [{type: 'user_input', content: blocks}];
-}
-
-function sanitizeTraceContentBlock(item: unknown): unknown {
-  if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
-  const record = item as Record<string, unknown>;
-  if (typeof record.data === 'string' && record.data.length > 128) {
-    const approxKb = Math.max(1, Math.round((record.data.length * 3) / 4 / 1024));
-    return {
-      ...record,
-      data: `<base64 ~${approxKb} KB omitted>`,
-    };
-  }
-  if (typeof record.text === 'string' && record.text.length > 4000) {
-    return {
-      ...record,
-      text: `${record.text.slice(0, 1200)}\n... <truncated ${record.text.length - 1200} chars>`,
-    };
-  }
-  if (Array.isArray(record.content)) {
-    return {
-      ...record,
-      content: record.content.map(sanitizeTraceContentBlock),
-    };
-  }
-  return record;
-}
-
-/**
- * Strips bulky base64 payloads from trace snapshots (including nested `user_input.content`)
- * so AI Trace Inspector & Copy Trace JSON remain fast, readable, and lightweight.
- */
-export function sanitizeTraceInput(input: unknown): unknown {
-  if (!Array.isArray(input)) return input;
-  return input.map(sanitizeTraceContentBlock);
-}
-
-function isAbortError(error: unknown, signal?: AbortSignal): boolean {
-  if (signal?.aborted) return true;
-  if (!error || typeof error !== 'object') return false;
-  const err = error as {name?: unknown; code?: unknown; message?: unknown};
-  if (err.name === 'AbortError' || err.code === 'ABORT_ERR') return true;
-  if (typeof err.message === 'string' && /aborted|abort/i.test(err.message)) return true;
-  return false;
-}
-
-function extractHttpStatus(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') return undefined;
-  const err = error as {status?: unknown; statusCode?: unknown; response?: {status?: unknown}};
-  if (typeof err.status === 'number') return err.status;
-  if (typeof err.statusCode === 'number') return err.statusCode;
-  if (typeof err.response?.status === 'number') return err.response.status;
-  return undefined;
-}
-
-function extractRawErrorMessage(error: unknown): string {
-  if (typeof error === 'string') return error;
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object' && 'message' in error) {
-    const msg = (error as {message?: unknown}).message;
-    if (typeof msg === 'string') return msg;
-  }
-  return 'Unknown Gemini API error.';
-}
-
-/**
- * Normalizes SDK, HTTP, SSE, network, and abort errors into clean user-facing GeminiServiceError instances.
- */
-export function classifyGeminiError(error: unknown, signal?: AbortSignal): GeminiServiceError {
-  if (error instanceof GeminiServiceError) {
-    return error;
-  }
-
-  if (isAbortError(error, signal)) {
-    return new GeminiServiceError('aborted', 'Request cancelled.', {cause: error});
-  }
-
-  const status = extractHttpStatus(error);
-  const rawMessage = extractRawErrorMessage(error);
-  const lower = rawMessage.toLowerCase();
-
-  if (
-    status === 401 ||
-    status === 403 ||
-    lower.includes('api_key_invalid') ||
-    lower.includes('api key not valid') ||
-    lower.includes('invalid api key') ||
-    lower.includes('permission_denied') ||
-    lower.includes('unauthenticated')
-  ) {
-    return new GeminiServiceError(
-      'invalid_api_key',
-      'Your Gemini API key was rejected. Check or replace your key in AI Settings.',
-      {status, cause: error}
-    );
-  }
-
-  if (
-    status === 429 ||
-    lower.includes('resource_exhausted') ||
-    lower.includes('quota') ||
-    lower.includes('rate limit') ||
-    lower.includes('too many requests')
-  ) {
-    return new GeminiServiceError(
-      'quota_exceeded',
-      'Gemini API rate limit or quota exceeded. Wait a moment, switch to Gemini 4 Hydrogen, or check your billing tier.',
-      {status, cause: error}
-    );
-  }
-
-  if (status === 404 || lower.includes('not_found') || lower.includes('model not found')) {
-    return new GeminiServiceError(
-      'model_not_found',
-      'The selected Gemini 4 model is unavailable for this API key. Try switching models in AI Settings.',
-      {status, cause: error}
-    );
-  }
-
-  if (
-    lower.includes('failed to fetch') ||
-    lower.includes('networkerror') ||
-    lower.includes('network error') ||
-    lower.includes('err_network') ||
-    lower.includes('enotfound') ||
-    lower.includes('econnrefused') ||
-    lower.includes('load failed') ||
-    (error instanceof TypeError && lower.includes('fetch'))
-  ) {
-    return new GeminiServiceError(
-      'network_error',
-      'Could not reach the Gemini API. Check your internet connection and try again.',
-      {status, cause: error}
-    );
-  }
-
-  return new GeminiServiceError(
-    'api_error',
-    rawMessage.trim().length > 0 ? rawMessage : 'Gemini Interactions request failed.',
-    {status, cause: error}
-  );
-}
-
-function parseJsonObjectSafe(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
-  if (!trimmed) return {};
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Fallback to empty arguments; tool validator will return a structured self-repair error
-  }
-  return {};
-}
-
-function extractThoughtSummaryText(delta: Record<string, unknown>): string {
-  const content = delta.content;
-  if (content && typeof content === 'object' && !Array.isArray(content)) {
-    const rec = content as Record<string, unknown>;
-    if (rec.type === 'text' && typeof rec.text === 'string') {
-      return rec.text;
-    }
-  }
-  if (typeof delta.text === 'string') {
-    return delta.text;
-  }
-  return '';
-}
-
-function extractFunctionCallsFromSteps(steps: Array<Record<string, unknown>> | undefined): PendingFunctionCall[] {
-  if (!Array.isArray(steps)) return [];
-  const calls: PendingFunctionCall[] = [];
-  for (const step of steps) {
-    if (step?.type === 'function_call' && typeof step.id === 'string' && typeof step.name === 'string') {
-      const args =
-        step.arguments && typeof step.arguments === 'object' && !Array.isArray(step.arguments)
-          ? (step.arguments as Record<string, unknown>)
-          : {};
-      calls.push({
-        id: step.id,
-        name: step.name,
-        arguments: args,
-      });
-    }
-  }
-  return calls;
-}
-
-function extractModelOutputTextFromSteps(steps: Array<Record<string, unknown>> | undefined): string {
-  if (!Array.isArray(steps)) return '';
-  let combined = '';
-  for (const step of steps) {
-    if (step?.type === 'model_output' && Array.isArray(step.content)) {
-      for (const part of step.content as Array<Record<string, unknown>>) {
-        if (part?.type === 'text' && typeof part.text === 'string') {
-          combined += part.text;
-        }
-      }
-    }
-  }
-  return combined;
-}
-
-function redactSecret(text: string, secret: string): string {
-  if (!secret || !text.includes(secret)) return text;
-  return text.split(secret).join('[REDACTED]');
-}
-
-function aggregateRoundUsage(rounds: readonly AgentRoundTrace[]): Record<string, unknown> | undefined {
-  const usages = rounds
-    .map((round) => round.usage)
-    .filter((u): u is Record<string, unknown> => Boolean(u && typeof u === 'object'));
-
-  if (usages.length === 0) return undefined;
-  if (usages.length === 1) return {...usages[0]};
-
-  const aggregated: Record<string, unknown> = {};
-  for (const usage of usages) {
-    for (const [key, value] of Object.entries(usage)) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        const prev = aggregated[key];
-        aggregated[key] = typeof prev === 'number' ? prev + value : value;
-      } else {
-        aggregated[key] = value;
-      }
-    }
-  }
-  return aggregated;
-}
-
-interface RoundStreamOutcome {
-  interactionId: string | null;
-  status: string | null;
-  usage?: Record<string, unknown>;
-  text: string;
-  thoughtSummary: string;
-  functionCalls: PendingFunctionCall[];
 }
 
 async function consumeInteractionStream(

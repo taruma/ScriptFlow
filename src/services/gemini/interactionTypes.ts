@@ -1,0 +1,192 @@
+import type {LintRuleOverrides} from '../../core/index.ts';
+import type {GeminiModelId, ReasoningLevel} from '../../ui/aiSettings.ts';
+import type {
+  AskQuestionMode,
+  AssistantFocus,
+  CustomAuteurSkill,
+  SkillOverride,
+} from '../auteurKnowledge.ts';
+import type {AssistantMode, StagedSuggestion} from '../scriptTools.ts';
+
+export const MAX_AGENT_TOOL_ROUNDS = 8;
+
+export type GeminiErrorCode =
+  | 'missing_api_key'
+  | 'invalid_api_key'
+  | 'quota_exceeded'
+  | 'model_not_found'
+  | 'network_error'
+  | 'aborted'
+  | 'api_error';
+
+export interface AgentTraceError {
+  code: GeminiErrorCode;
+  status?: number;
+  message: string;
+}
+
+export interface AgentToolCallTrace {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  ok: boolean;
+  result: Record<string, unknown>;
+  stagedSuggestionId?: string;
+}
+
+export interface AgentRoundRequestTrace {
+  model: GeminiModelId;
+  previous_interaction_id: string | null;
+  generation_config: {
+    thinking_level: ReasoningLevel;
+    thinking_summaries: 'auto';
+  };
+  toolNames: string[];
+  systemInstruction: string;
+  input: unknown;
+}
+
+export interface AgentRoundTrace {
+  /** 1-based round number within this turn. */
+  roundIndex: number;
+  durationMs: number;
+  interactionId: string | null;
+  status: string | null;
+  usage?: Record<string, unknown>;
+  request: AgentRoundRequestTrace;
+  toolCalls: AgentToolCallTrace[];
+}
+
+export interface AgentTurnTrace {
+  model: GeminiModelId;
+  reasoningLevel: ReasoningLevel;
+  mode: AssistantMode;
+  focus: AssistantFocus;
+  activeSkillIds: string[];
+  loadedSkillIds: string[];
+  startedAt: string;
+  durationMs: number;
+  initialPreviousInteractionId: string | null;
+  finalInteractionId: string | null;
+  toolRounds: number;
+  hitToolRoundLimit: boolean;
+  usage?: Record<string, unknown>;
+  error?: AgentTraceError;
+  rounds: AgentRoundTrace[];
+}
+
+export interface AgentStreamCallbacks {
+  onInteractionId?: (interactionId: string) => void;
+  onThoughtSummaryDelta?: (deltaText: string) => void;
+  onTextDelta?: (deltaText: string) => void;
+  onToolCallStart?: (call: {callId: string; name: string; arguments: Record<string, unknown>}) => void;
+  onToolCallResult?: (trace: AgentToolCallTrace) => void;
+  onSuggestionStaged?: (suggestion: StagedSuggestion) => void;
+  onSkillLoaded?: (event: {id: string; name: string; source: 'passive' | 'pinned' | 'tool'}) => void;
+}
+
+export interface InteractionsClientLike {
+  interactions: {
+    create(
+      params: Record<string, unknown>,
+      options?: {signal?: AbortSignal}
+    ): Promise<AsyncIterable<InteractionStreamEventLike>>;
+  };
+}
+
+/**
+ * Minimal structural projection of @google/genai InteractionSSEEvent
+ * to support strict typing and clean unit-test mocking.
+ */
+export interface InteractionStreamEventLike {
+  event_type: string;
+  index?: number;
+  interaction?: {
+    id?: string;
+    status?: string;
+    steps?: Array<Record<string, unknown>>;
+    usage?: Record<string, unknown>;
+  };
+  step?: Record<string, unknown>;
+  delta?: Record<string, unknown>;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+export interface AgentMediaAttachment {
+  handle: string;
+  label: string;
+  note?: string;
+  kind: 'image' | 'video' | 'audio' | 'document';
+  source: 'inline' | 'files_api' | 'youtube';
+  mimeType: string;
+  fileName?: string;
+  inlineBase64?: string;
+  inlineText?: string;
+  uri?: string;
+  processingMode?: 'static' | 'agentic';
+  fingerprint: string;
+}
+
+export interface RunAgentTurnOptions {
+  apiKey: string;
+  model: GeminiModelId;
+  reasoningLevel: ReasoningLevel;
+  mode: AssistantMode;
+  focus?: AssistantFocus;
+  prompt: string;
+  rawText: string;
+  ruleOverrides?: LintRuleOverrides;
+  previousInteractionId?: string;
+  previousSnapshotHash?: string;
+  foundationalCraftOverride?: string;
+  skillOverrides?: Record<string, SkillOverride>;
+  customSkills?: readonly CustomAuteurSkill[];
+  referenceHandles?: readonly string[];
+  briefContext?: string;
+  askQuestionMode?: AskQuestionMode;
+  attachments?: readonly AgentMediaAttachment[];
+  signal?: AbortSignal;
+  maxToolRounds?: number;
+  callbacks?: AgentStreamCallbacks;
+  createSuggestionId?: () => string;
+  /** Optional clock DI hook for deterministic trace timing in tests; defaults to `Date.now`. */
+  now?: () => number;
+  /** Optional DI hook for tests; defaults to `new GoogleGenAI({ apiKey })`. */
+  createClient?: (apiKey: string) => InteractionsClientLike;
+}
+
+export interface RunAgentTurnResult {
+  interactionId: string | null;
+  text: string;
+  thoughtSummary: string;
+  toolRounds: number;
+  hitToolRoundLimit: boolean;
+  toolTraces: AgentToolCallTrace[];
+  stagedSuggestions: StagedSuggestion[];
+  trace: AgentTurnTrace;
+}
+
+export interface PendingFunctionCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface TrackedStreamingFunctionCall {
+  id: string;
+  name: string;
+  initialArguments?: Record<string, unknown>;
+  argumentsBuffer: string;
+}
+
+export interface RoundStreamOutcome {
+  interactionId: string | null;
+  status: string | null;
+  usage?: Record<string, unknown>;
+  text: string;
+  thoughtSummary: string;
+  functionCalls: PendingFunctionCall[];
+}

@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -12,7 +11,6 @@ import {
   canUndoDocument,
   commitDocumentHistory,
   createDocumentHistory,
-  exportPlainText,
   redoDocumentHistory,
   undoDocumentHistory,
   type DocumentHistoryState,
@@ -20,106 +18,21 @@ import {
   type LintRuleOverrides,
 } from '../core/index.ts';
 import type {ConfirmDialogRequest} from '../components/ConfirmDialog.tsx';
-import {
-  BUNDLED_EXAMPLES,
-  getBundledExampleById,
-  type BundledExample,
-} from '../data/examples/index.ts';
+import {getBundledExampleById, type BundledExample} from '../data/examples/index.ts';
 import {BLANK_SCRIPT_TEMPLATE, DEFAULT_PRESET} from '../data/presets.ts';
 import {APP_META, UI_LABELS} from './labels.ts';
-import {
-  downloadCanonicalTxt,
-  downloadJsonEnvelope,
-  downloadLibraryBackup,
-  downloadTaglessTxt,
-  mergeLibraryBackup,
-  parseLibraryBackup,
-  readAndParseBrowserFile,
-  type AuteurLibraryBackup,
-} from './scriptFileIO.ts';
-import {
-  createScriptId,
-  scriptLibraryDb,
-  sortScriptRecords,
-  type ScriptRecord,
-} from './scriptLibraryDb.ts';
-import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
+import {createScriptId, scriptLibraryDb, type ScriptRecord} from './scriptLibraryDb.ts';
 import {createCopyTitle, type ActiveScriptRef} from './scriptLibraryView.ts';
+import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
+import {mirrorActiveScriptToLocalStorage} from './scriptStorage.ts';
+import {useLibraryFileIO} from './library/useLibraryFileIO.ts';
 import {
-  mirrorActiveScriptToLocalStorage,
-  readActiveScriptId,
-  readSavedScript,
-  readSavedScriptRaw,
-  readSavedTitle,
-} from './scriptStorage.ts';
-
-const AUTOSAVE_DEBOUNCE_MS = 350;
-
-interface InitialEditorState {
-  activeScript: ActiveScriptRef;
-  rawText: string;
-  title: string;
-}
-
-function resolveInitialEditorState(): InitialEditorState {
-  const savedActiveId = readActiveScriptId();
-  if (savedActiveId) {
-    const matchedExample = getBundledExampleById(savedActiveId);
-    if (matchedExample) {
-      return {
-        activeScript: {kind: 'example', id: matchedExample.id},
-        rawText: matchedExample.content,
-        title: matchedExample.title,
-      };
-    }
-
-    const savedScript = readSavedScriptRaw();
-    if (savedScript !== null) {
-      return {
-        activeScript: {kind: 'custom', id: savedActiveId},
-        rawText: savedScript,
-        title: readSavedTitle() ?? APP_META.untitledScene,
-      };
-    }
-  }
-
-  const legacyScript = readSavedScript();
-  if (legacyScript) {
-    const legacyTitle = readSavedTitle();
-    const normalizedLegacy = exportPlainText(legacyScript);
-    const matchedExample = BUNDLED_EXAMPLES.find(
-      (example) =>
-        exportPlainText(example.content) === normalizedLegacy &&
-        (!legacyTitle || legacyTitle.trim() === example.title.trim())
-    );
-    if (matchedExample) {
-      return {
-        activeScript: {kind: 'example', id: matchedExample.id},
-        rawText: matchedExample.content,
-        title: matchedExample.title,
-      };
-    }
-    return {
-      activeScript: {kind: 'example', id: DEFAULT_PRESET.id},
-      rawText: legacyScript,
-      title: legacyTitle ?? APP_META.untitledScene,
-    };
-  }
-
-  return {
-    activeScript: {kind: 'example', id: DEFAULT_PRESET.id},
-    rawText: DEFAULT_PRESET.content,
-    title: DEFAULT_PRESET.title,
-  };
-}
-
-function upsertSortedScript(
-  list: readonly ScriptRecord[],
-  record: ScriptRecord
-): ScriptRecord[] {
-  const withoutTarget = list.filter((item) => item.id !== record.id);
-  return sortScriptRecords([record, ...withoutTarget]);
-}
+  resolveInitialEditorState,
+  upsertSortedScript,
+  useLibraryPersistence,
+  type InitialEditorState,
+} from './library/useLibraryPersistence.ts';
+import {useLibrarySnapshots} from './library/useLibrarySnapshots.ts';
 
 export interface UseScriptLibraryOptions {
   ruleOverrides?: LintRuleOverrides;
@@ -233,216 +146,33 @@ export function useScriptLibrary({
   const rawTextRef = useRef<string>(rawText);
   const sceneTitleRef = useRef<string>(sceneTitle);
   const customScriptsRef = useRef<ScriptRecord[]>(customScripts);
-  const isLibraryHydratedRef = useRef<boolean>(false);
-  const saveTimerRef = useRef<number | null>(null);
-  const lastSavedSnapshotRef = useRef<{id: string; rawText: string; title: string} | null>({
-    id: initial.activeScript.id,
-    rawText: initial.rawText,
-    title: initial.title,
-  });
-
-  const importFileInputRef = useRef<HTMLInputElement | null>(null);
-  const restoreBackupInputRef = useRef<HTMLInputElement | null>(null);
 
   activeScriptRef.current = activeScript;
   rawTextRef.current = rawText;
   sceneTitleRef.current = sceneTitle;
   customScriptsRef.current = customScripts;
 
-  const activateCustomScript = useCallback(
-    (record: ScriptRecord, options?: {switchToLive?: boolean}) => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      const nextRef: ActiveScriptRef = {kind: 'custom', id: record.id};
-      activeScriptRef.current = nextRef;
-      rawTextRef.current = record.rawText;
-      sceneTitleRef.current = record.title;
-      lastSavedSnapshotRef.current = {
-        id: record.id,
-        rawText: record.rawText,
-        title: record.title,
-      };
-      setActiveScript(nextRef);
-      setHistory(createDocumentHistory(record.rawText));
-      setSceneTitle(record.title);
-      if (options?.switchToLive) {
-        onSwitchToLive();
-      }
-      mirrorActiveScriptToLocalStorage(record.id, record.rawText, record.title);
-    },
-    [onSwitchToLive]
-  );
-
-  const activateExample = useCallback(
-    (example: BundledExample, options?: {switchToLive?: boolean}) => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      const nextRef: ActiveScriptRef = {kind: 'example', id: example.id};
-      activeScriptRef.current = nextRef;
-      rawTextRef.current = example.content;
-      sceneTitleRef.current = example.title;
-      lastSavedSnapshotRef.current = {
-        id: example.id,
-        rawText: example.content,
-        title: example.title,
-      };
-      setActiveScript(nextRef);
-      setHistory(createDocumentHistory(example.content));
-      setSceneTitle(example.title);
-      if (options?.switchToLive) {
-        onSwitchToLive();
-      }
-      mirrorActiveScriptToLocalStorage(example.id, example.content, example.title);
-    },
-    [onSwitchToLive]
-  );
-
-  const persistCurrentCustomIfDirty = useCallback(async (): Promise<ScriptRecord | null> => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-
-    if (!isLibraryHydratedRef.current) return null;
-    const currentRef = activeScriptRef.current;
-    if (currentRef.kind !== 'custom') return null;
-
-    const currentRaw = rawTextRef.current;
-    const currentTitle = sceneTitleRef.current;
-    const last = lastSavedSnapshotRef.current;
-    if (
-      last &&
-      last.id === currentRef.id &&
-      last.rawText === currentRaw &&
-      last.title === currentTitle
-    ) {
-      return null;
-    }
-
-    const existing = customScriptsRef.current.find((item) => item.id === currentRef.id);
-    const now = Date.now();
-    const recordToSave: ScriptRecord = {
-      id: currentRef.id,
-      title: currentTitle.trim() || APP_META.untitledScene,
-      rawText: currentRaw,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      ...(existing?.forkedFromId ? {forkedFromId: existing.forkedFromId} : {}),
-      ...(existing?.pinned ? {pinned: true} : {}),
-      ...(existing?.folder ? {folder: existing.folder} : {}),
-      ...(existing?.tags && existing.tags.length > 0 ? {tags: existing.tags} : {}),
-    };
-
-    lastSavedSnapshotRef.current = {
-      id: currentRef.id,
-      rawText: currentRaw,
-      title: currentTitle,
-    };
-
-    try {
-      const saved = await scriptLibraryDb.put(recordToSave);
-      setCustomScripts((prev) => upsertSortedScript(prev, saved));
-      return saved;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // Mount lifecycle: migrate legacy localStorage once, hydrate IndexedDB library, open active script
-  useEffect(() => {
-    let cancelled = false;
-
-    const hydrate = async () => {
-      const migration = await scriptLibraryDb.migrateFromLegacyLocalStorage({
-        defaultTitle: APP_META.untitledScene,
-      });
-      const loadedRecords = await scriptLibraryDb.list();
-      if (cancelled) return;
-
-      setCustomScripts(loadedRecords);
-      customScriptsRef.current = loadedRecords;
-
-      const targetId = migration.activeScriptId ?? readActiveScriptId();
-      const matchedCustom = targetId
-        ? loadedRecords.find((record) => record.id === targetId)
-        : undefined;
-
-      if (matchedCustom) {
-        activateCustomScript(matchedCustom);
-      } else {
-        const matchedExample =
-          (targetId ? getBundledExampleById(targetId) : undefined) ?? DEFAULT_PRESET;
-        activateExample(matchedExample);
-      }
-
-      isLibraryHydratedRef.current = true;
-    };
-
-    void hydrate();
-
-    return () => {
-      cancelled = true;
-      void persistCurrentCustomIfDirty();
-    };
-  }, [activateCustomScript, activateExample, persistCurrentCustomIfDirty]);
-
-  // Harden autosave flush on tab hide / reload so refreshing within 350ms of typing never loses edits
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        void persistCurrentCustomIfDirty();
-      }
-    };
-    const handlePageHide = () => {
-      void persistCurrentCustomIfDirty();
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', handlePageHide);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', handlePageHide);
-    };
-  }, [persistCurrentCustomIfDirty]);
-
-  // Mirror active script to localStorage immediately (ErrorBoundary safety) & debounce IndexedDB puts for custom scripts
-  useEffect(() => {
-    if (!isLibraryHydratedRef.current) return;
-
-    mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle);
-
-    if (activeScript.kind !== 'custom') return;
-
-    const last = lastSavedSnapshotRef.current;
-    if (
-      last &&
-      last.id === activeScript.id &&
-      last.rawText === rawText &&
-      last.title === sceneTitle
-    ) {
-      return;
-    }
-
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      void persistCurrentCustomIfDirty();
-    }, AUTOSAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-    };
-  }, [activeScript, rawText, sceneTitle, persistCurrentCustomIfDirty]);
+  const {
+    activateCustomScript,
+    activateExample,
+    persistCurrentCustomIfDirty,
+    cancelPendingSave,
+    markSavedSnapshot,
+  } = useLibraryPersistence({
+    initial,
+    activeScript,
+    rawText,
+    sceneTitle,
+    activeScriptRef,
+    rawTextRef,
+    sceneTitleRef,
+    customScriptsRef,
+    setActiveScript,
+    setHistory,
+    setSceneTitle,
+    setCustomScripts,
+    onSwitchToLive,
+  });
 
   // History & Title Mutations (read-only guarded)
   const commitRawText = useCallback(
@@ -480,6 +210,49 @@ export function useScriptLibrary({
   const breakCoalescing = useCallback(() => {
     setHistory((prev) => breakHistoryCoalescing(prev));
   }, []);
+
+  const {
+    handleCreateSnapshot,
+    handleRestoreSnapshot,
+    handleForkSnapshotAsNewScript,
+  } = useLibrarySnapshots({
+    activeScriptRef,
+    rawTextRef,
+    sceneTitleRef,
+    customScriptsRef,
+    setCustomScripts,
+    commitRawText,
+    persistCurrentCustomIfDirty,
+    activateCustomScript,
+    onToast,
+  });
+
+  const {
+    importFileInputRef,
+    restoreBackupInputRef,
+    handleExportScriptTxt,
+    handleBulkExportScripts,
+    handleDownloadCanonical,
+    handleDownloadTagless,
+    handleDownloadJsonEnvelope,
+    handleBackupAll,
+    handleTriggerImportFile,
+    handleTriggerRestoreBackup,
+    handleImportFileChange,
+    handleRestoreBackupChange,
+  } = useLibraryFileIO({
+    sceneTitle,
+    rawText,
+    ruleOverrides,
+    activeScriptRef,
+    rawTextRef,
+    sceneTitleRef,
+    customScriptsRef,
+    setCustomScripts,
+    persistCurrentCustomIfDirty,
+    activateCustomScript,
+    onToast,
+  });
 
   // Script Library CRUD Actions
   const handleOpenCustomScript = useCallback(
@@ -572,20 +345,17 @@ export function useScriptLibrary({
         });
       }
 
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
+      cancelPendingSave();
 
       const nextRef: ActiveScriptRef = {kind: 'custom', id: saved.id};
       activeScriptRef.current = nextRef;
       rawTextRef.current = saved.rawText;
       sceneTitleRef.current = saved.title;
-      lastSavedSnapshotRef.current = {
+      markSavedSnapshot({
         id: saved.id,
         rawText: saved.rawText,
         title: saved.title,
-      };
+      });
 
       setActiveScript(nextRef);
       setSceneTitle(saved.title);
@@ -599,79 +369,7 @@ export function useScriptLibrary({
       onToast(options?.toastMessage ?? UI_LABELS.toasts.aiForkedAndApplied(saved.title));
       return true;
     },
-    [persistCurrentCustomIfDirty, onToast]
-  );
-
-  const handleCreateSnapshot = useCallback(
-    async (options: {
-      trigger: SnapshotTrigger;
-      label: string;
-      rawText?: string;
-      scriptId?: string;
-    }): Promise<ScriptSnapshot | null> => {
-      const targetScriptId =
-        options.scriptId ??
-        (activeScriptRef.current.kind === 'custom' ? activeScriptRef.current.id : null);
-      if (!targetScriptId) return null;
-      const textToSave = options.rawText ?? rawTextRef.current;
-      return scriptLibraryDb.saveSnapshot({
-        scriptId: targetScriptId,
-        trigger: options.trigger,
-        label: options.label,
-        rawText: textToSave,
-      });
-    },
-    []
-  );
-
-  const handleRestoreSnapshot = useCallback(
-    async (snapshot: ScriptSnapshot): Promise<boolean> => {
-      const current = activeScriptRef.current;
-      if (current.kind !== 'custom' || current.id !== snapshot.scriptId) {
-        return false;
-      }
-      const beforeText = rawTextRef.current;
-      if (beforeText === snapshot.rawText) {
-        return false;
-      }
-
-      // Always protect current state with a pre-restore checkpoint before rolling back
-      await scriptLibraryDb.saveSnapshot({
-        scriptId: current.id,
-        trigger: 'pre_restore',
-        label: `Before restore: ${snapshot.label}`,
-        rawText: beforeText,
-      });
-
-      commitRawText(snapshot.rawText, {mode: 'checkpoint'});
-      onToast(UI_LABELS.toasts.snapshotRestored);
-      return true;
-    },
-    [commitRawText, onToast]
-  );
-
-  const handleForkSnapshotAsNewScript = useCallback(
-    async (snapshot: ScriptSnapshot): Promise<ScriptRecord | null> => {
-      await persistCurrentCustomIfDirty();
-      const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
-      const baseTitle = sceneTitleRef.current.trim() || APP_META.untitledScene;
-      const title = createCopyTitle(baseTitle, existingTitles, 'Snapshot');
-      const now = Date.now();
-      const forked: ScriptRecord = {
-        id: createScriptId('script'),
-        title,
-        rawText: snapshot.rawText,
-        createdAt: now,
-        updatedAt: now,
-        forkedFromId: snapshot.scriptId,
-      };
-      const saved = await scriptLibraryDb.put(forked);
-      setCustomScripts((prev) => upsertSortedScript(prev, saved));
-      activateCustomScript(saved);
-      onToast(UI_LABELS.toasts.snapshotForked(saved.title));
-      return saved;
-    },
-    [persistCurrentCustomIfDirty, activateCustomScript, onToast]
+    [persistCurrentCustomIfDirty, cancelPendingSave, markSavedSnapshot, onToast]
   );
 
   const handleNewBlank = useCallback(async () => {
@@ -724,9 +422,8 @@ export function useScriptLibrary({
       const isRenamingActive =
         activeScriptRef.current.kind === 'custom' && activeScriptRef.current.id === record.id;
 
-      if (isRenamingActive && saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
+      if (isRenamingActive) {
+        cancelPendingSave();
       }
 
       const currentRaw = isRenamingActive
@@ -744,18 +441,18 @@ export function useScriptLibrary({
 
       if (isRenamingActive) {
         sceneTitleRef.current = saved.title;
-        lastSavedSnapshotRef.current = {
+        markSavedSnapshot({
           id: saved.id,
           rawText: saved.rawText,
           title: saved.title,
-        };
+        });
         setSceneTitle(saved.title);
         mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title);
       }
 
       onToast(UI_LABELS.toasts.renamedScript(saved.title));
     },
-    [onToast]
+    [cancelPendingSave, markSavedSnapshot, onToast]
   );
 
   const handleTogglePinScript = useCallback(async (record: ScriptRecord) => {
@@ -786,34 +483,6 @@ export function useScriptLibrary({
     []
   );
 
-  const handleExportScriptTxt = useCallback(async (record: ScriptRecord) => {
-    if (activeScriptRef.current.kind === 'custom' && activeScriptRef.current.id === record.id) {
-      downloadCanonicalTxt(sceneTitleRef.current, rawTextRef.current);
-      return;
-    }
-    const latest = (await scriptLibraryDb.get(record.id)) ?? record;
-    downloadCanonicalTxt(latest.title, latest.rawText);
-  }, []);
-
-  const handleBulkExportScripts = useCallback(
-    async (records: readonly ScriptRecord[]) => {
-      if (records.length === 0) return;
-      await persistCurrentCustomIfDirty();
-      const ids = new Set(records.map((r) => r.id));
-      const latestAll = await scriptLibraryDb.list();
-      const toExport = latestAll.filter((r) => ids.has(r.id));
-      if (toExport.length === 0) return;
-      downloadLibraryBackup(toExport, {
-        activeScriptId:
-          activeScriptRef.current.kind === 'custom' && ids.has(activeScriptRef.current.id)
-            ? activeScriptRef.current.id
-            : null,
-      });
-      onToast(UI_LABELS.toasts.exportedSelectedScripts(toExport.length));
-    },
-    [persistCurrentCustomIfDirty, onToast]
-  );
-
   const handleRequestBulkDeleteScripts = useCallback(
     (records: readonly ScriptRecord[], onDeleted?: () => void) => {
       if (records.length === 0) return;
@@ -831,9 +500,8 @@ export function useScriptLibrary({
             const wasActiveDeleted =
               activeScriptRef.current.kind === 'custom' && idSet.has(activeScriptRef.current.id);
 
-            if (wasActiveDeleted && saveTimerRef.current !== null) {
-              window.clearTimeout(saveTimerRef.current);
-              saveTimerRef.current = null;
+            if (wasActiveDeleted) {
+              cancelPendingSave();
             }
 
             await scriptLibraryDb.bulkDelete(ids);
@@ -855,7 +523,7 @@ export function useScriptLibrary({
         },
       });
     },
-    [onRequestConfirm, activateCustomScript, activateExample, onToast]
+    [onRequestConfirm, cancelPendingSave, activateCustomScript, activateExample, onToast]
   );
 
   const handleRequestDeleteScript = useCallback(
@@ -872,9 +540,8 @@ export function useScriptLibrary({
               activeScriptRef.current.kind === 'custom' &&
               activeScriptRef.current.id === record.id;
 
-            if (wasActive && saveTimerRef.current !== null) {
-              window.clearTimeout(saveTimerRef.current);
-              saveTimerRef.current = null;
+            if (wasActive) {
+              cancelPendingSave();
             }
 
             await scriptLibraryDb.delete(record.id);
@@ -895,59 +562,8 @@ export function useScriptLibrary({
         },
       });
     },
-    [onRequestConfirm, activateCustomScript, activateExample, onToast]
+    [onRequestConfirm, cancelPendingSave, activateCustomScript, activateExample, onToast]
   );
-
-  // File I/O: Single-script downloads, Import, Full-Library Backup & Smart Non-Destructive Restore
-  const handleDownloadCanonical = useCallback(() => {
-    downloadCanonicalTxt(sceneTitle, rawText);
-  }, [sceneTitle, rawText]);
-
-  const handleDownloadTagless = useCallback(() => {
-    downloadTaglessTxt(sceneTitle, rawText);
-  }, [sceneTitle, rawText]);
-
-  const handleDownloadJsonEnvelope = useCallback(() => {
-    downloadJsonEnvelope(sceneTitle, rawText, ruleOverrides);
-  }, [sceneTitle, rawText, ruleOverrides]);
-
-  const applyLibraryBackupRestore = useCallback(
-    async (backup: AuteurLibraryBackup) => {
-      await persistCurrentCustomIfDirty();
-      const existing = await scriptLibraryDb.list();
-      const mergeResult = mergeLibraryBackup(existing, backup.scripts);
-      if (mergeResult.recordsToWrite.length > 0) {
-        await scriptLibraryDb.bulkPut(mergeResult.recordsToWrite);
-      }
-      setCustomScripts(mergeResult.merged);
-      customScriptsRef.current = mergeResult.merged;
-      onToast(
-        UI_LABELS.toasts.backupRestored(
-          mergeResult.added.length,
-          mergeResult.forked.length,
-          mergeResult.skipped.length
-        )
-      );
-    },
-    [persistCurrentCustomIfDirty, onToast]
-  );
-
-  const handleBackupAll = useCallback(async () => {
-    await persistCurrentCustomIfDirty();
-    const latestRecords = await scriptLibraryDb.list();
-    setCustomScripts(latestRecords);
-    customScriptsRef.current = latestRecords;
-
-    if (latestRecords.length === 0) {
-      onToast(UI_LABELS.toasts.backupEmpty);
-      return;
-    }
-
-    downloadLibraryBackup(latestRecords, {
-      activeScriptId: activeScriptRef.current.id,
-    });
-    onToast(UI_LABELS.toasts.backupExported(latestRecords.length));
-  }, [persistCurrentCustomIfDirty, onToast]);
 
   const handleRequestClearLibrary = useCallback(
     (onCleared?: () => void) => {
@@ -967,10 +583,7 @@ export function useScriptLibrary({
         },
         onConfirm: () => {
           void (async () => {
-            if (saveTimerRef.current !== null) {
-              window.clearTimeout(saveTimerRef.current);
-              saveTimerRef.current = null;
-            }
+            cancelPendingSave();
 
             await scriptLibraryDb.clearAll();
             setCustomScripts([]);
@@ -986,74 +599,7 @@ export function useScriptLibrary({
         },
       });
     },
-    [onRequestConfirm, handleBackupAll, activateExample, onToast]
-  );
-
-  const handleTriggerImportFile = useCallback(() => {
-    importFileInputRef.current?.click();
-  }, []);
-
-  const handleTriggerRestoreBackup = useCallback(() => {
-    restoreBackupInputRef.current?.click();
-  }, []);
-
-  const handleImportFileChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      event.target.value = '';
-      if (!file) return;
-
-      try {
-        const result = await readAndParseBrowserFile(file);
-        if (!result.ok) {
-          onToast(result.error);
-          return;
-        }
-
-        if (result.kind === 'library-backup') {
-          await applyLibraryBackupRestore(result.backup);
-          return;
-        }
-
-        await persistCurrentCustomIfDirty();
-        const now = Date.now();
-        const importedRecord: ScriptRecord = {
-          id: createScriptId('script'),
-          title: result.title,
-          rawText: result.rawText,
-          createdAt: now,
-          updatedAt: now,
-        };
-        const saved = await scriptLibraryDb.put(importedRecord);
-        setCustomScripts((prev) => upsertSortedScript(prev, saved));
-        activateCustomScript(saved, {switchToLive: true});
-        onToast(UI_LABELS.toasts.importedScript(saved.title));
-      } catch {
-        onToast(UI_LABELS.toasts.fileReadError);
-      }
-    },
-    [applyLibraryBackupRestore, persistCurrentCustomIfDirty, activateCustomScript, onToast]
-  );
-
-  const handleRestoreBackupChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      event.target.value = '';
-      if (!file) return;
-
-      try {
-        const text = await file.text();
-        const parsed = parseLibraryBackup(text);
-        if (!parsed.ok) {
-          onToast(parsed.error);
-          return;
-        }
-        await applyLibraryBackupRestore(parsed.backup);
-      } catch {
-        onToast(UI_LABELS.toasts.fileReadError);
-      }
-    },
-    [applyLibraryBackupRestore, onToast]
+    [onRequestConfirm, handleBackupAll, cancelPendingSave, activateExample, onToast]
   );
 
   return {
