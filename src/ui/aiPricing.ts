@@ -68,7 +68,7 @@ export interface SessionCostSummary {
 }
 
 /**
- * Returns the USD-per-1M-tokens pricing schedule for a supported Gemini 4 model.
+ * Returns the USD-per-1M-tokens pricing schedule for a supported Gemini model.
  * Accepts an injectable `nowMs` timestamp for deterministic evaluation and tests.
  */
 export function getGeminiModelPricing(
@@ -76,6 +76,14 @@ export function getGeminiModelPricing(
   nowMs: number = Date.now()
 ): GeminiModelPricing {
   switch (model) {
+    case 'gemini-3.5-flash-lite':
+      return {
+        model,
+        inputPer1M: 0.3,
+        cachedInputPer1M: 0.03,
+        outputPer1M: 2.5,
+        isPromoRate: false,
+      };
     case 'gemini-4-hydrogen':
       return {
         model,

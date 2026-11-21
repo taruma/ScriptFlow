@@ -15,7 +15,15 @@ describe('aiPricing Gemini 4 rate table & cost estimation', () => {
   const NOV_30_2026_LAST_MS = GEMINI_4_CARBON_PROMO_END_MS - 1;
   const DEC_01_2026_START_MS = GEMINI_4_CARBON_PROMO_END_MS;
 
-  it('returns accurate Gemini 4 Hydrogen, Neon, and Carbon pricing across promo cutoff', () => {
+  it('returns accurate Gemini 3.5 Flash-Lite and Gemini 4 Hydrogen, Neon, and Carbon pricing across promo cutoff', () => {
+    expect(getGeminiModelPricing('gemini-3.5-flash-lite', NOV_21_2026)).toEqual({
+      model: 'gemini-3.5-flash-lite',
+      inputPer1M: 0.3,
+      cachedInputPer1M: 0.03,
+      outputPer1M: 2.5,
+      isPromoRate: false,
+    });
+
     expect(getGeminiModelPricing('gemini-4-hydrogen', NOV_21_2026)).toEqual({
       model: 'gemini-4-hydrogen',
       inputPer1M: 1.5,

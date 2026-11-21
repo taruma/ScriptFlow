@@ -1,6 +1,10 @@
 import {useCallback, useState} from 'react';
 
-export type GeminiModelId = 'gemini-4-hydrogen' | 'gemini-4-neon' | 'gemini-4-carbon';
+export type GeminiModelId =
+  | 'gemini-4-hydrogen'
+  | 'gemini-4-neon'
+  | 'gemini-4-carbon'
+  | 'gemini-3.5-flash-lite';
 export type ReasoningLevel = 'low' | 'medium' | 'high';
 
 export interface GeminiModelOption {
@@ -9,7 +13,7 @@ export interface GeminiModelOption {
   shortLabel: string;
   compactDesc: string;
   description: string;
-  tier: 'fast' | 'balanced' | 'deep';
+  tier: 'lite' | 'fast' | 'balanced' | 'deep';
 }
 
 export interface ReasoningLevelOption {
@@ -48,6 +52,15 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     description:
       '1M context · Strongest frontier reasoning for complex multi-lens audits and dense drafts',
     tier: 'deep',
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    label: 'Gemini 3.5 Flash-Lite',
+    shortLabel: '3.5 Flash-Lite',
+    compactDesc: 'Ultra-low-cost, low-latency edits & quick iterations',
+    description:
+      '1M context · Latest Flash-Lite model — cost-efficient, low-latency multimodal edits and quick passes',
+    tier: 'lite',
   },
 ] as const;
 

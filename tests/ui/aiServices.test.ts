@@ -85,12 +85,13 @@ async function* asAsyncStream(
 
 const SAMPLE_SCRIPT = SCRIPT_PRESETS[0].content;
 
-describe('aiSettings BYOK persistence and Gemini 4 catalog', () => {
-  it('exposes strictly the Gemini 4 catalog and default settings', () => {
+describe('aiSettings BYOK persistence and Gemini model catalog', () => {
+  it('exposes the supported Gemini model catalog and default settings', () => {
     expect(GEMINI_MODEL_OPTIONS.map((m) => m.id)).toEqual([
       'gemini-4-hydrogen',
       'gemini-4-neon',
       'gemini-4-carbon',
+      'gemini-3.5-flash-lite',
     ]);
     expect(DEFAULT_GEMINI_MODEL).toBe('gemini-4-hydrogen');
     expect(REASONING_LEVEL_OPTIONS.map((r) => r.id)).toEqual(['low', 'medium', 'high']);
