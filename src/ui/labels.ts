@@ -787,6 +787,11 @@ export const UI_LABELS = {
       draftStats: (blocks: number, beats: number) =>
         `${blocks} MB · ${beats} ${beats === 1 ? 'Macro-State' : 'Macro-States'}`,
       auditNoIssues: 'No issues found across the inspected lenses.',
+      showIssuesToggle: (count: number) => `Show ${count} ${count === 1 ? 'issue' : 'issues'}`,
+      hideIssuesToggle: (count: number) => `Hide ${count} ${count === 1 ? 'issue' : 'issues'}`,
+      appliedProgressBadge: (applied: number, total: number) => `${applied}/${total} applied`,
+      expandDetailsAria: 'Expand suggestion details',
+      collapseDetailsAria: 'Collapse suggestion details',
       auditCounts: (errors: number, warnings: number) => {
         if (errors === 0 && warnings === 0) return 'Clean';
         const parts: string[] = [];
@@ -989,7 +994,7 @@ export const UI_LABELS = {
     insertionHeaderTitle: (count: number) =>
       count === 1 ? 'AI Proposed Insertion' : `AI Proposed Insertions (${count})`,
     closeAria: 'Close AI change preview',
-    footerHint: 'Preview only · Apply or dismiss in AI Assistant',
+    footerHint: 'Apply directly here (Undo with Cmd/Ctrl+Z) or review in AI Assistant',
     kindBadges: {
       modify: 'Modify',
       delete: 'Delete',

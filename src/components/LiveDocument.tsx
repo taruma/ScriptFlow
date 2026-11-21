@@ -22,6 +22,7 @@ import {
   stabilizeStagingBlocks,
 } from '../ui/referenceStability.ts';
 import {useStableValue} from '../ui/useStableValue.ts';
+import {LivePatchActionContext} from './AiPatchIndicator.tsx';
 import {ExecutionPane} from './ExecutionPane.tsx';
 import {StagingPane} from './StagingPane.tsx';
 import type {StagingBlockCommitOptions} from './stagingBlockRegistry.ts';
@@ -34,6 +35,8 @@ interface LiveDocumentProps {
   metadata: ExtractedMetadata;
   diagnostics: LintDiagnostic[];
   activeAiPatches?: readonly ActiveAiPatchItem[];
+  onApplyAiPatch?: (patchId: string) => void;
+  onDismissAiPatch?: (patchId: string) => void;
   historyRevision: number;
   readOnly?: boolean;
   onUpdateStaging: (
@@ -75,6 +78,8 @@ export const LiveDocument = memo(function LiveDocument({
   metadata,
   diagnostics,
   activeAiPatches = EMPTY_ACTIVE_PATCHES,
+  onApplyAiPatch,
+  onDismissAiPatch,
   historyRevision,
   readOnly = false,
   onUpdateStaging,
@@ -149,9 +154,19 @@ export const LiveDocument = memo(function LiveDocument({
     stabilizeInsertionPatchMap
   );
 
+  const livePatchActionValue = useMemo(
+    () => ({
+      readOnly,
+      onApplyPatch: onApplyAiPatch,
+      onDismissPatch: onDismissAiPatch,
+    }),
+    [readOnly, onApplyAiPatch, onDismissAiPatch]
+  );
+
   return (
-    <main className="w-full lg:h-full lg:overflow-hidden">
-      <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <LivePatchActionContext.Provider value={livePatchActionValue}>
+      <main className="w-full lg:h-full lg:overflow-hidden">
+        <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <StagingPane
           stagingBlocks={stagingBlocks}
           characters={characters}
@@ -187,5 +202,6 @@ export const LiveDocument = memo(function LiveDocument({
         />
       </div>
     </main>
+    </LivePatchActionContext.Provider>
   );
 });

@@ -1,4 +1,4 @@
-import {memo, useMemo, useState} from 'react';
+import {memo, useEffect, useMemo, useRef, useState} from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -101,14 +101,51 @@ export const PatchSuggestionCard = memo(function PatchSuggestionCard({
   onDismiss,
 }: PatchSuggestionCardProps) {
   const [showDiff, setShowDiff] = useState(false);
+  const [isReceiptExpanded, setIsReceiptExpanded] = useState(false);
   const labels = UI_LABELS.ai.suggestions;
-  const stale = !isApplied && !isDismissed && isSuggestionStale(suggestion.baseSnapshotHash, currentSnapshotHash);
+  const isResolved = isApplied || isDismissed;
+  const stale = !isResolved && isSuggestionStale(suggestion.baseSnapshotHash, currentSnapshotHash);
 
   const {lintDelta} = suggestion;
   const resolvedCount = lintDelta.resolvedDiagnostics.length;
 
+  // Compact single-line receipt once applied or dismissed (click to expand details/diff)
+  if (isResolved && !isReceiptExpanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsReceiptExpanded(true)}
+        aria-expanded={false}
+        aria-label={labels.expandDetailsAria}
+        className={`w-full rounded-xl border border-border-subtle bg-surface px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-surface-subtle transition-colors cursor-pointer ${
+          isDismissed ? 'opacity-65' : ''
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {isApplied ? (
+            <span className="auteur-phase-aesthetic inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold shrink-0">
+              <Check className="h-2.5 w-2.5" />
+              <span>{labels.appliedBadge}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-faint shrink-0">
+              <span>{labels.dismissedBadge}</span>
+            </span>
+          )}
+          <span className="text-xs text-text-body truncate">{suggestion.summary}</span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="font-mono text-[10px] text-text-faint tabular-nums">
+            +{suggestion.diff.addedCount} / −{suggestion.diff.removedCount}
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
+        </div>
+      </button>
+    );
+  }
+
   return (
-    <div className={`${UI_TOKENS.ai.suggestionCard} ${isDismissed ? 'opacity-60' : ''}`}>
+    <div className={`${UI_TOKENS.ai.suggestionCard} ${isDismissed ? 'opacity-65' : ''}`}>
       <div className={UI_TOKENS.ai.suggestionHeader}>
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -144,9 +181,21 @@ export const PatchSuggestionCard = memo(function PatchSuggestionCard({
           <p className="text-xs font-medium leading-snug text-text-main">{suggestion.summary}</p>
         </div>
 
-        <span className="font-mono text-[10px] text-text-faint shrink-0 tabular-nums">
-          +{suggestion.diff.addedCount} / −{suggestion.diff.removedCount}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="font-mono text-[10px] text-text-faint tabular-nums">
+            +{suggestion.diff.addedCount} / −{suggestion.diff.removedCount}
+          </span>
+          {isResolved && (
+            <button
+              type="button"
+              onClick={() => setIsReceiptExpanded(false)}
+              aria-label={labels.collapseDetailsAria}
+              className="rounded p-0.5 text-text-faint hover:bg-surface-muted hover:text-text-main cursor-pointer"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-3 py-2.5 space-y-2.5">
@@ -245,30 +294,81 @@ export const DraftSuggestionCard = memo(function DraftSuggestionCard({
   onDismiss,
 }: DraftSuggestionCardProps) {
   const [expandedMode, setExpandedMode] = useState<'closed' | 'preview' | 'diff'>('closed');
+  const [isReceiptExpanded, setIsReceiptExpanded] = useState(false);
   const labels = UI_LABELS.ai.suggestions;
+  const isResolved = isApplied || isDismissed;
+
+  if (isResolved && !isReceiptExpanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsReceiptExpanded(true)}
+        aria-expanded={false}
+        aria-label={labels.expandDetailsAria}
+        className={`w-full rounded-xl border border-border-subtle bg-surface px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-surface-subtle transition-colors cursor-pointer ${
+          isDismissed ? 'opacity-65' : ''
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {isApplied ? (
+            <span className="auteur-phase-aesthetic inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold shrink-0">
+              <Check className="h-2.5 w-2.5" />
+              <span>{labels.appliedBadge}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-faint shrink-0">
+              <span>{labels.dismissedBadge}</span>
+            </span>
+          )}
+          <span className="text-xs text-text-body truncate">
+            {suggestion.title || suggestion.summary}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="font-mono text-[10px] text-text-faint tabular-nums">
+            {labels.draftStats(suggestion.stagingBlockCount, suggestion.beatCount)}
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
+        </div>
+      </button>
+    );
+  }
 
   return (
-    <div className={`${UI_TOKENS.ai.suggestionCard} ${isDismissed ? 'opacity-60' : ''}`}>
+    <div className={`${UI_TOKENS.ai.suggestionCard} ${isDismissed ? 'opacity-65' : ''}`}>
       <div className={UI_TOKENS.ai.suggestionHeader}>
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="auteur-phase-continuity inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium">
-              <Sparkles className="h-2.5 w-2.5" />
-              <span>{labels.draftLabel}</span>
-            </span>
-
-            <span className="rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-              {formatTopologyLabel(suggestion.sceneTopology)}
-            </span>
-
-            {suggestion.errorCount === 0 && suggestion.warningCount === 0 ? (
-              <span className="auteur-phase-aesthetic rounded-md border px-1.5 py-0.5 font-mono text-[10px]">
-                {labels.lintClean}
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="auteur-phase-continuity inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium">
+                <Sparkles className="h-2.5 w-2.5" />
+                <span>{labels.draftLabel}</span>
               </span>
-            ) : (
-              <span className="auteur-phase-intent rounded-md border px-1.5 py-0.5 font-mono text-[10px]">
-                {labels.lintWarnings(suggestion.warningCount)}
+
+              <span className="rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                {formatTopologyLabel(suggestion.sceneTopology)}
               </span>
+
+              {suggestion.errorCount === 0 && suggestion.warningCount === 0 ? (
+                <span className="auteur-phase-aesthetic rounded-md border px-1.5 py-0.5 font-mono text-[10px]">
+                  {labels.lintClean}
+                </span>
+              ) : (
+                <span className="auteur-phase-intent rounded-md border px-1.5 py-0.5 font-mono text-[10px]">
+                  {labels.lintWarnings(suggestion.warningCount)}
+                </span>
+              )}
+            </div>
+
+            {isResolved && (
+              <button
+                type="button"
+                onClick={() => setIsReceiptExpanded(false)}
+                aria-label={labels.collapseDetailsAria}
+                className="rounded p-0.5 text-text-faint hover:bg-surface-muted hover:text-text-main cursor-pointer shrink-0"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
             )}
           </div>
 
@@ -531,6 +631,9 @@ export const AuditReviewSuggestionCard = memo(function AuditReviewSuggestionCard
   const labels = UI_LABELS.ai.suggestions;
   const hasErrors = suggestion.errorCount > 0;
   const hasWarnings = suggestion.warningCount > 0;
+  const [isIssuesExpanded, setIsIssuesExpanded] = useState<boolean>(
+    () => suggestion.issues.length <= 1
+  );
 
   const {totalFixCount, appliedFixCount} = useMemo(() => {
     let total = 0;
@@ -547,6 +650,15 @@ export const AuditReviewSuggestionCard = memo(function AuditReviewSuggestionCard
   }, [suggestion.issues, appliedIds]);
 
   const allFixesApplied = totalFixCount > 0 && appliedFixCount === totalFixCount;
+  const wasAllAppliedRef = useRef(allFixesApplied);
+
+  // Auto-collapse once all fixes are applied to keep the conversation stream calm
+  useEffect(() => {
+    if (!wasAllAppliedRef.current && allFixesApplied) {
+      setIsIssuesExpanded(false);
+    }
+    wasAllAppliedRef.current = allFixesApplied;
+  }, [allFixesApplied]);
 
   const batchPlan = useMemo(
     () =>
@@ -632,32 +744,64 @@ export const AuditReviewSuggestionCard = memo(function AuditReviewSuggestionCard
               {labels.batchPartialNote(batchPlan.includedFixIds.length, batchPlan.eligibleCount)}
             </p>
           )}
+
+          {suggestion.issues.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsIssuesExpanded((prev) => !prev)}
+                aria-expanded={isIssuesExpanded}
+                className={UI_TOKENS.ai.pillButton}
+              >
+                {isIssuesExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                <span>
+                  {isIssuesExpanded
+                    ? labels.hideIssuesToggle(suggestion.issues.length)
+                    : labels.showIssuesToggle(suggestion.issues.length)}
+                </span>
+              </button>
+
+              {totalFixCount > 0 && appliedFixCount > 0 && !allFixesApplied && (
+                <span className="auteur-phase-aesthetic rounded-md border px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+                  {labels.appliedProgressBadge(appliedFixCount, totalFixCount)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="px-2.5 py-2.5 space-y-2">
-        {suggestion.issues.length === 0 ? (
+      {suggestion.issues.length === 0 ? (
+        <div className="px-2.5 py-2.5">
           <div className="rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs text-text-muted">
             {labels.auditNoIssues}
           </div>
-        ) : (
-          suggestion.issues.map((issue) => (
-            <AuditIssueRow
-              key={issue.id}
-              issue={issue}
-              currentSnapshotHash={currentSnapshotHash}
-              readOnly={readOnly}
-              isStreaming={isStreaming}
-              isFixApplied={
-                issue.patchSuggestion !== undefined &&
-                appliedIds.includes(issue.patchSuggestion.id)
-              }
-              onJumpToTarget={onJumpToTarget}
-              onApplyIssueFix={onApplyIssueFix}
-            />
-          ))
-        )}
-      </div>
+        </div>
+      ) : (
+        isIssuesExpanded && (
+          <div className="px-2.5 py-2.5 space-y-2">
+            {suggestion.issues.map((issue) => (
+              <AuditIssueRow
+                key={issue.id}
+                issue={issue}
+                currentSnapshotHash={currentSnapshotHash}
+                readOnly={readOnly}
+                isStreaming={isStreaming}
+                isFixApplied={
+                  issue.patchSuggestion !== undefined &&
+                  appliedIds.includes(issue.patchSuggestion.id)
+                }
+                onJumpToTarget={onJumpToTarget}
+                onApplyIssueFix={onApplyIssueFix}
+              />
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 });

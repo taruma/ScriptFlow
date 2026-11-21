@@ -182,12 +182,24 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
 
     const collected = collectActiveAiPatches(messages, envelope.snapshotHash);
     expect(collected.map((item) => item.id)).toEqual(['p-active', 'fix-1']);
-    expect(collected[0].sourceKind).toBe('patch');
+    expect(collected[0]).toMatchObject({
+      messageId: 'm1',
+      sourceKind: 'patch',
+    });
     expect(collected[1]).toMatchObject({
+      messageId: 'm2',
       sourceKind: 'audit_fix',
       lens: 'Lens 1: Spatial & Optics',
       issueMessage: 'Anchor overhead light transition on S2',
     });
+
+    // Streaming turns propagate isStreaming so Live Mode popovers disable Apply until completion
+    const streamingMessages = messages.map((m, idx) =>
+      idx === 0 ? {...m, isStreaming: true} : m
+    );
+    const collectedStreaming = collectActiveAiPatches(streamingMessages, envelope.snapshotHash);
+    expect(collectedStreaming[0]?.isStreaming).toBe(true);
+    expect(collectedStreaming[1]?.isStreaming).toBeUndefined();
 
     // Changing snapshot hash immediately clears all stale patches
     expect(collectActiveAiPatches(messages, 'mutated-hash')).toEqual([]);
@@ -226,8 +238,22 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
     });
 
     const activeItems = [
-      {id: patchA.id, sourceKind: 'patch' as const, summary: patchA.summary, suggestion: patchA},
-      {id: patchB.id, sourceKind: 'patch' as const, summary: patchB.summary, suggestion: patchB},
+      {
+        id: patchA.id,
+        messageId: 'm1',
+        sourceKind: 'patch' as const,
+        summary: patchA.summary,
+        isStreaming: false,
+        suggestion: patchA,
+      },
+      {
+        id: patchB.id,
+        messageId: 'm2',
+        sourceKind: 'patch' as const,
+        summary: patchB.summary,
+        isStreaming: false,
+        suggestion: patchB,
+      },
     ];
 
     const maps1 = buildLivePatchIndicators(INTERROGATION, activeItems);
@@ -251,5 +277,14 @@ describe('Quiet AI Patch Indicators & Word Diff', () => {
         maps2.executionInsertionsByAfterBeatIndex
       )
     ).toBe(maps1.executionInsertionsByAfterBeatIndex);
+
+    // Flipping isStreaming must invalidate the stabilized maps so Live Mode Apply unlocks immediately
+    const streamingMaps = buildLivePatchIndicators(
+      INTERROGATION,
+      activeItems.map((item) => ({...item, isStreaming: true}))
+    );
+    expect(
+      stabilizeBeatPatchMap(maps1.executionByBeatIndex, streamingMaps.executionByBeatIndex)
+    ).not.toBe(maps1.executionByBeatIndex);
   });
 });

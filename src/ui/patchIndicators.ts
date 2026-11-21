@@ -8,10 +8,12 @@ import {isSuggestionStale, type AiChatMessage} from './aiAssistant.ts';
 
 export interface ActiveAiPatchItem {
   id: string;
+  messageId: string;
   sourceKind: 'patch' | 'audit_fix';
   summary: string;
   lens?: AuditLens;
   issueMessage?: string;
+  isStreaming?: boolean;
   suggestion: PatchSuggestion;
 }
 
@@ -32,6 +34,7 @@ export interface LiveBlockPatchIndicator {
   summary: string;
   lens?: AuditLens;
   issueMessage?: string;
+  isStreaming?: boolean;
   kind: 'modify' | 'delete';
   blockIndex: number;
   header: string;
@@ -45,6 +48,7 @@ export interface LiveBeatPatchIndicator {
   summary: string;
   lens?: AuditLens;
   issueMessage?: string;
+  isStreaming?: boolean;
   kind: 'modify' | 'delete' | 'reorder';
   beatIndex: number;
   movedToBeatIndex?: number;
@@ -57,6 +61,7 @@ export interface LiveInsertionPatchIndicator {
   summary: string;
   lens?: AuditLens;
   issueMessage?: string;
+  isStreaming?: boolean;
   phase: 'staging' | 'execution';
   /** Staging: `-1` before MB0, `k` after MB<k>. Execution: `0` before S1, `k` after S<k>. */
   afterIndex: number;
@@ -444,8 +449,10 @@ export function collectActiveAiPatches(
         seenIds.add(suggestion.id);
         active.push({
           id: suggestion.id,
+          messageId: msg.id,
           sourceKind: 'patch',
           summary: suggestion.summary,
+          ...(msg.isStreaming ? {isStreaming: true} : {}),
           suggestion,
         });
       } else if (suggestion.kind === 'audit_review') {
@@ -463,10 +470,12 @@ export function collectActiveAiPatches(
           seenIds.add(patch.id);
           active.push({
             id: patch.id,
+            messageId: msg.id,
             sourceKind: 'audit_fix',
             summary: patch.summary,
             lens: issue.lens,
             issueMessage: issue.message,
+            ...(msg.isStreaming ? {isStreaming: true} : {}),
             suggestion: patch,
           });
         }
@@ -529,6 +538,7 @@ export function buildLivePatchIndicators(
         summary: item.summary,
         lens: item.lens,
         issueMessage: item.issueMessage,
+        isStreaming: item.isStreaming,
         kind: change.kind,
         blockIndex: change.blockIndex,
         header: change.header,
@@ -544,6 +554,7 @@ export function buildLivePatchIndicators(
         summary: item.summary,
         lens: item.lens,
         issueMessage: item.issueMessage,
+        isStreaming: item.isStreaming,
         phase: 'staging',
         afterIndex: ins.afterBlockIndex,
         header: ins.header,
@@ -565,6 +576,7 @@ export function buildLivePatchIndicators(
         summary: item.summary,
         lens: item.lens,
         issueMessage: item.issueMessage,
+        isStreaming: item.isStreaming,
         kind: change.kind,
         beatIndex: change.beatIndex,
         movedToBeatIndex: change.movedToBeatIndex,
@@ -579,6 +591,7 @@ export function buildLivePatchIndicators(
         summary: item.summary,
         lens: item.lens,
         issueMessage: item.issueMessage,
+        isStreaming: item.isStreaming,
         phase: 'execution',
         afterIndex: ins.afterBeatIndex,
         insertedBeatIndex: ins.insertedBeatIndex,

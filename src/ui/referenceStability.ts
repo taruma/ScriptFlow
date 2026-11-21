@@ -228,6 +228,7 @@ function isBlockPatchIndicatorEqual(
     a.summary === b.summary &&
     a.lens === b.lens &&
     a.issueMessage === b.issueMessage &&
+    Boolean(a.isStreaming) === Boolean(b.isStreaming) &&
     a.kind === b.kind &&
     a.blockIndex === b.blockIndex &&
     a.header === b.header &&
@@ -246,6 +247,7 @@ function isBeatPatchIndicatorEqual(
     a.summary === b.summary &&
     a.lens === b.lens &&
     a.issueMessage === b.issueMessage &&
+    Boolean(a.isStreaming) === Boolean(b.isStreaming) &&
     a.kind === b.kind &&
     a.beatIndex === b.beatIndex &&
     a.movedToBeatIndex === b.movedToBeatIndex &&
@@ -263,6 +265,7 @@ function isInsertionPatchIndicatorEqual(
     a.summary === b.summary &&
     a.lens === b.lens &&
     a.issueMessage === b.issueMessage &&
+    Boolean(a.isStreaming) === Boolean(b.isStreaming) &&
     a.phase === b.phase &&
     a.afterIndex === b.afterIndex &&
     a.header === b.header &&

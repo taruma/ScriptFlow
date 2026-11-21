@@ -1,7 +1,18 @@
-import {memo, useEffect, useRef, useState} from 'react';
-import {ArrowUpDown, Plus, Sparkles, Trash2, X} from 'lucide-react';
+import {createContext, memo, useContext, useEffect, useRef, useState} from 'react';
+import {
+  ArrowUpDown,
+  Check,
+  GitFork,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react';
 import {formatLensShort} from '../ui/aiAssistant.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import type {
   LiveBeatPatchIndicator,
   LiveBlockPatchIndicator,
@@ -9,6 +20,83 @@ import type {
   WordDiffLine,
   WordDiffToken,
 } from '../ui/patchIndicators.ts';
+
+export interface LivePatchActionContextValue {
+  readOnly: boolean;
+  onApplyPatch?: (patchId: string) => void;
+  onDismissPatch?: (patchId: string) => void;
+}
+
+export const LivePatchActionContext = createContext<LivePatchActionContextValue>({
+  readOnly: false,
+});
+
+function LivePatchActionBar({
+  patchId,
+  sourceKind,
+  isStreaming,
+  onAfterAction,
+}: {
+  patchId: string;
+  sourceKind: 'patch' | 'audit_fix';
+  isStreaming?: boolean;
+  onAfterAction: () => void;
+}) {
+  const {readOnly, onApplyPatch, onDismissPatch} = useContext(LivePatchActionContext);
+  if (!onApplyPatch && !onDismissPatch) return null;
+
+  const aiLabels = UI_LABELS.ai.suggestions;
+  const applyLabel = isStreaming
+    ? aiLabels.finishingLabel
+    : readOnly
+      ? aiLabels.forkAndApplyButton
+      : sourceKind === 'audit_fix'
+        ? aiLabels.applyFixButton
+        : aiLabels.applyButton;
+
+  return (
+    <div className="flex items-center justify-end gap-1.5 pt-1">
+      {sourceKind === 'patch' && onDismissPatch && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismissPatch(patchId);
+            onAfterAction();
+          }}
+          className={UI_TOKENS.ai.pillButton}
+        >
+          <X className="h-3 w-3" />
+          <span>{aiLabels.dismissButton}</span>
+        </button>
+      )}
+      {onApplyPatch && (
+        <button
+          type="button"
+          disabled={Boolean(isStreaming)}
+          title={isStreaming ? aiLabels.waitUntilFinishedTitle : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            onApplyPatch(patchId);
+            onAfterAction();
+          }}
+          className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1 px-2.5 py-1 text-[11px] disabled:opacity-45 disabled:cursor-not-allowed`}
+        >
+          {isStreaming ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : readOnly ? (
+            <GitFork className="h-3 w-3" />
+          ) : sourceKind === 'audit_fix' ? (
+            <Wrench className="h-3 w-3" />
+          ) : (
+            <Check className="h-3 w-3" />
+          )}
+          <span>{applyLabel}</span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 function useHoverPinPopover() {
   const [pinned, setPinned] = useState(false);
@@ -253,6 +341,16 @@ export const AiPatchIndicator = memo(function AiPatchIndicator(props: AiPatchInd
                       </p>
 
                       <MultiLineWordDiffView lines={item.lines} />
+
+                      <LivePatchActionBar
+                        patchId={item.patchId}
+                        sourceKind={item.sourceKind}
+                        isStreaming={item.isStreaming}
+                        onAfterAction={() => {
+                          setPinned(false);
+                          setHovered(false);
+                        }}
+                      />
                     </div>
                   ))
                 : props.indicators.map((item) => (
@@ -284,6 +382,16 @@ export const AiPatchIndicator = memo(function AiPatchIndicator(props: AiPatchInd
                       <div className="rounded-lg border border-border-subtle bg-app px-2.5 py-2 font-script text-[12px] leading-relaxed text-text-body whitespace-pre-wrap break-words max-h-56 overflow-y-auto auteur-pane-scroll">
                         <WordDiffTokensView tokens={item.tokens} />
                       </div>
+
+                      <LivePatchActionBar
+                        patchId={item.patchId}
+                        sourceKind={item.sourceKind}
+                        isStreaming={item.isStreaming}
+                        onAfterAction={() => {
+                          setPinned(false);
+                          setHovered(false);
+                        }}
+                      />
                     </div>
                   ))}
             </div>
@@ -423,6 +531,16 @@ export const AiPatchInsertionSeam = memo(function AiPatchInsertionSeam({
                           </span>
                         )}
                       </div>
+
+                      <LivePatchActionBar
+                        patchId={item.patchId}
+                        sourceKind={item.sourceKind}
+                        isStreaming={item.isStreaming}
+                        onAfterAction={() => {
+                          setPinned(false);
+                          setHovered(false);
+                        }}
+                      />
                     </div>
                   ))}
                 </div>

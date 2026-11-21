@@ -128,6 +128,11 @@ const MIN_SIDEBAR_WIDTH = 340;
 const MAX_SIDEBAR_WIDTH = 580;
 const DEFAULT_SIDEBAR_WIDTH = 410;
 
+export interface AiLivePatchActionHandlers {
+  applyPatchById: (patchId: string) => void;
+  dismissPatchById: (patchId: string) => void;
+}
+
 export interface AiAssistantSidebarProps {
   scriptSessionKey: string;
   rawText: string;
@@ -143,6 +148,7 @@ export interface AiAssistantSidebarProps {
   onApplyDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean> | boolean;
   onJumpToTarget: (targetId: string) => void;
   onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
+  onRegisterLivePatchActions?: (actions: AiLivePatchActionHandlers | null) => void;
 }
 
 interface ActivityHoverTooltip {
@@ -415,6 +421,7 @@ export function AiAssistantSidebar({
   onApplyDraftSuggestion,
   onJumpToTarget,
   onActivePatchesChange,
+  onRegisterLivePatchActions,
 }: AiAssistantSidebarProps) {
   const {
     settings,
@@ -1099,6 +1106,31 @@ export function AiAssistantSidebar({
       markSuggestionApplied,
     ]
   );
+
+  // Sync live-editor Apply / Dismiss popover actions directly into the sidebar state & Audit rebase flow
+  useEffect(() => {
+    if (!onRegisterLivePatchActions) return;
+    const handlers: AiLivePatchActionHandlers = {
+      applyPatchById: (patchId: string) => {
+        const target = activePatches.find((item) => item.id === patchId);
+        if (!target || target.isStreaming) return;
+        void handleApplyPatch(
+          target.messageId,
+          target.suggestion,
+          target.sourceKind === 'audit_fix' ? 'fix' : 'patch'
+        );
+      },
+      dismissPatchById: (patchId: string) => {
+        const target = activePatches.find((item) => item.id === patchId);
+        if (!target || target.sourceKind !== 'patch') return;
+        markSuggestionDismissed(target.messageId, target.id);
+      },
+    };
+    onRegisterLivePatchActions(handlers);
+    return () => {
+      onRegisterLivePatchActions(null);
+    };
+  }, [activePatches, handleApplyPatch, markSuggestionDismissed, onRegisterLivePatchActions]);
 
   const handleApplyAuditFixesBatch = useCallback(
     async (messageId: string, batchPatch: PatchSuggestion, includedFixIds: string[]) => {

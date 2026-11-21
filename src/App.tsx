@@ -19,6 +19,7 @@ import {
   updateStagingBlock,
   type HistoryCommitMode,
 } from './core/index.ts';
+import type {AiLivePatchActionHandlers} from './components/AiAssistantSidebar.tsx';
 import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDialog.tsx';
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {ScriptLibraryModal} from './components/ScriptLibraryModal.tsx';
@@ -75,15 +76,32 @@ export default function App() {
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [activeAiPatches, setActiveAiPatches] = useState<ActiveAiPatchItem[]>([]);
+  const livePatchActionsRef = useRef<AiLivePatchActionHandlers | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
 
   const handleActiveAiPatchesChange = useCallback((next: ActiveAiPatchItem[]) => {
     setActiveAiPatches((prev) => (prev.length === 0 && next.length === 0 ? prev : next));
   }, []);
 
+  const handleRegisterLivePatchActions = useCallback(
+    (actions: AiLivePatchActionHandlers | null) => {
+      livePatchActionsRef.current = actions;
+    },
+    []
+  );
+
+  const handleApplyLivePatch = useCallback((patchId: string) => {
+    livePatchActionsRef.current?.applyPatchById(patchId);
+  }, []);
+
+  const handleDismissLivePatch = useCallback((patchId: string) => {
+    livePatchActionsRef.current?.dismissPatchById(patchId);
+  }, []);
+
   useEffect(() => {
     if (!isAiOpen) {
       setActiveAiPatches((prev) => (prev.length === 0 ? prev : []));
+      livePatchActionsRef.current = null;
     }
   }, [isAiOpen]);
 
@@ -558,6 +576,8 @@ export default function App() {
               metadata={metadata}
               diagnostics={diagnostics}
               activeAiPatches={activeAiPatches}
+              onApplyAiPatch={handleApplyLivePatch}
+              onDismissAiPatch={handleDismissLivePatch}
               historyRevision={history.revision}
               readOnly={isReadOnly}
               onUpdateStaging={handleUpdateStaging}
@@ -595,6 +615,7 @@ export default function App() {
               onApplyDraftSuggestion={handleApplyAiDraftSuggestion}
               onJumpToTarget={handleJumpToAiTarget}
               onActivePatchesChange={handleActiveAiPatchesChange}
+              onRegisterLivePatchActions={handleRegisterLivePatchActions}
             />
           </Suspense>
         )}
