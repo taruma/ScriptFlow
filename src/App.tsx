@@ -1,45 +1,20 @@
 import {lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  deleteExecutionBeat,
-  deleteExecutionSubState,
-  deleteStagingBlock,
-  exportPlainText,
-  exportTagless,
-  extractMetadata,
-  formatAuteurScript,
-  insertExecutionBeat,
-  insertExecutionSubState,
-  insertStagingBlock,
-  isMultiBlockAuteurScript,
-  lintDocument,
-  mergeExecutionSubStateWithPrevious,
-  parseAuteurScript,
-  reorderExecutionBeats,
-  reorderExecutionSubStates,
-  reorderStagingBlocks,
-  toAuteurEnvelope,
-  updateExecutionSubState,
-  updateStagingBlock,
-  type HistoryCommitMode,
-} from './core/index.ts';
+import {extractMetadata, lintDocument, parseAuteurScript} from './core/index.ts';
 import type {AiLivePatchActionHandlers} from './components/AiAssistantSidebar.tsx';
 import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDialog.tsx';
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {ScriptLibraryModal} from './components/ScriptLibraryModal.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
-import type {StagingBlockCommitOptions} from './components/stagingBlockRegistry.ts';
-import {TopSlateBar, type CopyFormatKind, type ViewMode} from './components/TopSlateBar.tsx';
+import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
 import {BUNDLED_EXAMPLES} from './data/examples/index.ts';
 import type {QuickScanResult} from './services/geminiDecisions.ts';
-import type {DraftSuggestion, PatchSuggestion} from './services/scriptTools.ts';
 import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
-import {copyTextToClipboard} from './ui/clipboard.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
-import {matchHistoryShortcut} from './ui/historyShortcuts.ts';
-import {APP_META, UI_LABELS} from './ui/labels.ts';
+import {APP_META} from './ui/labels.ts';
 import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
-import {buildAiSnapshotLabel} from './ui/scriptSnapshots.ts';
+import {useDocumentMutations} from './ui/useDocumentMutations.ts';
+import {useGlobalEditorShortcuts} from './ui/useGlobalEditorShortcuts.ts';
 import {useScriptLibrary} from './ui/useScriptLibrary.ts';
 import {useStableValue} from './ui/useStableValue.ts';
 
@@ -61,27 +36,9 @@ const VersionHistoryModal = lazy(() =>
   }))
 );
 
-function isEditableElement(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName.toLowerCase();
-  if (tag === 'input' || tag === 'textarea') return true;
-  return (el as HTMLElement).isContentEditable === true;
-}
-
-function isWritableEditableElement(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName.toLowerCase();
-  if (tag === 'input' || tag === 'textarea') {
-    const field = el as HTMLInputElement | HTMLTextAreaElement;
-    return !field.readOnly && !field.disabled;
-  }
-  return (el as HTMLElement).isContentEditable === true;
-}
-
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const {settings, updateSettings} = useEditorSettings();
-  const [copiedKind, setCopiedKind] = useState<CopyFormatKind | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
@@ -172,6 +129,10 @@ export default function App() {
   );
   const skipNextAiResetRef = useRef<boolean>(false);
 
+  const handleSkipNextAiReset = useCallback(() => {
+    skipNextAiResetRef.current = true;
+  }, []);
+
   useEffect(() => {
     const nextKey = `${activeScript.kind}:${activeScript.id}`;
     if (skipNextAiResetRef.current) {
@@ -189,18 +150,12 @@ export default function App() {
     [breakCoalescing]
   );
 
-  // Transient toast & copy feedback timers
+  // Transient toast feedback timer
   useEffect(() => {
     if (!toastMessage) return;
     const timer = window.setTimeout(() => setToastMessage(null), 2800);
     return () => window.clearTimeout(timer);
   }, [toastMessage]);
-
-  useEffect(() => {
-    if (!copiedKind) return;
-    const timer = window.setTimeout(() => setCopiedKind(null), 1800);
-    return () => window.clearTimeout(timer);
-  }, [copiedKind]);
 
   // Synchronous pure derivations from Plain-Text-as-Truth
   const doc = useMemo(() => parseAuteurScript(rawText), [rawText]);
@@ -216,319 +171,34 @@ export default function App() {
     docRef.current = doc;
   }, [doc]);
 
-  // Global Paste-and-Hydrate with Active-Editor & Read-Only Guards
-  useEffect(() => {
-    const handleGlobalPaste = (event: ClipboardEvent) => {
-      if (isDebugOpen || confirmRequest !== null || isLibraryOpen || isVersionHistoryOpen) return;
-      if (document.querySelector('[aria-modal="true"]')) return;
+  const isModalOpen =
+    isDebugOpen || confirmRequest !== null || isLibraryOpen || isVersionHistoryOpen;
 
-      const pasted = event.clipboardData?.getData('text/plain');
-      if (!pasted || pasted.trim().length === 0) return;
-
-      const targetEl = event.target instanceof Element ? event.target : null;
-      const active = document.activeElement;
-      if (
-        (active instanceof Element && active.closest('[data-ai-sidebar="true"]')) ||
-        (targetEl && targetEl.closest('[data-ai-sidebar="true"]'))
-      ) {
-        return;
-      }
-      const inEditable = isEditableElement(active);
-      const inWritableEditable = isWritableEditableElement(active);
-      const hasMultiBlockScript = isMultiBlockAuteurScript(pasted);
-
-      if (isReadOnly) {
-        if (inWritableEditable && !hasMultiBlockScript) {
-          return;
-        }
-        event.preventDefault();
-        setToastMessage(UI_LABELS.toasts.readOnlyPasteBlocked);
-        return;
-      }
-
-      if (viewMode === 'source' && inEditable) {
-        return;
-      }
-
-      if (inEditable && !hasMultiBlockScript) {
-        return;
-      }
-
-      event.preventDefault();
-      if (active instanceof HTMLElement) {
-        active.blur();
-      }
-      commitRawText(pasted.replace(/\r\n?/g, '\n'), {mode: 'checkpoint'});
-      setViewMode('live');
-      setToastMessage(UI_LABELS.toasts.scriptHydrated);
-    };
-
-    document.addEventListener('paste', handleGlobalPaste);
-    return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [
+  useGlobalEditorShortcuts({
     viewMode,
     isReadOnly,
-    isDebugOpen,
-    confirmRequest,
-    isLibraryOpen,
-    isVersionHistoryOpen,
+    isModalOpen,
     commitRawText,
-  ]);
+    onSwitchToLive: handleSwitchToLive,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onToast: setToastMessage,
+  });
 
-  // Document-level Undo / Redo keyboard shortcuts (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      const action = matchHistoryShortcut(event);
-      if (!action) return;
-
-      if (
-        isReadOnly ||
-        isDebugOpen ||
-        confirmRequest !== null ||
-        isLibraryOpen ||
-        isVersionHistoryOpen
-      ) {
-        return;
-      }
-      if (document.querySelector('[aria-modal="true"]')) return;
-
-      const active = document.activeElement;
-      if (active instanceof Element && active.closest('[data-native-undo="true"]')) {
-        return;
-      }
-
-      event.preventDefault();
-      if (action === 'undo') {
-        handleUndo();
-      } else {
-        handleRedo();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [
+  const mutations = useDocumentMutations({
+    rawText,
+    sceneTitle,
     isReadOnly,
-    isDebugOpen,
-    confirmRequest,
-    isLibraryOpen,
-    isVersionHistoryOpen,
-    handleUndo,
-    handleRedo,
-  ]);
-
-  // Pure Serializer Mutations
-  const handleUpdateStaging = useCallback(
-    (blockIndex: number, nextBody: string, options?: StagingBlockCommitOptions) => {
-      const mode = options?.mode ?? 'coalesce';
-      const groupKey = options?.groupKey
-        ? `staging:${blockIndex}:${options.groupKey}`
-        : `staging:${blockIndex}`;
-      commitRawText((prev) => updateStagingBlock(prev, blockIndex, nextBody), {
-        mode,
-        groupKey: mode === 'coalesce' ? groupKey : null,
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleInsertStaging = useCallback(
-    (headerName: string, afterBlockIndex?: number) => {
-      commitRawText((prev) => insertStagingBlock(prev, headerName, '', afterBlockIndex), {
-        mode: 'checkpoint',
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleRequestDeleteStaging = useCallback(
-    (blockIndex: number) => {
-      if (isReadOnly) return;
-      const target = docRef.current.stagingBlocks[blockIndex];
-      if (!target) return;
-      const excerpt = target.lines.find((line) => line.trim().length > 0)?.trim();
-      setConfirmRequest({
-        title: UI_LABELS.confirm.deleteMacroBlockTitle(target.name),
-        description: UI_LABELS.confirm.deleteMacroBlockDesc,
-        excerpt,
-        confirmLabel: UI_LABELS.confirm.delete,
-        cancelLabel: UI_LABELS.confirm.cancel,
-        tone: 'danger',
-        onConfirm: () => {
-          commitRawText((prev) => deleteStagingBlock(prev, blockIndex), {mode: 'checkpoint'});
-        },
-      });
-    },
-    [isReadOnly, commitRawText]
-  );
-
-  const handleReorderStaging = useCallback(
-    (fromBlockIndex: number, toBlockIndex: number) => {
-      commitRawText((prev) => reorderStagingBlocks(prev, fromBlockIndex, toBlockIndex), {
-        mode: 'checkpoint',
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleUpdateSubState = useCallback(
-    (
-      beatIndex: number,
-      subStateIndex: number,
-      nextSubStateRaw: string,
-      mode: HistoryCommitMode = 'coalesce'
-    ) => {
-      commitRawText(
-        (prev) => updateExecutionSubState(prev, beatIndex, subStateIndex, nextSubStateRaw),
-        {
-          mode,
-          groupKey: mode === 'coalesce' ? `beat:${beatIndex}:step:${subStateIndex}` : null,
-        }
-      );
-    },
-    [commitRawText]
-  );
-
-  const handleInsertSubState = useCallback(
-    (
-      beatIndex: number,
-      afterSubStateIndex: number,
-      starterText: string,
-      mode: HistoryCommitMode = 'checkpoint'
-    ) => {
-      commitRawText(
-        (prev) => insertExecutionSubState(prev, beatIndex, afterSubStateIndex, starterText),
-        {
-          mode,
-          groupKey: mode === 'coalesce' ? `beat:${beatIndex}:step:${afterSubStateIndex + 1}` : null,
-        }
-      );
-    },
-    [commitRawText]
-  );
-
-  const handleDeleteSubState = useCallback(
-    (beatIndex: number, subStateIndex: number) => {
-      commitRawText((prev) => deleteExecutionSubState(prev, beatIndex, subStateIndex), {
-        mode: 'checkpoint',
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleMergeSubState = useCallback(
-    (beatIndex: number, subStateIndex: number) => {
-      commitRawText((prev) => mergeExecutionSubStateWithPrevious(prev, beatIndex, subStateIndex), {
-        mode: 'checkpoint',
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleReorderSubState = useCallback(
-    (beatIndex: number, fromSubStateIndex: number, toSubStateIndex: number) => {
-      commitRawText(
-        (prev) => reorderExecutionSubStates(prev, beatIndex, fromSubStateIndex, toSubStateIndex),
-        {
-          mode: 'checkpoint',
-        }
-      );
-    },
-    [commitRawText]
-  );
-
-  const handleInsertBeat = useCallback(
-    (afterBeatIndex: number, starterLine: string) => {
-      commitRawText((prev) => insertExecutionBeat(prev, afterBeatIndex, starterLine), {
-        mode: 'checkpoint',
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleRequestDeleteBeat = useCallback(
-    (beatIndex: number) => {
-      if (isReadOnly) return;
-      const target = docRef.current.execution?.beats.find((b) => b.index === beatIndex);
-      setConfirmRequest({
-        title: UI_LABELS.confirm.deleteMacroStateTitle(beatIndex),
-        description: UI_LABELS.confirm.deleteMacroStateDesc,
-        excerpt: target?.raw,
-        confirmLabel: UI_LABELS.confirm.delete,
-        cancelLabel: UI_LABELS.confirm.cancel,
-        tone: 'danger',
-        onConfirm: () => {
-          commitRawText((prev) => deleteExecutionBeat(prev, beatIndex), {mode: 'checkpoint'});
-        },
-      });
-    },
-    [isReadOnly, commitRawText]
-  );
-
-  const handleReorderBeats = useCallback(
-    (fromBeatIndex: number, toBeatIndex: number) => {
-      commitRawText((prev) => reorderExecutionBeats(prev, fromBeatIndex, toBeatIndex), {
-        mode: 'checkpoint',
-      });
-    },
-    [commitRawText]
-  );
-
-  const handleUpdateSource = useCallback(
-    (nextRawText: string) => {
-      commitRawText(nextRawText, {mode: 'coalesce', groupKey: 'source'});
-    },
-    [commitRawText]
-  );
-
-  const handleFormatScript = useCallback(() => {
-    if (isReadOnly) return;
-    const formatted = formatAuteurScript(rawText);
-    if (formatted === rawText) {
-      setToastMessage(UI_LABELS.toasts.scriptAlreadyFormatted);
-      return;
-    }
-    commitRawText(formatted, {mode: 'checkpoint'});
-    setToastMessage(UI_LABELS.toasts.scriptFormatted);
-  }, [isReadOnly, rawText, commitRawText]);
-
-  // Clipboard Export & Debug Commit
-  const handleCopyPlainText = useCallback(async () => {
-    const text = exportPlainText(rawText);
-    const ok = await copyTextToClipboard(text);
-    if (ok) {
-      setCopiedKind('plain');
-    }
-  }, [rawText]);
-
-  const handleCopyTagless = useCallback(async () => {
-    const text = exportTagless(rawText);
-    const ok = await copyTextToClipboard(text);
-    if (ok) {
-      setCopiedKind('tagless');
-    }
-  }, [rawText]);
-
-  const handleCopyJsonEnvelope = useCallback(async () => {
-    const envelope = toAuteurEnvelope(rawText, settings.lintRuleOverrides);
-    const text = JSON.stringify(envelope, null, 2);
-    const ok = await copyTextToClipboard(text);
-    if (ok) {
-      setCopiedKind('json');
-    }
-  }, [rawText, settings.lintRuleOverrides]);
-
-  const handleCommitFromDebug = useCallback(
-    (nextRawText: string, message?: string) => {
-      if (isReadOnly) return;
-      commitRawText(nextRawText, {mode: 'checkpoint'});
-      if (message) {
-        setToastMessage(message);
-      }
-    },
-    [isReadOnly, commitRawText]
-  );
+    ruleOverrides: settings.lintRuleOverrides,
+    docRef,
+    commitRawText,
+    onTitleChange: handleTitleChange,
+    onCreateSnapshot: library.handleCreateSnapshot,
+    onForkCurrentExampleWithContent: library.handleForkCurrentExampleWithContent,
+    onSkipNextAiReset: handleSkipNextAiReset,
+    onRequestConfirm: setConfirmRequest,
+    onToast: setToastMessage,
+  });
 
   const handleJumpToFirstDiagnostic = useCallback(() => {
     const first = diagnostics[0];
@@ -572,69 +242,6 @@ export default function App() {
     [viewMode]
   );
 
-  const handleApplyAiPatchSuggestion = useCallback(
-    async (
-      suggestion: PatchSuggestion,
-      kind: 'patch' | 'fix',
-      options?: {batchCount?: number}
-    ): Promise<boolean> => {
-      const trigger = kind === 'fix' ? 'ai_fix' : 'ai_patch';
-      const snapshotLabel = buildAiSnapshotLabel(trigger, suggestion.summary, options);
-      if (isReadOnly) {
-        skipNextAiResetRef.current = true;
-        return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText, {
-          snapshotMeta: {trigger, label: snapshotLabel},
-        });
-      }
-      void library.handleCreateSnapshot({
-        trigger,
-        label: snapshotLabel,
-        rawText,
-      });
-      commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
-      setToastMessage(
-        kind === 'fix'
-          ? options?.batchCount && options.batchCount > 1
-            ? UI_LABELS.toasts.aiFixesBatchApplied(options.batchCount)
-            : UI_LABELS.toasts.aiFixApplied
-          : UI_LABELS.toasts.aiPatchApplied
-      );
-      return true;
-    },
-    [isReadOnly, library, rawText, commitRawText]
-  );
-
-  const handleApplyAiDraftSuggestion = useCallback(
-    async (suggestion: DraftSuggestion): Promise<boolean> => {
-      const snapshotLabel = buildAiSnapshotLabel(
-        'ai_draft',
-        suggestion.title || suggestion.summary
-      );
-      if (isReadOnly) {
-        skipNextAiResetRef.current = true;
-        return library.handleForkCurrentExampleWithContent(suggestion.candidateRawText, {
-          title: suggestion.title,
-          snapshotMeta: {trigger: 'ai_draft', label: snapshotLabel},
-        });
-      }
-      void library.handleCreateSnapshot({
-        trigger: 'ai_draft',
-        label: snapshotLabel,
-        rawText,
-      });
-      commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
-      if (
-        suggestion.title &&
-        (sceneTitle.trim() === '' || sceneTitle.startsWith(APP_META.untitledScene))
-      ) {
-        handleTitleChange(suggestion.title);
-      }
-      setToastMessage(UI_LABELS.toasts.aiDraftApplied);
-      return true;
-    },
-    [isReadOnly, library, rawText, commitRawText, sceneTitle, handleTitleChange]
-  );
-
   const beatCount = doc.execution?.beats.length ?? 0;
 
   return (
@@ -651,7 +258,7 @@ export default function App() {
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
         onImportFile={library.handleTriggerImportFile}
-        onFormatScript={handleFormatScript}
+        onFormatScript={mutations.handleFormatScript}
         onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
         onDownloadCanonical={library.handleDownloadCanonical}
         onDownloadTagless={library.handleDownloadTagless}
@@ -662,10 +269,10 @@ export default function App() {
         isLibraryOpen={isLibraryOpen}
         settings={settings}
         onUpdateSettings={updateSettings}
-        onCopyPlainText={handleCopyPlainText}
-        onCopyTagless={handleCopyTagless}
-        onCopyJsonEnvelope={handleCopyJsonEnvelope}
-        copiedKind={copiedKind}
+        onCopyPlainText={mutations.handleCopyPlainText}
+        onCopyTagless={mutations.handleCopyTagless}
+        onCopyJsonEnvelope={mutations.handleCopyJsonEnvelope}
+        copiedKind={mutations.copiedKind}
         onOpenDebug={() => setIsDebugOpen(true)}
         onToggleAi={handleToggleAi}
         isAiOpen={isAiOpen}
@@ -696,26 +303,26 @@ export default function App() {
               onAuditQuickScanBeat={handleAuditQuickScanBeat}
               historyRevision={history.revision}
               readOnly={isReadOnly}
-              onUpdateStaging={handleUpdateStaging}
-              onInsertStaging={handleInsertStaging}
-              onDeleteStaging={handleRequestDeleteStaging}
-              onReorderStaging={handleReorderStaging}
-              onUpdateSubState={handleUpdateSubState}
-              onInsertSubState={handleInsertSubState}
-              onDeleteSubState={handleDeleteSubState}
-              onMergeSubState={handleMergeSubState}
-              onReorderSubState={handleReorderSubState}
-              onInsertBeat={handleInsertBeat}
-              onDeleteBeat={handleRequestDeleteBeat}
-              onReorderBeats={handleReorderBeats}
+              onUpdateStaging={mutations.handleUpdateStaging}
+              onInsertStaging={mutations.handleInsertStaging}
+              onDeleteStaging={mutations.handleRequestDeleteStaging}
+              onReorderStaging={mutations.handleReorderStaging}
+              onUpdateSubState={mutations.handleUpdateSubState}
+              onInsertSubState={mutations.handleInsertSubState}
+              onDeleteSubState={mutations.handleDeleteSubState}
+              onMergeSubState={mutations.handleMergeSubState}
+              onReorderSubState={mutations.handleReorderSubState}
+              onInsertBeat={mutations.handleInsertBeat}
+              onDeleteBeat={mutations.handleRequestDeleteBeat}
+              onReorderBeats={mutations.handleReorderBeats}
             />
           ) : (
             <SourceEditor
               rawText={rawText}
               aestheticTokens={stableAestheticTokens}
               readOnly={isReadOnly}
-              onChange={handleUpdateSource}
-              onFormatScript={handleFormatScript}
+              onChange={mutations.handleUpdateSource}
+              onFormatScript={mutations.handleFormatScript}
             />
           )}
         </div>
@@ -730,8 +337,8 @@ export default function App() {
               readOnly={isReadOnly}
               ruleOverrides={settings.lintRuleOverrides}
               onClose={() => setIsAiOpen(false)}
-              onApplyPatchSuggestion={handleApplyAiPatchSuggestion}
-              onApplyDraftSuggestion={handleApplyAiDraftSuggestion}
+              onApplyPatchSuggestion={mutations.handleApplyAiPatchSuggestion}
+              onApplyDraftSuggestion={mutations.handleApplyAiDraftSuggestion}
               onJumpToTarget={handleJumpToAiTarget}
               onActivePatchesChange={handleActiveAiPatchesChange}
               onActiveQuickScanChange={handleActiveQuickScanChange}
@@ -822,7 +429,7 @@ export default function App() {
             rawText={rawText}
             readOnly={isReadOnly}
             ruleOverrides={settings.lintRuleOverrides}
-            onCommitRawText={handleCommitFromDebug}
+            onCommitRawText={mutations.handleCommitFromDebug}
           />
         </Suspense>
       )}
