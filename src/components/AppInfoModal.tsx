@@ -176,19 +176,6 @@ export function AppInfoModal({isOpen, onClose}: AppInfoModalProps) {
             </p>
           </div>
 
-          {/* Directorial Intent Card */}
-          <div className="p-4 bg-surface-subtle border border-border-main rounded-2xl space-y-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-text-faint">
-              {UI_LABELS.infoModal.intentHeading}
-            </span>
-            <p className="text-xs italic text-text-body leading-relaxed border-l-2 border-border-main pl-3 my-1">
-              {UI_LABELS.infoModal.intentQuote}
-            </p>
-            <p className="text-[11px] text-text-muted leading-relaxed">
-              {UI_LABELS.infoModal.intentBody}
-            </p>
-          </div>
-
           {/* Documentation & Resources Grid */}
           <div className="space-y-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-text-faint">
@@ -243,7 +230,7 @@ export function AppInfoModal({isOpen, onClose}: AppInfoModalProps) {
             </div>
           </div>
 
-          {/* Local-First & Platform-Agnostic Footer Note */}
+          {/* Local-First & Additional Info Note */}
           <div className="p-3 rounded-xl bg-surface-muted/50 border border-border-subtle text-[11px] text-text-muted leading-relaxed">
             <strong className="text-text-main">{UI_LABELS.infoModal.privacyNoteTitle}</strong>{' '}
             {UI_LABELS.infoModal.privacyNoteBody}

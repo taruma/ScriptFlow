@@ -573,17 +573,12 @@ export const EDITOR_LABELS = {
     heroTitle: 'Auteur Script Editor & Scene Blueprint',
     licenseBadge: 'MIT License',
     heroBody:
-      'A local-first, Plain-Text-as-Truth workspace for authoring, linting, visualizing, and exporting Pure Auteur Script (v0.4.0). Live Mode, Source Mode, Graph View, and programmatic JSON IR all derive synchronously from a single canonical plain-text script.',
-    intentHeading: 'Directorial Intent',
-    intentQuote:
-      '“What does a scene actually do before the camera rolls? How do optical framing, character blocking, performance, and acoustic design cascade across every beat of screen time?”',
-    intentBody:
-      'ScriptFlow treats dramatic writing and blocking as inspectable, human-readable plain text: separating Phase 1 Staging (world, lookbook, and rules) from Phase 2 Execution (Macro-States and chained Sub-States) without hiding anything behind proprietary formats.',
+      'A local-first, Plain-Text-as-Truth workspace for authoring, linting, visualizing, and exporting Auteur Script. Live Mode, Source Mode, and Graph View all derive synchronously from a single canonical plain-text script.',
     resourcesHeading: 'Documentation & Resources',
     shortcutsHeading: 'Quick Editor Shortcuts',
-    privacyNoteTitle: 'Local-First & Platform-Agnostic:',
+    privacyNoteTitle: 'Local-First:',
     privacyNoteBody:
-      'All scripts, version snapshots, and preferences stay strictly in your browser (IndexedDB & localStorage). Pure Auteur Script v0.4.0 syntax, exports, and linting are 100% platform- and model-agnostic.',
+      'All scripts, version snapshots, and preferences stay strictly in your browser (IndexedDB & localStorage). Auteur Script v0.4.0 is inspired by the Seedance 2.5 prompt guide.',
     footerVersion: (name: string, version: string) => `${name} v${version}`,
     resources: {
       repoLabel: 'GitHub Repository',
