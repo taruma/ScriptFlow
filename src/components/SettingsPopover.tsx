@@ -26,6 +26,7 @@ import {
 } from '../ui/textSize.ts';
 import {THEME_OPTIONS} from '../ui/theme.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {DEFAULT_LIVE_SPLIT_PERCENT, isDefaultLiveSplit} from '../ui/workspaceSplit.ts';
 
 interface SettingsPopoverProps {
   settings: EditorSettings;
@@ -70,11 +71,13 @@ export function SettingsPopover({
     }
   }, [isOpen]);
 
-  const {themeMode, textSize, clauseGuides, subStateIds, lintRuleOverrides} = settings;
+  const {themeMode, textSize, clauseGuides, subStateIds, liveSplitPercent, lintRuleOverrides} =
+    settings;
   const currentTextSize = getTextSizeOption(textSize);
   const canDecreaseText = textSize !== TEXT_SIZE_OPTIONS[0].id;
   const canIncreaseText = textSize !== TEXT_SIZE_OPTIONS[TEXT_SIZE_OPTIONS.length - 1].id;
   const isDefaultTextSize = textSize === DEFAULT_TEXT_SIZE;
+  const isDefaultSplit = isDefaultLiveSplit(liveSplitPercent);
   const customRuleCount = countCustomLintRules(lintRuleOverrides);
 
   return (
@@ -215,6 +218,28 @@ export function SettingsPopover({
                         : 'translate-x-[2px] bg-text-faint'
                     }`}
                   />
+                </button>
+              </div>
+
+              {/* Column Layout Reset Row (Live Mode desktop split) */}
+              <div className="hidden sm:flex px-3 py-2.5 items-center justify-between gap-3">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-medium text-text-body">
+                    {UI_LABELS.topBar.settingsLayoutLabel}
+                  </span>
+                  <span className="text-[10.5px] text-text-faint leading-tight mt-0.5">
+                    {UI_LABELS.topBar.settingsLayoutDesc}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isDefaultSplit}
+                  onClick={() => onUpdateSettings({liveSplitPercent: DEFAULT_LIVE_SPLIT_PERCENT})}
+                  aria-label={UI_LABELS.topBar.settingsLayoutResetAria}
+                  className="inline-flex items-center gap-1 shrink-0 rounded-md border border-border-main bg-surface-subtle px-2 py-1 text-[11px] font-medium text-text-body hover:bg-surface-muted hover:text-text-main disabled:opacity-35 disabled:hover:bg-surface-subtle disabled:hover:text-text-body disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>{UI_LABELS.topBar.settingsLayoutReset}</span>
                 </button>
               </div>
 

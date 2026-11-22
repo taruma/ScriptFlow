@@ -52,6 +52,17 @@ import {
   NARROW_VIEWPORT_MEDIA_QUERY,
   resolveNarrowWorkspaceState,
 } from '../../src/ui/useNarrowViewport.ts';
+import {
+  applyLiveSplit,
+  clampLiveSplitPercent,
+  computeLiveSplitFromPointer,
+  DEFAULT_LIVE_SPLIT_PERCENT,
+  isDefaultLiveSplit,
+  loadStoredLiveSplit,
+  MAX_LIVE_SPLIT_PERCENT,
+  MIN_LIVE_SPLIT_PERCENT,
+  saveStoredLiveSplit,
+} from '../../src/ui/workspaceSplit.ts';
 
 describe('stagingCollapse helpers', () => {
   it('toggles duplicate-header blocks independently by index', () => {
@@ -582,6 +593,82 @@ describe('narrow-viewport (< 640px) read-only mode helpers', () => {
     }
   });
 });
+
+describe('Live Mode column split helpers', () => {
+  it('clamps values to safe bounds and detects default 40/60 split', () => {
+    expect(DEFAULT_LIVE_SPLIT_PERCENT).toBe(40);
+    expect(clampLiveSplitPercent(10)).toBe(MIN_LIVE_SPLIT_PERCENT);
+    expect(clampLiveSplitPercent(90)).toBe(MAX_LIVE_SPLIT_PERCENT);
+    expect(clampLiveSplitPercent(Number.NaN)).toBe(DEFAULT_LIVE_SPLIT_PERCENT);
+    expect(clampLiveSplitPercent(33.37)).toBe(33.4);
+
+    expect(isDefaultLiveSplit(40)).toBe(true);
+    expect(isDefaultLiveSplit(40.02)).toBe(true);
+    expect(isDefaultLiveSplit(45)).toBe(false);
+  });
+
+  it('computes clamped split percentages from pointer coordinates', () => {
+    expect(computeLiveSplitFromPointer(500, 100, 1000)).toBe(40);
+    expect(computeLiveSplitFromPointer(150, 100, 1000)).toBe(MIN_LIVE_SPLIT_PERCENT);
+    expect(computeLiveSplitFromPointer(900, 100, 1000)).toBe(MAX_LIVE_SPLIT_PERCENT);
+    expect(computeLiveSplitFromPointer(500, 100, 0)).toBe(DEFAULT_LIVE_SPLIT_PERCENT);
+  });
+
+  it('persists custom splits, clears storage on default reset, and syncs --live-staging-split', () => {
+    const storage = new Map<string, string>();
+    const styles = new Map<string, string>();
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    try {
+      (globalThis as {window?: unknown}).window = {
+        localStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            storage.set(key, value);
+          },
+          removeItem: (key: string) => {
+            storage.delete(key);
+          },
+        },
+      };
+      (globalThis as {document?: unknown}).document = {
+        documentElement: {
+          style: {
+            setProperty: (key: string, value: string) => {
+              styles.set(key, value);
+            },
+          },
+        },
+      };
+
+      expect(loadStoredLiveSplit()).toBe(DEFAULT_LIVE_SPLIT_PERCENT);
+
+      saveStoredLiveSplit(52.4);
+      expect(loadStoredLiveSplit()).toBe(52.4);
+      applyLiveSplit(52.4);
+      expect(styles.get('--live-staging-split')).toBe('52.4%');
+
+      saveStoredLiveSplit(DEFAULT_LIVE_SPLIT_PERCENT);
+      expect(storage.size).toBe(0);
+      expect(loadStoredLiveSplit()).toBe(DEFAULT_LIVE_SPLIT_PERCENT);
+      applyLiveSplit(DEFAULT_LIVE_SPLIT_PERCENT);
+      expect(styles.get('--live-staging-split')).toBe('40%');
+    } finally {
+      if (originalWindow === undefined) {
+        delete (globalThis as {window?: unknown}).window;
+      } else {
+        (globalThis as {window?: unknown}).window = originalWindow;
+      }
+      if (originalDocument === undefined) {
+        delete (globalThis as {document?: unknown}).document;
+      } else {
+        (globalThis as {document?: unknown}).document = originalDocument;
+      }
+    }
+  });
+});
+
 
 
 

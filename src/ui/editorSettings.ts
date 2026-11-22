@@ -31,12 +31,20 @@ import {
   saveStoredTheme,
   type ThemeMode,
 } from './theme.ts';
+import {
+  applyLiveSplit,
+  clampLiveSplitPercent,
+  DEFAULT_LIVE_SPLIT_PERCENT,
+  loadStoredLiveSplit,
+  saveStoredLiveSplit,
+} from './workspaceSplit.ts';
 
 export interface EditorSettings {
   themeMode: ThemeMode;
   textSize: TextSizePreset;
   clauseGuides: boolean;
   subStateIds: boolean;
+  liveSplitPercent: number;
   lintRuleOverrides: LintRuleOverrides;
 }
 
@@ -45,6 +53,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   textSize: DEFAULT_TEXT_SIZE,
   clauseGuides: DEFAULT_CLAUSE_GUIDES,
   subStateIds: DEFAULT_SUBSTATE_IDS,
+  liveSplitPercent: DEFAULT_LIVE_SPLIT_PERCENT,
   lintRuleOverrides: DEFAULT_LINT_RULE_OVERRIDES,
 };
 
@@ -54,6 +63,7 @@ export function loadEditorSettings(): EditorSettings {
     textSize: loadStoredTextSize(),
     clauseGuides: loadStoredClauseGuides(),
     subStateIds: loadStoredSubStateIds(),
+    liveSplitPercent: loadStoredLiveSplit(),
     lintRuleOverrides: loadStoredLintRuleOverrides(),
   };
 }
@@ -66,6 +76,7 @@ export function applyEditorSettings(
   applyTextSize(settings.textSize);
   applyClauseGuides(settings.clauseGuides);
   applySubStateIds(settings.subStateIds);
+  applyLiveSplit(settings.liveSplitPercent);
 }
 
 /**
@@ -86,7 +97,15 @@ export function useEditorSettings(): {
 
   const updateSettings = useCallback((patch: Partial<EditorSettings>) => {
     setSettings((prev) => {
-      const next: EditorSettings = {...prev, ...patch};
+      const normalizedLiveSplit =
+        patch.liveSplitPercent !== undefined
+          ? clampLiveSplitPercent(patch.liveSplitPercent)
+          : prev.liveSplitPercent;
+      const next: EditorSettings = {
+        ...prev,
+        ...patch,
+        liveSplitPercent: normalizedLiveSplit,
+      };
 
       if (patch.themeMode !== undefined && patch.themeMode !== prev.themeMode) {
         saveStoredTheme(patch.themeMode);
@@ -103,6 +122,10 @@ export function useEditorSettings(): {
       if (patch.subStateIds !== undefined && patch.subStateIds !== prev.subStateIds) {
         saveStoredSubStateIds(patch.subStateIds);
         applySubStateIds(patch.subStateIds);
+      }
+      if (patch.liveSplitPercent !== undefined) {
+        saveStoredLiveSplit(normalizedLiveSplit);
+        applyLiveSplit(normalizedLiveSplit);
       }
       if (
         patch.lintRuleOverrides !== undefined &&

@@ -5,6 +5,7 @@
 [data-theme-category="light"] {
   --script-font-size: 14px;
   --source-font-size: 13px;
+  --live-staging-split: 40%;
   --app-bg: #f5f5f4;
   --surface: #ffffff;
   --surface-subtle: #fafaf9;
@@ -589,4 +590,13 @@
 }
 [data-theme-category="dark"] .auteur-word-diff-removed {
   color: #fca5a5;
+}
+
+@media (min-width: 1024px) {
+  .auteur-live-split-grid {
+    grid-template-columns: minmax(0, var(--live-staging-split, 40%)) minmax(0, 1fr);
+  }
+  .auteur-live-split-handle {
+    left: var(--live-staging-split, 40%);
+  }
 }

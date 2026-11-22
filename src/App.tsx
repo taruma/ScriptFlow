@@ -259,6 +259,13 @@ export default function App() {
     [viewMode]
   );
 
+  const handleChangeLiveSplit = useCallback(
+    (liveSplitPercent: number) => {
+      updateSettings({liveSplitPercent});
+    },
+    [updateSettings]
+  );
+
   return (
     <div className="min-h-screen lg:h-dvh lg:overflow-hidden bg-app text-text-main flex flex-col">
       <TopSlateBar
@@ -319,6 +326,8 @@ export default function App() {
               historyRevision={history.revision}
               readOnly={effectiveReadOnly}
               narrowReadOnly={isNarrow}
+              liveSplitPercent={settings.liveSplitPercent}
+              onChangeLiveSplit={handleChangeLiveSplit}
               onUpdateStaging={mutations.handleUpdateStaging}
               onInsertStaging={mutations.handleInsertStaging}
               onDeleteStaging={mutations.handleRequestDeleteStaging}

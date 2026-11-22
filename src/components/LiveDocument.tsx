@@ -1,4 +1,13 @@
-import {memo, useMemo} from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import {computeSnapshotHash} from '../core/index.ts';
 import type {HistoryCommitMode} from '../core/history.ts';
 import type {
@@ -7,11 +16,22 @@ import type {
   LintDiagnostic,
 } from '../core/types.ts';
 import type {QuickScanResult} from '../services/geminiDecisions.ts';
+import {UI_LABELS} from '../ui/labels.ts';
 import {
   buildLivePatchIndicators,
   type ActiveAiPatchItem,
 } from '../ui/patchIndicators.ts';
 import {buildLiveQuickScanIndicators} from '../ui/quickScanIndicators.ts';
+import {
+  applyLiveSplit,
+  clampLiveSplitPercent,
+  computeLiveSplitFromPointer,
+  DEFAULT_LIVE_SPLIT_PERCENT,
+  LIVE_SPLIT_KEYBOARD_LARGE_STEP,
+  LIVE_SPLIT_KEYBOARD_STEP,
+  MAX_LIVE_SPLIT_PERCENT,
+  MIN_LIVE_SPLIT_PERCENT,
+} from '../ui/workspaceSplit.ts';
 import {
   EMPTY_BEATS,
   stabilizeAestheticTokens,
@@ -47,6 +67,8 @@ interface LiveDocumentProps {
   historyRevision: number;
   readOnly?: boolean;
   narrowReadOnly?: boolean;
+  liveSplitPercent?: number;
+  onChangeLiveSplit?: (nextPercent: number) => void;
   onUpdateStaging: (
     blockIndex: number,
     nextBody: string,
@@ -98,6 +120,8 @@ export const LiveDocument = memo(function LiveDocument({
   historyRevision,
   readOnly = false,
   narrowReadOnly = false,
+  liveSplitPercent = DEFAULT_LIVE_SPLIT_PERCENT,
+  onChangeLiveSplit,
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
@@ -196,11 +220,121 @@ export const LiveDocument = memo(function LiveDocument({
     [onAuditQuickScanBeat]
   );
 
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeSplitCleanupRef = useRef<(() => void) | null>(null);
+  const [isResizingSplit, setIsResizingSplit] = useState<boolean>(false);
+
+  useEffect(() => {
+    return () => {
+      activeSplitCleanupRef.current?.();
+      activeSplitCleanupRef.current = null;
+    };
+  }, []);
+
+  const commitLiveSplit = useCallback(
+    (nextPercent: number) => {
+      const clamped = clampLiveSplitPercent(nextPercent);
+      applyLiveSplit(clamped);
+      onChangeLiveSplit?.(clamped);
+    },
+    [onChangeLiveSplit]
+  );
+
+  const handleSplitPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      const container = splitContainerRef.current;
+      if (!container) return;
+
+      event.preventDefault();
+      activeSplitCleanupRef.current?.();
+
+      const rect = container.getBoundingClientRect();
+      if (rect.width <= 0) return;
+
+      let latestPercent = liveSplitPercent;
+      let didMove = false;
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      setIsResizingSplit(true);
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        didMove = true;
+        latestPercent = computeLiveSplitFromPointer(moveEvent.clientX, rect.left, rect.width);
+        applyLiveSplit(latestPercent);
+      };
+
+      const cleanup = (commit: boolean) => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerCancel);
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+        setIsResizingSplit(false);
+        if (activeSplitCleanupRef.current === forceCleanup) {
+          activeSplitCleanupRef.current = null;
+        }
+        if (commit && didMove) {
+          onChangeLiveSplit?.(latestPercent);
+        }
+      };
+
+      const handlePointerUp = () => cleanup(true);
+      const handlePointerCancel = () => cleanup(true);
+      const forceCleanup = () => cleanup(false);
+
+      activeSplitCleanupRef.current = forceCleanup;
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerCancel);
+    },
+    [liveSplitPercent, onChangeLiveSplit]
+  );
+
+  const handleSplitDoubleClick = useCallback(() => {
+    commitLiveSplit(DEFAULT_LIVE_SPLIT_PERCENT);
+  }, [commitLiveSplit]);
+
+  const handleSplitKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const step = event.shiftKey ? LIVE_SPLIT_KEYBOARD_LARGE_STEP : LIVE_SPLIT_KEYBOARD_STEP;
+      switch (event.key) {
+        case 'ArrowLeft':
+          event.preventDefault();
+          commitLiveSplit(liveSplitPercent - step);
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          commitLiveSplit(liveSplitPercent + step);
+          break;
+        case 'Home':
+          event.preventDefault();
+          commitLiveSplit(MIN_LIVE_SPLIT_PERCENT);
+          break;
+        case 'End':
+          event.preventDefault();
+          commitLiveSplit(MAX_LIVE_SPLIT_PERCENT);
+          break;
+        case 'Enter':
+        case '0':
+          event.preventDefault();
+          commitLiveSplit(DEFAULT_LIVE_SPLIT_PERCENT);
+          break;
+      }
+    },
+    [liveSplitPercent, commitLiveSplit]
+  );
+
   return (
     <LivePatchActionContext.Provider value={livePatchActionValue}>
       <LiveQuickScanActionContext.Provider value={liveQuickScanActionValue}>
         <main className="w-full lg:h-full lg:overflow-hidden">
-          <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div
+            ref={splitContainerRef}
+            className="relative grid h-full w-full grid-cols-1 auteur-live-split-grid"
+          >
             <StagingPane
               stagingBlocks={stagingBlocks}
               characters={characters}
@@ -237,6 +371,39 @@ export const LiveDocument = memo(function LiveDocument({
               onDeleteBeat={onDeleteBeat}
               onReorderBeats={onReorderBeats}
             />
+
+            {/* Quiet desktop-only draggable column divider aligned over StagingPane's hairline */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={UI_LABELS.document.resizeColumnsAria}
+              aria-valuemin={MIN_LIVE_SPLIT_PERCENT}
+              aria-valuemax={MAX_LIVE_SPLIT_PERCENT}
+              aria-valuenow={Math.round(liveSplitPercent)}
+              title={UI_LABELS.document.resizeColumnsTitle}
+              tabIndex={0}
+              onPointerDown={handleSplitPointerDown}
+              onDoubleClick={handleSplitDoubleClick}
+              onKeyDown={handleSplitKeyDown}
+              className="auteur-live-split-handle group/splitter hidden lg:flex absolute inset-y-0 z-30 w-2.5 -translate-x-1/2 items-center justify-center cursor-col-resize select-none touch-none focus:outline-none"
+            >
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none h-full w-[2px] transition-colors ${
+                  isResizingSplit
+                    ? 'bg-text-muted/60'
+                    : 'bg-transparent group-hover/splitter:bg-text-faint/40 group-focus-visible/splitter:bg-text-muted/60'
+                }`}
+              />
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute h-8 w-1 rounded-full transition-opacity ${
+                  isResizingSplit
+                    ? 'opacity-100 bg-text-muted/80'
+                    : 'opacity-0 group-hover/splitter:opacity-100 group-focus-visible/splitter:opacity-100 bg-text-faint/80'
+                }`}
+              />
+            </div>
           </div>
         </main>
       </LiveQuickScanActionContext.Provider>
