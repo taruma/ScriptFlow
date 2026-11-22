@@ -259,7 +259,7 @@ function AiSettingsModalContent({
 
           <hr className="border-border-subtle" />
 
-          {/* Section 2: Gemini Models (3-col Gemini 4: Hydrogen -> Neon -> Carbon + slim Flash-Lite row) */}
+          {/* Section 2: Gemini Models (3-col Gemini 4: Hydrogen -> Neon -> Carbon + 2-col Gemini 3 Flash row) */}
           <section className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
@@ -271,115 +271,127 @@ function AiSettingsModalContent({
             <div
               role="radiogroup"
               aria-label={labels.modelGroupAria}
-              className="space-y-1.5"
+              className="space-y-2"
             >
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {GEMINI_MODEL_OPTIONS.filter((option) => option.tier !== 'lite').map((option) => {
-                  const selected = settings.model === option.id;
-                  const pricing = getGeminiModelPricing(option.id);
-                  const rateText = `${formatCompactRate(pricing.inputPer1M)} / ${formatCompactRate(
-                    pricing.outputPer1M
-                  )}`;
+                {GEMINI_MODEL_OPTIONS.filter((option) => option.family === 'gemini-4').map(
+                  (option) => {
+                    const selected = settings.model === option.id;
+                    const pricing = getGeminiModelPricing(option.id);
+                    const rateText = `${formatCompactRate(pricing.inputPer1M)} / ${formatCompactRate(
+                      pricing.outputPer1M
+                    )}`;
 
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      title={`${option.id} — ${option.description}`}
-                      onClick={() => onUpdateSettings({model: option.id as GeminiModelId})}
-                      className={`flex flex-col justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-left transition-colors cursor-pointer ${
-                        selected
-                          ? 'border-btn-primary-bg bg-surface-muted'
-                          : 'border-border-main bg-surface hover:bg-surface-subtle'
-                      }`}
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className="text-xs font-semibold text-text-main truncate">
-                            {option.shortLabel}
-                          </span>
-                          <span
-                            aria-hidden="true"
-                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                              selected
-                                ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
-                                : 'border-border-main bg-surface'
-                            }`}
-                          >
-                            {selected && <Check className="h-2.5 w-2.5" />}
-                          </span>
-                        </div>
-                        <p className="text-[10.5px] leading-snug text-text-muted">
-                          {option.compactDesc}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-border-subtle/70 font-mono text-[10px] text-text-faint tabular-nums">
-                        <span>{rateText}</span>
-                        {pricing.isPromoRate && (
-                          <span className="rounded px-1 py-0.25 text-[9px] auteur-phase-aesthetic">
-                            {labels.modelPromoBadge}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {GEMINI_MODEL_OPTIONS.filter((option) => option.tier === 'lite').map((option) => {
-                const selected = settings.model === option.id;
-                const pricing = getGeminiModelPricing(option.id);
-                const rateText = `${formatCompactRate(pricing.inputPer1M)} / ${formatCompactRate(
-                  pricing.outputPer1M
-                )}`;
-
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    title={`${option.id} — ${option.description}`}
-                    onClick={() => onUpdateSettings({model: option.id as GeminiModelId})}
-                    className={`w-full flex items-center justify-between gap-2.5 rounded-xl border px-2.5 py-1.5 text-left transition-colors cursor-pointer ${
-                      selected
-                        ? 'border-btn-primary-bg bg-surface-muted'
-                        : 'border-border-main bg-surface hover:bg-surface-subtle'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-semibold text-text-main shrink-0">
-                        {option.shortLabel}
-                      </span>
-                      <span className="rounded px-1 py-0.25 font-mono text-[9px] auteur-phase-slate shrink-0">
-                        {labels.modelLiteBadge}
-                      </span>
-                      <span className="text-[10.5px] text-text-muted truncate">
-                        {option.compactDesc}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-mono text-[10px] text-text-faint tabular-nums">
-                        {rateText}
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        title={`${option.id} — ${option.description}`}
+                        onClick={() => onUpdateSettings({model: option.id as GeminiModelId})}
+                        className={`flex flex-col justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-left transition-colors cursor-pointer ${
                           selected
-                            ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
-                            : 'border-border-main bg-surface'
+                            ? 'border-btn-primary-bg bg-surface-muted'
+                            : 'border-border-main bg-surface hover:bg-surface-subtle'
                         }`}
                       >
-                        {selected && <Check className="h-2.5 w-2.5" />}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-xs font-semibold text-text-main truncate">
+                              {option.shortLabel}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                                selected
+                                  ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
+                                  : 'border-border-main bg-surface'
+                              }`}
+                            >
+                              {selected && <Check className="h-2.5 w-2.5" />}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] leading-snug text-text-muted">
+                            {option.compactDesc}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-border-subtle/70 font-mono text-[10px] text-text-faint tabular-nums">
+                          <span>{rateText}</span>
+                          {pricing.isPromoRate && (
+                            <span className="rounded px-1 py-0.25 text-[9px] auteur-phase-aesthetic">
+                              {labels.modelPromoBadge}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {GEMINI_MODEL_OPTIONS.filter((option) => option.family === 'gemini-3-flash').map(
+                  (option) => {
+                    const selected = settings.model === option.id;
+                    const pricing = getGeminiModelPricing(option.id);
+                    const rateText = `${formatCompactRate(pricing.inputPer1M)} / ${formatCompactRate(
+                      pricing.outputPer1M
+                    )}`;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        title={`${option.id} — ${option.description}`}
+                        onClick={() => onUpdateSettings({model: option.id as GeminiModelId})}
+                        className={`flex flex-col justify-between gap-1.5 rounded-xl border px-2.5 py-2 text-left transition-colors cursor-pointer ${
+                          selected
+                            ? 'border-btn-primary-bg bg-surface-muted'
+                            : 'border-border-main bg-surface hover:bg-surface-subtle'
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-xs font-semibold text-text-main truncate">
+                              {option.shortLabel}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                                selected
+                                  ? 'border-btn-primary-bg bg-btn-primary-bg text-btn-primary-text'
+                                  : 'border-border-main bg-surface'
+                              }`}
+                            >
+                              {selected && <Check className="h-2.5 w-2.5" />}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] leading-snug text-text-muted">
+                            {option.compactDesc}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-border-subtle/70 font-mono text-[10px] text-text-faint tabular-nums">
+                          <span>{rateText}</span>
+                          {pricing.isPromoRate ? (
+                            <span className="rounded px-1 py-0.25 text-[9px] auteur-phase-aesthetic">
+                              {labels.modelPromoBadge}
+                            </span>
+                          ) : option.tier === 'lite' ? (
+                            <span className="rounded px-1 py-0.25 text-[9px] auteur-phase-slate">
+                              {labels.modelLiteBadge}
+                            </span>
+                          ) : null}
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
             </div>
           </section>
 

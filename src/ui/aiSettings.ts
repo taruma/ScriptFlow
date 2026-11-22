@@ -7,6 +7,7 @@ export type GeminiModelId =
   | 'gemini-4-hydrogen'
   | 'gemini-4-neon'
   | 'gemini-4-carbon'
+  | 'gemini-3.8-flash'
   | 'gemini-3.5-flash-lite';
 export type ReasoningLevel = 'low' | 'medium' | 'high';
 
@@ -42,7 +43,8 @@ export interface GeminiModelOption {
   shortLabel: string;
   compactDesc: string;
   description: string;
-  tier: 'lite' | 'fast' | 'balanced' | 'deep';
+  tier: 'lite' | 'flash' | 'fast' | 'balanced' | 'deep';
+  family: 'gemini-4' | 'gemini-3-flash';
 }
 
 export interface ReasoningLevelOption {
@@ -63,6 +65,7 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     description:
       '1M context · Fast, balanced performance for everyday agentic edits and multimodal briefs',
     tier: 'fast',
+    family: 'gemini-4',
   },
   {
     id: 'gemini-4-neon',
@@ -72,6 +75,7 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     description:
       '1M context · Frontier-level intelligence with fast end-to-end completion for rewrites and coverage',
     tier: 'balanced',
+    family: 'gemini-4',
   },
   {
     id: 'gemini-4-carbon',
@@ -81,15 +85,27 @@ export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
     description:
       '1M context · Strongest frontier reasoning for complex multi-lens audits and dense drafts',
     tier: 'deep',
+    family: 'gemini-4',
+  },
+  {
+    id: 'gemini-3.8-flash',
+    label: 'Gemini 3.8 Flash',
+    shortLabel: '3.8 Flash',
+    compactDesc: 'High-intelligence agentic Flash workhorse',
+    description:
+      '1M context · High-intelligence Flash workhorse for long-horizon agentic edits, tool loops, and multimodal briefs',
+    tier: 'flash',
+    family: 'gemini-3-flash',
   },
   {
     id: 'gemini-3.5-flash-lite',
     label: 'Gemini 3.5 Flash-Lite',
     shortLabel: '3.5 Flash-Lite',
-    compactDesc: 'Ultra-low-cost, low-latency edits & quick iterations',
+    compactDesc: 'Ultra-low-cost, low-latency quick iterations',
     description:
       '1M context · Latest Flash-Lite model — cost-efficient, low-latency multimodal edits and quick passes',
     tier: 'lite',
+    family: 'gemini-3-flash',
   },
 ] as const;
 

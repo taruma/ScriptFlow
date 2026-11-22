@@ -10,6 +10,12 @@ export type PricingModelId = GeminiModelId | 'gemini-decision-1';
  */
 export const GEMINI_4_CARBON_PROMO_END_MS = Date.UTC(2026, 11, 1, 0, 0, 0, 0);
 
+/**
+ * Timestamp (UTC) when `gemini-3.8-flash` introductory promotional pricing ends
+ * and standard pricing takes effect (2027-01-01T00:00:00.000Z).
+ */
+export const GEMINI_3_8_FLASH_PROMO_END_MS = Date.UTC(2027, 0, 1, 0, 0, 0, 0);
+
 const TOKENS_PER_MILLION = 1_000_000;
 
 export interface GeminiModelPricing {
@@ -95,6 +101,24 @@ export function getGeminiModelPricing(
         outputPer1M: 2.5,
         isPromoRate: false,
       };
+    case 'gemini-3.8-flash': {
+      const isPromo = nowMs < GEMINI_3_8_FLASH_PROMO_END_MS;
+      return isPromo
+        ? {
+            model,
+            inputPer1M: 0.75,
+            cachedInputPer1M: 0.075,
+            outputPer1M: 3.75,
+            isPromoRate: true,
+          }
+        : {
+            model,
+            inputPer1M: 1.5,
+            cachedInputPer1M: 0.15,
+            outputPer1M: 7.5,
+            isPromoRate: false,
+          };
+    }
     case 'gemini-4-hydrogen':
       return {
         model,

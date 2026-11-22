@@ -5,22 +5,43 @@ import {
   estimateTurnCost,
   formatEstimatedUsd,
   formatUsdBreakdown,
+  GEMINI_3_8_FLASH_PROMO_END_MS,
   GEMINI_4_CARBON_PROMO_END_MS,
   getGeminiModelPricing,
   parseInteractionUsage,
 } from '../../src/ui/aiPricing.ts';
 
-describe('aiPricing Gemini 4 rate table & cost estimation', () => {
+describe('aiPricing Gemini 4 & 3.x Flash rate table & cost estimation', () => {
   const NOV_21_2026 = Date.UTC(2026, 10, 21, 12, 0, 0);
   const NOV_30_2026_LAST_MS = GEMINI_4_CARBON_PROMO_END_MS - 1;
   const DEC_01_2026_START_MS = GEMINI_4_CARBON_PROMO_END_MS;
+  const DEC_31_2026_LAST_MS = GEMINI_3_8_FLASH_PROMO_END_MS - 1;
+  const JAN_01_2027_START_MS = GEMINI_3_8_FLASH_PROMO_END_MS;
 
-  it('returns accurate Gemini 3.5 Flash-Lite and Gemini 4 Hydrogen, Neon, and Carbon pricing across promo cutoff', () => {
+  it('returns accurate Gemini 3.5 Flash-Lite, 3.8 Flash, and Gemini 4 pricing across promo cutoffs', () => {
     expect(getGeminiModelPricing('gemini-3.5-flash-lite', NOV_21_2026)).toEqual({
       model: 'gemini-3.5-flash-lite',
       inputPer1M: 0.3,
       cachedInputPer1M: 0.03,
       outputPer1M: 2.5,
+      isPromoRate: false,
+    });
+
+    // 3.8 Flash promotional rate active through Dec 31, 2026 UTC
+    expect(getGeminiModelPricing('gemini-3.8-flash', DEC_31_2026_LAST_MS)).toEqual({
+      model: 'gemini-3.8-flash',
+      inputPer1M: 0.75,
+      cachedInputPer1M: 0.075,
+      outputPer1M: 3.75,
+      isPromoRate: true,
+    });
+
+    // 3.8 Flash switches automatically to standard rate starting Jan 1, 2027 00:00:00Z
+    expect(getGeminiModelPricing('gemini-3.8-flash', JAN_01_2027_START_MS)).toEqual({
+      model: 'gemini-3.8-flash',
+      inputPer1M: 1.5,
+      cachedInputPer1M: 0.15,
+      outputPer1M: 7.5,
       isPromoRate: false,
     });
 
@@ -144,6 +165,28 @@ describe('aiPricing Gemini 4 rate table & cost estimation', () => {
     );
     expect(standardTurn?.rates.isPromoRate).toBe(false);
     expect(standardTurn?.totalCostUsd).toBeCloseTo(24.0, 10); // $4 + $20
+
+    const flashPromoTurn = estimateTraceCost(
+      {
+        model: 'gemini-3.8-flash',
+        startedAt: '2026-12-20T10:00:00.000Z',
+        usage,
+      },
+      JAN_01_2027_START_MS
+    );
+    expect(flashPromoTurn?.rates.isPromoRate).toBe(true);
+    expect(flashPromoTurn?.totalCostUsd).toBeCloseTo(4.5, 10); // $0.75 + $3.75
+
+    const flashStandardTurn = estimateTraceCost(
+      {
+        model: 'gemini-3.8-flash',
+        startedAt: '2027-01-05T10:00:00.000Z',
+        usage,
+      },
+      NOV_21_2026
+    );
+    expect(flashStandardTurn?.rates.isPromoRate).toBe(false);
+    expect(flashStandardTurn?.totalCostUsd).toBeCloseTo(9.0, 10); // $1.50 + $7.50
   });
 
   it('aggregates cumulative session cost across multi-turn mixed-model threads', () => {

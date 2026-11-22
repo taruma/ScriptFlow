@@ -23,6 +23,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
       'gemini-4-hydrogen',
       'gemini-4-neon',
       'gemini-4-carbon',
+      'gemini-3.8-flash',
       'gemini-3.5-flash-lite',
     ]);
     expect(DEFAULT_GEMINI_MODEL).toBe('gemini-4-hydrogen');
@@ -125,6 +126,11 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
     // Legacy gemini-4-argon preference migrates cleanly to the middle tier (gemini-4-neon)
     expect(sanitizeAiSettings({model: 'gemini-4-argon', reasoningLevel: 'high'}).model).toBe(
       'gemini-4-neon'
+    );
+
+    // Gemini 3.8 Flash is accepted as a valid persisted model selection
+    expect(sanitizeAiSettings({model: 'gemini-3.8-flash', reasoningLevel: 'medium'}).model).toBe(
+      'gemini-3.8-flash'
     );
 
     expect(
