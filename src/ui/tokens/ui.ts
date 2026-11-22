@@ -1,7 +1,7 @@
 export const UI_TOKENS = {
   layout: {
     appHeader:
-      'relative h-12 border-b border-border-main bg-surface flex items-center justify-between px-3 shrink-0 z-30 text-text-main select-none',
+      'relative h-12 border-b border-border-main bg-surface flex items-center justify-between px-3 shrink-0 z-40 text-text-main select-none',
     leftPanelBase: 'flex flex-col bg-surface border-border-main z-10 text-text-main',
     rightPanelBase: 'bg-app flex flex-col overflow-hidden relative',
     sectionTitle: 'text-xs font-black uppercase tracking-[0.2em] text-text-faint',

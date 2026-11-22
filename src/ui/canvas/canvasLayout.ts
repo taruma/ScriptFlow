@@ -805,12 +805,23 @@ export function buildCanvasLayout(
         let prevSubNodeId = p.nodeId;
         let prevSourceHandle = 'sub-out';
 
-        for (const ss of p.ms.subStates) {
-          const matchesIso = !hasIsolation || isolatedDims.has(ss.dimension);
-          if (!matchesIso && isolationMode === 'compact') {
-            continue;
-          }
+        // Compute the last visible traced Sub-State index inside this Macro-State so
+        // structural `subStateChain` connectors from the parent header down to the matched
+        // Sub-State stay subtly visible (`isSecondary: true`) even when the header is off-thread.
+        const visibleSubs = p.ms.subStates.filter(
+          (ss) => !hasIsolation || isolatedDims.has(ss.dimension) || isolationMode !== 'compact'
+        );
+        let lastTracedVisibleIdx = -1;
+        if (activeObj) {
+          visibleSubs.forEach((ss, idx) => {
+            if (ss.matchedObjectIds.includes(activeObj.id)) {
+              lastTracedVisibleIdx = idx;
+            }
+          });
+        }
 
+        visibleSubs.forEach((ss, visibleIdx) => {
+          const matchesIso = !hasIsolation || isolatedDims.has(ss.dimension);
           const subNodeId = `subnode-${ss.id}`;
           visibleSubNodeIds.add(subNodeId);
 
@@ -827,6 +838,8 @@ export function buildCanvasLayout(
 
           const isSubTraced = activeObj ? ss.matchedObjectIds.includes(activeObj.id) : false;
           const isSubDimmed = Boolean(activeObj && !isSubTraced);
+          const isChainLeadingToMatch =
+            Boolean(activeObj) && lastTracedVisibleIdx >= 0 && visibleIdx <= lastTracedVisibleIdx;
 
           nodes.push({
             id: subNodeId,
@@ -852,14 +865,15 @@ export function buildCanvasLayout(
             targetHandle: 'chain-in',
             kind: 'subStateChain',
             dimension: ss.dimension,
-            isDimmed: Boolean(activeObj && !isSubTraced),
+            isSecondary: isChainLeadingToMatch && !isSubTraced,
+            isDimmed: Boolean(activeObj && !isChainLeadingToMatch),
             direction,
           });
 
           prevSubNodeId = subNodeId;
           prevSourceHandle = 'chain-out';
           subCursor += isLR ? subH + SUB_GAP_LR : subW + SUB_GAP_TB;
-        }
+        });
       }
     }
 
@@ -890,6 +904,48 @@ export function buildCanvasLayout(
         direction
       )
     );
+  }
+
+  // Pass 5: Differentiate direct active-thread nodes vs. structurally owning parent headers
+  // (e.g., split Macro-State headers S2/S3/S4 or expanded [AESTHETIC] header when the active
+  // thread flows directly between their child cards without passing through the parent header).
+  // Those owning headers shift to `isSecondaryTraced` (slightly dimmed, still clearly linked)
+  // while the actual thread-line nodes retain full `isTraced` glow.
+  if (activeObj && activeObj.kind !== 'camera_slot') {
+    const directThreadNodeIds = new Set<string>();
+    for (const edge of edges) {
+      if (
+        edge.isHot &&
+        (edge.kind === 'extraction' || edge.kind === 'labelMatch' || edge.kind === 'recall')
+      ) {
+        directThreadNodeIds.add(edge.source);
+        directThreadNodeIds.add(edge.target);
+      }
+    }
+
+    for (const node of nodes) {
+      if (node.type === 'macroState') {
+        const data = node.data as {
+          isExpanded?: boolean;
+          isTraced?: boolean;
+          isSecondaryTraced?: boolean;
+        };
+        if (data.isTraced && data.isExpanded && !directThreadNodeIds.has(node.id)) {
+          data.isTraced = false;
+          data.isSecondaryTraced = true;
+        }
+      } else if (node.type === 'stagingBlock') {
+        const data = node.data as {
+          isExpanded?: boolean;
+          isTraced?: boolean;
+          isSecondaryTraced?: boolean;
+        };
+        if (data.isTraced && data.isExpanded && !directThreadNodeIds.has(node.id)) {
+          data.isTraced = false;
+          data.isSecondaryTraced = true;
+        }
+      }
+    }
   }
 
   return {nodes, edges};

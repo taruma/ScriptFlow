@@ -741,27 +741,39 @@ export function tokenizeAnnotatedText(
 }
 
 /**
- * Returns default Graph View expansion sets when loading or resetting a script:
- * - All Execution Macro-States start compact (folded) with Source branches collapsed.
- * - `[AESTHETIC]` Staging Macro-Blocks with structured Key-Value entries start open (split into
- *   Lookbook swatch cards) so extraction threads originate from their exact Lookbook keys.
+ * Returns orientation-aware default Graph View expansion sets when loading, switching
+ * direction, or clicking Reset:
+ * - `LR` (default horizontal overview): all Execution Macro-States and `[AESTHETIC]` Lookbook
+ *   cards start folded (compact), with all Source branches collapsed.
+ * - `TB` (vertical deep-dive): all Execution Macro-States and `[AESTHETIC]` Lookbook cards
+ *   start unfolded (split), with all Source branches collapsed.
  */
-export function createDefaultGraphExpansionState(model?: GraphSceneModel): {
+export function createDefaultGraphExpansionState(
+  model?: GraphSceneModel,
+  direction: 'LR' | 'TB' = 'LR'
+): {
   expandedIds: Set<string>;
   expandedStagingIds: Set<string>;
   rawOpenIds: Set<string>;
 } {
-  const expandedStagingIds = new Set<string>();
-  if (model) {
+  if (direction === 'TB' && model) {
+    const expandedIds = new Set<string>(model.macroStates.map((ms) => ms.id));
+    const expandedStagingIds = new Set<string>();
     for (const sb of model.stagingBlocks) {
       if (sb.kind === 'AESTHETIC' && sb.aestheticItems.length > 0) {
         expandedStagingIds.add(sb.mbId);
       }
     }
+    return {
+      expandedIds,
+      expandedStagingIds,
+      rawOpenIds: new Set(),
+    };
   }
+
   return {
     expandedIds: new Set(),
-    expandedStagingIds,
+    expandedStagingIds: new Set(),
     rawOpenIds: new Set(),
   };
 }

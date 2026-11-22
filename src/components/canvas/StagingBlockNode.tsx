@@ -13,6 +13,7 @@ export interface StagingBlockNodeData extends Record<string, unknown> {
   isExpanded?: boolean;
   isRawOpen?: boolean;
   isTraced: boolean;
+  isSecondaryTraced?: boolean;
   isDimmed: boolean;
 }
 
@@ -34,8 +35,15 @@ function getHeaderAccentColor(kind: MacroBlockKind): string {
 }
 
 export const StagingBlockNode = memo(function StagingBlockNode({data}: NodeProps) {
-  const {block, direction, isExpanded = false, isRawOpen = false, isTraced, isDimmed} =
-    data as StagingBlockNodeData;
+  const {
+    block,
+    direction,
+    isExpanded = false,
+    isRawOpen = false,
+    isTraced,
+    isSecondaryTraced = false,
+    isDimmed,
+  } = data as StagingBlockNodeData;
   const {onToggleStagingExpand, onToggleRaw} = useGraphInteraction();
 
   const isLR = direction === 'LR';
@@ -49,10 +57,17 @@ export const StagingBlockNode = memo(function StagingBlockNode({data}: NodeProps
 
   return (
     <div
+      style={
+        isSecondaryTraced
+          ? {borderColor: 'color-mix(in srgb, var(--tok-continuity) 42%, var(--border-main))'}
+          : undefined
+      }
       className={`relative rounded-xl border bg-surface p-3.5 shadow-2xs transition-[opacity,box-shadow,border-color] duration-150 ${
         isTraced
           ? 'auteur-graph-traced border-[var(--tok-continuity)]'
-          : 'border-border-main'
+          : isSecondaryTraced
+            ? 'auteur-graph-secondary-traced border-border-main'
+            : 'border-border-main'
       } ${isDimmed ? 'auteur-graph-dimmed' : ''}`}
     >
       <Handle type="source" id="staging-out" position={portPosition} style={outHandleStyle} />

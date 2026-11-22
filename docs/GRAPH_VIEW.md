@@ -104,13 +104,16 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 
 | Axis / Tier | `L → R` (`direction: 'LR'`, Default) | `T ↓ B` (`direction: 'TB'`, 90° Transpose) |
 |---|---|---|
-| **Tier 1 — Phase 1 Staging** | Horizontal row (`L → R`) across the top band (`[INTENT]` → `[LOGIC]` → `[AESTHETIC]` → `[OPENING]`). **`[AESTHETIC]`** starts **open**, fanning its Key–Value Lookbook swatch cards (`AestheticItemNode`) horizontally beneath its header (with a **`Keys`/`Fold`** toggle and opposite-side **`Source`** button branching above). | Single vertical column (`T ↓ B`) on the left. **`[AESTHETIC]`** starts **open**, stacking indented Lookbook swatch cards beneath its header (flush with Tier 1's right edge, with **`Source`** branching left). |
+| **Tier 1 — Phase 1 Staging** | Horizontal row (`L → R`) across the top band (`[INTENT]` → `[LOGIC]` → `[AESTHETIC]` → `[OPENING]`). **`[AESTHETIC]`** starts **folded** in `L → R` and can split into horizontal Key–Value Lookbook swatch cards (`AestheticItemNode`) beneath its header (with **`Keys`/`Fold`** and opposite-side **`Source`** branching above). | Single vertical column (`T ↓ B`) on the left. **`[AESTHETIC]`** starts **unfolded** in `T ↓ B`, stacking indented Lookbook swatch cards beneath its header (flush with Tier 1's right edge, with **`Source`** branching left). |
 | **Tier 2 — Inferred Objects** | Horizontal band (`L → R`) directly beneath Tier 1, grouped by kind on one unified baseline | Vertical column (`T ↓ B`) directly right of Tier 1, grouped by kind |
-| **Tier 3 — Phase 2 Execution** | Horizontal spine (`S1 → SN`, `L → R`) directly beneath Tier 2 | Vertical spine (`S1 ↓ SN`, `T ↓ B`) directly right of Tier 2 |
+| **Tier 3 — Phase 2 Execution** | Horizontal spine (`S1 → SN`, `L → R`) directly beneath Tier 2 (starts **folded**) | Vertical spine (`S1 ↓ SN`, `T ↓ B`) directly right of Tier 2 (starts **unfolded**) |
 | **Split Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
 | **Opposite-Side `Source` Branch** | Branches **above** the Macro-State (or `[AESTHETIC]`) with reserved headroom | Branches **left** of the Macro-State (or `[AESTHETIC]`) with reserved gutter width |
 
-- **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset`**, all Execution Macro-States start **folded (compact)**, all **Source** branches start collapsed, all ephemeral drag offsets are cleared, and **`[AESTHETIC]`** blocks with structured Key–Value entries start **open** (`expandedStagingIds`) as distinct Lookbook swatch cards.
+- **Orientation-Aware Defaults & Reset (`createDefaultGraphExpansionState(model, direction)`):**
+  - **`L → R` (default overview):** All Execution Macro-States and `[AESTHETIC]` Lookbook cards start **folded**, with all `Source` branches collapsed.
+  - **`T ↓ B` (vertical deep-dive):** All Execution Macro-States and `[AESTHETIC]` Lookbook cards start **unfolded**, with all `Source` branches collapsed.
+  - Switching orientations or clicking **`Reset`** restores the active orientation's clean default posture, closes all `Source` branches, clears ephemeral drag offsets, and refits the canvas.
 
 ### 3.2 Sub-State Isolation (`Ghost` vs. `Compact`)
 
@@ -133,13 +136,14 @@ When one or more dimensions are toggled in `SubStateIsolatorDock`:
 4. **Rounded Orthogonal Blueprint Pipes vs. Curved `RECALL` Arcs:**
    - All structural threads (`extraction`, `labelMatch`, `aestheticBranch`, `isolationThread`, `spine*`, `subStateChain`, `rawBranch`) use **rounded orthogonal pipes** (`getSmoothStepPath` + `buildRoundedOrthogonalPath` in `AuteurGraphEdge.tsx`) with dashed styling on state-flow & isolation threads.
    - **Curved `RECALL` Arcs (`recall`):** Reserved exclusively for camera setup flashbacks (`establishing S#` → `recalled S#`) so optical continuity stays visually distinct from state-flow pipes.
-5. **Selective Gliding Pulse-Dot Animation (Performance & Clarity Guardrail):**
-   - Active **isolated Dimension Threads** (`isolationThread`) and **single-object focused traces** (hover/click an Inferred Object or Camera Setup) render a native SVG `<animateMotion>` **gliding pulse dot** (translucent halo + solid core moving strictly `source → target`) along their dashed wire—automatically hidden under `@media (prefers-reduced-motion: reduce)` (`.auteur-graph-pulse-dot` in `src/index.css`).
-   - Unfiltered **`Show Threads`** (all entities visible at once) renders static dashed orthogonal lane pipes with zero pulse dots to avoid visual clutter and repaint load.
+5. **Off-Thread Parent Dimming & Selective Gliding Pulse-Dot Animation:**
+   - **Three-Tier Focus Contrast:** When an entity is focused, nodes directly on the active wire path (`directThreadNodeIds` — e.g., `S1`, `S1.2`, `S1.4`, `S2.3`, `S3.2`, …) keep full `isTraced` glow; split Macro-State headers (like `S2`/`S3`/`S4`) or an expanded `[AESTHETIC]` header that own matched child cards without sitting on the wire itself step down to **`isSecondaryTraced`** (`.auteur-graph-secondary-traced`, `opacity: 0.6`, soft tinted border) while preserving visible `subStateChain` ownership lines (`isSecondary: true`); unrelated nodes dim fully (`opacity: 0.22`).
+   - **Gliding Pulse Dot:** Active **isolated Dimension Threads** (`isolationThread`) and **single-object focused traces** (hover/click an Inferred Object or Camera Setup) render a native SVG `<animateMotion>` **gliding pulse dot** (translucent halo + solid core moving strictly `source → target`) along their dashed wire—automatically hidden under `@media (prefers-reduced-motion: reduce)` (`.auteur-graph-pulse-dot` in `src/index.css`).
+   - **Static Overview:** Unfiltered **`Show Threads`** (all entities visible at once) renders static dashed orthogonal lane pipes with zero pulse dots to avoid visual clutter and repaint load.
 
-### 3.4 Explicit Z-Index Stacking Hierarchy
+### 3.4 Explicit Z-Index Stacking Hierarchy & App Shell Isolation
 
-`<ReactFlow>` runs with **`zIndexMode="manual"`** and **`elevateEdgesOnSelect={false}`** so React Flow's automatic parent-elevation never lifts edges above cards inside Shot Chambers:
+`.auteur-graph-canvas` runs with `isolate z-0` (strictly below `TopSlateBar` at `z-40`), guaranteeing top-bar popovers (`Settings`, `File`, `Copy`) always float cleanly above Graph View's `ObjectInspectorPanel` and HUD. Inside the canvas, `<ReactFlow>` runs with **`zIndexMode="manual"`** and **`elevateEdgesOnSelect={false}`** so React Flow's automatic parent-elevation never lifts edges above cards inside Shot Chambers:
 
 | Layer | `zIndex` | Elements |
 |---|---|---|

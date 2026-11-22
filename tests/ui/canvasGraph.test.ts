@@ -716,13 +716,18 @@ Rosa stands in LOC01 wearing RS01.
 [CAM 01] MS in LOC01 -> [ACT] Rosa checks her watch`;
 
     const model = buildModelFromRaw(raw);
-    const defaults = createDefaultGraphExpansionState(model);
+    const lrDefaults = createDefaultGraphExpansionState(model, 'LR');
+    const tbDefaults = createDefaultGraphExpansionState(model, 'TB');
     const aesBlock = model.stagingBlocks.find((b) => b.kind === 'AESTHETIC')!;
 
-    // [AESTHETIC] starts open by default while Execution Macro-States stay folded and Source stays closed
-    expect(defaults.expandedStagingIds.has(aesBlock.mbId)).toBe(true);
-    expect(defaults.expandedIds.size).toBe(0);
-    expect(defaults.rawOpenIds.size).toBe(0);
+    // Orientation-aware defaults: LR starts fully folded (Macro-States + [AESTHETIC] + Source closed),
+    // while TB starts unfolded (all Macro-States + [AESTHETIC] expanded, Source closed)
+    expect(lrDefaults.expandedIds.size).toBe(0);
+    expect(lrDefaults.expandedStagingIds.size).toBe(0);
+    expect(lrDefaults.rawOpenIds.size).toBe(0);
+    expect(tbDefaults.expandedIds.has('S1')).toBe(true);
+    expect(tbDefaults.expandedStagingIds.has(aesBlock.mbId)).toBe(true);
+    expect(tbDefaults.rawOpenIds.size).toBe(0);
     expect(aesBlock.aestheticItems).toHaveLength(3);
 
     // 1. LR mode with [AESTHETIC] open + [AESTHETIC] Source open + tall measured heights
@@ -730,7 +735,7 @@ Rosa stands in LOC01 wearing RS01.
       model,
       makeLayoutOptions({
         direction: 'LR',
-        expandedStagingIds: defaults.expandedStagingIds,
+        expandedStagingIds: tbDefaults.expandedStagingIds,
         rawOpenIds: new Set([aesBlock.mbId]),
         activeObjectId: model.railObjects.find((o) => o.matchToken === 'LOC01')!.id,
         measuredHeights: {
@@ -771,7 +776,7 @@ Rosa stands in LOC01 wearing RS01.
       model,
       makeLayoutOptions({
         direction: 'TB',
-        expandedStagingIds: defaults.expandedStagingIds,
+        expandedStagingIds: tbDefaults.expandedStagingIds,
         rawOpenIds: new Set([aesBlock.mbId]),
         measuredHeights: {
           [`raw-${aesBlock.mbId}`]: 480,
@@ -809,5 +814,56 @@ Rosa stands in LOC01 wearing RS01.
           e.target === 'obj-tok-LOC01'
       )
     ).toBe(true);
+  });
+
+  it('marks off-thread split Macro-State headers as secondary-traced while keeping their subStateChain connection visible', () => {
+    const raw = `[INTENT]
+Featuring @img1 as Evan.
+
+[EXECUTION]
+[CAM 01] MS -> [ACT] Evan enters
+[CAM 02] CU -> [ACT] Crowd turns -> Evan says {Hold on.}`;
+
+    const model = buildModelFromRaw(raw);
+    const evan = model.railObjects.find((o) => o.matchToken === 'Evan')!;
+
+    // Both S1 and S2 are split: thread runs Evan -> node-S1 -> subnode-S1.2 -> subnode-S2.3
+    // So node-S1 IS directly on the thread (`isTraced: true`), while node-S2 header is off-thread (`isSecondaryTraced: true`)
+    const layout = buildCanvasLayout(
+      model,
+      makeLayoutOptions({
+        direction: 'TB',
+        expandedIds: new Set(['S1', 'S2']),
+        activeObjectId: evan.id,
+      })
+    );
+
+    const s1Data = layout.nodes.find((n) => n.id === 'node-S1')!.data as {
+      isTraced?: boolean;
+      isSecondaryTraced?: boolean;
+      isDimmed?: boolean;
+    };
+    const s2Data = layout.nodes.find((n) => n.id === 'node-S2')!.data as {
+      isTraced?: boolean;
+      isSecondaryTraced?: boolean;
+      isDimmed?: boolean;
+    };
+
+    expect(s1Data.isTraced).toBe(true);
+    expect(s1Data.isSecondaryTraced).toBeFalsy();
+    expect(s2Data.isTraced).toBe(false);
+    expect(s2Data.isSecondaryTraced).toBe(true);
+    expect(s2Data.isDimmed).toBe(false);
+
+    // Structural chain edges from node-S2 down to subnode-S2.3 remain visible (not fully dimmed)
+    const s2ChainToFirst = layout.edges.find(
+      (e) => e.kind === 'subStateChain' && e.source === 'node-S2' && e.target === 'subnode-S2.1'
+    )!;
+    const s2ChainToMatch = layout.edges.find(
+      (e) => e.kind === 'subStateChain' && e.target === 'subnode-S2.3'
+    )!;
+    expect(s2ChainToFirst.isDimmed).toBe(false);
+    expect(s2ChainToFirst.isSecondary).toBe(true);
+    expect(s2ChainToMatch.isDimmed).toBe(false);
   });
 });

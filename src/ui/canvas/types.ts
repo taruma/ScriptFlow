@@ -243,6 +243,8 @@ export interface CanvasEdgeSpec {
   objectKind?: InferredObjectKind;
   isHot?: boolean;
   isDimmed?: boolean;
+  /** True when a structural chain edge connects a slightly dimmed parent header to an active child */
+  isSecondary?: boolean;
   /** True when the edge renders subtle directional flow animation (source -> target pulse dot) */
   isAnimated?: boolean;
   /** True when a labelMatch edge cascades chronologically between consecutive Execution appearances */

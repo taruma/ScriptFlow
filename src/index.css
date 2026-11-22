@@ -700,6 +700,11 @@
     0 12px 26px -10px color-mix(in srgb, var(--tok-continuity) 42%, transparent);
 }
 
+.auteur-graph-secondary-traced {
+  opacity: 0.6;
+  filter: saturate(0.78);
+}
+
 .auteur-graph-dimmed {
   opacity: 0.22;
   filter: saturate(0.28);

@@ -135,13 +135,13 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
 
   const [direction, setDirection] = useState<GraphDirection>('LR');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    () => createDefaultGraphExpansionState(model).expandedIds
+    () => createDefaultGraphExpansionState(model, 'LR').expandedIds
   );
   const [expandedStagingIds, setExpandedStagingIds] = useState<Set<string>>(
-    () => createDefaultGraphExpansionState(model).expandedStagingIds
+    () => createDefaultGraphExpansionState(model, 'LR').expandedStagingIds
   );
   const [rawOpenIds, setRawOpenIds] = useState<Set<string>>(
-    () => createDefaultGraphExpansionState(model).rawOpenIds
+    () => createDefaultGraphExpansionState(model, 'LR').rawOpenIds
   );
   const [isolatedDims, setIsolatedDims] = useState<Set<GraphDimension>>(() => new Set());
   const [isolationMode, setIsolationMode] = useState<GraphIsolationMode>('ghost');
@@ -162,7 +162,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   useEffect(() => {
     if (prevScriptKeyRef.current === scriptSessionKey) return;
     prevScriptKeyRef.current = scriptSessionKey;
-    const defaults = createDefaultGraphExpansionState(model);
+    const defaults = createDefaultGraphExpansionState(model, direction);
     setExpandedIds(defaults.expandedIds);
     setExpandedStagingIds(defaults.expandedStagingIds);
     setRawOpenIds(defaults.rawOpenIds);
@@ -172,7 +172,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     setNodeOffsets({});
     setMeasuredHeights({});
     pendingFitRef.current = true;
-  }, [scriptSessionKey, model]);
+  }, [scriptSessionKey, model, direction]);
 
   // Clear selection if selected object disappears after an AI/source update
   useEffect(() => {
@@ -288,6 +288,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
           objectKind: e.objectKind,
           isHot: e.isHot,
           isDimmed: e.isDimmed,
+          isSecondary: e.isSecondary,
           isAnimated: e.isAnimated,
           isCascade: e.isCascade,
           isIntraState: e.isIntraState,
@@ -447,12 +448,19 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     });
   }, []);
 
-  const handleDirectionChange = useCallback((nextDir: GraphDirection) => {
-    setDirection(nextDir);
-    setNodeOffsets({});
-    setMeasuredHeights({});
-    pendingFitRef.current = true;
-  }, []);
+  const handleDirectionChange = useCallback(
+    (nextDir: GraphDirection) => {
+      const defaults = createDefaultGraphExpansionState(model, nextDir);
+      setDirection(nextDir);
+      setExpandedIds(defaults.expandedIds);
+      setExpandedStagingIds(defaults.expandedStagingIds);
+      setRawOpenIds(defaults.rawOpenIds);
+      setNodeOffsets({});
+      setMeasuredHeights({});
+      pendingFitRef.current = true;
+    },
+    [model]
+  );
 
   const allExpanded =
     model.macroStates.length > 0 &&
@@ -491,7 +499,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   }, []);
 
   const handleResetLayout = useCallback(() => {
-    const defaults = createDefaultGraphExpansionState(model);
+    const defaults = createDefaultGraphExpansionState(model, direction);
     setNodeOffsets({});
     setMeasuredHeights({});
     setExpandedIds(defaults.expandedIds);
@@ -499,7 +507,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     setRawOpenIds(defaults.rawOpenIds);
     pendingFitRef.current = true;
     triggerFitView();
-  }, [model, triggerFitView]);
+  }, [model, direction, triggerFitView]);
 
   const handleClearIsolation = useCallback(() => {
     setMeasuredHeights({});
@@ -564,23 +572,26 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
 
   const isEmpty = model.stagingBlocks.length === 0 && model.macroStates.length === 0;
   const selectedObject = selectedObjectId ? model.objectById[selectedObjectId] ?? null : null;
-  const defaultStagingExpanded = useMemo(
-    () => createDefaultGraphExpansionState(model).expandedStagingIds,
-    [model]
+  const defaultExpansion = useMemo(
+    () => createDefaultGraphExpansionState(model, direction),
+    [model, direction]
   );
+  const macroExpansionDiffers =
+    expandedIds.size !== defaultExpansion.expandedIds.size ||
+    [...defaultExpansion.expandedIds].some((id) => !expandedIds.has(id));
   const stagingExpansionDiffers =
-    expandedStagingIds.size !== defaultStagingExpanded.size ||
-    [...defaultStagingExpanded].some((id) => !expandedStagingIds.has(id));
+    expandedStagingIds.size !== defaultExpansion.expandedStagingIds.size ||
+    [...defaultExpansion.expandedStagingIds].some((id) => !expandedStagingIds.has(id));
   const hasCustomOffsets =
     Object.keys(nodeOffsets).length > 0 ||
-    expandedIds.size > 0 ||
-    rawOpenIds.size > 0 ||
-    stagingExpansionDiffers;
+    macroExpansionDiffers ||
+    stagingExpansionDiffers ||
+    rawOpenIds.size > 0;
 
   return (
     <div
       aria-label={UI_LABELS.graph.canvasAria}
-      className="auteur-graph-canvas relative h-full w-full overflow-hidden bg-app select-none"
+      className="auteur-graph-canvas relative isolate z-0 h-full w-full overflow-hidden bg-app select-none"
     >
       {isEmpty ? (
         <div className="flex h-full w-full items-center justify-center p-8">

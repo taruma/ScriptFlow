@@ -19,6 +19,7 @@ export interface AuteurGraphEdgeData extends Record<string, unknown> {
   objectKind?: InferredObjectKind;
   isHot?: boolean;
   isDimmed?: boolean;
+  isSecondary?: boolean;
   isAnimated?: boolean;
   isCascade?: boolean;
   isIntraState?: boolean;
@@ -111,6 +112,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
     objectKind,
     isHot,
     isDimmed,
+    isSecondary,
     isAnimated,
     isCascade,
     isIntraState,
@@ -359,7 +361,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
     case 'subStateChain':
       stroke = dimension ? getDimensionColorVar(dimension) : 'var(--border-main)';
       strokeWidth = 1.6;
-      opacity = isDimmed ? 0.2 : 0.72;
+      opacity = isDimmed ? 0.18 : isSecondary ? 0.46 : 0.72;
       break;
     case 'rawBranch':
       stroke = 'var(--text-muted)';
