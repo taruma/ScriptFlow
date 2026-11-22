@@ -12,6 +12,8 @@ import {
   mergeLayoutIntoFlowNodes,
   RAW_GAP,
   RAW_W_LR,
+  RECALL_LANE_BASE,
+  RECALL_LANE_STEP,
   tokenizeAnnotatedText,
   type FlowNodeLike,
   type GraphDimension,
@@ -938,5 +940,53 @@ Multi-camera dialogue.
       'node-S3->node-S5',
     ]);
     expect(cam1Recalls.every((e) => e.isHot && e.isAnimated)).toBe(true);
+  });
+
+  it('scales cleanly beyond 3 recalled cameras with compact lane indices and dynamic LR/TB recall gutter clearance', () => {
+    const raw = `[INTENT]
+Featuring @img1 as Detective.
+
+[EXECUTION]
+[CAM 01] Master wide -> [ACT] Beat 1
+[CAM 02] OTS left -> [ACT] Beat 2
+[CAM 03] OTS right -> [ACT] Beat 3
+[CAM 04] High overhead -> [ACT] Beat 4
+[CAM 05] Insert floor -> [ACT] Beat 5
+[CAM 02] -> [ACT] Recall cam 2
+[CAM 03] -> [ACT] Recall cam 3
+[CAM 04] -> [ACT] Recall cam 4
+[CAM 05] -> [ACT] Recall cam 5`;
+
+    const model = buildModelFromRaw(raw);
+    const isolatedDims = new Set<GraphDimension>(['camera']);
+
+    // CAM 01 is never recalled, so the 4 actually recalled cameras (02..05) pack tightly onto lanes 0..3
+    const tb = buildCanvasLayout(model, makeLayoutOptions({direction: 'TB', isolatedDims}));
+    const tbRecalls = tb.edges.filter((e) => e.kind === 'recall');
+    expect(
+      tbRecalls.map((e) => ({label: e.label, laneIndex: e.laneIndex}))
+    ).toEqual([
+      {label: 'RECALL CAM 02', laneIndex: 0},
+      {label: 'RECALL CAM 03', laneIndex: 1},
+      {label: 'RECALL CAM 04', laneIndex: 2},
+      {label: 'RECALL CAM 05', laneIndex: 3},
+    ]);
+
+    const outerDepth = RECALL_LANE_BASE + 3 * RECALL_LANE_STEP;
+    const tbS1 = tb.nodes.find((n) => n.id === 'node-S1')!;
+    const tbZoneExec = tb.nodes.find((n) => n.id === 'zone-execution')!;
+    const tbDetObj = tb.nodes.find((n) => n.id === 'obj-char-Detective')!;
+
+    // Outermost recall track & pill clear Tier 2 Objects cleanly in TB
+    expect(tbS1.position.x - outerDepth).toBeGreaterThan(
+      tbDetObj.position.x + (tbDetObj.width ?? 0)
+    );
+    expect(tbS1.position.x - outerDepth).toBeGreaterThan(tbZoneExec.position.x);
+
+    // Outermost recall track & pill clear Tier 2 Objects and PHASE 2 · EXECUTION zone header in LR
+    const lr = buildCanvasLayout(model, makeLayoutOptions({direction: 'LR', isolatedDims}));
+    const lrS1 = lr.nodes.find((n) => n.id === 'node-S1')!;
+    const lrZoneExec = lr.nodes.find((n) => n.id === 'zone-execution')!;
+    expect(lrS1.position.y - outerDepth).toBeGreaterThan(lrZoneExec.position.y + 34);
   });
 });

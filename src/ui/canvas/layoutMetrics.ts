@@ -53,6 +53,11 @@ export const CHAMBER_PAD_X = 20;
 export const CHAMBER_PAD_TOP = 38;
 export const CHAMBER_PAD_BOTTOM = 20;
 
+export const RECALL_LANE_BASE = 44;
+export const RECALL_LANE_STEP = 30;
+export const RECALL_GUTTER_CLEARANCE_LR = 26;
+export const RECALL_GUTTER_CLEARANCE_TB = 52;
+
 // Explicit stacking hierarchy (paired with React Flow `zIndexMode="manual"`):
 // ShotChamber backdrop (0) < Graph Edges (1..3) < Edge Labels (4) < All Cards & Headers (10)
 export const GRAPH_Z_CHAMBER = 0;

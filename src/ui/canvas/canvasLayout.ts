@@ -3,6 +3,7 @@ import {
   buildDownstreamLabelMatchEdges,
   buildExecutionContinuityEdges,
   buildExtractionEdges,
+  resolveVisibleRecallSlotLanes,
 } from './layoutEdges.ts';
 import {
   AES_BRANCH_GAP_LR,
@@ -41,6 +42,10 @@ import {
   RAW_GAP,
   RAW_W_LR,
   RAW_W_TB,
+  RECALL_GUTTER_CLEARANCE_LR,
+  RECALL_GUTTER_CLEARANCE_TB,
+  RECALL_LANE_BASE,
+  RECALL_LANE_STEP,
   resolveMeasuredHeight,
   STAGING_GAP,
   STAGING_W_LR,
@@ -557,6 +562,22 @@ export function buildCanvasLayout(
   const visibleSubNodeIds = new Set<string>();
 
   if (model.macroStates.length > 0) {
+    const {laneCount: visibleRecallLanes} = resolveVisibleRecallSlotLanes(
+      model.macroStates,
+      activeObj,
+      activeObjectId,
+      isolatedDims,
+      showAllLinks
+    );
+    const outerRecallTrackDepth =
+      visibleRecallLanes > 0
+        ? RECALL_LANE_BASE + (visibleRecallLanes - 1) * RECALL_LANE_STEP
+        : 0;
+    const recallGutterLR =
+      outerRecallTrackDepth > 0 ? outerRecallTrackDepth + RECALL_GUTTER_CLEARANCE_LR : 0;
+    const recallGutterTB =
+      outerRecallTrackDepth > 0 ? outerRecallTrackDepth + RECALL_GUTTER_CLEARANCE_TB : 0;
+
     const execZoneX = isLR
       ? 0
       : hasRail || model.stagingBlocks.length > 0
@@ -564,17 +585,15 @@ export function buildCanvasLayout(
         : 0;
     const execStartX = isLR
       ? 0
-      : execZoneX + (maxRawWidthLeftTB > 0 ? maxRawWidthLeftTB : 32);
+      : execZoneX + Math.max(maxRawWidthLeftTB, recallGutterTB, 32);
     const execStartY = isLR
       ? hasRail || model.stagingBlocks.length > 0
         ? railBottomEdge + LAYER_GAP_LR
         : 0
       : 0;
+    const rawHeadroomLR = maxRawHeightAboveLR > 0 ? maxRawHeightAboveLR + RAW_GAP + 24 : 44;
     const execBaseY_LR =
-      execStartY +
-      ZONE_HEADER_H +
-      18 +
-      (maxRawHeightAboveLR > 0 ? maxRawHeightAboveLR + RAW_GAP + 24 : 44);
+      execStartY + ZONE_HEADER_H + 18 + Math.max(rawHeadroomLR, recallGutterLR);
 
     nodes.push({
       id: 'zone-execution',

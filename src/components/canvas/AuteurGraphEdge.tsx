@@ -5,11 +5,13 @@ import {
   getSmoothStepPath,
   type EdgeProps,
 } from '@xyflow/react';
-import type {
-  CanvasEdgeKind,
-  GraphDimension,
-  GraphDirection,
-  InferredObjectKind,
+import {
+  RECALL_LANE_BASE,
+  RECALL_LANE_STEP,
+  type CanvasEdgeKind,
+  type GraphDimension,
+  type GraphDirection,
+  type InferredObjectKind,
 } from '../../ui/canvas/index.ts';
 import {getDimensionColorVar, getObjectColorVar} from './graphContext.tsx';
 
@@ -126,7 +128,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
   // Stepped rounded-orthogonal RECALL subway lane per camera slot (never overlaps sibling camera slots)
   if (kind === 'recall') {
     const lane = laneIndex ?? 0;
-    const laneDepth = 44 + lane * 34;
+    const laneDepth = RECALL_LANE_BASE + lane * RECALL_LANE_STEP;
 
     const path = isLR
       ? buildRoundedOrthogonalPath(

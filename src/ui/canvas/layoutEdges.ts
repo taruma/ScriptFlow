@@ -4,8 +4,55 @@ import type {
   CanvasEdgeSpec,
   GraphDimension,
   GraphDirection,
+  GraphMacroStateItem,
   InferredGraphObject,
 } from './types.ts';
+
+export interface RecallSlotLaneResolution {
+  laneBySlot: Map<string, number>;
+  laneCount: number;
+}
+
+/**
+ * Resolves compact 0-based `RECALL` subway lane indices **only** for camera slots that actually
+ * emit at least one visible `recall` edge under the current focus / `CAM` isolation / `Show Threads`
+ * state—avoiding wasted empty tracks for single-appearance cameras and scaling cleanly past 3+ cameras.
+ */
+export function resolveVisibleRecallSlotLanes(
+  macroStates: readonly GraphMacroStateItem[],
+  activeObj: InferredGraphObject | null,
+  activeObjectId: string | null,
+  isolatedDims: ReadonlySet<GraphDimension>,
+  showAllLinks: boolean
+): RecallSlotLaneResolution {
+  const laneBySlot = new Map<string, number>();
+  const isCamIsolated = isolatedDims.has('camera') && !activeObj;
+  const showRecallLanes =
+    activeObj?.kind === 'camera_slot' || isCamIsolated || (showAllLinks && !activeObj);
+
+  if (!showRecallLanes) {
+    return {laneBySlot, laneCount: 0};
+  }
+
+  const seenSlots = new Set<string>();
+  for (const ms of macroStates) {
+    const slot = ms.cameraSlot;
+    if (!slot) continue;
+
+    if (ms.cameraTransition === 'RECALL' && seenSlots.has(slot)) {
+      const camObjId = `obj-cam-${slot.replace(/\s+/g, '-')}`;
+      const shouldEmit =
+        activeObj?.kind === 'camera_slot' ? activeObjectId === camObjId : true;
+      if (shouldEmit && !laneBySlot.has(slot)) {
+        laneBySlot.set(slot, laneBySlot.size);
+      }
+    }
+
+    seenSlots.add(slot);
+  }
+
+  return {laneBySlot, laneCount: laneBySlot.size};
+}
 
 /**
  * Emits Tier 1 -> Tier 2 extraction wires connecting each declaring Staging Macro-Block
@@ -100,48 +147,44 @@ export function buildExecutionContinuityEdges(
 
   // 2. Stepped cascading RECALL lanes (prev -> next per camera slot, zero hub-and-spoke pileups).
   //    Shown quietly on demand when a Camera Setup is focused, `CAM` is isolated, or `Show Threads` is ON.
-  const showRecallLanes =
-    activeObj?.kind === 'camera_slot' || isCamIsolated || (showAllLinks && !activeObj);
+  const {laneBySlot} = resolveVisibleRecallSlotLanes(
+    placements.map((p) => p.ms),
+    activeObj,
+    activeObjectId,
+    isolatedDims,
+    showAllLinks
+  );
 
-  if (showRecallLanes) {
-    const slotLaneIndex = new Map<string, number>();
+  if (laneBySlot.size > 0) {
     const lastSeenBySlot = new Map<string, {nodeId: string; msId: string}>();
 
     for (const p of placements) {
       const slot = p.ms.cameraSlot;
       if (!slot) continue;
 
-      if (!slotLaneIndex.has(slot)) {
-        slotLaneIndex.set(slot, slotLaneIndex.size);
-      }
-
       const prev = lastSeenBySlot.get(slot);
-      if (p.ms.cameraTransition === 'RECALL' && prev) {
+      const laneIndex = laneBySlot.get(slot);
+      if (p.ms.cameraTransition === 'RECALL' && prev && laneIndex !== undefined) {
         const camObjId = `obj-cam-${slot.replace(/\s+/g, '-')}`;
         const isTargetCam = activeObjectId === camObjId;
-        const shouldEmit =
-          activeObj?.kind === 'camera_slot' ? isTargetCam : true;
+        const isHot = isTargetCam || isCamIsolated;
+        const isAnimated = isHot;
+        const isDimmed = !isHot && hasIsolation && !isCamIsolated;
 
-        if (shouldEmit) {
-          const isHot = isTargetCam || isCamIsolated;
-          const isAnimated = isHot;
-          const isDimmed = !isHot && hasIsolation && !isCamIsolated;
-
-          edges.push({
-            id: `edge-recall-${prev.msId}-${p.ms.id}`,
-            source: prev.nodeId,
-            target: p.nodeId,
-            sourceHandle: 'recall-out',
-            targetHandle: 'recall-in',
-            kind: 'recall',
-            label: UI_LABELS.graph.edgeRecallSlotLabel(slot),
-            isHot,
-            isAnimated,
-            isDimmed,
-            laneIndex: slotLaneIndex.get(slot) ?? 0,
-            direction,
-          });
-        }
+        edges.push({
+          id: `edge-recall-${prev.msId}-${p.ms.id}`,
+          source: prev.nodeId,
+          target: p.nodeId,
+          sourceHandle: 'recall-out',
+          targetHandle: 'recall-in',
+          kind: 'recall',
+          label: UI_LABELS.graph.edgeRecallSlotLabel(slot),
+          isHot,
+          isAnimated,
+          isDimmed,
+          laneIndex,
+          direction,
+        });
       }
 
       lastSeenBySlot.set(slot, {nodeId: p.nodeId, msId: p.ms.id});
