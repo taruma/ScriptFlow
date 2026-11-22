@@ -103,14 +103,22 @@ export const LIBRARY_LABELS = {
     loadingText: 'Loading snapshots…',
     readOnlyTitle: 'Version History tracks custom scripts',
     readOnlyDesc:
-      'Bundled examples are read-only. Fork this example into My Scripts to save automatic pre-AI checkpoints and manual milestones.',
+      'Bundled examples are read-only. Fork this example into My Scripts to save automatic AI checkpoints and manual milestones.',
     forkToEditButton: 'Fork to Edit',
     emptyTitle: 'No snapshots saved yet',
     emptyDesc:
-      'Checkpoints are saved automatically before every AI Draft, Patch, or Audit Fix apply—or save a manual milestone above anytime.',
+      'Automatic checkpoints are saved before and after every AI Draft, Patch, or Audit Fix apply—or save a manual version above anytime.',
     selectPromptTitle: 'Select a snapshot to inspect',
     selectPromptDesc:
       'Compare any checkpoint against your current script, restore it as an undoable edit, or fork it into a new script.',
+    origins: {
+      auto: 'Auto',
+      manual: 'Manual',
+    } as const,
+    originTitles: {
+      auto: 'Saved automatically by ScriptFlow',
+      manual: 'Saved manually by you in Version History',
+    } as const,
     triggers: {
       ai_draft: 'AI Draft',
       ai_patch: 'AI Patch',
@@ -131,7 +139,8 @@ export const LIBRARY_LABELS = {
     diffLegend: 'Changes to current script if this snapshot is restored',
     diffSummary: (added: number, removed: number) => `+${added} / -${removed} lines`,
     matchesCurrentNote: 'This snapshot already matches your current script.',
-    retentionNote: 'Auto-saved before AI applies · 30 auto-checkpoints kept (milestones & pinned kept)',
+    retentionNote:
+      'Auto checkpoints saved before & after AI applies (30 kept) · Manual & pinned versions kept permanently',
     forkSnapshotButton: 'Fork as New Script',
     restoreButton: 'Restore',
     restoreDisabledTitle: 'Snapshot already matches current script',

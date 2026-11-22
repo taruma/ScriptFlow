@@ -342,19 +342,23 @@ export function useDocumentMutations({
       options?: {batchCount?: number}
     ): Promise<boolean> => {
       const trigger = kind === 'fix' ? 'ai_fix' : 'ai_patch';
-      const snapshotLabel = buildAiSnapshotLabel(trigger, suggestion.summary, options);
+      const beforeLabel = buildAiSnapshotLabel(trigger, suggestion.summary, {
+        ...options,
+        phase: 'before',
+      });
+      const afterLabel = buildAiSnapshotLabel(trigger, suggestion.summary, {
+        ...options,
+        phase: 'after',
+      });
       if (isReadOnly) {
         onSkipNextAiReset();
         return onForkCurrentExampleWithContent(suggestion.candidateRawText, {
-          snapshotMeta: {trigger, label: snapshotLabel},
+          snapshotMeta: {trigger, beforeLabel, afterLabel},
         });
       }
-      void onCreateSnapshot({
-        trigger,
-        label: snapshotLabel,
-        rawText,
-      });
-      commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
+      const previousRawText = rawText;
+      const nextRawText = suggestion.candidateRawText;
+      commitRawText(nextRawText, {mode: 'checkpoint'});
       onToast(
         kind === 'fix'
           ? options?.batchCount && options.batchCount > 1
@@ -362,6 +366,18 @@ export function useDocumentMutations({
             : UI_LABELS.toasts.aiFixApplied
           : UI_LABELS.toasts.aiPatchApplied
       );
+      if (previousRawText !== nextRawText) {
+        await onCreateSnapshot({
+          trigger,
+          label: beforeLabel,
+          rawText: previousRawText,
+        });
+      }
+      await onCreateSnapshot({
+        trigger,
+        label: afterLabel,
+        rawText: nextRawText,
+      });
       return true;
     },
     [
@@ -377,23 +393,19 @@ export function useDocumentMutations({
 
   const handleApplyAiDraftSuggestion = useCallback(
     async (suggestion: DraftSuggestion): Promise<boolean> => {
-      const snapshotLabel = buildAiSnapshotLabel(
-        'ai_draft',
-        suggestion.title || suggestion.summary
-      );
+      const detail = suggestion.title || suggestion.summary;
+      const beforeLabel = buildAiSnapshotLabel('ai_draft', detail, {phase: 'before'});
+      const afterLabel = buildAiSnapshotLabel('ai_draft', detail, {phase: 'after'});
       if (isReadOnly) {
         onSkipNextAiReset();
         return onForkCurrentExampleWithContent(suggestion.candidateRawText, {
           title: suggestion.title,
-          snapshotMeta: {trigger: 'ai_draft', label: snapshotLabel},
+          snapshotMeta: {trigger: 'ai_draft', beforeLabel, afterLabel},
         });
       }
-      void onCreateSnapshot({
-        trigger: 'ai_draft',
-        label: snapshotLabel,
-        rawText,
-      });
-      commitRawText(suggestion.candidateRawText, {mode: 'checkpoint'});
+      const previousRawText = rawText;
+      const nextRawText = suggestion.candidateRawText;
+      commitRawText(nextRawText, {mode: 'checkpoint'});
       if (
         suggestion.title &&
         (sceneTitle.trim() === '' || sceneTitle.startsWith(APP_META.untitledScene))
@@ -401,6 +413,18 @@ export function useDocumentMutations({
         onTitleChange(suggestion.title);
       }
       onToast(UI_LABELS.toasts.aiDraftApplied);
+      if (previousRawText !== nextRawText) {
+        await onCreateSnapshot({
+          trigger: 'ai_draft',
+          label: beforeLabel,
+          rawText: previousRawText,
+        });
+      }
+      await onCreateSnapshot({
+        trigger: 'ai_draft',
+        label: afterLabel,
+        rawText: nextRawText,
+      });
       return true;
     },
     [

@@ -18,6 +18,7 @@ import {countExecutionBeatsFast} from '../ui/scriptLibraryView.ts';
 import {
   computeRestoreDiff,
   formatSnapshotTimestamp,
+  getSnapshotOrigin,
   type ScriptSnapshot,
   type SnapshotTrigger,
 } from '../ui/scriptSnapshots.ts';
@@ -112,6 +113,8 @@ function VersionHistoryModalContent({
     () => snapshots.find((s) => s.id === selectedId) ?? snapshots[0] ?? null,
     [snapshots, selectedId]
   );
+
+  const selectedOrigin = selectedSnapshot ? getSnapshotOrigin(selectedSnapshot.trigger) : null;
 
   const restoreDiff = useMemo(() => {
     if (!selectedSnapshot) return null;
@@ -372,6 +375,7 @@ function VersionHistoryModalContent({
                       const isSelected = selectedSnapshot?.id === snapshot.id;
                       const isCurrentMatch = snapshot.rawText === currentRawText;
                       const beats = countExecutionBeatsFast(snapshot.rawText);
+                      const origin = getSnapshotOrigin(snapshot.trigger);
 
                       return (
                         <button
@@ -393,6 +397,16 @@ function VersionHistoryModalContent({
 
                           <div className="flex items-center justify-between gap-1.5">
                             <div className="flex items-center gap-1 min-w-0">
+                              <span
+                                title={labels.originTitles[origin]}
+                                className={`inline-flex items-center rounded border px-1.5 py-0.25 font-mono text-[9px] font-semibold uppercase tracking-wider shrink-0 ${
+                                  origin === 'manual'
+                                    ? 'border-border-main bg-surface text-text-main'
+                                    : 'border-border-subtle bg-surface-subtle text-text-muted'
+                                }`}
+                              >
+                                {labels.origins[origin]}
+                              </span>
                               <span
                                 className={`inline-flex items-center rounded border px-1.5 py-0.25 font-mono text-[9px] font-medium shrink-0 ${getTriggerBadgeClass(
                                   snapshot.trigger
@@ -451,7 +465,26 @@ function VersionHistoryModalContent({
                     {/* Preview Header */}
                     <div className="px-4 py-2.5 border-b border-border-subtle bg-surface flex flex-wrap items-center justify-between gap-2 shrink-0">
                       <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {selectedOrigin && (
+                            <span
+                              title={labels.originTitles[selectedOrigin]}
+                              className={`inline-flex items-center rounded border px-1.5 py-0.25 font-mono text-[9px] font-semibold uppercase tracking-wider shrink-0 ${
+                                selectedOrigin === 'manual'
+                                  ? 'border-border-main bg-surface text-text-main'
+                                  : 'border-border-subtle bg-surface-subtle text-text-muted'
+                              }`}
+                            >
+                              {labels.origins[selectedOrigin]}
+                            </span>
+                          )}
+                          <span
+                            className={`inline-flex items-center rounded border px-1.5 py-0.25 font-mono text-[9px] font-medium shrink-0 ${getTriggerBadgeClass(
+                              selectedSnapshot.trigger
+                            )}`}
+                          >
+                            {labels.triggers[selectedSnapshot.trigger]}
+                          </span>
                           <span className="text-xs font-semibold text-text-main truncate">
                             {selectedSnapshot.label}
                           </span>

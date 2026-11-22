@@ -4,6 +4,7 @@ import {
   buildAiSnapshotLabel,
   computeRestoreDiff,
   formatSnapshotTimestamp,
+  getSnapshotOrigin,
   isProtectedSnapshot,
   selectSnapshotsToPrune,
   shouldSkipAutoSnapshot,
@@ -40,7 +41,15 @@ describe('scriptSnapshots pure helpers', () => {
     expect(selectSnapshotsToPrune(base, 1)).toEqual(['s4', 's1']);
   });
 
-  it('deduplicates consecutive identical auto-snapshots while allowing explicit manual milestones', () => {
+  it('classifies manual vs. automatic snapshot origins accurately', () => {
+    expect(getSnapshotOrigin('manual')).toBe('manual');
+    expect(getSnapshotOrigin('ai_draft')).toBe('auto');
+    expect(getSnapshotOrigin('ai_patch')).toBe('auto');
+    expect(getSnapshotOrigin('ai_fix')).toBe('auto');
+    expect(getSnapshotOrigin('pre_restore')).toBe('auto');
+  });
+
+  it('skips empty/whitespace and consecutive identical auto-snapshots while allowing explicit manual milestones', () => {
     const latest: ScriptSnapshot = {
       id: 's1',
       scriptId: 'doc-1',
@@ -54,21 +63,48 @@ describe('scriptSnapshots pure helpers', () => {
     expect(shouldSkipAutoSnapshot(latest, '[EXECUTION]\n[CAM 01] CU', 'ai_patch')).toBe(false);
     expect(shouldSkipAutoSnapshot(latest, '[EXECUTION]\n[CAM 01] MS', 'manual')).toBe(false);
     expect(shouldSkipAutoSnapshot(undefined, '[EXECUTION]\n[CAM 01] MS', 'ai_patch')).toBe(false);
+
+    // Blank / whitespace-only scripts are skipped for automatic triggers, but allowed for manual
+    expect(shouldSkipAutoSnapshot(undefined, '', 'ai_draft')).toBe(true);
+    expect(shouldSkipAutoSnapshot(undefined, '   \n\t  ', 'ai_patch')).toBe(true);
+    expect(shouldSkipAutoSnapshot(latest, '', 'ai_fix')).toBe(true);
+    expect(shouldSkipAutoSnapshot(latest, '  ', 'pre_restore')).toBe(true);
+    expect(shouldSkipAutoSnapshot(undefined, '', 'manual')).toBe(false);
   });
 
-  it('builds concise AI snapshot labels and computes restore diffs accurately', () => {
+  it('builds concise before & after AI snapshot labels and computes restore diffs accurately', () => {
+    // Default / before phase
     expect(buildAiSnapshotLabel('ai_draft', 'Rainy Alley Confrontation')).toBe(
       'Before AI Draft: Rainy Alley Confrontation'
     );
-    expect(buildAiSnapshotLabel('ai_patch', 'Tighten S2 eyeline')).toBe(
+    expect(buildAiSnapshotLabel('ai_draft')).toBe('Before AI Draft');
+    expect(buildAiSnapshotLabel('ai_patch', 'Tighten S2 eyeline', {phase: 'before'})).toBe(
       'Before AI Patch: Tighten S2 eyeline'
     );
+    expect(buildAiSnapshotLabel('ai_patch', undefined, {phase: 'before'})).toBe('Before AI Patch');
     expect(buildAiSnapshotLabel('ai_fix', 'Fix prop continuity', {batchCount: 4})).toBe(
       'Before 4 Audit Fixes'
     );
     expect(buildAiSnapshotLabel('ai_fix', 'Fix S3 prop handoff')).toBe(
       'Before Audit Fix: Fix S3 prop handoff'
     );
+
+    // After phase
+    expect(
+      buildAiSnapshotLabel('ai_draft', 'Rainy Alley Confrontation', {phase: 'after'})
+    ).toBe('AI Draft: Rainy Alley Confrontation');
+    expect(buildAiSnapshotLabel('ai_draft', undefined, {phase: 'after'})).toBe('AI Draft');
+    expect(buildAiSnapshotLabel('ai_patch', 'Tighten S2 eyeline', {phase: 'after'})).toBe(
+      'AI Patch: Tighten S2 eyeline'
+    );
+    expect(buildAiSnapshotLabel('ai_patch', undefined, {phase: 'after'})).toBe('AI Patch');
+    expect(
+      buildAiSnapshotLabel('ai_fix', 'Fix prop continuity', {batchCount: 4, phase: 'after'})
+    ).toBe('Applied 4 Audit Fixes');
+    expect(buildAiSnapshotLabel('ai_fix', 'Fix S3 prop handoff', {phase: 'after'})).toBe(
+      'Audit Fix: Fix S3 prop handoff'
+    );
+    expect(buildAiSnapshotLabel('ai_fix', undefined, {phase: 'after'})).toBe('Audit Fix');
 
     const same = computeRestoreDiff('line 1\nline 2', 'line 1\nline 2');
     expect(same.isIdentical).toBe(true);
@@ -194,5 +230,84 @@ describe('scriptLibraryDb snapshot persistence & cascade lifecycle', () => {
     // Clearing the entire library clears all remaining snapshots too
     await store.clearAll();
     expect(await store.listSnapshots('script-b')).toEqual([]);
+  });
+
+  it('records before/after AI checkpoints cleanly across blank drafts, consecutive patches, and manual edits with monotonic ordering', async () => {
+    const store = createScriptLibraryStore({indexedDB: null, fallbackStorageKey: null});
+    const scriptId = 'script-flow';
+
+    await store.put({
+      id: scriptId,
+      title: 'Untitled Scene',
+      rawText: '',
+      createdAt: 100,
+      updatedAt: 100,
+    });
+
+    const applyAiStep = async (
+      trigger: 'ai_draft' | 'ai_patch' | 'ai_fix',
+      detail: string,
+      prevRawText: string,
+      nextRawText: string
+    ) => {
+      if (prevRawText !== nextRawText) {
+        await store.saveSnapshot({
+          scriptId,
+          trigger,
+          label: buildAiSnapshotLabel(trigger, detail, {phase: 'before'}),
+          rawText: prevRawText,
+        });
+      }
+      await store.saveSnapshot({
+        scriptId,
+        trigger,
+        label: buildAiSnapshotLabel(trigger, detail, {phase: 'after'}),
+        rawText: nextRawText,
+      });
+    };
+
+    // 1. Start from blank ("") -> apply AI Draft (A1): empty pre-draft is skipped; only A1 is stored
+    const a1 = '[INTENT]\nDraft A1\n\n[EXECUTION]\n[CAM 01] MS';
+    await applyAiStep('ai_draft', 'Draft A1', '', a1);
+    const afterDraft = await store.listSnapshots(scriptId);
+    expect(afterDraft.map((s) => ({label: s.label, rawText: s.rawText}))).toEqual([
+      {label: 'AI Draft: Draft A1', rawText: a1},
+    ]);
+
+    // 2. Apply 2 consecutive AI Patches (A1 -> A2 -> A3) without manual edits:
+    // redundant pre-apply snapshots matching A1 / A2 are skipped automatically
+    const a2 = '[INTENT]\nDraft A1\n\n[EXECUTION]\n[CAM 01] CU';
+    const a3 = '[INTENT]\nDraft A1\n\n[EXECUTION]\n[CAM 01] ECU';
+    await applyAiStep('ai_patch', 'Tighten to CU', a1, a2);
+    await applyAiStep('ai_patch', 'Push to ECU', a2, a3);
+
+    const afterConsecutivePatches = await store.listSnapshots(scriptId);
+    expect(afterConsecutivePatches.map((s) => ({label: s.label, rawText: s.rawText}))).toEqual([
+      {label: 'AI Patch: Push to ECU', rawText: a3},
+      {label: 'AI Patch: Tighten to CU', rawText: a2},
+      {label: 'AI Draft: Draft A1', rawText: a1},
+    ]);
+    expect(afterConsecutivePatches[0].createdAt).toBeGreaterThan(
+      afterConsecutivePatches[1].createdAt
+    );
+    expect(afterConsecutivePatches[1].createdAt).toBeGreaterThan(
+      afterConsecutivePatches[2].createdAt
+    );
+
+    // 3. User edits manually (A3 -> U1) and applies Patch 4 (U1 -> A4):
+    // records BOTH Before AI Patch (U1) and AI Patch (A4) with A4 strictly newest
+    const u1 = '[INTENT]\nUser manual revision\n\n[EXECUTION]\n[CAM 01] ECU';
+    const a4 = '[INTENT]\nUser manual revision\n\n[EXECUTION]\n[CAM 01] ECU -> [ACT] Blinks';
+    await applyAiStep('ai_patch', 'Add blink action', u1, a4);
+
+    const finalList = await store.listSnapshots(scriptId);
+    expect(finalList.map((s) => ({label: s.label, rawText: s.rawText}))).toEqual([
+      {label: 'AI Patch: Add blink action', rawText: a4},
+      {label: 'Before AI Patch: Add blink action', rawText: u1},
+      {label: 'AI Patch: Push to ECU', rawText: a3},
+      {label: 'AI Patch: Tighten to CU', rawText: a2},
+      {label: 'AI Draft: Draft A1', rawText: a1},
+    ]);
+    expect(finalList[0].createdAt).toBeGreaterThan(finalList[1].createdAt);
   });
 });

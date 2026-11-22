@@ -73,7 +73,11 @@ export interface UseScriptLibraryResult {
     options?: {
       title?: string;
       toastMessage?: string;
-      snapshotMeta?: {trigger: 'ai_draft' | 'ai_patch' | 'ai_fix'; label: string};
+      snapshotMeta?: {
+        trigger: 'ai_draft' | 'ai_patch' | 'ai_fix';
+        beforeLabel: string;
+        afterLabel: string;
+      };
     }
   ) => Promise<boolean>;
   handleCreateSnapshot: (options: {
@@ -312,7 +316,11 @@ export function useScriptLibrary({
       options?: {
         title?: string;
         toastMessage?: string;
-        snapshotMeta?: {trigger: 'ai_draft' | 'ai_patch' | 'ai_fix'; label: string};
+        snapshotMeta?: {
+          trigger: 'ai_draft' | 'ai_patch' | 'ai_fix';
+          beforeLabel: string;
+          afterLabel: string;
+        };
       }
     ): Promise<boolean> => {
       const current = activeScriptRef.current;
@@ -341,12 +349,21 @@ export function useScriptLibrary({
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
 
       if (options?.snapshotMeta) {
-        void scriptLibraryDb.saveSnapshot({
+        if (example.content.trim().length > 0 && example.content !== nextRawText) {
+          await scriptLibraryDb.saveSnapshot({
+            scriptId: saved.id,
+            trigger: options.snapshotMeta.trigger,
+            label: options.snapshotMeta.beforeLabel,
+            rawText: example.content,
+            createdAt: now,
+          });
+        }
+        await scriptLibraryDb.saveSnapshot({
           scriptId: saved.id,
           trigger: options.snapshotMeta.trigger,
-          label: options.snapshotMeta.label,
-          rawText: example.content,
-          createdAt: now,
+          label: options.snapshotMeta.afterLabel,
+          rawText: nextRawText,
+          createdAt: now + 1,
         });
       }
 

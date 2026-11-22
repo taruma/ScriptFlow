@@ -2,6 +2,8 @@ import {buildLineDiff, type DiffLine} from '../services/scriptTools.ts';
 
 export type SnapshotTrigger = 'ai_draft' | 'ai_patch' | 'ai_fix' | 'pre_restore' | 'manual';
 
+export type SnapshotOrigin = 'auto' | 'manual';
+
 export interface ScriptSnapshot {
   id: string;
   scriptId: string;
@@ -18,6 +20,14 @@ const VALID_TRIGGERS = new Set<string>(['ai_draft', 'ai_patch', 'ai_fix', 'pre_r
 
 export function isValidSnapshotTrigger(value: unknown): value is SnapshotTrigger {
   return typeof value === 'string' && VALID_TRIGGERS.has(value);
+}
+
+/**
+ * Classifies a snapshot trigger as either user-authored ('manual') or
+ * system-captured ('auto').
+ */
+export function getSnapshotOrigin(trigger: SnapshotTrigger): SnapshotOrigin {
+  return trigger === 'manual' ? 'manual' : 'auto';
 }
 
 /**
@@ -55,8 +65,8 @@ export function selectSnapshotsToPrune(
 }
 
 /**
- * Deduplicates consecutive identical automatic snapshots while allowing manual
- * milestones to always be recorded when explicitly requested.
+ * Skips empty/whitespace-only and consecutive identical automatic snapshots
+ * while allowing manual milestones to always be recorded when explicitly requested.
  */
 export function shouldSkipAutoSnapshot(
   latestSnapshot: ScriptSnapshot | undefined,
@@ -64,21 +74,36 @@ export function shouldSkipAutoSnapshot(
   trigger: SnapshotTrigger
 ): boolean {
   if (trigger === 'manual') return false;
+  if (candidateRawText.trim().length === 0) return true;
   if (!latestSnapshot) return false;
   return latestSnapshot.rawText === candidateRawText;
 }
 
 /**
- * Builds a concise, scannable snapshot label for pre-AI-apply checkpoints.
+ * Builds a concise, scannable snapshot label for pre- or post-AI-apply checkpoints.
  */
 export function buildAiSnapshotLabel(
   trigger: 'ai_draft' | 'ai_patch' | 'ai_fix',
   detail?: string,
-  options?: {batchCount?: number}
+  options?: {batchCount?: number; phase?: 'before' | 'after'}
 ): string {
+  const phase = options?.phase ?? 'before';
   const cleanDetail = detail?.replace(/\s+/g, ' ').trim() ?? '';
   const truncate = (text: string, maxLen = 58): string =>
     text.length <= maxLen ? text : `${text.slice(0, maxLen - 1).trimEnd()}…`;
+
+  if (phase === 'after') {
+    if (trigger === 'ai_draft') {
+      return cleanDetail ? `AI Draft: ${truncate(cleanDetail)}` : 'AI Draft';
+    }
+    if (trigger === 'ai_fix') {
+      if (options?.batchCount && options.batchCount > 1) {
+        return `Applied ${options.batchCount} Audit Fixes`;
+      }
+      return cleanDetail ? `Audit Fix: ${truncate(cleanDetail)}` : 'Audit Fix';
+    }
+    return cleanDetail ? `AI Patch: ${truncate(cleanDetail)}` : 'AI Patch';
+  }
 
   if (trigger === 'ai_draft') {
     return cleanDetail ? `Before AI Draft: ${truncate(cleanDetail)}` : 'Before AI Draft';

@@ -319,13 +319,19 @@ export function createScriptLibraryStore(
         return null;
       }
 
+      const latestCreatedAt = existing[0]?.createdAt ?? 0;
+      const resolvedCreatedAt =
+        input.createdAt !== undefined
+          ? input.createdAt
+          : Math.max(Date.now(), latestCreatedAt + 1);
+
       const candidate: ScriptSnapshot = sanitizeSnapshot({
         id: input.id?.trim() || createScriptId('snap'),
         scriptId: cleanScriptId,
         trigger: input.trigger,
         label: input.label,
         rawText: input.rawText,
-        createdAt: input.createdAt ?? Date.now(),
+        createdAt: resolvedCreatedAt,
         ...(input.pinned ? {pinned: true} : {}),
       });
 
