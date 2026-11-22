@@ -12,6 +12,7 @@ import {
   Redo2,
   Sparkles,
   Undo2,
+  Workflow,
 } from 'lucide-react';
 import type {LintDiagnostic} from '../core/types.ts';
 import type {EditorSettings} from '../ui/editorSettings.ts';
@@ -20,7 +21,7 @@ import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import {FileMenuDropdown} from './FileMenuDropdown.tsx';
 import {SettingsPopover} from './SettingsPopover.tsx';
 
-export type ViewMode = 'live' | 'source';
+export type ViewMode = 'live' | 'source' | 'graph';
 export type CopyFormatKind = 'plain' | 'tagless' | 'json';
 
 interface TopSlateBarProps {
@@ -279,6 +280,20 @@ export function TopSlateBar({
             >
               <Code2 className="h-3.5 w-3.5" />
               <span>{UI_LABELS.topBar.sourceMode}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'graph'}
+              onClick={() => onViewModeChange('graph')}
+              className={
+                viewMode === 'graph'
+                  ? UI_TOKENS.button.segmentedItemActive
+                  : UI_TOKENS.button.segmentedItem
+              }
+            >
+              <Workflow className="h-3.5 w-3.5" />
+              <span>{UI_LABELS.topBar.graphMode}</span>
             </button>
           </div>
         </div>

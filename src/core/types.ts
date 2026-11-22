@@ -58,6 +58,11 @@ export interface DialogueParts {
   line: string;
 }
 
+export interface ParsedDialogueModifiers {
+  extensions: string[];
+  delivery: string[];
+}
+
 export interface SubStateNode {
   index: number;
   raw: string;
@@ -111,6 +116,15 @@ export interface AestheticToken {
   token: string;
   description: string;
   category?: string;
+  reference?: string;
+  lineIndex: number;
+}
+
+export interface StagingVisualReference {
+  ref: string;
+  description: string;
+  category?: string;
+  sourceBlock: string;
   lineIndex: number;
 }
 
@@ -143,6 +157,7 @@ export interface CameraSlotDefinition {
 export interface ExtractedMetadata {
   characters: CharacterBinding[];
   aestheticTokens: AestheticToken[];
+  stagingReferences: StagingVisualReference[];
   cameraSlots: Record<string, CameraSlotDefinition>;
   beatLinks: BeatCameraLink[];
   hasContinuationContext: boolean;

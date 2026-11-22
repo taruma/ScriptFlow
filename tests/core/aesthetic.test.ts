@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {
   countAestheticKeys,
+  extractAestheticStandaloneReferences,
   extractAestheticTokenSegments,
   extractAestheticTokens,
   parseAestheticEntries,
@@ -97,4 +98,33 @@ Location: dim alley -> LOC01; neon diner → LOC02
       envelopeTokens.map(({token, description, category}) => ({token, description, category}))
     );
   });
+
+  it('captures optional trailing (reference: @ref) / (ref: @ref) annotations on token segments', () => {
+    const value =
+      'Sunlit hallway -> LOC01; Rustic cabin porch -> LOC03 (reference: @location); Rain-slick pier → LOC04 (ref: @pier_photo)';
+    const segments = extractAestheticTokenSegments(value);
+
+    expect(segments).toEqual([
+      {description: 'Sunlit hallway', token: 'LOC01'},
+      {description: 'Rustic cabin porch', token: 'LOC03', reference: '@location'},
+      {description: 'Rain-slick pier', token: 'LOC04', reference: '@pier_photo'},
+    ]);
+    expect('reference' in segments[0]).toBe(false);
+  });
+
+  it('extracts standalone Staging visual references while skipping -> TOKEN mapped segments', () => {
+    expect(
+      extractAestheticStandaloneReferences(
+        'Interior of a mid-century house (reference: @house); Vintage sedan (ref: @car_ref)'
+      )
+    ).toEqual([
+      {description: 'Interior of a mid-century house', reference: '@house'},
+      {description: 'Vintage sedan', reference: '@car_ref'},
+    ]);
+
+    expect(
+      extractAestheticStandaloneReferences('Cabin porch -> LOC03 (reference: @location)')
+    ).toEqual([]);
+  });
 });
+

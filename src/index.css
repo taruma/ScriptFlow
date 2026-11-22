@@ -619,3 +619,164 @@
     opacity: 1;
   }
 }
+
+/* ============================================================================
+   Graph View — 4-Theme Semantic Tokens & Sculpted Sub-State Motifs
+   ============================================================================ */
+:root,
+[data-theme-category="light"] {
+  --graph-dot: rgba(28, 25, 23, 0.16);
+  --graph-chamber-bg: rgba(2, 132, 199, 0.055);
+  --graph-chamber-border: rgba(2, 132, 199, 0.28);
+  --graph-dim-camera: var(--tok-cam-text);
+  --graph-dim-block: #0f766e;
+  --graph-dim-action: #059669;
+  --graph-dim-dialogue: var(--tok-dial-text);
+  --graph-dim-foley: var(--tok-foley-text);
+  --graph-dim-score: var(--tok-score-text);
+  --graph-dim-light_vfx: #7e22ce;
+  --graph-dim-onscreen_text: #be123c;
+  --graph-obj-character: var(--tok-continuity);
+  --graph-obj-location: #0f766e;
+  --graph-obj-wardrobe: var(--tok-dial-text);
+  --graph-obj-prop: var(--tok-foley-text);
+  --graph-obj-staging_ref: var(--tok-ref-text);
+  --graph-obj-camera_slot: var(--tok-cam-text);
+}
+
+[data-theme-category="warm"] {
+  --graph-dot: rgba(43, 35, 29, 0.18);
+  --graph-chamber-bg: rgba(24, 98, 139, 0.06);
+  --graph-chamber-border: rgba(24, 98, 139, 0.30);
+  --graph-dim-camera: var(--tok-cam-text);
+  --graph-dim-block: #16605a;
+  --graph-dim-action: #1d6447;
+  --graph-dim-dialogue: var(--tok-dial-text);
+  --graph-dim-foley: var(--tok-foley-text);
+  --graph-dim-score: var(--tok-score-text);
+  --graph-dim-light_vfx: #653494;
+  --graph-dim-onscreen_text: #9f263c;
+  --graph-obj-character: var(--tok-continuity);
+  --graph-obj-location: #16605a;
+  --graph-obj-wardrobe: var(--tok-dial-text);
+  --graph-obj-prop: var(--tok-foley-text);
+  --graph-obj-staging_ref: var(--tok-ref-text);
+  --graph-obj-camera_slot: var(--tok-cam-text);
+}
+
+[data-theme-category="dark"] {
+  --graph-dot: rgba(245, 245, 244, 0.15);
+  --graph-chamber-bg: rgba(56, 189, 248, 0.06);
+  --graph-chamber-border: rgba(56, 189, 248, 0.30);
+  --graph-dim-camera: #38bdf8;
+  --graph-dim-block: #2dd4bf;
+  --graph-dim-action: #34d399;
+  --graph-dim-dialogue: #fbbf24;
+  --graph-dim-foley: #fb923c;
+  --graph-dim-score: #c4b5fd;
+  --graph-dim-light_vfx: #c084fc;
+  --graph-dim-onscreen_text: #fb7185;
+  --graph-obj-character: #38bdf8;
+  --graph-obj-location: #2dd4bf;
+  --graph-obj-wardrobe: #fbbf24;
+  --graph-obj-prop: #fb923c;
+  --graph-obj-staging_ref: #34d399;
+  --graph-obj-camera_slot: #7dd3fc;
+}
+
+[data-pure-black-shell="true"],
+[data-pure-black-shell="true"] [data-theme-category="dark"] {
+  --graph-dot: rgba(255, 255, 255, 0.16);
+  --graph-chamber-bg: rgba(56, 189, 248, 0.075);
+  --graph-chamber-border: rgba(56, 189, 248, 0.34);
+}
+
+.auteur-graph-traced {
+  box-shadow:
+    0 0 0 2px var(--tok-continuity),
+    0 12px 26px -10px color-mix(in srgb, var(--tok-continuity) 42%, transparent);
+}
+
+.auteur-graph-dimmed {
+  opacity: 0.22;
+  filter: saturate(0.28);
+}
+
+.auteur-graph-ghost {
+  opacity: 0.14;
+  filter: saturate(0.25);
+}
+
+.auteur-graph-foley-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+}
+
+.auteur-graph-foley-wave span {
+  display: block;
+  width: 2px;
+  border-radius: 99px;
+  background: var(--graph-dim-foley);
+}
+
+.auteur-graph-title-frame {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--graph-dim-onscreen_text) 42%, transparent);
+  background: color-mix(in srgb, var(--graph-dim-onscreen_text) 7%, var(--surface));
+}
+
+.auteur-graph-title-frame::before,
+.auteur-graph-title-frame::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+}
+
+.auteur-graph-title-frame::before {
+  top: 3px;
+  left: 3px;
+  border-top: 1.5px solid var(--graph-dim-onscreen_text);
+  border-left: 1.5px solid var(--graph-dim-onscreen_text);
+}
+
+.auteur-graph-title-frame::after {
+  bottom: 3px;
+  right: 3px;
+  border-bottom: 1.5px solid var(--graph-dim-onscreen_text);
+  border-right: 1.5px solid var(--graph-dim-onscreen_text);
+}
+
+.auteur-graph-raw-card {
+  user-select: text;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 48%, transparent);
+  background: color-mix(in srgb, var(--app-bg) 78%, var(--surface));
+}
+
+.auteur-graph-canvas .react-flow__pane {
+  cursor: grab;
+}
+.auteur-graph-canvas .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+.auteur-graph-canvas .react-flow__selection {
+  background: color-mix(in srgb, var(--tok-continuity) 12%, transparent);
+  border: 1px dashed var(--tok-continuity);
+}
+.auteur-graph-canvas .react-flow__minimap {
+  background-color: var(--surface);
+  border: 1px solid var(--border-main);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.14);
+}
+.auteur-graph-canvas .react-flow__handle {
+  width: 6px;
+  height: 6px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
+

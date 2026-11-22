@@ -10,7 +10,7 @@ import {BUNDLED_EXAMPLES} from './data/examples/index.ts';
 import type {QuickScanResult} from './services/geminiDecisions.ts';
 import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
-import {APP_META} from './ui/labels.ts';
+import {APP_META, UI_LABELS} from './ui/labels.ts';
 import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
 import {useDocumentMutations} from './ui/useDocumentMutations.ts';
@@ -34,6 +34,12 @@ const AiAssistantSidebar = lazy(() =>
 const VersionHistoryModal = lazy(() =>
   import('./components/VersionHistoryModal.tsx').then((mod) => ({
     default: mod.VersionHistoryModal,
+  }))
+);
+
+const AuteurGraphView = lazy(() =>
+  import('./components/canvas/AuteurGraphView.tsx').then((mod) => ({
+    default: mod.AuteurGraphView,
   }))
 );
 
@@ -309,7 +315,9 @@ export default function App() {
           className={`flex-1 min-w-0 min-h-0 lg:h-full ${
             effectiveViewMode === 'source'
               ? 'lg:overflow-y-auto auteur-pane-scroll'
-              : 'lg:overflow-hidden'
+              : effectiveViewMode === 'graph'
+                ? 'h-[calc(100dvh-3rem)] overflow-hidden'
+                : 'lg:overflow-hidden'
           }`}
         >
           {effectiveViewMode === 'live' ? (
@@ -341,7 +349,7 @@ export default function App() {
               onDeleteBeat={mutations.handleRequestDeleteBeat}
               onReorderBeats={mutations.handleReorderBeats}
             />
-          ) : (
+          ) : effectiveViewMode === 'source' ? (
             <SourceEditor
               rawText={rawText}
               aestheticTokens={stableAestheticTokens}
@@ -349,6 +357,20 @@ export default function App() {
               onChange={mutations.handleUpdateSource}
               onFormatScript={mutations.handleFormatScript}
             />
+          ) : (
+            <Suspense
+              fallback={
+                <div className="flex h-full w-full items-center justify-center bg-app text-xs font-medium text-text-muted">
+                  {UI_LABELS.graph.loading}
+                </div>
+              }
+            >
+              <AuteurGraphView
+                doc={doc}
+                metadata={metadata}
+                scriptSessionKey={aiScriptSessionKey}
+              />
+            </Suspense>
           )}
         </div>
 

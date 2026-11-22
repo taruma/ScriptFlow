@@ -1,4 +1,9 @@
-import {extractAestheticTokenSegments, parseAestheticLine} from './aesthetic.ts';
+import {
+  extractAestheticStandaloneReferences,
+  extractAestheticTokenSegments,
+  parseAestheticLine,
+} from './aesthetic.ts';
+import type {SceneTopology} from './irSchemas.ts';
 import type {
   AestheticToken,
   AuteurDocument,
@@ -6,6 +11,7 @@ import type {
   CameraSlotDefinition,
   CharacterBinding,
   ExtractedMetadata,
+  StagingVisualReference,
 } from './types.ts';
 
 const CHARACTER_BINDING_REGEX =
@@ -57,13 +63,46 @@ export function extractAestheticTokens(doc: AuteurDocument): AestheticToken[] {
       const category = parsed.type === 'kv' ? parsed.key : undefined;
       const remainder = parsed.type === 'kv' ? parsed.value : parsed.raw;
 
-      for (const {description, token} of extractAestheticTokenSegments(remainder)) {
+      for (const {description, token, reference} of extractAestheticTokenSegments(remainder)) {
         if (!seen.has(token)) {
           seen.add(token);
           results.push({
             token,
             description,
             ...(category ? {category} : {}),
+            ...(reference ? {reference} : {}),
+            lineIndex,
+          });
+        }
+      }
+    });
+  }
+
+  return results;
+}
+
+export function extractStagingVisualReferences(doc: AuteurDocument): StagingVisualReference[] {
+  const results: StagingVisualReference[] = [];
+  const seen = new Set<string>();
+
+  for (const block of doc.stagingBlocks) {
+    if (block.kind !== 'AESTHETIC') continue;
+
+    block.lines.forEach((line, offset) => {
+      const lineIndex = block.contentStartLine + offset;
+      const parsed = parseAestheticLine(line);
+      const category = parsed.type === 'kv' ? parsed.key : undefined;
+      const remainder = parsed.type === 'kv' ? parsed.value : parsed.raw;
+
+      for (const {description, reference} of extractAestheticStandaloneReferences(remainder)) {
+        const key = reference.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push({
+            ref: reference,
+            description,
+            ...(category ? {category} : {}),
+            sourceBlock: block.name,
             lineIndex,
           });
         }
@@ -187,15 +226,44 @@ export function extractCameraContinuity(doc: AuteurDocument): {
   return {cameraSlots, beatLinks};
 }
 
+export function inferSceneTopologyFromDocument(
+  doc: AuteurDocument,
+  metadata?: ExtractedMetadata
+): SceneTopology {
+  if (!doc.execution || doc.execution.beats.length === 0) {
+    return 'empty';
+  }
+
+  const resolvedMeta = metadata ?? extractMetadata(doc);
+  const numberedSlots = new Set<string>();
+  let hasMontage = false;
+
+  for (const link of resolvedMeta.beatLinks) {
+    if (link.transition === 'MONTAGE') {
+      hasMontage = true;
+    } else if (link.slot) {
+      numberedSlots.add(link.slot.toUpperCase());
+    }
+  }
+
+  if (hasMontage && numberedSlots.size > 0) return 'mixed';
+  if (hasMontage) return 'discontinuous_montage';
+  if (numberedSlots.size === 1) return 'continuous_oner';
+  if (numberedSlots.size > 1) return 'multi_camera_coverage';
+  return 'mixed';
+}
+
 export function extractMetadata(doc: AuteurDocument): ExtractedMetadata {
   const characters = extractCharacterBindings(doc);
   const aestheticTokens = extractAestheticTokens(doc);
+  const stagingReferences = extractStagingVisualReferences(doc);
   const hasContinuationContext = detectContinuationContext(doc);
   const {cameraSlots, beatLinks} = extractCameraContinuity(doc);
 
   return {
     characters,
     aestheticTokens,
+    stagingReferences,
     cameraSlots,
     beatLinks,
     hasContinuationContext,

@@ -1,5 +1,9 @@
 import {describe, expect, it} from 'vitest';
-import {extractMetadata, parseAuteurScript} from '../../src/core/index.ts';
+import {
+  extractMetadata,
+  inferSceneTopologyFromDocument,
+  parseAuteurScript,
+} from '../../src/core/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script Metadata & Continuity Extractor', () => {
@@ -103,4 +107,57 @@ Wardrobe Mapping: Evan in mustard yellow track jacket → EV01`;
     const standard = parseAuteurScript(SCRIPT_PRESETS[0].content);
     expect(extractMetadata(standard).hasContinuationContext).toBe(false);
   });
+
+  it('retains optional @ref on [AESTHETIC] tokens and extracts standalone Staging visual references', () => {
+    const raw = `[INTENT]
+Create a scene featuring @img1 as Evan.
+
+[AESTHETIC]
+Location: Warm suburban house interior (reference: @house)
+Location Mapping: Dim neon alley -> LOC01; Rainy dock -> LOC03 (reference: @location)
+Props: Brass compass (ref: @compass)
+
+[EXECUTION]
+[CAM 01] WS in LOC03 -> [ACT] Evan checks the compass`;
+
+    const meta = extractMetadata(parseAuteurScript(raw));
+    expect(meta.aestheticTokens).toHaveLength(2);
+    expect(meta.aestheticTokens[0].reference).toBeUndefined();
+    expect(meta.aestheticTokens[1]).toMatchObject({
+      token: 'LOC03',
+      description: 'Rainy dock',
+      reference: '@location',
+    });
+
+    expect(meta.stagingReferences).toHaveLength(2);
+    expect(meta.stagingReferences[0]).toMatchObject({
+      ref: '@house',
+      category: 'Location',
+      description: 'Warm suburban house interior',
+      sourceBlock: 'AESTHETIC',
+    });
+    expect(meta.stagingReferences[1]).toMatchObject({
+      ref: '@compass',
+      category: 'Props',
+      description: 'Brass compass',
+      sourceBlock: 'AESTHETIC',
+    });
+  });
+
+  it('infers canonical Scene Topologies cleanly across bundled presets and empty scripts', () => {
+    expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[0].content))).toBe(
+      'multi_camera_coverage'
+    );
+    expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[1].content))).toBe(
+      'continuous_oner'
+    );
+    expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[2].content))).toBe(
+      'continuous_oner'
+    );
+    expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[3].content))).toBe(
+      'discontinuous_montage'
+    );
+    expect(inferSceneTopologyFromDocument(parseAuteurScript(''))).toBe('empty');
+  });
 });
+

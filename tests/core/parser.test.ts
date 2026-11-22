@@ -4,6 +4,7 @@ import {
   exportPlainText,
   isMultiBlockAuteurScript,
   parseAuteurScript,
+  parseDialogueModifiers,
   parseExecutionLine,
   parseSubState,
 } from '../../src/core/index.ts';
@@ -134,6 +135,37 @@ Wardrobe Mapping: Evan in mustard track jacket -> EV01
     expect(onscreenText).toMatchObject({kind: 'onscreen_text', body: 'THREE YEARS LATER'});
   });
 
+  it('separates screenplay character extensions from delivery parentheticals via parseDialogueModifiers', () => {
+    expect(parseDialogueModifiers('(V.O., deadpan)')).toEqual({
+      extensions: ['V.O.'],
+      delivery: ['deadpan'],
+    });
+    expect(parseDialogueModifiers('(O.S., flat)')).toEqual({
+      extensions: ['O.S.'],
+      delivery: ['flat'],
+    });
+    expect(parseDialogueModifiers('O.S. (strained protest)')).toEqual({
+      extensions: ['O.S.'],
+      delivery: ['strained protest'],
+    });
+    expect(parseDialogueModifiers("(CONT'D, whispered, urgent)")).toEqual({
+      extensions: ["CONT'D"],
+      delivery: ['whispered', 'urgent'],
+    });
+    expect(parseDialogueModifiers('(FILTERED, PRE-LAP, metallic)')).toEqual({
+      extensions: ['FILTERED', 'PRE-LAP'],
+      delivery: ['metallic'],
+    });
+    expect(parseDialogueModifiers('(low, guarded)')).toEqual({
+      extensions: [],
+      delivery: ['low', 'guarded'],
+    });
+    expect(parseDialogueModifiers(undefined)).toEqual({
+      extensions: [],
+      delivery: [],
+    });
+  });
+
   it('splits both ASCII -> and Unicode → chaining operators inside [EXECUTION]', () => {
     const beat = parseExecutionLine(
       '[STATE IN] Mark grips rail → [ACT] Mark swings forward -> <steel ring> → [STATE OUT] Mark lands',
@@ -161,3 +193,4 @@ Wardrobe Mapping: Evan in mustard track jacket -> EV01
     expect(isMultiBlockAuteurScript('[CAM 01] MS -> [ACT] Ray walks in')).toBe(false);
   });
 });
+

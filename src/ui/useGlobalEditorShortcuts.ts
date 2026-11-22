@@ -54,7 +54,7 @@ export function useGlobalEditorShortcuts({
   // Global Paste-and-Hydrate with Active-Editor & Read-Only Guards
   useEffect(() => {
     const handleGlobalPaste = (event: ClipboardEvent) => {
-      if (isModalOpen) return;
+      if (isModalOpen || viewMode === 'graph') return;
       if (document.querySelector('[aria-modal="true"]')) return;
 
       const pasted = event.clipboardData?.getData('text/plain');
@@ -113,7 +113,7 @@ export function useGlobalEditorShortcuts({
       const action = matchHistoryShortcut(event);
       if (!action) return;
 
-      if (isReadOnly || isModalOpen) {
+      if (isReadOnly || isModalOpen || viewMode === 'graph') {
         return;
       }
       if (document.querySelector('[aria-modal="true"]')) return;
@@ -133,5 +133,5 @@ export function useGlobalEditorShortcuts({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isReadOnly, isModalOpen, onUndo, onRedo]);
+  }, [viewMode, isReadOnly, isModalOpen, onUndo, onRedo]);
 }

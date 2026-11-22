@@ -50,7 +50,12 @@ function stabilizeArray<T>(
 }
 
 function isAestheticTokenEqual(a: AestheticToken, b: AestheticToken): boolean {
-  return a.token === b.token && a.description === b.description && a.category === b.category;
+  return (
+    a.token === b.token &&
+    a.description === b.description &&
+    a.category === b.category &&
+    a.reference === b.reference
+  );
 }
 
 function isCharacterBindingEqual(a: CharacterBinding, b: CharacterBinding): boolean {

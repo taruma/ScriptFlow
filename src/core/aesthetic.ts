@@ -17,10 +17,19 @@ export const AESTHETIC_LINE_CAPTURE_REGEX = /^(\s*)([A-Za-z0-9_/-][A-Za-z0-9 _/-
 export const AESTHETIC_TOKEN_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
 
 /**
- * Canonical `[AESTHETIC]` shorthand token mapping segment: `Description -> TOKEN`
+ * Canonical `[AESTHETIC]` shorthand token mapping segment:
+ * `Description -> TOKEN` with optional trailing `(reference: @ref)` / `(ref: @ref)`
  * (supports both ASCII `->` and Unicode `→`).
  */
-export const AESTHETIC_TOKEN_SEGMENT_REGEX = /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)\s*$/;
+export const AESTHETIC_TOKEN_SEGMENT_REGEX =
+  /^(.*?)\s*(?:->|→)\s*([A-Za-z0-9_-]+)(?:\s*\(\s*(?:reference|ref)\s*:\s*(@[A-Za-z0-9_-]+)\s*\))?\s*$/i;
+
+/**
+ * Standalone `[AESTHETIC]` reference anchor without a `-> TOKEN` mapping:
+ * e.g. `Sunlit Victorian house (reference: @house)` or `Red vintage coupe (ref: @car)`.
+ */
+export const AESTHETIC_STANDALONE_REF_REGEX =
+  /^(.*?)\s*\(\s*(?:reference|ref)\s*:\s*(@[A-Za-z0-9_-]+)\s*\)\s*$/i;
 
 export type AestheticRow =
   | {type: 'kv'; key: string; value: string}
@@ -29,6 +38,12 @@ export type AestheticRow =
 export interface ParsedAestheticTokenSegment {
   description: string;
   token: string;
+  reference?: string;
+}
+
+export interface ParsedAestheticStandaloneRef {
+  description: string;
+  reference: string;
 }
 
 /**
@@ -50,7 +65,7 @@ export function parseAestheticLine(line: string): AestheticRow {
 }
 
 /**
- * Parses a single semicolon-delimited `[AESTHETIC]` segment (`Description -> TOKEN`).
+ * Parses a single semicolon-delimited `[AESTHETIC]` segment (`Description -> TOKEN [(reference: @ref)]`).
  * Returns null when the segment does not declare a shorthand token mapping.
  */
 export function parseAestheticTokenSegment(segment: string): ParsedAestheticTokenSegment | null {
@@ -63,9 +78,12 @@ export function parseAestheticTokenSegment(segment: string): ParsedAestheticToke
   const token = match[2].trim();
   if (!token) return null;
 
+  const reference = match[3]?.trim() || undefined;
+
   return {
     description: match[1].trim(),
     token,
+    ...(reference ? {reference} : {}),
   };
 }
 
@@ -83,6 +101,35 @@ export function extractAestheticTokenSegments(value: string): ParsedAestheticTok
     const parsed = parseAestheticTokenSegment(rawSeg);
     if (parsed) {
       results.push(parsed);
+    }
+  }
+  return results;
+}
+
+/**
+ * Extracts standalone `(reference: @ref)` / `(ref: @ref)` bindings from an `[AESTHETIC]`
+ * value string on segments that do NOT declare a `-> TOKEN` shorthand mapping.
+ */
+export function extractAestheticStandaloneReferences(
+  value: string
+): ParsedAestheticStandaloneRef[] {
+  if (!value.includes('@')) {
+    return [];
+  }
+
+  const results: ParsedAestheticStandaloneRef[] = [];
+  for (const rawSeg of value.split(';')) {
+    const trimmed = rawSeg.trim();
+    if (!trimmed) continue;
+    // Skip token-mapped segments (handled by extractAestheticTokenSegments)
+    if (parseAestheticTokenSegment(trimmed)) continue;
+
+    const match = AESTHETIC_STANDALONE_REF_REGEX.exec(trimmed);
+    if (match && match[2]) {
+      results.push({
+        description: match[1].trim(),
+        reference: match[2].trim(),
+      });
     }
   }
   return results;

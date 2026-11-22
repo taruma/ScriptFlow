@@ -146,6 +146,74 @@ export function parseCameraTag(tag: string, body: string): CameraMeta | null {
   return null;
 }
 
+const DIALOGUE_CHARACTER_EXTENSION_REGEX =
+  /^(?:V\.O\.|O\.S\.|O\.C\.|CONT'D|FILTERED|PRE-LAP)$/i;
+
+/**
+ * Splits raw dialogue modifiers (e.g. `(V.O., deadpan)` or `O.S. (strained protest)`)
+ * into canonical screenplay Character Extensions (`V.O.`, `O.S.`, `O.C.`, `CONT'D`,
+ * `FILTERED`, `PRE-LAP`) and Delivery/Effort parentheticals (`deadpan`, `strained protest`).
+ */
+export function parseDialogueModifiers(modifiers?: string): {
+  extensions: string[];
+  delivery: string[];
+} {
+  const extensions: string[] = [];
+  const delivery: string[] = [];
+
+  if (!modifiers || modifiers.trim().length === 0) {
+    return {extensions, delivery};
+  }
+
+  const seenExt = new Set<string>();
+  const pushPart = (rawPart: string) => {
+    const cleaned = rawPart.trim();
+    if (!cleaned) return;
+    if (DIALOGUE_CHARACTER_EXTENSION_REGEX.test(cleaned)) {
+      const normalized = cleaned.toUpperCase();
+      if (!seenExt.has(normalized)) {
+        seenExt.add(normalized);
+        extensions.push(normalized);
+      }
+    } else {
+      delivery.push(cleaned);
+    }
+  };
+
+  // Extract parenthetical groups and any leading/trailing bare tokens (e.g. `O.S. (strained protest)`)
+  const stripped = modifiers
+    .replace(/\(([^)]*)\)/g, (_, inner: string) => {
+      for (const piece of inner.split(/[,;]/)) {
+        pushPart(piece);
+      }
+      return ' ';
+    })
+    .trim();
+
+  if (stripped.length > 0) {
+    for (const piece of stripped.split(/[,;]/)) {
+      const trimmed = piece.trim();
+      if (!trimmed) continue;
+      if (DIALOGUE_CHARACTER_EXTENSION_REGEX.test(trimmed)) {
+        pushPart(trimmed);
+      } else {
+        // Check if bare prefix starts with a known extension followed by delivery prose
+        const prefixMatch = /^(V\.O\.|O\.S\.|O\.C\.|CONT'D|FILTERED|PRE-LAP)\b\s*(.*)$/i.exec(
+          trimmed
+        );
+        if (prefixMatch) {
+          pushPart(prefixMatch[1]);
+          if (prefixMatch[2]) pushPart(prefixMatch[2]);
+        } else {
+          pushPart(trimmed);
+        }
+      }
+    }
+  }
+
+  return {extensions, delivery};
+}
+
 export function parseDialogueSubState(segment: string): DialogueParts | null {
   const match = DIALOGUE_REGEX.exec(segment);
   if (!match || !match.groups) return null;
