@@ -674,7 +674,7 @@ export function buildGraphSceneModel(
     topology,
     stats: {
       stagingCount: stagingBlocks.length,
-      inferredObjectCount: railObjects.length > 0 ? railObjects.length : cameraSlotObjects.length,
+      inferredObjectCount: railObjects.length + cameraSlotObjects.length,
       macroStateCount: macroStates.length,
       subStateCount: totalSubStates,
       dimensionCounts,

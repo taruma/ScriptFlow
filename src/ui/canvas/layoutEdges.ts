@@ -255,7 +255,7 @@ export function buildDownstreamLabelMatchEdges(
   const objsToWire: InferredGraphObject[] = activeObj
     ? [activeObj]
     : showAllLinks
-      ? [...displayRailObjects]
+      ? displayRailObjects.filter((o) => o.kind !== 'camera_slot')
       : [];
 
   objsToWire.forEach((obj, laneIndex) => {

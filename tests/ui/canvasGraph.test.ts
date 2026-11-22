@@ -537,38 +537,54 @@ Robbie checks PR01 in LOC01 wearing WR01.
 
     const model = buildModelFromRaw(raw);
 
-    // Verify enhanced [AESTHETIC] key inference for location / prop / wardrobe
+    // Verify enhanced [AESTHETIC] key inference for location / prop / wardrobe + total object count (5 staging + 2 cameras)
     expect(model.railObjects.find((o) => o.matchToken === 'LOC01')?.kind).toBe('location');
     expect(model.railObjects.find((o) => o.matchToken === 'PR01')?.kind).toBe('prop');
     expect(model.railObjects.find((o) => o.matchToken === 'WR01')?.kind).toBe('wardrobe');
+    expect(model.stats.inferredObjectCount).toBe(7);
 
-    // LR: 3 horizontal bands stacked top-to-bottom (Tier 1 Staging -> Tier 2 Objects -> Tier 3 Execution)
+    // LR: 3 horizontal bands stacked top-to-bottom (Tier 1 Staging -> Tier 2 Objects + Camera sub-row -> Tier 3 Execution)
     const lr = buildCanvasLayout(model, makeLayoutOptions({direction: 'LR'}));
     const lrStaging = lr.nodes.filter((n) => n.type === 'stagingBlock');
     const lrObjects = lr.nodes.filter((n) => n.type === 'inferredObject');
+    const lrStagingObjects = lrObjects.filter((n) => !n.id.startsWith('obj-cam-'));
+    const lrCameraObjects = lrObjects.filter((n) => n.id.startsWith('obj-cam-'));
     const lrExec = lr.nodes.filter((n) => n.type === 'macroState');
 
     // Tier 1 blocks flow L -> R on the same Y row
     expect(lrStaging[1].position.x).toBeGreaterThan(lrStaging[0].position.x);
     expect(lrStaging[1].position.y).toBe(lrStaging[0].position.y);
-    // Tier 2 objects sit strictly below Tier 1 and flow L -> R on one shared Y baseline
-    expect(lrObjects[0].position.y).toBeGreaterThan(lrStaging[0].position.y);
-    expect(lrObjects.every((o) => o.position.y === lrObjects[0].position.y)).toBe(true);
-    expect(lrObjects[1].position.x).toBeGreaterThan(lrObjects[0].position.x);
-    // Tier 3 Execution sits strictly below Tier 2 and flows L -> R
-    expect(lrExec[0].position.y).toBeGreaterThan(lrObjects[0].position.y);
+    // Tier 2 Staging objects sit strictly below Tier 1 and flow L -> R on one shared Y baseline
+    expect(lrStagingObjects).toHaveLength(5);
+    expect(lrStagingObjects[0].position.y).toBeGreaterThan(lrStaging[0].position.y);
+    expect(lrStagingObjects.every((o) => o.position.y === lrStagingObjects[0].position.y)).toBe(true);
+    expect(lrStagingObjects[1].position.x).toBeGreaterThan(lrStagingObjects[0].position.x);
+    // Tier 2 Camera Setup objects sit on a distinct row below the Staging objects row
+    expect(lrCameraObjects.map((n) => n.id)).toEqual(['obj-cam-CAM-01', 'obj-cam-CAM-02']);
+    expect(lrCameraObjects[0].position.y).toBeGreaterThan(lrStagingObjects[0].position.y);
+    expect(lrCameraObjects[0].position.x).toBe(lrStagingObjects[0].position.x);
+    expect(lrCameraObjects[1].position.y).toBe(lrCameraObjects[0].position.y);
+    expect(lrCameraObjects[1].position.x).toBeGreaterThan(lrCameraObjects[0].position.x);
+    // Tier 3 Execution sits strictly below the Tier 2 Camera Setups row and flows L -> R
+    expect(lrExec[0].position.y).toBeGreaterThan(lrCameraObjects[0].position.y);
     expect(lrExec[1].position.x).toBeGreaterThan(lrExec[0].position.x);
 
-    // TB: 90-degree transpose into 3 parallel vertical columns (Staging | Objects | Execution)
+    // TB: 90-degree transpose into 3 parallel vertical columns (Staging | Objects + Camera Setups below | Execution)
     const tb = buildCanvasLayout(model, makeLayoutOptions({direction: 'TB'}));
     const tbStaging = tb.nodes.filter((n) => n.type === 'stagingBlock');
     const tbObjects = tb.nodes.filter((n) => n.type === 'inferredObject');
+    const tbStagingObjects = tbObjects.filter((n) => !n.id.startsWith('obj-cam-'));
+    const tbCameraObjects = tbObjects.filter((n) => n.id.startsWith('obj-cam-'));
     const tbExec = tb.nodes.filter((n) => n.type === 'macroState');
 
     expect(tbStaging[1].position.x).toBe(tbStaging[0].position.x);
     expect(tbStaging[1].position.y).toBeGreaterThan(tbStaging[0].position.y);
     expect(tbObjects[0].position.x).toBeGreaterThan(tbStaging[0].position.x);
     expect(tbObjects[1].position.y).toBeGreaterThan(tbObjects[0].position.y);
+    expect(
+      tbCameraObjects[0].position.y
+    ).toBeGreaterThan(tbStagingObjects[tbStagingObjects.length - 1].position.y);
+    expect(tbCameraObjects[0].position.x).toBe(tbStagingObjects[0].position.x);
     expect(tbExec[0].position.x).toBeGreaterThan(tbObjects[0].position.x);
     expect(tbExec[1].position.y).toBeGreaterThan(tbExec[0].position.y);
   });

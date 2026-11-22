@@ -96,9 +96,11 @@ export function buildCanvasLayout(
   const nodes: CanvasNodeSpec[] = [];
   const edges: CanvasEdgeSpec[] = [];
 
-  // Layer 2 rail objects: Staging-derived objects primarily; fall back to Camera Setups when none exist
-  const displayRailObjects: InferredGraphObject[] =
-    model.railObjects.length > 0 ? model.railObjects : model.cameraSlotObjects;
+  // Layer 2 rail objects: Staging-derived objects + numbered Camera Setups (placed below the row/column)
+  const displayRailObjects: InferredGraphObject[] = [
+    ...model.railObjects,
+    ...model.cameraSlotObjects,
+  ];
   const hasRail = displayRailObjects.length > 0;
 
   // Reserve perpendicular headroom for opposite-side </> Source branches in Tier 1 & Tier 3
@@ -474,32 +476,65 @@ export function buildCanvasLayout(
       },
     });
 
-    const kindOrder: InferredGraphObject['kind'][] = [
+    const stagingKindOrder: InferredGraphObject['kind'][] = [
       'character',
       'location',
       'wardrobe',
       'prop',
       'staging_ref',
-      'camera_slot',
     ];
-    const groups = kindOrder
+    const stagingGroups = stagingKindOrder
       .map((kind) => ({
         kind,
         items: displayRailObjects.filter((o) => o.kind === kind),
       }))
       .filter((g) => g.items.length > 0);
+    const cameraItems = displayRailObjects.filter((o) => o.kind === 'camera_slot');
 
     if (isLR) {
-      let curX = railStartX;
       const chipY = railStartY + ZONE_HEADER_H + 16 + OBJ_GROUP_LABEL_H;
+      let maxRowRightEdge = stagingRightEdge;
+      let currentBottomEdge = chipY + OBJ_CHIP_H;
 
-      for (const grp of groups) {
-        grp.items.forEach((obj, idx) => {
+      if (stagingGroups.length > 0) {
+        let curX = railStartX;
+        for (const grp of stagingGroups) {
+          grp.items.forEach((obj, idx) => {
+            const isSelected = activeObjectId === obj.id;
+            nodes.push({
+              id: obj.id,
+              type: 'inferredObject',
+              position: applyOffset(obj.id, {x: curX, y: chipY}, nodeOffsets),
+              width: OBJ_CHIP_W_LR,
+              zIndex: GRAPH_Z_CARD,
+              data: {
+                object: obj,
+                direction,
+                showGroupLabel: idx === 0,
+                isTraced: isSelected,
+                isDimmed: Boolean(activeObj && !isSelected),
+              },
+            });
+            curX += OBJ_CHIP_W_LR + OBJ_GAP;
+          });
+          curX += OBJ_GROUP_GAP - OBJ_GAP;
+        }
+        maxRowRightEdge = Math.max(maxRowRightEdge, curX - OBJ_GROUP_GAP);
+      }
+
+      if (cameraItems.length > 0) {
+        const camChipY =
+          stagingGroups.length > 0
+            ? currentBottomEdge + OBJ_GROUP_GAP + OBJ_GROUP_LABEL_H
+            : chipY;
+        let camX = railStartX;
+
+        cameraItems.forEach((obj, idx) => {
           const isSelected = activeObjectId === obj.id;
           nodes.push({
             id: obj.id,
             type: 'inferredObject',
-            position: applyOffset(obj.id, {x: curX, y: chipY}, nodeOffsets),
+            position: applyOffset(obj.id, {x: camX, y: camChipY}, nodeOffsets),
             width: OBJ_CHIP_W_LR,
             zIndex: GRAPH_Z_CARD,
             data: {
@@ -510,15 +545,18 @@ export function buildCanvasLayout(
               isDimmed: Boolean(activeObj && !isSelected),
             },
           });
-          curX += OBJ_CHIP_W_LR + OBJ_GAP;
+          camX += OBJ_CHIP_W_LR + OBJ_GAP;
         });
-        curX += OBJ_GROUP_GAP - OBJ_GAP;
+
+        maxRowRightEdge = Math.max(maxRowRightEdge, camX - OBJ_GAP);
+        currentBottomEdge = camChipY + OBJ_CHIP_H;
       }
-      railRightEdge = Math.max(stagingRightEdge, curX - OBJ_GROUP_GAP);
-      railBottomEdge = chipY + OBJ_CHIP_H;
+
+      railRightEdge = maxRowRightEdge;
+      railBottomEdge = currentBottomEdge;
     } else {
       let curY = railStartY + ZONE_HEADER_H + 16;
-      for (const grp of groups) {
+      for (const grp of stagingGroups) {
         grp.items.forEach((obj, idx) => {
           const isSelected = activeObjectId === obj.id;
           nodes.push({
@@ -539,6 +577,32 @@ export function buildCanvasLayout(
         });
         curY += OBJ_GROUP_GAP - OBJ_GAP;
       }
+
+      if (cameraItems.length > 0) {
+        if (stagingGroups.length > 0) {
+          curY += 8;
+        }
+        cameraItems.forEach((obj, idx) => {
+          const isSelected = activeObjectId === obj.id;
+          nodes.push({
+            id: obj.id,
+            type: 'inferredObject',
+            position: applyOffset(obj.id, {x: railStartX, y: curY}, nodeOffsets),
+            width: OBJ_RAIL_W_TB,
+            zIndex: GRAPH_Z_CARD,
+            data: {
+              object: obj,
+              direction,
+              showGroupLabel: idx === 0,
+              isTraced: isSelected,
+              isDimmed: Boolean(activeObj && !isSelected),
+            },
+          });
+          curY += OBJ_CHIP_H + (idx === 0 ? OBJ_GROUP_LABEL_H : 0) + OBJ_GAP;
+        });
+        curY += OBJ_GROUP_GAP - OBJ_GAP;
+      }
+
       railRightEdge = railStartX + OBJ_RAIL_W_TB;
       railBottomEdge = Math.max(stagingBottomEdge, curY);
     }
