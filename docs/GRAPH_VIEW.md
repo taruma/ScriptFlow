@@ -1,6 +1,6 @@
 # Graph View — Technical Architecture & Extraction Reference
 
-This document is the transparent technical specification for **Graph View** (`[ Live | Source | Graph ]`) in the **Auteur Script Editor**. It explains how a plain-text Pure Auteur Script (`v0.4.0`) is parsed, inferred into decoupled graph objects, laid out deterministically across two orientations, and rendered interactively via `@xyflow/react`—all without mutating the canonical plain-text source of truth.
+This document is the transparent technical specification for **Graph View** (`[ Live | Graph | Source ]`) in the **Auteur Script Editor**. It explains how a plain-text Pure Auteur Script (`v0.4.0`) is parsed, inferred into decoupled graph objects, laid out deterministically across two orientations, and rendered interactively via `@xyflow/react`—all without mutating the canonical plain-text source of truth.
 
 ---
 
@@ -60,18 +60,19 @@ In `src/core/parser.ts`, `parseDialogueModifiers(modifiers?: string)` splits com
 - **`extensions`**: Screenplay **Character Extensions** matching `/^(?:V\.O\.|O\.S\.|O\.C\.|CONT'D|FILTERED|PRE-LAP)$/i` (normalized uppercase, e.g., `(V.O.)`, `(O.S.)`).
 - **`delivery`**: Performance / effort / emotional delivery cues (e.g., `(deadpan)`, `(panicked)`), rendered as an italic parenthetical line above the quoted dialogue in `SculptedSubStateBody.tsx`.
 
-Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of **8 Graph Isolation Dimensions** (`mapSubStateKindToGraphDimension` in `src/ui/canvas/canvasGraph.ts`):
+Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of **9 Graph Isolation Dimensions** (`mapSubStateKindToGraphDimension` in `src/ui/canvas/canvasGraph.ts`). The Isolator Dock dynamically displays **only dimensions detected in the current scene (`count > 0`)**:
 
 | `GraphDimension` | Source `SubStateKind` | Sculpted Visual Motif (`SculptedSubStateBody.tsx`) |
 |---|---|---|
 | `camera` | `camera` | Single-line optical slate with clickable `CAM ##` badge when numbered |
 | `block` | `block` | Subtle `BLOCK` tag prefix + spatial coordinates prose |
-| `action` | `action`, `state_boundary`, `plain` | Clean choreography prose (zero repeated `[ACT]`) |
+| `action` | `action`, `state_boundary` | Clean choreography prose (zero repeated `[ACT]`) |
 | `dialogue` | `dialogue` | Centered screenplay micro-block: clickable `SPEAKER` + `[Language]` + `(Extensions)` / `(delivery)` / `“line”` |
 | `foley` | `foley` | 5-bar acoustic waveform icon + italic physical sound cue |
 | `score` | `score` | `Music2` icon + italic musical cue |
 | `light_vfx` | `light`, `tier2` | Subtle uppercase tag prefix + optical/VFX cue |
 | `onscreen_text` | `onscreen_text` | Framed serif Title Card micro-slate with corner tick marks |
+| `other` | `plain` *(untagged / undetected)* | Neutral slate prose labeled `Other` in the Isolator Dock (no extra parsing required) |
 
 ### 2.3 Downstream Label Matching, Call Sites & Inline Tokenization
 
@@ -107,7 +108,7 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 | **Perpendicular Decoupled Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
 | **Opposite-Side `</>` Raw Branch** | Branches **above** the Macro-State | Branches **left** of the Macro-State |
 
-- **Default Posture (`createDefaultGraphExpansionState`):** On load or script switch, `S1` opens **decoupled** with its **`</>` Raw Input** branch open, while `S2..SN` start coupled—immediately showcasing both sculpted formatting and plain-text provenance.
+- **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset Layout`**, all Macro-States start **coupled (compact)** with **`</>` Raw Input** branches collapsed and all ephemeral drag offsets cleared—keeping the initial view calm until the presenter explicitly decouples a Macro-State or reveals Raw Input.
 
 ### 3.2 Sub-State Isolation (`Ghost` vs. `Compact`)
 

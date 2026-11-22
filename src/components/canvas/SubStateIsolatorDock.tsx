@@ -24,6 +24,9 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
   onToggleDimension,
   onIsolationModeChange,
 }: SubStateIsolatorDockProps) {
+  const visibleDimensions = GRAPH_DIMENSIONS.filter((dim) => (dimensionCounts[dim] ?? 0) > 0);
+  if (visibleDimensions.length === 0) return null;
+
   const isAllActive = isolatedDims.size === 0;
 
   return (
@@ -50,9 +53,8 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
           {UI_LABELS.graph.isolatorAll}
         </button>
 
-        {GRAPH_DIMENSIONS.map((dim) => {
+        {visibleDimensions.map((dim) => {
           const isActive = isolatedDims.has(dim);
-          const count = dimensionCounts[dim] ?? 0;
           const colorVar = getDimensionColorVar(dim);
 
           return (
@@ -74,9 +76,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                       borderColor: `color-mix(in srgb, ${colorVar} 30%, transparent)`,
                     }
               }
-              className={`rounded-lg border px-2 py-1 font-mono text-[11px] font-medium transition-opacity cursor-pointer whitespace-nowrap shrink-0 ${
-                !isActive && count === 0 ? 'opacity-40 hover:opacity-80' : ''
-              }`}
+              className="rounded-lg border px-2 py-1 font-mono text-[11px] font-medium transition-opacity cursor-pointer whitespace-nowrap shrink-0"
             >
               {UI_LABELS.graph.isolatorDimensions[dim]}
             </button>

@@ -173,6 +173,23 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     }
   }, [model.objectById, selectedObjectId]);
 
+  // Prune isolated dimensions that are no longer present in the current scene
+  useEffect(() => {
+    setIsolatedDims((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<GraphDimension>();
+      for (const dim of prev) {
+        if ((model.stats.dimensionCounts[dim] ?? 0) > 0) {
+          next.add(dim);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [model.stats.dimensionCounts]);
+
   // Escape clears active inspection
   useEffect(() => {
     if (!selectedObjectId) return;
@@ -384,10 +401,13 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   }, []);
 
   const handleResetLayout = useCallback(() => {
+    const defaults = createDefaultGraphExpansionState(model);
     setNodeOffsets({});
+    setExpandedIds(defaults.expandedIds);
+    setRawOpenIds(defaults.rawOpenIds);
     pendingFitRef.current = true;
     triggerFitView();
-  }, [triggerFitView]);
+  }, [model, triggerFitView]);
 
   const handleClearIsolation = useCallback(() => {
     setIsolatedDims(new Set());
@@ -443,7 +463,8 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
 
   const isEmpty = model.stagingBlocks.length === 0 && model.macroStates.length === 0;
   const selectedObject = selectedObjectId ? model.objectById[selectedObjectId] ?? null : null;
-  const hasCustomOffsets = Object.keys(nodeOffsets).length > 0;
+  const hasCustomOffsets =
+    Object.keys(nodeOffsets).length > 0 || expandedIds.size > 0 || rawOpenIds.size > 0;
 
   return (
     <div

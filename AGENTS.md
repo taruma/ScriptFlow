@@ -12,7 +12,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 - **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, modular facade map, pure serializer mutation contracts, and global paste/history guards.
 - **`docs/JSON_IR_SPEC.md`**: Programmatic JSON IR (`AuteurScriptIR`, `AuteurEnvelope`), Zod/JSON Schema contracts, transactional `AuteurPatch` engine, and composable Script Supervisor Lens Slicer (`AUDIT_LENS_PRESETS`).
 - **`docs/UI_PHILOSOPHY.md`**: Asymmetric `40/60` Live workspace, single-document Source mode, and read-only Graph View principles, Undo/Redo & crash recovery, 2-column Lookbook & Waterfall editing, shared DnD, unified Settings popover, and 4-mode theme system.
-- **`docs/GRAPH_VIEW.md`**: Transparent technical reference for the read-only Graph View (`[ Live | Source | Graph ]`)—plain-text extraction pipeline, dialogue extension/delivery parsing, Shot Chambers & `RECALL` arcs, dual-axis layout & z-index stacking contract, React Flow v13 reconciliation (`flowSync.ts`), 4-theme token binding, and extension recipes.
+- **`docs/GRAPH_VIEW.md`**: Transparent technical reference for the read-only Graph View (`[ Live | Graph | Source ]`)—plain-text extraction pipeline, dialogue extension/delivery parsing, Shot Chambers & `RECALL` arcs, dual-axis layout & z-index stacking contract, React Flow v13 reconciliation (`flowSync.ts`), 4-theme token binding, and extension recipes.
 - **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces across `src/ui/labels/*.ts`, Pure Auteur UI vocabulary contract, and theme labels).
 - **`docs/AI_ASSISTANT_WALKTHROUGH.md`**: End-to-end user & operator walkthrough for the Unified Transparent AI Assistant (BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus routing, `Ask First` clarifying workflow, multimodal `Scene Brief & References` modal, all 7 local AI tools, Layer 2.5 Quick Scan, 3-state skill machine, 4-tab Context Inspector with JSON Pack Export/Import, suggestion cards & Live Mode indicators, cost estimator, and Trace Inspector).
 
@@ -124,7 +124,7 @@ Before concluding any task, update every affected doc and test suite mapped belo
 ### Verification Commands (All Must Exit `0`)
 
 ```bash
-npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (29 files, 292 tests)
+npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (29 files, 293 tests)
 npm run lint      # Runs strict TypeScript type-checking (tsc --noEmit)
 npm run build     # Runs tsc --noEmit && vite build
 ```

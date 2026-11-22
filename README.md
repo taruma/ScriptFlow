@@ -26,9 +26,9 @@ Live Mode, Source Mode, deterministic linting, exports, and programmatic JSON IR
   - Asymmetric `40/60` desktop Live workspace (**Phase 1 — Staging** on the left, **Phase 2 — Execution** on the right) with independently scrollable panes, collapsible Staging cards and Execution Macro-States, and a structured 2-column `[AESTHETIC]` Lookbook editor.
   - Always-formatted `↳` Waterfall Sub-State editing with live `->` / `Enter` splitting, `Backspace` merging, `ArrowUp`/`ArrowDown` boundary navigation, `Alt+↑`/`Alt+↓` keyboard Sub-State reordering, hover-revealed drag-and-drop reordering for Macro-Blocks and Macro-States, global Paste-and-Hydrate, non-destructive **Format Script**, and active-draft document Undo/Redo (`Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z` / `Ctrl+Y`).
   - Centered single-document **Source Mode** (`~820px` measure in `JetBrains Mono`) plus one-click Canonical Plain Text (`.txt`), Tagless (`.txt`), and JSON Envelope (`.json`) copy and download exports.
-- **Read-Only Spatial Graph View (`[ Live | Source | Graph ]`)**
+- **Read-Only Spatial Graph View (`[ Live | Graph | Source ]`)**
   - Lazy-loaded `@xyflow/react` blueprint canvas visualizing **Phase 1 — Staging Macro-Blocks (`MB#`)**, an intermediate **Inferred Objects** rail (Characters via `@ref as Label`, `[AESTHETIC]` Lookbook tokens with optional `(reference: @ref)`, Staging-only visual refs, and Camera Setups), and **Phase 2 — Execution (`S1 → SN`)** grouped into **Shot Chambers** with curved **`RECALL`** arcs.
-  - Supports dual-axis **`L → R` / `T ↓ B`** auto-layout, perpendicular Sub-State decoupling (`Decouple ⤢`), opposite-side **`</>` Raw Input** plain-text provenance branches, bespoke sculpted Sub-States (screenplay Dialogue micro-blocks, Foley waveforms, Score cues, framed serif Title Cards), an 8-dimension **Sub-State Isolator Dock** (`Ghost` vs. `Compact` Milestone Pills + Dimension Threads), a read-only **Object Inspector** with Call Site `fitView` focus, free dragging with **Reset Layout**, and full 4-theme parity. See [`docs/GRAPH_VIEW.md`](docs/GRAPH_VIEW.md).
+  - Supports dual-axis **`L → R` / `T ↓ B`** auto-layout, compact default posture with on-demand perpendicular Sub-State decoupling (`Decouple ⤢`) and opposite-side **`</>` Raw Input** plain-text provenance branches, bespoke sculpted Sub-States (screenplay Dialogue micro-blocks, Foley waveforms, Score cues, framed serif Title Cards), a scene-aware **Sub-State Isolator Dock** (showing only detected dimensions plus `Other` for plain Sub-States in `Ghost` vs. `Compact` mode), a read-only **Object Inspector** with Call Site `fitView` focus, free dragging with full **Reset Layout**, and 4-theme parity. See [`docs/GRAPH_VIEW.md`](docs/GRAPH_VIEW.md).
 - **Deterministic Script Supervisor Linter & Worked Examples**
   - 5 pure, synchronous linter rules spanning `Lens 1`–`Lens 5` (`viewport-coordinate-purity`, `camera-redefinition-guard`, `macro-state-resolution`, `multimodal-reference-isolation`, `frozen-first-frame-purity`) with persisted per-rule `'off' | 'warning' | 'error'` overrides in Settings and zero-layout-shift right-margin `DiagnosticDot` popovers.
   - 4 bundled read-only canonical worked examples (*Interrogation Room Coverage*, *Subway Train Fight Oner*, *POV Forest Horror*, and *1970s Heist Montage*) covering all scene topologies with one-click **Fork to Edit**.
@@ -58,7 +58,7 @@ npm install
 # Start the Vite dev server (http://localhost:3000)
 npm run dev
 
-# Run the Vitest unit test suite (29 test files / 292 tests)
+# Run the Vitest unit test suite (29 test files / 293 tests)
 npm test
 
 # Run Vitest in watch mode

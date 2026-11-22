@@ -149,14 +149,29 @@ Evan stands in LOC01 wearing EV01 as rain taps the awning.
     expect(layout.edges).toHaveLength(0);
   });
 
-  it('defaults to S1 decoupled with S1 Raw branch open while leaving S2..SN coupled', () => {
+  it('defaults to all Macro-States coupled with Raw Input branches collapsed', () => {
     const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
     const defaults = createDefaultGraphExpansionState(coverage);
 
-    expect(defaults.expandedIds.has('S1')).toBe(true);
-    expect(defaults.expandedIds.has('S2')).toBe(false);
-    expect(defaults.rawOpenIds.has('S1')).toBe(true);
-    expect(defaults.rawOpenIds.has('S2')).toBe(false);
+    expect(defaults.expandedIds.size).toBe(0);
+    expect(defaults.rawOpenIds.size).toBe(0);
+  });
+
+  it('classifies undetected/plain Sub-States into the Other dimension and counts only detected dimensions', () => {
+    const raw = `[INTENT]
+Minimal scene.
+
+[EXECUTION]
+[CAM] Static wide -> Slow fog drifts across the harbor -> <distant bell>`;
+
+    const model = buildModelFromRaw(raw);
+    expect(model.macroStates[0].subStates[1].dimension).toBe('other');
+    expect(model.macroStates[0].subStates[1].tag).toBe('OTHER');
+    expect(model.stats.dimensionCounts.camera).toBe(1);
+    expect(model.stats.dimensionCounts.other).toBe(1);
+    expect(model.stats.dimensionCounts.foley).toBe(1);
+    expect(model.stats.dimensionCounts.dialogue).toBe(0);
+    expect(model.stats.dimensionCounts.action).toBe(0);
   });
 
   it('tokenizes inline entity mentions longest-first without partial-word collisions', () => {
@@ -181,14 +196,15 @@ Location: Rainy alley -> LOC01
 
   it('builds deterministic LR and TB layouts with Shot Chamber parentId grouping and RECALL arcs', () => {
     const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
-    const defaults = createDefaultGraphExpansionState(oner);
+    const expandedS1 = new Set(['S1']);
+    const rawS1Open = new Set(['S1']);
 
     const lrLayout = buildCanvasLayout(
       oner,
       makeLayoutOptions({
         direction: 'LR',
-        expandedIds: defaults.expandedIds,
-        rawOpenIds: defaults.rawOpenIds,
+        expandedIds: expandedS1,
+        rawOpenIds: rawS1Open,
       })
     );
 
@@ -222,8 +238,8 @@ Location: Rainy alley -> LOC01
       oner,
       makeLayoutOptions({
         direction: 'TB',
-        expandedIds: defaults.expandedIds,
-        rawOpenIds: defaults.rawOpenIds,
+        expandedIds: expandedS1,
+        rawOpenIds: rawS1Open,
       })
     );
     const tbS1 = tbLayout.nodes.find((n) => n.id === 'node-S1')!;
@@ -412,12 +428,11 @@ Rosa holds EV01.
 
   it('layers all content cards above edges and above ShotChamber backdrops', () => {
     const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
-    const defaults = createDefaultGraphExpansionState(oner);
     const layout = buildCanvasLayout(
       oner,
       makeLayoutOptions({
-        expandedIds: defaults.expandedIds,
-        rawOpenIds: defaults.rawOpenIds,
+        expandedIds: new Set(['S1']),
+        rawOpenIds: new Set(['S1']),
       })
     );
 

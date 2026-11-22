@@ -44,9 +44,10 @@ export function mapSubStateKindToGraphDimension(kind: SubStateKind): GraphDimens
       return 'onscreen_text';
     case 'action':
     case 'state_boundary':
+      return 'action';
     case 'plain':
     default:
-      return 'action';
+      return 'other';
   }
 }
 
@@ -70,7 +71,7 @@ function resolveSubStateTag(sub: SubStateNode): string {
   if (sub.kind === 'score') return 'SCORE';
   if (sub.kind === 'onscreen_text') return 'TITLE';
   if (sub.tag) return sub.tag.toUpperCase();
-  return 'ACT';
+  return sub.kind === 'plain' ? 'OTHER' : 'ACT';
 }
 
 function resolveSubStateCleanBody(sub: SubStateNode): string {
@@ -302,6 +303,7 @@ export function buildGraphSceneModel(
     score: 0,
     light_vfx: 0,
     onscreen_text: 0,
+    other: 0,
   };
 
   const beats = doc.execution?.beats ?? [];
@@ -566,19 +568,15 @@ export function tokenizeAnnotatedText(
 }
 
 /**
- * Returns default Graph View sets when loading a script:
- * S1 decoupled with its Raw Input branch open (matches approved mockup & Phase 1 choice).
+ * Returns default Graph View sets when loading or resetting a script:
+ * all Macro-States start compact (coupled) with Raw Input branches collapsed.
  */
-export function createDefaultGraphExpansionState(model: GraphSceneModel): {
+export function createDefaultGraphExpansionState(_model?: GraphSceneModel): {
   expandedIds: Set<string>;
   rawOpenIds: Set<string>;
 } {
-  const firstId = model.macroStates[0]?.id;
-  if (!firstId) {
-    return {expandedIds: new Set(), rawOpenIds: new Set()};
-  }
   return {
-    expandedIds: new Set([firstId]),
-    rawOpenIds: new Set([firstId]),
+    expandedIds: new Set(),
+    rawOpenIds: new Set(),
   };
 }

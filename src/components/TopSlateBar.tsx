@@ -245,7 +245,7 @@ export function TopSlateBar({
         )}
       </div>
 
-      {/* Center Zone: [ Live | Source ] Segmented Toggle (Hidden in Narrow Live-Only Mode) */}
+      {/* Center Zone: [ Live | Graph | Source ] Segmented Toggle (Hidden in Narrow Live-Only Mode) */}
       {!isNarrow && (
         <div className="flex items-center justify-center shrink-0">
           <div
@@ -270,20 +270,6 @@ export function TopSlateBar({
             <button
               type="button"
               role="tab"
-              aria-selected={viewMode === 'source'}
-              onClick={() => onViewModeChange('source')}
-              className={
-                viewMode === 'source'
-                  ? UI_TOKENS.button.segmentedItemActive
-                  : UI_TOKENS.button.segmentedItem
-              }
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              <span>{UI_LABELS.topBar.sourceMode}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
               aria-selected={viewMode === 'graph'}
               onClick={() => onViewModeChange('graph')}
               className={
@@ -294,6 +280,20 @@ export function TopSlateBar({
             >
               <Workflow className="h-3.5 w-3.5" />
               <span>{UI_LABELS.topBar.graphMode}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'source'}
+              onClick={() => onViewModeChange('source')}
+              className={
+                viewMode === 'source'
+                  ? UI_TOKENS.button.segmentedItemActive
+                  : UI_TOKENS.button.segmentedItem
+              }
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              <span>{UI_LABELS.topBar.sourceMode}</span>
             </button>
           </div>
         </div>

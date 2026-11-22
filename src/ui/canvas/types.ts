@@ -16,7 +16,8 @@ export type GraphDimension =
   | 'foley'
   | 'score'
   | 'light_vfx'
-  | 'onscreen_text';
+  | 'onscreen_text'
+  | 'other';
 
 export const GRAPH_DIMENSIONS: readonly GraphDimension[] = [
   'camera',
@@ -27,6 +28,7 @@ export const GRAPH_DIMENSIONS: readonly GraphDimension[] = [
   'score',
   'light_vfx',
   'onscreen_text',
+  'other',
 ] as const;
 
 export type InferredObjectKind =

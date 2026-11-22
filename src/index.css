@@ -636,6 +636,7 @@
   --graph-dim-score: var(--tok-score-text);
   --graph-dim-light_vfx: #7e22ce;
   --graph-dim-onscreen_text: #be123c;
+  --graph-dim-other: var(--phase-slate-text);
   --graph-obj-character: var(--tok-continuity);
   --graph-obj-location: #0f766e;
   --graph-obj-wardrobe: var(--tok-dial-text);
@@ -656,6 +657,7 @@
   --graph-dim-score: var(--tok-score-text);
   --graph-dim-light_vfx: #653494;
   --graph-dim-onscreen_text: #9f263c;
+  --graph-dim-other: var(--phase-slate-text);
   --graph-obj-character: var(--tok-continuity);
   --graph-obj-location: #16605a;
   --graph-obj-wardrobe: var(--tok-dial-text);
@@ -676,6 +678,7 @@
   --graph-dim-score: #c4b5fd;
   --graph-dim-light_vfx: #c084fc;
   --graph-dim-onscreen_text: #fb7185;
+  --graph-dim-other: #94a3b8;
   --graph-obj-character: #38bdf8;
   --graph-obj-location: #2dd4bf;
   --graph-obj-wardrobe: #fbbf24;
