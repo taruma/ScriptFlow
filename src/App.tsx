@@ -242,8 +242,6 @@ export default function App() {
     [viewMode]
   );
 
-  const beatCount = doc.execution?.beats.length ?? 0;
-
   return (
     <div className="min-h-screen lg:h-dvh lg:overflow-hidden bg-app text-text-main flex flex-col">
       <TopSlateBar
@@ -251,7 +249,6 @@ export default function App() {
         onTitleChange={handleTitleChange}
         readOnly={isReadOnly}
         onForkExample={library.handleForkCurrentExample}
-        beatCount={beatCount}
         diagnostics={diagnostics}
         onJumpToFirstDiagnostic={handleJumpToFirstDiagnostic}
         viewMode={viewMode}

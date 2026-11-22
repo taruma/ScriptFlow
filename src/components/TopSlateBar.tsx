@@ -28,7 +28,6 @@ interface TopSlateBarProps {
   onTitleChange: (nextTitle: string) => void;
   readOnly?: boolean;
   onForkExample?: () => void;
-  beatCount: number;
   diagnostics: LintDiagnostic[];
   onJumpToFirstDiagnostic: () => void;
   viewMode: ViewMode;
@@ -66,7 +65,6 @@ export function TopSlateBar({
   onTitleChange,
   readOnly = false,
   onForkExample,
-  beatCount,
   diagnostics,
   onJumpToFirstDiagnostic,
   viewMode,
@@ -124,8 +122,12 @@ export function TopSlateBar({
 
   return (
     <header ref={barRef} className={`${UI_TOKENS.layout.appHeader} sticky top-0`}>
-      {/* Left Zone: Calm File Menu + Scene Title + Live Beat Count + Quiet Diagnostic Jump */}
+      {/* Left Zone: App Title + Calm File Menu + Scene Title + Quiet Diagnostic Jump */}
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
+        <span className="font-sans text-sm font-semibold tracking-tight text-text-main whitespace-nowrap shrink-0 pl-0.5 pr-1">
+          {APP_META.name}
+        </span>
+
         <FileMenuDropdown
           isOpen={openMenu === 'file'}
           onToggle={() => setOpenMenu((prev) => (prev === 'file' ? null : 'file'))}
@@ -178,13 +180,6 @@ export function TopSlateBar({
             />
           </div>
         )}
-
-        <div className="hidden sm:flex items-center gap-2 text-xs text-text-faint whitespace-nowrap shrink-0">
-          <span aria-hidden="true">·</span>
-          <span className="font-mono text-[11px] tabular-nums">
-            {beatCount} {UI_LABELS.topBar.beatUnit(beatCount)}
-          </span>
-        </div>
 
         {diagnostics.length > 0 && (
           <button
