@@ -70,9 +70,9 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 | `dialogue` | `dialogue` | Centered screenplay micro-block: clickable `SPEAKER` + `[Language]` + `(Extensions)` / `(delivery)` / `“line”` |
 | `foley` | `foley` | 5-bar acoustic waveform icon + italic physical sound cue |
 | `score` | `score` | `Music2` icon + italic musical cue |
-| `light_vfx` | `light`, `tier2` | Subtle uppercase tag prefix + optical/VFX cue |
+| `light_vfx` | `light`, `tier2` (`[VFX]` only) | Subtle uppercase tag prefix + optical/VFX cue |
 | `onscreen_text` | `onscreen_text` | Framed serif Title Card micro-slate with corner tick marks |
-| `other` | `plain` *(untagged / undetected)* | Neutral slate prose labeled `Other` in the Isolator Dock (no extra parsing required) |
+| `other` | `plain`, other `tier2` *(non-`[VFX]` / custom `[TAG]`)* | Neutral slate prose labeled `Other` in the Isolator Dock while preserving any `[TAG]` prefix |
 
 ### 2.3 Downstream Label Matching, Call Sites & Inline Tokenization
 

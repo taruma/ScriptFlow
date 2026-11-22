@@ -161,18 +161,23 @@ Evan stands in LOC01 wearing EV01 as rain taps the awning.
     expect(defaults.rawOpenIds.size).toBe(0);
   });
 
-  it('classifies undetected/plain Sub-States into the Other dimension and counts only detected dimensions', () => {
+  it('classifies undetected/plain and unrecognized [TAG] Sub-States into Other while keeping [LIGHT] and [VFX] in Light/VFX', () => {
     const raw = `[INTENT]
 Minimal scene.
 
 [EXECUTION]
-[CAM] Static wide -> Slow fog drifts across the harbor -> <distant bell>`;
+[CAM] Static wide -> Slow fog drifts across the harbor -> [BABABABABABA] Robbie ducks -> [LIGHT] Amber glow -> [VFX] Dust motes -> <distant bell>`;
 
     const model = buildModelFromRaw(raw);
     expect(model.macroStates[0].subStates[1].dimension).toBe('other');
     expect(model.macroStates[0].subStates[1].tag).toBe('OTHER');
+    expect(model.macroStates[0].subStates[2].dimension).toBe('other');
+    expect(model.macroStates[0].subStates[2].tag).toBe('BABABABABABA');
+    expect(model.macroStates[0].subStates[3].dimension).toBe('light_vfx');
+    expect(model.macroStates[0].subStates[4].dimension).toBe('light_vfx');
     expect(model.stats.dimensionCounts.camera).toBe(1);
-    expect(model.stats.dimensionCounts.other).toBe(1);
+    expect(model.stats.dimensionCounts.other).toBe(2);
+    expect(model.stats.dimensionCounts.light_vfx).toBe(2);
     expect(model.stats.dimensionCounts.foley).toBe(1);
     expect(model.stats.dimensionCounts.dialogue).toBe(0);
     expect(model.stats.dimensionCounts.action).toBe(0);

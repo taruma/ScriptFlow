@@ -25,7 +25,10 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function mapSubStateKindToGraphDimension(kind: SubStateKind): GraphDimension {
+export function mapSubStateKindToGraphDimension(
+  kind: SubStateKind,
+  tag?: string
+): GraphDimension {
   switch (kind) {
     case 'camera':
       return 'camera';
@@ -38,8 +41,9 @@ export function mapSubStateKindToGraphDimension(kind: SubStateKind): GraphDimens
     case 'score':
       return 'score';
     case 'light':
-    case 'tier2':
       return 'light_vfx';
+    case 'tier2':
+      return tag?.trim().toUpperCase() === 'VFX' ? 'light_vfx' : 'other';
     case 'onscreen_text':
       return 'onscreen_text';
     case 'action':
@@ -318,7 +322,7 @@ export function buildGraphSceneModel(
     const subStates: GraphSubStateItem[] = beat.subStates.map((sub, subIdx) => {
       totalSubStates += 1;
       const ssId = `${msId}.${subIdx + 1}`;
-      const dimension = mapSubStateKindToGraphDimension(sub.kind);
+      const dimension = mapSubStateKindToGraphDimension(sub.kind, sub.tag);
       dimensionCounts[dimension] += 1;
 
       const matched = findMatchedObjectIds(sub.raw);
