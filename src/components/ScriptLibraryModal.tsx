@@ -1,3 +1,4 @@
+import {useEffect} from 'react';
 import {BookOpen, FilePlus2, Trash2, Upload, X} from 'lucide-react';
 import type {BundledExample} from '../data/examples/index.ts';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -14,6 +15,7 @@ export type {ActiveScriptRef};
 export interface ScriptLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
+  readOnly?: boolean;
   customScripts: readonly ScriptRecord[];
   examples: readonly BundledExample[];
   activeScript: ActiveScriptRef;
@@ -49,6 +51,7 @@ export function ScriptLibraryModal(props: ScriptLibraryModalProps) {
 
 function ScriptLibraryModalContent({
   onClose,
+  readOnly = false,
   customScripts,
   examples,
   activeScript,
@@ -79,6 +82,14 @@ function ScriptLibraryModalContent({
     onClose,
   });
 
+  useEffect(() => {
+    if (readOnly && nav.isBulkMode) {
+      nav.exitBulkMode();
+    }
+  }, [readOnly, nav.isBulkMode, nav.exitBulkMode]);
+
+  const effectiveBulkMode = !readOnly && nav.isBulkMode;
+
   return (
     <div
       role="dialog"
@@ -102,42 +113,46 @@ function ScriptLibraryModalContent({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {customScripts.length > 0 && (
+            {!readOnly && (
               <>
+                {customScripts.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onRequestClearLibrary(nav.exitBulkMode)}
+                      aria-label={UI_LABELS.library.clearLibraryAria}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-red-500/10 hover:text-red-500 transition-colors active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{UI_LABELS.library.clearLibraryButton}</span>
+                    </button>
+                    <span aria-hidden="true" className="h-4 w-px bg-border-main mx-0.5" />
+                  </>
+                )}
                 <button
                   type="button"
-                  onClick={() => onRequestClearLibrary(nav.exitBulkMode)}
-                  aria-label={UI_LABELS.library.clearLibraryAria}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-red-500/10 hover:text-red-500 transition-colors active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+                  onClick={() => {
+                    onClose();
+                    onNewBlank();
+                  }}
+                  className={UI_TOKENS.button.actionPill}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{UI_LABELS.library.clearLibraryButton}</span>
+                  <FilePlus2 className="h-3.5 w-3.5 text-text-muted" />
+                  <span>{UI_LABELS.library.newBlankButton}</span>
                 </button>
-                <span aria-hidden="true" className="h-4 w-px bg-border-main mx-0.5" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onImportFile();
+                  }}
+                  className={UI_TOKENS.button.actionPill}
+                >
+                  <Upload className="h-3.5 w-3.5 text-text-muted" />
+                  <span>{UI_LABELS.library.importButton}</span>
+                </button>
               </>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onNewBlank();
-              }}
-              className={UI_TOKENS.button.actionPill}
-            >
-              <FilePlus2 className="h-3.5 w-3.5 text-text-muted" />
-              <span>{UI_LABELS.library.newBlankButton}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onImportFile();
-              }}
-              className={UI_TOKENS.button.actionPill}
-            >
-              <Upload className="h-3.5 w-3.5 text-text-muted" />
-              <span>{UI_LABELS.library.importButton}</span>
-            </button>
             <button
               type="button"
               onClick={onClose}
@@ -167,7 +182,8 @@ function ScriptLibraryModalContent({
               onCloseSortMenu={() => nav.setIsSortMenuOpen(false)}
               sortMenuRef={nav.sortMenuRef}
               customScriptsCount={customScripts.length}
-              isBulkMode={nav.isBulkMode}
+              readOnly={readOnly}
+              isBulkMode={effectiveBulkMode}
               onToggleBulkMode={nav.toggleBulkMode}
               facets={nav.facets}
               hasFacets={nav.hasFacets}
@@ -185,7 +201,7 @@ function ScriptLibraryModalContent({
               selectedIndex={nav.selectedIndex}
               activeScript={activeScript}
               openedAt={nav.openedAt}
-              isBulkMode={nav.isBulkMode}
+              isBulkMode={effectiveBulkMode}
               checkedIds={nav.checkedIds}
               query={nav.query}
               hasFacetFilters={nav.hasFacetFilters}
@@ -198,7 +214,7 @@ function ScriptLibraryModalContent({
             />
 
             <LibraryBulkToolbar
-              isBulkMode={nav.isBulkMode}
+              isBulkMode={effectiveBulkMode}
               selectedBulkRecords={nav.selectedBulkRecords}
               visibleCustomCount={nav.visibleCustomRecords.length}
               visibleCount={nav.paginated.visible.length}
@@ -220,6 +236,7 @@ function ScriptLibraryModalContent({
                 activeScript.kind === nav.selectedRow.kind &&
                 activeScript.id === nav.selectedRow.id
               }
+              readOnly={readOnly}
               openedAt={nav.openedAt}
               existingFolders={nav.facets.folders}
               onOpen={nav.handleOpenRow}

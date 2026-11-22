@@ -7,6 +7,7 @@ import type {MacroBlockKind} from '../../core/types.ts';
 
 export const APP_META = {
   name: 'ScriptFlow',
+  shortMark: 'S',
   untitledScene: 'Untitled Scene',
 } as const;
 

@@ -45,6 +45,13 @@ import {
   loadStoredSubStateIds,
   saveStoredSubStateIds,
 } from '../../src/ui/subStateIds.ts';
+import {
+  isNarrowViewportWidth,
+  matchesNarrowViewport,
+  NARROW_VIEWPORT_MAX_WIDTH,
+  NARROW_VIEWPORT_MEDIA_QUERY,
+  resolveNarrowWorkspaceState,
+} from '../../src/ui/useNarrowViewport.ts';
 
 describe('stagingCollapse helpers', () => {
   it('toggles duplicate-header blocks independently by index', () => {
@@ -525,5 +532,56 @@ describe('subStateIds display setting helpers', () => {
     }
   });
 });
+
+describe('narrow-viewport (< 640px) read-only mode helpers', () => {
+  it('aligns breakpoint strictly with Tailwind sm (< 640px)', () => {
+    expect(NARROW_VIEWPORT_MAX_WIDTH).toBe(639);
+    expect(NARROW_VIEWPORT_MEDIA_QUERY).toBe('(max-width: 639px)');
+    expect(isNarrowViewportWidth(320)).toBe(true);
+    expect(isNarrowViewportWidth(639)).toBe(true);
+    expect(isNarrowViewportWidth(640)).toBe(false);
+    expect(isNarrowViewportWidth(1024)).toBe(false);
+    expect(isNarrowViewportWidth(Number.NaN)).toBe(false);
+  });
+
+  it('forces read-only Live mode when narrow while preserving desktop view mode when wide', () => {
+    expect(resolveNarrowWorkspaceState(true, false, 'source')).toEqual({
+      effectiveReadOnly: true,
+      effectiveViewMode: 'live',
+    });
+    expect(resolveNarrowWorkspaceState(true, true, 'live')).toEqual({
+      effectiveReadOnly: true,
+      effectiveViewMode: 'live',
+    });
+    expect(resolveNarrowWorkspaceState(false, false, 'source')).toEqual({
+      effectiveReadOnly: false,
+      effectiveViewMode: 'source',
+    });
+    expect(resolveNarrowWorkspaceState(false, true, 'source')).toEqual({
+      effectiveReadOnly: true,
+      effectiveViewMode: 'source',
+    });
+  });
+
+  it('safely defaults matchesNarrowViewport to false when window.matchMedia is unavailable', () => {
+    const originalWindow = globalThis.window;
+    try {
+      delete (globalThis as {window?: unknown}).window;
+      expect(matchesNarrowViewport()).toBe(false);
+
+      (globalThis as {window?: unknown}).window = {
+        matchMedia: (query: string) => ({matches: query === NARROW_VIEWPORT_MEDIA_QUERY}),
+      };
+      expect(matchesNarrowViewport()).toBe(true);
+    } finally {
+      if (originalWindow === undefined) {
+        delete (globalThis as {window?: unknown}).window;
+      } else {
+        (globalThis as {window?: unknown}).window = originalWindow;
+      }
+    }
+  });
+});
+
 
 

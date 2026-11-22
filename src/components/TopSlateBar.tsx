@@ -27,6 +27,7 @@ interface TopSlateBarProps {
   title: string;
   onTitleChange: (nextTitle: string) => void;
   readOnly?: boolean;
+  isNarrow?: boolean;
   onForkExample?: () => void;
   diagnostics: LintDiagnostic[];
   onJumpToFirstDiagnostic: () => void;
@@ -64,6 +65,7 @@ export function TopSlateBar({
   title,
   onTitleChange,
   readOnly = false,
+  isNarrow = false,
   onForkExample,
   diagnostics,
   onJumpToFirstDiagnostic,
@@ -117,180 +119,228 @@ export function TopSlateBar({
     };
   }, [openMenu]);
 
+  useEffect(() => {
+    if (isNarrow) {
+      setOpenMenu((prev) => (prev === 'settings' ? prev : null));
+    }
+  }, [isNarrow]);
+
   const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
   const warningCount = diagnostics.filter((d) => d.severity === 'warning').length;
 
   return (
     <header ref={barRef} className={`${UI_TOKENS.layout.appHeader} sticky top-0`}>
-      {/* Left Zone: App Title + Calm File Menu + Scene Title + Quiet Diagnostic Jump */}
+      {/* Left Zone: App Title + (Wide: File Menu) + Scene Title + (Wide: Quiet Diagnostic Jump) */}
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
-        <span className="font-sans text-sm font-semibold tracking-tight text-text-main whitespace-nowrap shrink-0 pl-0.5 pr-1">
-          {APP_META.name}
-        </span>
-
-        <FileMenuDropdown
-          isOpen={openMenu === 'file'}
-          onToggle={() => setOpenMenu((prev) => (prev === 'file' ? null : 'file'))}
-          onClose={() => setOpenMenu(null)}
-          readOnly={readOnly}
-          onNewBlank={onNewBlank}
-          onImportFile={onImportFile}
-          onFormatScript={onFormatScript}
-          onVersionHistory={onOpenVersionHistory}
-          onDownloadCanonical={onDownloadCanonical}
-          onDownloadTagless={onDownloadTagless}
-          onDownloadJsonEnvelope={onDownloadJsonEnvelope}
-          onBackupAll={onBackupAll}
-          onRestoreBackup={onRestoreBackup}
-          onBrowseLibrary={onOpenLibrary}
-          onOpenDebug={onOpenDebug}
-          onOpenSettings={() => setOpenMenu('settings')}
-        />
-
-        <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
-
-        {readOnly ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 max-w-[240px] truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
-              {title || APP_META.untitledScene}
-            </span>
+        {isNarrow ? (
+          <>
             <span
-              title={UI_LABELS.topBar.exampleBadgeTitle}
-              className="auteur-phase-logic inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide"
+              aria-label={APP_META.name}
+              title={APP_META.name}
+              className="inline-flex h-7 w-7 items-center justify-center font-sans text-sm font-bold tracking-tight text-text-main shrink-0"
             >
-              {UI_LABELS.topBar.exampleBadge}
+              {APP_META.shortMark}
             </span>
-          </div>
+
+            <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
+
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <span className="min-w-0 truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
+                {title || APP_META.untitledScene}
+              </span>
+              {readOnly && (
+                <span
+                  title={UI_LABELS.topBar.exampleBadgeTitle}
+                  className="auteur-phase-logic inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide"
+                >
+                  {UI_LABELS.topBar.exampleBadge}
+                </span>
+              )}
+            </div>
+          </>
         ) : (
-          <div className="inline-grid min-w-0 max-w-[240px] items-center">
-            <span
-              aria-hidden="true"
-              className="invisible col-start-1 row-start-1 whitespace-pre truncate px-1.5 py-1 font-serif text-sm font-bold tracking-tight"
-            >
-              {title || APP_META.untitledScene}
+          <>
+            <span className="font-sans text-sm font-semibold tracking-tight text-text-main whitespace-nowrap shrink-0 pl-0.5 pr-1">
+              {APP_META.name}
             </span>
-            <input
-              type="text"
-              data-native-undo="true"
-              value={title}
-              onChange={(e) => onTitleChange(e.target.value)}
-              aria-label={UI_LABELS.topBar.sceneTitleAria}
-              placeholder={APP_META.untitledScene}
-              className="col-start-1 row-start-1 min-w-[4ch] w-full truncate rounded-md bg-transparent px-1.5 py-1 font-serif text-sm font-bold tracking-tight text-text-main hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
+
+            <FileMenuDropdown
+              isOpen={openMenu === 'file'}
+              onToggle={() => setOpenMenu((prev) => (prev === 'file' ? null : 'file'))}
+              onClose={() => setOpenMenu(null)}
+              readOnly={readOnly}
+              onNewBlank={onNewBlank}
+              onImportFile={onImportFile}
+              onFormatScript={onFormatScript}
+              onVersionHistory={onOpenVersionHistory}
+              onDownloadCanonical={onDownloadCanonical}
+              onDownloadTagless={onDownloadTagless}
+              onDownloadJsonEnvelope={onDownloadJsonEnvelope}
+              onBackupAll={onBackupAll}
+              onRestoreBackup={onRestoreBackup}
+              onBrowseLibrary={onOpenLibrary}
+              onOpenDebug={onOpenDebug}
+              onOpenSettings={() => setOpenMenu('settings')}
             />
-          </div>
-        )}
 
-        {diagnostics.length > 0 && (
-          <button
-            type="button"
-            onClick={onJumpToFirstDiagnostic}
-            title={UI_LABELS.topBar.jumpToFirstDiagnostic}
-            className={`hidden md:inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-              errorCount > 0
-                ? 'text-red-500 hover:bg-red-500/10'
-                : 'text-amber-500 hover:bg-amber-500/10'
-            }`}
-          >
-            {errorCount > 0 ? (
-              <AlertCircle className="h-3.5 w-3.5" />
+            <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
+
+            {readOnly ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 max-w-[240px] truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
+                  {title || APP_META.untitledScene}
+                </span>
+                <span
+                  title={UI_LABELS.topBar.exampleBadgeTitle}
+                  className="auteur-phase-logic inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide"
+                >
+                  {UI_LABELS.topBar.exampleBadge}
+                </span>
+              </div>
             ) : (
-              <AlertTriangle className="h-3.5 w-3.5" />
+              <div className="inline-grid min-w-0 max-w-[240px] items-center">
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1 whitespace-pre truncate px-1.5 py-1 font-serif text-sm font-bold tracking-tight"
+                >
+                  {title || APP_META.untitledScene}
+                </span>
+                <input
+                  type="text"
+                  data-native-undo="true"
+                  value={title}
+                  onChange={(e) => onTitleChange(e.target.value)}
+                  aria-label={UI_LABELS.topBar.sceneTitleAria}
+                  placeholder={APP_META.untitledScene}
+                  className="col-start-1 row-start-1 min-w-[4ch] w-full truncate rounded-md bg-transparent px-1.5 py-1 font-serif text-sm font-bold tracking-tight text-text-main hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
+                />
+              </div>
             )}
-            <span>
-              {errorCount > 0 && UI_LABELS.topBar.errorShort(errorCount)}
-              {errorCount > 0 && warningCount > 0 && ' · '}
-              {warningCount > 0 && UI_LABELS.topBar.warningShort(warningCount)}
-            </span>
-          </button>
+
+            {diagnostics.length > 0 && (
+              <button
+                type="button"
+                onClick={onJumpToFirstDiagnostic}
+                title={UI_LABELS.topBar.jumpToFirstDiagnostic}
+                className={`hidden md:inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  errorCount > 0
+                    ? 'text-red-500 hover:bg-red-500/10'
+                    : 'text-amber-500 hover:bg-amber-500/10'
+                }`}
+              >
+                {errorCount > 0 ? (
+                  <AlertCircle className="h-3.5 w-3.5" />
+                ) : (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {errorCount > 0 && UI_LABELS.topBar.errorShort(errorCount)}
+                  {errorCount > 0 && warningCount > 0 && ' · '}
+                  {warningCount > 0 && UI_LABELS.topBar.warningShort(warningCount)}
+                </span>
+              </button>
+            )}
+          </>
         )}
       </div>
 
-      {/* Center Zone: [ Live | Source ] Segmented Toggle */}
-      <div className="flex items-center justify-center shrink-0">
-        <div
-          role="tablist"
-          aria-label={UI_LABELS.topBar.viewModeAria}
-          className={UI_TOKENS.button.segmentedGroup}
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === 'live'}
-            onClick={() => onViewModeChange('live')}
-            className={
-              viewMode === 'live'
-                ? UI_TOKENS.button.segmentedItemActive
-                : UI_TOKENS.button.segmentedItem
-            }
-          >
-            <Eye className="h-3.5 w-3.5" />
-            <span>{UI_LABELS.topBar.liveMode}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === 'source'}
-            onClick={() => onViewModeChange('source')}
-            className={
-              viewMode === 'source'
-                ? UI_TOKENS.button.segmentedItemActive
-                : UI_TOKENS.button.segmentedItem
-            }
-          >
-            <Code2 className="h-3.5 w-3.5" />
-            <span>{UI_LABELS.topBar.sourceMode}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Right Zone: Quiet Undo/Redo, Icon-Only Library & Settings, AI, Split Copy */}
-      <div className="flex flex-1 items-center justify-end gap-1.5 pl-2">
-        {readOnly && onForkExample ? (
-          <button
-            type="button"
-            onClick={() => {
-              setOpenMenu(null);
-              onForkExample();
-            }}
-            title={UI_LABELS.topBar.forkToEditTitle}
-            className={UI_TOKENS.button.forkPill}
-          >
-            <GitFork className="h-3.5 w-3.5 text-[var(--phase-logic-text)]" />
-            <span>{UI_LABELS.topBar.forkToEditButton}</span>
-          </button>
-        ) : (
+      {/* Center Zone: [ Live | Source ] Segmented Toggle (Hidden in Narrow Live-Only Mode) */}
+      {!isNarrow && (
+        <div className="flex items-center justify-center shrink-0">
           <div
-            role="group"
-            aria-label={UI_LABELS.topBar.historyGroupAria}
-            className="inline-flex items-center gap-0.5 shrink-0"
+            role="tablist"
+            aria-label={UI_LABELS.topBar.viewModeAria}
+            className={UI_TOKENS.button.segmentedGroup}
           >
             <button
               type="button"
-              disabled={readOnly || !canUndo}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onUndo}
-              title={UI_LABELS.topBar.undoTitle}
-              aria-label={UI_LABELS.topBar.undoAria}
-              className={UI_TOKENS.button.iconGhost}
+              role="tab"
+              aria-selected={viewMode === 'live'}
+              onClick={() => onViewModeChange('live')}
+              className={
+                viewMode === 'live'
+                  ? UI_TOKENS.button.segmentedItemActive
+                  : UI_TOKENS.button.segmentedItem
+              }
             >
-              <Undo2 className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5" />
+              <span>{UI_LABELS.topBar.liveMode}</span>
             </button>
             <button
               type="button"
-              disabled={readOnly || !canRedo}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onRedo}
-              title={UI_LABELS.topBar.redoTitle}
-              aria-label={UI_LABELS.topBar.redoAria}
-              className={UI_TOKENS.button.iconGhost}
+              role="tab"
+              aria-selected={viewMode === 'source'}
+              onClick={() => onViewModeChange('source')}
+              className={
+                viewMode === 'source'
+                  ? UI_TOKENS.button.segmentedItemActive
+                  : UI_TOKENS.button.segmentedItem
+              }
             >
-              <Redo2 className="h-3.5 w-3.5" />
+              <Code2 className="h-3.5 w-3.5" />
+              <span>{UI_LABELS.topBar.sourceMode}</span>
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-border-main shrink-0" />
+      {/* Right Zone: Wide (Undo/Redo, Library, Settings, AI, Split Copy) | Narrow (Library, Settings, 1-Tap Copy Icon) */}
+      <div
+        className={
+          isNarrow
+            ? 'flex items-center justify-end gap-1.5 pl-2 shrink-0'
+            : 'flex flex-1 items-center justify-end gap-1.5 pl-2'
+        }
+      >
+        {!isNarrow && (
+          <>
+            {readOnly && onForkExample ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenu(null);
+                  onForkExample();
+                }}
+                title={UI_LABELS.topBar.forkToEditTitle}
+                className={UI_TOKENS.button.forkPill}
+              >
+                <GitFork className="h-3.5 w-3.5 text-[var(--phase-logic-text)]" />
+                <span>{UI_LABELS.topBar.forkToEditButton}</span>
+              </button>
+            ) : (
+              <div
+                role="group"
+                aria-label={UI_LABELS.topBar.historyGroupAria}
+                className="inline-flex items-center gap-0.5 shrink-0"
+              >
+                <button
+                  type="button"
+                  disabled={readOnly || !canUndo}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onUndo}
+                  title={UI_LABELS.topBar.undoTitle}
+                  aria-label={UI_LABELS.topBar.undoAria}
+                  className={UI_TOKENS.button.iconGhost}
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={readOnly || !canRedo}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onRedo}
+                  title={UI_LABELS.topBar.redoTitle}
+                  aria-label={UI_LABELS.topBar.redoAria}
+                  className={UI_TOKENS.button.iconGhost}
+                >
+                  <Redo2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-border-main shrink-0" />
+          </>
+        )}
 
         {/* Quiet Icon-Only Library Button */}
         <button
@@ -314,11 +364,11 @@ export function TopSlateBar({
           isOpen={openMenu === 'settings'}
           onToggle={() => setOpenMenu((prev) => (prev === 'settings' ? null : 'settings'))}
           onClose={() => setOpenMenu(null)}
-          onOpenDebug={onOpenDebug}
+          onOpenDebug={isNarrow ? undefined : onOpenDebug}
         />
 
-        {/* Quiet AI Assistant Sidebar Toggle (left of Copy) */}
-        {onToggleAi && (
+        {/* Quiet AI Assistant Sidebar Toggle (Hidden in Narrow Mode) */}
+        {!isNarrow && onToggleAi && (
           <button
             type="button"
             onClick={() => {
@@ -335,117 +385,136 @@ export function TopSlateBar({
           </button>
         )}
 
-        {/* Split Copy Button: 1-Click Canonical Plain Text + Chevron Format Picker */}
-        <div className="relative">
-          <div
+        {/* Copy Action: 1-Tap Icon-Only in Narrow Mode, Split Format Picker in Wide Mode */}
+        {isNarrow ? (
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenu(null);
+              onCopyPlainText();
+            }}
+            title={UI_LABELS.topBar.copyDefaultTitle}
+            aria-label={UI_LABELS.topBar.copyDefaultAria}
             className={
-              copiedKind ? UI_TOKENS.button.splitGroupActive : UI_TOKENS.button.splitGroup
+              copiedKind
+                ? 'inline-flex items-center justify-center h-[30px] w-[30px] bg-btn-primary-bg text-btn-primary-text hover:bg-btn-primary-hover rounded-xl transition-colors active:scale-95 border border-btn-primary-bg shadow-2xs cursor-pointer shrink-0'
+                : UI_TOKENS.button.iconPill
             }
           >
-            <button
-              type="button"
-              onClick={() => {
-                setOpenMenu(null);
-                onCopyPlainText();
-              }}
-              title={UI_LABELS.topBar.copyDefaultTitle}
-              aria-label={UI_LABELS.topBar.copyDefaultAria}
-              className={
-                copiedKind ? UI_TOKENS.button.splitPrimaryActive : UI_TOKENS.button.splitPrimary
-              }
-            >
-              {copiedKind ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <Copy className="h-3.5 w-3.5 text-text-muted" />
-              )}
-              <span>
-                {copiedKind === 'plain'
-                  ? UI_LABELS.topBar.copiedPlain
-                  : copiedKind === 'tagless'
-                    ? UI_LABELS.topBar.copiedTagless
-                    : copiedKind === 'json'
-                      ? UI_LABELS.topBar.copiedJson
-                      : UI_LABELS.topBar.copyButton}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpenMenu((prev) => (prev === 'copy' ? null : 'copy'))}
-              aria-expanded={openMenu === 'copy'}
-              aria-haspopup="menu"
-              aria-label={UI_LABELS.topBar.copyMenuAria}
-              title={UI_LABELS.topBar.copyMenuTitle}
-              className={
-                copiedKind
-                  ? UI_TOKENS.button.splitChevronActive
-                  : openMenu === 'copy'
-                    ? UI_TOKENS.button.splitChevronOpen
-                    : UI_TOKENS.button.splitChevron
-              }
-            >
-              <ChevronDown className="h-3 w-3" />
-            </button>
-          </div>
-
-          {openMenu === 'copy' && (
+            {copiedKind ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        ) : (
+          <div className="relative">
             <div
-              role="menu"
-              aria-label={UI_LABELS.topBar.copyMenuAria}
-              className={UI_TOKENS.dropdown.menuWide}
+              className={
+                copiedKind ? UI_TOKENS.button.splitGroupActive : UI_TOKENS.button.splitGroup
+              }
             >
-              <div className={UI_TOKENS.dropdown.header}>
-                <span className={UI_TOKENS.dropdown.headerText}>
-                  {UI_LABELS.topBar.copyHeader}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenu(null);
+                  onCopyPlainText();
+                }}
+                title={UI_LABELS.topBar.copyDefaultTitle}
+                aria-label={UI_LABELS.topBar.copyDefaultAria}
+                className={
+                  copiedKind ? UI_TOKENS.button.splitPrimaryActive : UI_TOKENS.button.splitPrimary
+                }
+              >
+                {copiedKind ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5 text-text-muted" />
+                )}
+                <span>
+                  {copiedKind === 'plain'
+                    ? UI_LABELS.topBar.copiedPlain
+                    : copiedKind === 'tagless'
+                      ? UI_LABELS.topBar.copiedTagless
+                      : copiedKind === 'json'
+                        ? UI_LABELS.topBar.copiedJson
+                        : UI_LABELS.topBar.copyButton}
                 </span>
-              </div>
-              <div className="py-1">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    onCopyPlainText();
-                    setOpenMenu(null);
-                  }}
-                  className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
-                >
-                  <span>{UI_LABELS.topBar.copyPlainTitle}</span>
-                  <span className="text-[10px] font-normal text-text-faint">
-                    {UI_LABELS.topBar.copyPlainDesc}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    onCopyTagless();
-                    setOpenMenu(null);
-                  }}
-                  className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
-                >
-                  <span>{UI_LABELS.topBar.copyTaglessTitle}</span>
-                  <span className="text-[10px] font-normal text-text-faint">
-                    {UI_LABELS.topBar.copyTaglessDesc}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    onCopyJsonEnvelope();
-                    setOpenMenu(null);
-                  }}
-                  className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
-                >
-                  <span>{UI_LABELS.topBar.copyJsonTitle}</span>
-                  <span className="text-[10px] font-normal text-text-faint">
-                    {UI_LABELS.topBar.copyJsonDesc}
-                  </span>
-                </button>
-              </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpenMenu((prev) => (prev === 'copy' ? null : 'copy'))}
+                aria-expanded={openMenu === 'copy'}
+                aria-haspopup="menu"
+                aria-label={UI_LABELS.topBar.copyMenuAria}
+                title={UI_LABELS.topBar.copyMenuTitle}
+                className={
+                  copiedKind
+                    ? UI_TOKENS.button.splitChevronActive
+                    : openMenu === 'copy'
+                      ? UI_TOKENS.button.splitChevronOpen
+                      : UI_TOKENS.button.splitChevron
+                }
+              >
+                <ChevronDown className="h-3 w-3" />
+              </button>
             </div>
-          )}
-        </div>
+
+            {openMenu === 'copy' && (
+              <div
+                role="menu"
+                aria-label={UI_LABELS.topBar.copyMenuAria}
+                className={UI_TOKENS.dropdown.menuWide}
+              >
+                <div className={UI_TOKENS.dropdown.header}>
+                  <span className={UI_TOKENS.dropdown.headerText}>
+                    {UI_LABELS.topBar.copyHeader}
+                  </span>
+                </div>
+                <div className="py-1">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onCopyPlainText();
+                      setOpenMenu(null);
+                    }}
+                    className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
+                  >
+                    <span>{UI_LABELS.topBar.copyPlainTitle}</span>
+                    <span className="text-[10px] font-normal text-text-faint">
+                      {UI_LABELS.topBar.copyPlainDesc}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onCopyTagless();
+                      setOpenMenu(null);
+                    }}
+                    className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
+                  >
+                    <span>{UI_LABELS.topBar.copyTaglessTitle}</span>
+                    <span className="text-[10px] font-normal text-text-faint">
+                      {UI_LABELS.topBar.copyTaglessDesc}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onCopyJsonEnvelope();
+                      setOpenMenu(null);
+                    }}
+                    className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
+                  >
+                    <span>{UI_LABELS.topBar.copyJsonTitle}</span>
+                    <span className="text-[10px] font-normal text-text-faint">
+                      {UI_LABELS.topBar.copyJsonDesc}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

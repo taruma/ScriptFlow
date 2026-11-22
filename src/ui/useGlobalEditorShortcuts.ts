@@ -25,6 +25,7 @@ export function isWritableEditableElement(el: Element | null): boolean {
 export interface UseGlobalEditorShortcutsOptions {
   viewMode: ViewMode;
   isReadOnly: boolean;
+  isNarrowReadOnly?: boolean;
   isModalOpen: boolean;
   commitRawText: UseScriptLibraryResult['commitRawText'];
   onSwitchToLive: () => void;
@@ -42,6 +43,7 @@ export interface UseGlobalEditorShortcutsOptions {
 export function useGlobalEditorShortcuts({
   viewMode,
   isReadOnly,
+  isNarrowReadOnly = false,
   isModalOpen,
   commitRawText,
   onSwitchToLive,
@@ -75,7 +77,11 @@ export function useGlobalEditorShortcuts({
           return;
         }
         event.preventDefault();
-        onToast(UI_LABELS.toasts.readOnlyPasteBlocked);
+        onToast(
+          isNarrowReadOnly
+            ? UI_LABELS.toasts.narrowReadOnlyPasteBlocked
+            : UI_LABELS.toasts.readOnlyPasteBlocked
+        );
         return;
       }
 
@@ -98,7 +104,7 @@ export function useGlobalEditorShortcuts({
 
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [viewMode, isReadOnly, isModalOpen, commitRawText, onSwitchToLive, onToast]);
+  }, [viewMode, isReadOnly, isNarrowReadOnly, isModalOpen, commitRawText, onSwitchToLive, onToast]);
 
   // Document-level Undo / Redo keyboard shortcuts (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y)
   useEffect(() => {

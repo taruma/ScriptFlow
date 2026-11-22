@@ -36,6 +36,7 @@ export interface LibraryFilterBarProps {
   onCloseSortMenu: () => void;
   sortMenuRef: RefObject<HTMLDivElement | null>;
   customScriptsCount: number;
+  readOnly?: boolean;
   isBulkMode: boolean;
   onToggleBulkMode: () => void;
   facets: LibraryFacets;
@@ -67,6 +68,7 @@ export function LibraryFilterBar({
   onCloseSortMenu,
   sortMenuRef,
   customScriptsCount,
+  readOnly = false,
   isBulkMode,
   onToggleBulkMode,
   facets,
@@ -197,7 +199,7 @@ export function LibraryFilterBar({
           )}
         </div>
 
-        {customScriptsCount > 0 && (
+        {!readOnly && customScriptsCount > 0 && (
           <button
             type="button"
             onClick={onToggleBulkMode}

@@ -15,6 +15,7 @@ import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
 import {useDocumentMutations} from './ui/useDocumentMutations.ts';
 import {useGlobalEditorShortcuts} from './ui/useGlobalEditorShortcuts.ts';
+import {resolveNarrowWorkspaceState, useNarrowViewport} from './ui/useNarrowViewport.ts';
 import {useScriptLibrary} from './ui/useScriptLibrary.ts';
 import {useStableValue} from './ui/useStableValue.ts';
 
@@ -45,6 +46,7 @@ export default function App() {
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [hasOpenedAi, setHasOpenedAi] = useState<boolean>(false);
+  const isNarrow = useNarrowViewport();
   const [activeAiPatches, setActiveAiPatches] = useState<ActiveAiPatchItem[]>([]);
   const [activeQuickScan, setActiveQuickScan] = useState<QuickScanResult | null>(null);
   const livePatchActionsRef = useRef<AiLivePatchActionHandlers | null>(null);
@@ -84,6 +86,14 @@ export default function App() {
       livePatchActionsRef.current = null;
     }
   }, [isAiOpen]);
+
+  // Close desktop-only drawers/modals when entering narrow read-only mode (< 640px)
+  useEffect(() => {
+    if (!isNarrow) return;
+    setIsAiOpen(false);
+    setIsDebugOpen(false);
+    setIsVersionHistoryOpen(false);
+  }, [isNarrow]);
 
   const handleToggleAi = useCallback(() => {
     setIsAiOpen((prev) => {
@@ -171,12 +181,19 @@ export default function App() {
     docRef.current = doc;
   }, [doc]);
 
+  const {effectiveReadOnly, effectiveViewMode} = resolveNarrowWorkspaceState(
+    isNarrow,
+    isReadOnly,
+    viewMode
+  );
+
   const isModalOpen =
     isDebugOpen || confirmRequest !== null || isLibraryOpen || isVersionHistoryOpen;
 
   useGlobalEditorShortcuts({
-    viewMode,
-    isReadOnly,
+    viewMode: effectiveViewMode,
+    isReadOnly: effectiveReadOnly,
+    isNarrowReadOnly: isNarrow,
     isModalOpen,
     commitRawText,
     onSwitchToLive: handleSwitchToLive,
@@ -188,7 +205,7 @@ export default function App() {
   const mutations = useDocumentMutations({
     rawText,
     sceneTitle,
-    isReadOnly,
+    isReadOnly: effectiveReadOnly,
     ruleOverrides: settings.lintRuleOverrides,
     docRef,
     commitRawText,
@@ -248,10 +265,11 @@ export default function App() {
         title={sceneTitle}
         onTitleChange={handleTitleChange}
         readOnly={isReadOnly}
+        isNarrow={isNarrow}
         onForkExample={library.handleForkCurrentExample}
         diagnostics={diagnostics}
         onJumpToFirstDiagnostic={handleJumpToFirstDiagnostic}
-        viewMode={viewMode}
+        viewMode={effectiveViewMode}
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
         onImportFile={library.handleTriggerImportFile}
@@ -270,8 +288,8 @@ export default function App() {
         onCopyTagless={mutations.handleCopyTagless}
         onCopyJsonEnvelope={mutations.handleCopyJsonEnvelope}
         copiedKind={mutations.copiedKind}
-        onOpenDebug={() => setIsDebugOpen(true)}
-        onToggleAi={handleToggleAi}
+        onOpenDebug={isNarrow ? undefined : () => setIsDebugOpen(true)}
+        onToggleAi={isNarrow ? undefined : handleToggleAi}
         isAiOpen={isAiOpen}
         canUndo={canUndo}
         canRedo={canRedo}
@@ -282,12 +300,12 @@ export default function App() {
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row lg:overflow-hidden">
         <div
           className={`flex-1 min-w-0 min-h-0 lg:h-full ${
-            viewMode === 'source'
+            effectiveViewMode === 'source'
               ? 'lg:overflow-y-auto auteur-pane-scroll'
               : 'lg:overflow-hidden'
           }`}
         >
-          {viewMode === 'live' ? (
+          {effectiveViewMode === 'live' ? (
             <LiveDocument
               rawText={rawText}
               doc={doc}
@@ -299,7 +317,8 @@ export default function App() {
               activeQuickScan={activeQuickScan}
               onAuditQuickScanBeat={handleAuditQuickScanBeat}
               historyRevision={history.revision}
-              readOnly={isReadOnly}
+              readOnly={effectiveReadOnly}
+              narrowReadOnly={isNarrow}
               onUpdateStaging={mutations.handleUpdateStaging}
               onInsertStaging={mutations.handleInsertStaging}
               onDeleteStaging={mutations.handleRequestDeleteStaging}
@@ -317,14 +336,14 @@ export default function App() {
             <SourceEditor
               rawText={rawText}
               aestheticTokens={stableAestheticTokens}
-              readOnly={isReadOnly}
+              readOnly={effectiveReadOnly}
               onChange={mutations.handleUpdateSource}
               onFormatScript={mutations.handleFormatScript}
             />
           )}
         </div>
 
-        {hasOpenedAi && (
+        {!isNarrow && hasOpenedAi && (
           <Suspense fallback={null}>
             <AiAssistantSidebar
               isOpen={isAiOpen}
@@ -369,6 +388,7 @@ export default function App() {
         <ScriptLibraryModal
           isOpen={isLibraryOpen}
           onClose={() => setIsLibraryOpen(false)}
+          readOnly={isNarrow}
           customScripts={customScripts}
           examples={BUNDLED_EXAMPLES}
           activeScript={activeScript}
@@ -394,7 +414,7 @@ export default function App() {
         />
       )}
 
-      {isVersionHistoryOpen && (
+      {!isNarrow && isVersionHistoryOpen && (
         <Suspense fallback={null}>
           <VersionHistoryModal
             isOpen={isVersionHistoryOpen}
@@ -418,7 +438,7 @@ export default function App() {
         </Suspense>
       )}
 
-      {isDebugOpen && (
+      {!isNarrow && isDebugOpen && (
         <Suspense fallback={null}>
           <JsonIrDebugDrawer
             isOpen={isDebugOpen}

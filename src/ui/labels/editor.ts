@@ -137,6 +137,8 @@ export const EDITOR_LABELS = {
       'Click any Macro-Block or Sub-State to edit live · Paste any plain-text Auteur Script anywhere to hydrate',
     footerHintReadOnly:
       'Read-only reference example · Click Fork to Edit to make changes, or switch to Source to inspect raw text',
+    footerHintNarrowReadOnly:
+      'Read-only view on narrow screens · Open on a wider screen to edit',
   },
 
   staging: {
@@ -259,6 +261,8 @@ export const EDITOR_LABELS = {
     scriptHydrated: 'Script pasted and hydrated',
     readOnlyPasteBlocked:
       'Read-only example — click Fork to Edit or create a New Blank Script to paste',
+    narrowReadOnlyPasteBlocked:
+      'Read-only on narrow screens — open on a wider screen to edit or paste',
     forkedExample: (title: string) => `Forked "${title}" to My Scripts`,
     duplicatedScript: (title: string) => `Duplicated "${title}"`,
     createdBlankScript: 'Created new blank script',

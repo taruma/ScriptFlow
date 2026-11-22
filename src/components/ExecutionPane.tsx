@@ -44,6 +44,7 @@ interface ExecutionPaneProps {
   quickScanIndicatorsByBeatIndex: Map<number, LiveBeatQuickScanIndicator[]>;
   historyRevision: number;
   readOnly?: boolean;
+  narrowReadOnly?: boolean;
   onUpdateSubState: (
     beatIndex: number,
     subStateIndex: number,
@@ -104,6 +105,7 @@ export const ExecutionPane = memo(function ExecutionPane({
   quickScanIndicatorsByBeatIndex,
   historyRevision,
   readOnly = false,
+  narrowReadOnly = false,
   onUpdateSubState,
   onInsertSubState,
   onDeleteSubState,
@@ -468,7 +470,11 @@ export const ExecutionPane = memo(function ExecutionPane({
         <footer className={`mt-8 grid ${EXECUTION_GRID} items-center gap-1.5`}>
           <div />
           <p className="text-center text-[11px] text-text-faint">
-            {readOnly ? UI_LABELS.document.footerHintReadOnly : UI_LABELS.document.footerHint}
+            {narrowReadOnly
+              ? UI_LABELS.document.footerHintNarrowReadOnly
+              : readOnly
+                ? UI_LABELS.document.footerHintReadOnly
+                : UI_LABELS.document.footerHint}
           </p>
           <div />
         </footer>

@@ -35,6 +35,7 @@ import {UI_TOKENS} from '../ui/tokens/ui.ts';
 export interface LibraryPreviewPaneProps {
   row: LibraryRowItem | null;
   isActive: boolean;
+  readOnly?: boolean;
   openedAt: number;
   existingFolders: readonly string[];
   onOpen: (row: LibraryRowItem) => void;
@@ -55,6 +56,7 @@ type PreviewMode = 'structured' | 'source';
 export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   row,
   isActive,
+  readOnly = false,
   openedAt,
   existingFolders,
   onOpen,
@@ -196,7 +198,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
       <div className="px-5 py-4 border-b border-border-subtle bg-surface shrink-0 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            {isCustom && isRenaming ? (
+            {isCustom && !readOnly && isRenaming ? (
               <div className="flex items-center gap-1.5">
                 <input
                   ref={renameInputRef}
@@ -238,7 +240,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                 <h3 className="truncate font-serif text-base font-bold tracking-tight text-text-main">
                   {row.title}
                 </h3>
-                {isCustom && (
+                {isCustom && !readOnly && (
                   <button
                     type="button"
                     onClick={() => {
@@ -286,7 +288,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
 
           {/* Primary Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {isCustom && (
+            {isCustom && !readOnly && (
               <button
                 type="button"
                 onClick={() => onTogglePin(row.record)}
@@ -311,22 +313,30 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                 <button
                   type="button"
                   onClick={() => onOpen(row)}
-                  className={UI_TOKENS.button.actionPill}
+                  className={
+                    readOnly
+                      ? isActive
+                        ? UI_TOKENS.button.secondary
+                        : UI_TOKENS.button.primary
+                      : UI_TOKENS.button.actionPill
+                  }
                 >
                   <span>
                     {isActive ? UI_LABELS.library.alreadyOpenAction : UI_LABELS.library.openAction}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onForkExample(row.example)}
-                  className={UI_TOKENS.button.primary}
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <GitFork className="h-3.5 w-3.5" />
-                    <span>{UI_LABELS.library.forkAction}</span>
-                  </span>
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => onForkExample(row.example)}
+                    className={UI_TOKENS.button.primary}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <GitFork className="h-3.5 w-3.5" />
+                      <span>{UI_LABELS.library.forkAction}</span>
+                    </span>
+                  </button>
+                )}
               </>
             ) : (
               <button
@@ -342,61 +352,82 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
 
         {/* Quiet Folder & Tags Organizer (Custom Scripts Only) */}
         {isCustom ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 border-t border-border-subtle/80 text-xs">
-            <div className="inline-flex items-center gap-1.5 min-w-[140px] max-w-[200px]">
-              <Folder className="h-3 w-3 text-text-faint shrink-0" />
-              <input
-                type="text"
-                list="library-existing-folders"
-                data-native-undo="true"
-                value={folderDraft}
-                onChange={(e) => setFolderDraft(e.target.value)}
-                onBlur={commitFolder}
-                onKeyDown={handleFolderKeyDown}
-                placeholder={UI_LABELS.library.folderPlaceholder}
-                aria-label={UI_LABELS.library.folderInputAria}
-                className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
-              />
-              <datalist id="library-existing-folders">
-                {existingFolders.map((folder) => (
-                  <option key={folder} value={folder} />
-                ))}
-              </datalist>
-            </div>
-
-            <span aria-hidden="true" className="h-3.5 w-px bg-border-main/80 hidden sm:inline-block" />
-
-            <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-[160px]">
-              <Tag className="h-3 w-3 text-text-faint shrink-0" />
-              {currentTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-                >
-                  <span>#{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    aria-label={UI_LABELS.library.removeTagAria(tag)}
-                    className="text-text-faint hover:text-text-main cursor-pointer"
+          readOnly ? (
+            (row.folder || currentTags.length > 0) && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border-subtle/80 text-xs">
+                {row.folder && (
+                  <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
+                    <Folder className="h-2.5 w-2.5 shrink-0" />
+                    <span>{row.folder}</span>
+                  </span>
+                )}
+                {currentTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
                   >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              ))}
-              <input
-                type="text"
-                data-native-undo="true"
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
-                onKeyDown={handleTagKeyDown}
-                onBlur={commitTag}
-                placeholder={UI_LABELS.library.tagPlaceholder}
-                aria-label={UI_LABELS.library.tagInputAria}
-                className="w-24 min-w-[84px] rounded-md bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:w-36 focus:outline-none focus:ring-1 focus:ring-border-main transition-all"
-              />
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 border-t border-border-subtle/80 text-xs">
+              <div className="inline-flex items-center gap-1.5 min-w-[140px] max-w-[200px]">
+                <Folder className="h-3 w-3 text-text-faint shrink-0" />
+                <input
+                  type="text"
+                  list="library-existing-folders"
+                  data-native-undo="true"
+                  value={folderDraft}
+                  onChange={(e) => setFolderDraft(e.target.value)}
+                  onBlur={commitFolder}
+                  onKeyDown={handleFolderKeyDown}
+                  placeholder={UI_LABELS.library.folderPlaceholder}
+                  aria-label={UI_LABELS.library.folderInputAria}
+                  className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
+                />
+                <datalist id="library-existing-folders">
+                  {existingFolders.map((folder) => (
+                    <option key={folder} value={folder} />
+                  ))}
+                </datalist>
+              </div>
+
+              <span aria-hidden="true" className="h-3.5 w-px bg-border-main/80 hidden sm:inline-block" />
+
+              <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-[160px]">
+                <Tag className="h-3 w-3 text-text-faint shrink-0" />
+                {currentTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+                  >
+                    <span>#{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      aria-label={UI_LABELS.library.removeTagAria(tag)}
+                      className="text-text-faint hover:text-text-main cursor-pointer"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  data-native-undo="true"
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  onBlur={commitTag}
+                  placeholder={UI_LABELS.library.tagPlaceholder}
+                  aria-label={UI_LABELS.library.tagInputAria}
+                  className="w-24 min-w-[84px] rounded-md bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:w-36 focus:outline-none focus:ring-1 focus:ring-border-main transition-all"
+                />
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <p className="text-xs leading-relaxed text-text-muted pt-1 border-t border-border-subtle/80">
             {row.summary}
@@ -527,8 +558,8 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
         )}
       </div>
 
-      {/* Quiet Footer Utility Bar (Custom Scripts Only) */}
-      {isCustom && (
+      {/* Quiet Footer Utility Bar (Custom Scripts Only, Hidden in Read-Only Mode) */}
+      {isCustom && !readOnly && (
         <div className="flex items-center justify-between gap-2 px-5 py-2.5 border-t border-border-subtle bg-surface shrink-0">
           <div className="flex items-center gap-1.5">
             <button

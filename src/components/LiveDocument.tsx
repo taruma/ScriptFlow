@@ -46,6 +46,7 @@ interface LiveDocumentProps {
   onAuditQuickScanBeat?: (beatIndex: number) => void;
   historyRevision: number;
   readOnly?: boolean;
+  narrowReadOnly?: boolean;
   onUpdateStaging: (
     blockIndex: number,
     nextBody: string,
@@ -96,6 +97,7 @@ export const LiveDocument = memo(function LiveDocument({
   onAuditQuickScanBeat,
   historyRevision,
   readOnly = false,
+  narrowReadOnly = false,
   onUpdateStaging,
   onInsertStaging,
   onDeleteStaging,
@@ -225,6 +227,7 @@ export const LiveDocument = memo(function LiveDocument({
               quickScanIndicatorsByBeatIndex={beatQuickScanIndicatorsByIndex}
               historyRevision={historyRevision}
               readOnly={readOnly}
+              narrowReadOnly={narrowReadOnly}
               onUpdateSubState={onUpdateSubState}
               onInsertSubState={onInsertSubState}
               onDeleteSubState={onDeleteSubState}
