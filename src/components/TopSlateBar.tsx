@@ -18,6 +18,7 @@ import {
 import type {LintDiagnostic} from '../core/types.ts';
 import type {EditorSettings} from '../ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from '../ui/labels.ts';
+import {attachCaptureOutsideDismiss} from '../ui/outsideDismiss.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import {FileMenuDropdown} from './FileMenuDropdown.tsx';
 import {SettingsPopover} from './SettingsPopover.tsx';
@@ -109,22 +110,7 @@ export function TopSlateBar({
 
   useEffect(() => {
     if (!openMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (barRef.current && !barRef.current.contains(event.target as Node)) {
-        setOpenMenu(null);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenMenu(null);
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
+    return attachCaptureOutsideDismiss(document, () => barRef.current, () => setOpenMenu(null));
   }, [openMenu]);
 
   useEffect(() => {

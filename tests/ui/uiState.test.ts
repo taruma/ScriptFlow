@@ -46,6 +46,11 @@ import {
   saveStoredSubStateIds,
 } from '../../src/ui/subStateIds.ts';
 import {
+  attachCaptureOutsideDismiss,
+  isOutsideDismissTarget,
+  type CaptureDismissHost,
+} from '../../src/ui/outsideDismiss.ts';
+import {
   isNarrowViewportWidth,
   matchesNarrowViewport,
   NARROW_VIEWPORT_MAX_WIDTH,
@@ -675,6 +680,67 @@ describe('Live Mode column split helpers', () => {
         (globalThis as {document?: unknown}).document = originalDocument;
       }
     }
+  });
+});
+
+describe('capture-phase outside dismiss helper (Graph View & top-bar menus)', () => {
+  it('registers capture listeners for pointerdown/mousedown so React Flow stopPropagation cannot block menu dismissal', () => {
+    const insideTarget = {} as Node;
+    const outsideGraphPane = {} as Node;
+    const container = {
+      contains: (node: Node | null) => node === insideTarget,
+    };
+
+    expect(isOutsideDismissTarget(container, insideTarget)).toBe(false);
+    expect(isOutsideDismissTarget(container, outsideGraphPane)).toBe(true);
+    expect(isOutsideDismissTarget(null, outsideGraphPane)).toBe(false);
+
+    const registered: Array<{
+      type: string;
+      listener: EventListener;
+      capture: boolean;
+    }> = [];
+
+    const mockDoc: CaptureDismissHost = {
+      addEventListener: (type, listener, options) => {
+        const capture = typeof options === 'boolean' ? options : Boolean(options?.capture);
+        registered.push({type, listener, capture});
+      },
+      removeEventListener: (type, listener, options) => {
+        const capture = typeof options === 'boolean' ? options : Boolean(options?.capture);
+        const idx = registered.findIndex(
+          (entry) => entry.type === type && entry.listener === listener && entry.capture === capture
+        );
+        if (idx >= 0) registered.splice(idx, 1);
+      },
+    };
+
+    let dismissed = 0;
+    const detach = attachCaptureOutsideDismiss(mockDoc, () => container, () => {
+      dismissed += 1;
+    });
+
+    const pointerCap = registered.find((r) => r.type === 'pointerdown' && r.capture);
+    const mouseCap = registered.find((r) => r.type === 'mousedown' && r.capture);
+    const keydownListener = registered.find((r) => r.type === 'keydown');
+    expect(pointerCap).toBeDefined();
+    expect(mouseCap).toBeDefined();
+    expect(keydownListener).toBeDefined();
+
+    // Clicking inside the header container does NOT dismiss
+    pointerCap!.listener({target: insideTarget} as unknown as Event);
+    expect(dismissed).toBe(0);
+
+    // Clicking outside on Graph View pane DOES dismiss in capture phase
+    pointerCap!.listener({target: outsideGraphPane} as unknown as Event);
+    expect(dismissed).toBe(1);
+
+    // Escape key dismisses cleanly
+    keydownListener!.listener({key: 'Escape'} as unknown as Event);
+    expect(dismissed).toBe(2);
+
+    detach();
+    expect(registered).toHaveLength(0);
   });
 });
 
