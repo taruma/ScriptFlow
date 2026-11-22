@@ -51,7 +51,7 @@ export interface VersionHistoryModalProps {
   onTitleChange: (nextTitle: string) => void;
   onUpdateBranchNote: (nextBranchNote: string) => void;
   onBranchCurrentScript: (options?: {branchNote?: string}) => Promise<ScriptRecord | null>;
-  onBranchFromScript: (record: ScriptRecord) => Promise<void>;
+  onBranchFromScript: (record: ScriptRecord) => Promise<ScriptRecord | null>;
   onOpenCustomScript: (record: ScriptRecord) => Promise<void>;
   onOpenExample: (example: BundledExample) => Promise<void>;
   onForkCurrentExample: () => void;
@@ -274,12 +274,16 @@ function VersionHistoryModalContent({
     if (isReadOnly || isBranching) return;
     setIsBranching(true);
     try {
-      await onBranchFromScript(record);
-      setActiveTab('lineage');
-      requestAnimationFrame(() => {
-        titleInputRef.current?.focus();
-        titleInputRef.current?.select();
-      });
+      commitBranchNote();
+      const created = await onBranchFromScript(record);
+      if (created) {
+        setActiveTab('lineage');
+        setSelectedLineageNodeId(created.id);
+        requestAnimationFrame(() => {
+          titleInputRef.current?.focus();
+          titleInputRef.current?.select();
+        });
+      }
     } finally {
       setIsBranching(false);
     }

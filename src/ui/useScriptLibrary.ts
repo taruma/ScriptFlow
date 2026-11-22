@@ -552,6 +552,13 @@ export function useScriptLibrary({
       record: ScriptRecord,
       patch: {folder?: string | null; tags?: string[]; branchNote?: string | null}
     ) => {
+      const isUpdatingActive =
+        activeScriptRef.current.kind === 'custom' && activeScriptRef.current.id === record.id;
+
+      if (isUpdatingActive) {
+        cancelPendingSave();
+      }
+
       const latest = customScriptsRef.current.find((item) => item.id === record.id) ?? record;
       const nextFolder =
         patch.folder !== undefined ? (patch.folder?.trim() || undefined) : latest.folder;
@@ -560,17 +567,36 @@ export function useScriptLibrary({
         patch.branchNote !== undefined
           ? (patch.branchNote?.trim().replace(/\s+/g, ' ').slice(0, 160) || undefined)
           : latest.branchNote;
+      const nextTitle = isUpdatingActive
+        ? sceneTitleRef.current.trim() || latest.title
+        : latest.title;
+      const nextRawText = isUpdatingActive ? rawTextRef.current : latest.rawText;
+      const hasPendingContentChange =
+        isUpdatingActive && (nextTitle !== latest.title || nextRawText !== latest.rawText);
 
       const updated: ScriptRecord = {
         ...latest,
+        title: nextTitle,
+        rawText: nextRawText,
         folder: nextFolder,
         tags: nextTags,
         branchNote: nextBranchNote,
+        ...(hasPendingContentChange ? {updatedAt: Date.now()} : {}),
       };
       const saved = await scriptLibraryDb.put(updated);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
+
+      if (isUpdatingActive) {
+        markSavedSnapshot({
+          id: saved.id,
+          rawText: saved.rawText,
+          title: saved.title,
+        });
+        mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title);
+      }
     },
-    []
+    [cancelPendingSave, markSavedSnapshot]
   );
 
   const handleUpdateActiveBranchNote = useCallback(

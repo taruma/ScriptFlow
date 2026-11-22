@@ -483,9 +483,7 @@ export default function App() {
             onTitleChange={handleTitleChange}
             onUpdateBranchNote={(nextNote) => void library.handleUpdateActiveBranchNote(nextNote)}
             onBranchCurrentScript={(options) => library.handleDuplicateActiveScript(options)}
-            onBranchFromScript={(record) =>
-              library.handleDuplicateScript(record, {activate: true}).then(() => undefined)
-            }
+            onBranchFromScript={(record) => library.handleDuplicateScript(record, {activate: true})}
             onOpenCustomScript={library.handleOpenCustomScript}
             onOpenExample={library.handleOpenExample}
             onForkCurrentExample={library.handleForkCurrentExample}
