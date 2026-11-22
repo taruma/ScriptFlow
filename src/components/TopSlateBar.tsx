@@ -9,6 +9,7 @@ import {
   Copy,
   Eye,
   GitFork,
+  Info,
   Redo2,
   Sparkles,
   Undo2,
@@ -55,6 +56,8 @@ interface TopSlateBarProps {
   onOpenDebug?: () => void;
   onToggleAi?: () => void;
   isAiOpen?: boolean;
+  onOpenInfo?: () => void;
+  isInfoOpen?: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -94,6 +97,8 @@ export function TopSlateBar({
   onOpenDebug,
   onToggleAi,
   isAiOpen = false,
+  onOpenInfo,
+  isInfoOpen = false,
   canUndo,
   canRedo,
   onUndo,
@@ -532,6 +537,23 @@ export function TopSlateBar({
               </div>
             )}
           </div>
+        )}
+
+        {/* Standalone About / Info Modal Button (Top Right Corner, StageFlow / SceneFlow parity) */}
+        {onOpenInfo && (
+          <button
+            type="button"
+            onClick={() => {
+              setOpenMenu(null);
+              onOpenInfo();
+            }}
+            title={UI_LABELS.topBar.infoTitle}
+            aria-label={UI_LABELS.topBar.infoAria}
+            aria-expanded={isInfoOpen}
+            className={isInfoOpen ? UI_TOKENS.button.iconPillActive : UI_TOKENS.button.iconPill}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
         )}
       </div>
     </header>

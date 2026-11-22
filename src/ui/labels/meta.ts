@@ -7,8 +7,14 @@ import type {MacroBlockKind} from '../../core/types.ts';
 
 export const APP_META = {
   name: 'ScriptFlow',
+  version: '0.4.0',
   shortMark: 'S',
   untitledScene: 'Untitled Scene',
+  authorName: 'Taruma Sakti',
+  authorUrl: 'https://github.com/taruma',
+  githubUrl: 'https://github.com/taruma/ScriptFlow',
+  sceneflowUrl: 'https://github.com/taruma/screenplay-sync',
+  stageflowUrl: 'https://github.com/taruma/stageflow',
 } as const;
 
 export interface MacroBlockMeta {

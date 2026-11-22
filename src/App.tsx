@@ -43,6 +43,12 @@ const AuteurGraphView = lazy(() =>
   }))
 );
 
+const AppInfoModal = lazy(() =>
+  import('./components/AppInfoModal.tsx').then((mod) => ({
+    default: mod.AppInfoModal,
+  }))
+);
+
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const {settings, updateSettings} = useEditorSettings();
@@ -50,6 +56,7 @@ export default function App() {
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
+  const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [hasOpenedAi, setHasOpenedAi] = useState<boolean>(false);
   const isNarrow = useNarrowViewport();
@@ -194,7 +201,11 @@ export default function App() {
   );
 
   const isModalOpen =
-    isDebugOpen || confirmRequest !== null || isLibraryOpen || isVersionHistoryOpen;
+    isDebugOpen ||
+    confirmRequest !== null ||
+    isLibraryOpen ||
+    isVersionHistoryOpen ||
+    isInfoOpen;
 
   useGlobalEditorShortcuts({
     viewMode: effectiveViewMode,
@@ -305,6 +316,8 @@ export default function App() {
         onOpenDebug={isNarrow ? undefined : () => setIsDebugOpen(true)}
         onToggleAi={isNarrow ? undefined : handleToggleAi}
         isAiOpen={isAiOpen}
+        onOpenInfo={() => setIsInfoOpen(true)}
+        isInfoOpen={isInfoOpen}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={handleUndo}
@@ -480,6 +493,12 @@ export default function App() {
             ruleOverrides={settings.lintRuleOverrides}
             onCommitRawText={mutations.handleCommitFromDebug}
           />
+        </Suspense>
+      )}
+
+      {isInfoOpen && (
+        <Suspense fallback={null}>
+          <AppInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />
         </Suspense>
       )}
 
