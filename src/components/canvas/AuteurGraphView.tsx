@@ -15,12 +15,13 @@ import {
   type EdgeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import {Map as MapIcon, Minus, Plus} from 'lucide-react';
+import {CircleHelp, Map as MapIcon, Minus, Plus} from 'lucide-react';
 import type {AuteurDocument, ExtractedMetadata} from '../../core/types.ts';
 import {
   buildCanvasLayout,
   buildGraphSceneModel,
   createDefaultGraphExpansionState,
+  isGraphViewModified,
   mergeLayoutIntoFlowNodes,
   type GraphDimension,
   type GraphDirection,
@@ -29,6 +30,7 @@ import {
   type ObjectCallSite,
 } from '../../ui/canvas/index.ts';
 import {UI_LABELS} from '../../ui/labels.ts';
+import {attachCaptureOutsideDismiss} from '../../ui/outsideDismiss.ts';
 import {AestheticItemNode} from './AestheticItemNode.tsx';
 import {AuteurGraphEdge} from './AuteurGraphEdge.tsx';
 import {GraphHud} from './GraphHud.tsx';
@@ -75,6 +77,17 @@ interface ZoomControlsBarProps {
 function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControlsBarProps) {
   const {zoomIn, zoomOut} = useReactFlow();
   const {zoom} = useViewport();
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const helpContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isHelpOpen) return;
+    return attachCaptureOutsideDismiss(
+      document,
+      () => helpContainerRef.current,
+      () => setIsHelpOpen(false)
+    );
+  }, [isHelpOpen]);
 
   return (
     <div className="pointer-events-auto absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-xl border border-border-main bg-surface/95 backdrop-blur px-2 py-1 shadow-xs text-xs">
@@ -125,6 +138,48 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
         <MapIcon className="h-3 w-3" aria-hidden="true" />
         <span>{UI_LABELS.graph.miniMapToggle}</span>
       </button>
+
+      <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-border-main" />
+
+      <div ref={helpContainerRef} className="relative flex items-center">
+        <button
+          type="button"
+          onClick={() => setIsHelpOpen((prev) => !prev)}
+          aria-label={UI_LABELS.graph.helpButtonAria}
+          title={UI_LABELS.graph.helpButtonTitle}
+          aria-expanded={isHelpOpen}
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors cursor-pointer ${
+            isHelpOpen
+              ? 'bg-surface-muted text-text-main'
+              : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
+          }`}
+        >
+          <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+
+        {isHelpOpen && (
+          <div
+            role="region"
+            aria-label={UI_LABELS.graph.helpPopoverHeading}
+            className="absolute bottom-full right-0 mb-2 w-64 rounded-xl border border-border-main bg-surface/95 backdrop-blur p-3 shadow-lg text-[11px] leading-relaxed text-text-muted"
+          >
+            <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-text-main">
+              {UI_LABELS.graph.helpPopoverHeading}
+            </div>
+            <p>
+              {UI_LABELS.graph.hintLead}{' '}
+              <strong className="font-mono font-semibold text-text-main">
+                {UI_LABELS.graph.hintRawCode}
+              </strong>{' '}
+              {UI_LABELS.graph.hintMiddle}{' '}
+              <strong className="font-semibold text-text-main">
+                {UI_LABELS.graph.hintLabelEmphasis}
+              </strong>{' '}
+              {UI_LABELS.graph.hintTail}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -473,6 +528,9 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     setExpandedIds(defaults.expandedIds);
     setExpandedStagingIds(defaults.expandedStagingIds);
     setRawOpenIds(defaults.rawOpenIds);
+    setIsolatedDims(new Set());
+    setIsolationMode('ghost');
+    setShowAllLinks(false);
     pendingFitRef.current = true;
     triggerFitView();
   }, [model, direction, triggerFitView]);
@@ -540,18 +598,19 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
 
   const isEmpty = model.stagingBlocks.length === 0 && model.macroStates.length === 0;
   const selectedObject = selectedObjectId ? model.objectById[selectedObjectId] ?? null : null;
-  const defaultExpansion = useMemo(
-    () => createDefaultGraphExpansionState(model, direction),
-    [model, direction]
+  const isModified = useMemo(
+    () =>
+      isGraphViewModified({
+        model,
+        direction,
+        expandedIds,
+        expandedStagingIds,
+        rawOpenIds,
+        isolatedDims,
+        showAllLinks,
+      }),
+    [model, direction, expandedIds, expandedStagingIds, rawOpenIds, isolatedDims, showAllLinks]
   );
-  const macroExpansionDiffers =
-    expandedIds.size !== defaultExpansion.expandedIds.size ||
-    [...defaultExpansion.expandedIds].some((id) => !expandedIds.has(id));
-  const stagingExpansionDiffers =
-    expandedStagingIds.size !== defaultExpansion.expandedStagingIds.size ||
-    [...defaultExpansion.expandedStagingIds].some((id) => !expandedStagingIds.has(id));
-  const hasCustomOffsets =
-    macroExpansionDiffers || stagingExpansionDiffers || rawOpenIds.size > 0;
 
   return (
     <div
@@ -617,22 +676,8 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
             )}
           </ReactFlow>
 
-          {/* Top Floating HUD */}
-          <GraphHud
-            topology={model.topology}
-            stats={model.stats}
-            direction={direction}
-            allExpanded={allExpanded}
-            allRawOpen={allRawOpen}
-            showAllLinks={showAllLinks}
-            hasCustomOffsets={hasCustomOffsets}
-            hasExecution={model.macroStates.length > 0}
-            onDirectionChange={handleDirectionChange}
-            onToggleExpandAll={handleToggleExpandAll}
-            onToggleRawAll={handleToggleRawAll}
-            onToggleAllLinks={handleToggleAllLinks}
-            onResetLayout={handleResetLayout}
-          />
+          {/* Top-Left Passive Context Pill */}
+          <GraphHud topology={model.topology} stats={model.stats} />
 
           {/* Top-Right Floating Read-Only Object Inspector */}
           <ObjectInspectorPanel
@@ -641,39 +686,33 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
             onFocusCallSite={handleFocusCallSite}
           />
 
-          {/* Bottom-Center Sub-State Type Isolation Dock */}
-          {model.macroStates.length > 0 && (
-            <SubStateIsolatorDock
-              isolatedDims={isolatedDims}
-              isolationMode={isolationMode}
-              dimensionCounts={model.stats.dimensionCounts}
-              onClearIsolation={handleClearIsolation}
-              onToggleDimension={handleToggleDimension}
-              onIsolationModeChange={handleIsolationModeChange}
-            />
-          )}
+          {/* Bottom-Center Unified Studio Dock */}
+          <SubStateIsolatorDock
+            direction={direction}
+            allExpanded={allExpanded}
+            allRawOpen={allRawOpen}
+            showAllLinks={showAllLinks}
+            isModified={isModified}
+            hasExecution={model.macroStates.length > 0}
+            isolatedDims={isolatedDims}
+            isolationMode={isolationMode}
+            dimensionCounts={model.stats.dimensionCounts}
+            onDirectionChange={handleDirectionChange}
+            onToggleExpandAll={handleToggleExpandAll}
+            onToggleRawAll={handleToggleRawAll}
+            onToggleAllLinks={handleToggleAllLinks}
+            onResetLayout={handleResetLayout}
+            onClearIsolation={handleClearIsolation}
+            onToggleDimension={handleToggleDimension}
+            onIsolationModeChange={handleIsolationModeChange}
+          />
 
-          {/* Bottom-Right Zoom & MiniMap Controls */}
+          {/* Bottom-Right Zoom, MiniMap & Help Controls */}
           <ZoomControlsBar
             showMiniMap={showMiniMap}
             onToggleMiniMap={() => setShowMiniMap((prev) => !prev)}
             onFitView={triggerFitView}
           />
-
-          {/* Bottom-Left Quiet Interaction Hint */}
-          <div className="hidden xl:flex pointer-events-none absolute bottom-3 left-3 z-10 items-center gap-1.5 rounded-xl border border-border-subtle bg-surface/85 backdrop-blur px-2.5 py-1.5 text-[11px] text-text-muted">
-            <span>
-              {UI_LABELS.graph.hintLead}{' '}
-              <strong className="font-mono font-semibold text-text-main">
-                {UI_LABELS.graph.hintRawCode}
-              </strong>{' '}
-              {UI_LABELS.graph.hintMiddle}{' '}
-              <strong className="font-semibold text-text-main">
-                {UI_LABELS.graph.hintLabelEmphasis}
-              </strong>{' '}
-              {UI_LABELS.graph.hintTail}
-            </span>
-          </div>
         </GraphInteractionProvider>
       )}
     </div>

@@ -777,3 +777,48 @@ export function createDefaultGraphExpansionState(
     rawOpenIds: new Set(),
   };
 }
+
+export interface GraphViewModificationCheckInput {
+  model: GraphSceneModel;
+  direction: 'LR' | 'TB';
+  expandedIds: ReadonlySet<string>;
+  expandedStagingIds: ReadonlySet<string>;
+  rawOpenIds: ReadonlySet<string>;
+  isolatedDims: ReadonlySet<GraphDimension>;
+  showAllLinks: boolean;
+}
+
+/**
+ * Pure predicate returning true whenever the Graph View's current expansion,
+ * Source branch, thread visibility, or dimension isolation state differs from
+ * the default resting posture for `direction`.
+ */
+export function isGraphViewModified(input: GraphViewModificationCheckInput): boolean {
+  const {
+    model,
+    direction,
+    expandedIds,
+    expandedStagingIds,
+    rawOpenIds,
+    isolatedDims,
+    showAllLinks,
+  } = input;
+
+  if (rawOpenIds.size > 0) return true;
+  if (isolatedDims.size > 0) return true;
+  if (showAllLinks) return true;
+
+  const defaults = createDefaultGraphExpansionState(model, direction);
+
+  if (expandedIds.size !== defaults.expandedIds.size) return true;
+  for (const id of defaults.expandedIds) {
+    if (!expandedIds.has(id)) return true;
+  }
+
+  if (expandedStagingIds.size !== defaults.expandedStagingIds.size) return true;
+  for (const id of defaults.expandedStagingIds) {
+    if (!expandedStagingIds.has(id)) return true;
+  }
+
+  return false;
+}

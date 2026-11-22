@@ -6,11 +6,11 @@ This document is the transparent technical specification for **Graph View** (`[ 
 
 ## 1. Design Philosophy & Invariants
 
-1. **Plain-Text-as-Truth (Strictly Read-Only, Pan-Anywhere):** Graph View holds zero parallel mutable document state. Every card, extracted object, wire, Shot Chamber, and `RECALL` lane is derived synchronously from `rawText` (`parseAuteurScript` → `extractMetadata` → `buildGraphSceneModel` → `buildCanvasLayout`). Card dragging is disabled (`nodesDraggable={false}`) so dragging anywhere—even directly over cards—pans the blueprint smoothly without accidentally disturbing the deterministic layout. **`Reset`** restores the current orientation's default fold/unfold posture, collapses `Source` viewers, and refits the viewport.
-2. **Decoupled Extraction Proof (`Show Source`):** Every formatted Execution Macro-State and Sub-State strips redundant syntax delimiters (`[CAM]`, `[ACT]`, `<...>`, `{...}`, `【...】`) for typographic clarity, while providing a one-click **`Source` (`Code2`)** toggle that branches the exact unedited plain-text line off the opposite side of the node—proving the entire structured graph comes directly from plain text.
-3. **Zero-React Pure Graph Layer (`src/ui/canvas/`):** All graph modeling, entity tokenization, deterministic auto-layout, edge derivation, and React Flow state reconciliation live in pure TypeScript modules under `src/ui/canvas/` (exported via `src/ui/canvas/index.ts`) and are unit-tested directly in Vitest (`tests/ui/canvasGraph.test.ts`).
+1. **Plain-Text-as-Truth (Strictly Read-Only, Pan-Anywhere):** Graph View holds zero parallel mutable document state. Every card, extracted object, wire, Shot Chamber, and `RECALL` lane is derived synchronously from `rawText` (`parseAuteurScript` → `extractMetadata` → `buildGraphSceneModel` → `buildCanvasLayout`). Card dragging is disabled (`nodesDraggable={false}`) so dragging anywhere—even directly over cards—pans the blueprint smoothly without accidentally disturbing the deterministic layout. **`Reset`** (progressively disclosed in the bottom Studio Dock via `isGraphViewModified()`) restores the current orientation's default fold/unfold posture, collapses `Source` viewers, turns off `Threads`, clears dimension isolation (resetting mode to `Ghost`), and refits the viewport.
+2. **Decoupled Extraction Proof (`Source`):** Every formatted Execution Macro-State and Sub-State strips redundant syntax delimiters (`[CAM]`, `[ACT]`, `<...>`, `{...}`, `【...】`) for typographic clarity, while providing a one-click **`Source` (`Code2`)** toggle that branches the exact unedited plain-text line off the opposite side of the node—proving the entire structured graph comes directly from plain text.
+3. **Zero-React Pure Graph Layer (`src/ui/canvas/`):** All graph modeling, entity tokenization, deterministic auto-layout, edge derivation, modification predicates (`isGraphViewModified`), and React Flow state reconciliation live in pure TypeScript modules under `src/ui/canvas/` (exported via `src/ui/canvas/index.ts`) and are unit-tested directly in Vitest (`tests/ui/canvasGraph.test.ts`).
 4. **Zero Initial Bundle Cost:** `AuteurGraphView` (`src/components/canvas/AuteurGraphView.tsx`) is code-split via `React.lazy` in `src/App.tsx`, so `@xyflow/react` (~100 kB gzipped) is never downloaded until the user switches to **Graph** mode.
-5. **Presentation-First Hygiene & Capture-Phase Menu Dismissal:** Script Supervisor linter diagnostics are intentionally hidden in Graph View, and global Paste-and-Hydrate / document Undo/Redo shortcuts are guarded (`viewMode === 'graph'`) in `src/ui/useGlobalEditorShortcuts.ts`. `TopSlateBar` uses capture-phase outside-pointer listeners (`attachCaptureOutsideDismiss` in `src/ui/outsideDismiss.ts`) so `@xyflow/react` pane pan/zoom pointer handling never blocks `File`, `Settings`, or `Copy` dropdowns from closing on Graph clicks. On narrow viewports (`< 640px`), `resolveNarrowWorkspaceState` keeps the workspace in read-only Live Mode.
+5. **Presentation-First Hygiene & Capture-Phase Menu Dismissal:** Script Supervisor linter diagnostics are intentionally hidden in Graph View, and global Paste-and-Hydrate / document Undo/Redo shortcuts are guarded (`viewMode === 'graph'`) in `src/ui/useGlobalEditorShortcuts.ts`. Both `TopSlateBar` and Graph View's bottom-right `?` Help popover use capture-phase outside-pointer listeners (`attachCaptureOutsideDismiss` in `src/ui/outsideDismiss.ts`) so `@xyflow/react` pane pan/zoom pointer handling never blocks menus or popovers from closing on canvas clicks. On narrow viewports (`< 640px`), `resolveNarrowWorkspaceState` keeps the workspace in read-only Live Mode.
 
 ---
 
@@ -110,17 +110,23 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 | **Split Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
 | **Opposite-Side `Source` Branch** | Branches **above** the Macro-State (or `[AESTHETIC]`) with reserved headroom | Branches **left** of the Macro-State (or `[AESTHETIC]`) with reserved gutter width |
 
-- **Orientation-Aware Defaults & Reset (`createDefaultGraphExpansionState(model, direction)`):**
+- **Orientation-Aware Defaults & Progressive `Reset` (`createDefaultGraphExpansionState` + `isGraphViewModified`):**
   - **`L → R` (default overview):** All Execution Macro-States and `[AESTHETIC]` Lookbook cards start **folded**, with all `Source` branches collapsed.
   - **`T ↓ B` (vertical deep-dive):** All Execution Macro-States and `[AESTHETIC]` Lookbook cards start **unfolded**, with all `Source` branches collapsed.
-  - Switching orientations or clicking **`Reset`** restores the active orientation's clean default posture, closes all `Source` branches, clears ephemeral drag offsets, and refits the canvas.
+  - Switching orientations restores the target orientation's default posture and refits the canvas. Whenever expansion, open `Source` branches, `Threads`, or dimension isolation diverge from the active orientation's resting state (`isGraphViewModified()`), **`Reset`** reveals inside the bottom Studio Dock; clicking it restores default expansion, closes `Source` branches, turns off `Threads`, clears dimension isolation (resetting mode to `Ghost`), and refits the canvas.
 
-### 3.2 Sub-State Isolation (`Ghost` vs. `Compact`)
+### 3.2 3-Anchor Canvas HUD & Unified Bottom Studio Dock
+
+Graph View uses a **3-Anchor Spatial HUD** that keeps the top-right and bottom-left corners clear at rest:
+1. **Top-Left Passive Context Pill (`GraphHud.tsx`, `top-3 left-3`):** Displays strictly the Scene Topology label and tabular scene counts (`Staging · Objects · Macro-States · Sub-States`).
+2. **Top-Right Dedicated Object Inspector (`ObjectInspectorPanel.tsx`, `top-3 right-3`):** Appears only when an Inferred Object or inline entity is selected, occupying the freed top-right corner with zero toolbar overlap.
+3. **Bottom-Center Unified Studio Dock (`SubStateIsolatorDock.tsx`, `bottom-3 left-1/2 -translate-x-1/2`):** Combines Orientation & Layer controls (`[ L → R | T ↓ B ]`, `Split` / `Fold`, `Source`, `Threads`) with the **Sub-State Dimension Isolator** (`All` + detected dimension pills styled as neutral surface chips with `6px` semantic colored dots at rest, filling with full semantic color when active). Uses progressive disclosure so **`Ghost | Compact`** renders only when isolating `>= 1` dimension and **`Reset`** renders only when `isGraphViewModified()` is true.
+4. **Bottom-Right Viewport & Help Bar (`ZoomControlsBar` in `AuteurGraphView.tsx`, `bottom-3 right-3`):** Houses `- 100% + | Fit | Map | ?`, where `?` (`CircleHelp`) toggles a compact click/Escape-dismissible interaction tips popover (`attachCaptureOutsideDismiss`) above the zoom bar instead of a permanent bottom-left banner.
 
 When one or more dimensions are toggled in `SubStateIsolatorDock`:
 - **Non-matching Sub-States:** Dimmed (`opacity: 0.14`) in **`Ghost`** mode, or omitted from cards and split branches in **`Compact`** mode.
 - **Zero-Match Macro-States:** Collapse into compact dashed **Milestone Pills** (`S3`) on the spine so temporal ordering remains intact.
-- **Animated Dimension Thread (`isolationThread`):** Connects surviving matching Macro-States directly across Milestone Pill gaps in the active dimension's color as a crisp dashed orthogonal pipe with a **gliding SVG pulse dot** (`L → R` in `LR`, `T ↓ B` in `TB`). While a tag is isolated, any background **`Show Threads`** entity wires stay static and dimmed so they never compete visually with the isolated craft thread.
+- **Animated Dimension Thread (`isolationThread`):** Connects surviving matching Macro-States directly across Milestone Pill gaps in the active dimension's color as a crisp dashed orthogonal pipe with a **gliding SVG pulse dot** (`L → R` in `LR`, `T ↓ B` in `TB`). While a tag is isolated, any background **`Threads`** entity wires stay static and dimmed so they never compete visually with the isolated craft thread.
 
 ### 3.3 Strict Tier Boundaries, Cascading State-Flow Threads & Blueprint Routing (`src/ui/canvas/layoutEdges.ts`, `AuteurGraphEdge.tsx`)
 
@@ -180,16 +186,16 @@ When one or more dimensions are toggled in `SubStateIsolatorDock`:
 |---|---|
 | `src/ui/canvas/index.ts` | Preserved public facade for all pure Graph View types, model, layout, and reconciliation helpers. |
 | `src/ui/canvas/types.ts` | Canonical Graph View TypeScript contracts (`GraphSceneModel`, `InferredGraphObject`, `CanvasNodeSpec`, `CanvasEdgeSpec`, `GraphLayoutOptions`). |
-| `src/ui/canvas/canvasGraph.ts` | Pure `buildGraphSceneModel`, `mapSubStateKindToGraphDimension`, `tokenizeAnnotatedText`, and `createDefaultGraphExpansionState`. |
+| `src/ui/canvas/canvasGraph.ts` | Pure `buildGraphSceneModel`, `mapSubStateKindToGraphDimension`, `tokenizeAnnotatedText`, `createDefaultGraphExpansionState`, and `isGraphViewModified`. |
 | `src/ui/canvas/layoutMetrics.ts` | Geometry constants, `GRAPH_Z_CHAMBER` / `GRAPH_Z_CARD`, character-count height heuristics, and `applyOffset`. |
 | `src/ui/canvas/layoutEdges.ts` | Pure edge builders (`buildExtractionEdges`, `buildExecutionContinuityEdges`, `buildDownstreamLabelMatchEdges`). |
 | `src/ui/canvas/canvasLayout.ts` | Deterministic 3-layer `LR` / `TB` node placement orchestrating `layoutMetrics.ts` and `layoutEdges.ts`. |
 | `src/ui/canvas/flowSync.ts` | Pure `mergeLayoutIntoFlowNodes` reconciling layout specs with React Flow internal node state. |
-| `src/components/canvas/AuteurGraphView.tsx` | Lazy-loaded React Flow shell, HUD/Dock/Inspector wiring, drag-offset capture, `fitView`, and `useUpdateNodeInternals`. |
+| `src/components/canvas/AuteurGraphView.tsx` | Lazy-loaded React Flow shell, 3-anchor HUD/Studio Dock/Inspector wiring, bottom-right `ZoomControlsBar` + `?` Help popover, `fitView`, and `useUpdateNodeInternals`. |
 | `src/components/canvas/*Node.tsx` | Thin `memo()`'d custom node renderers (`ZoneHeaderNode`, `StagingBlockNode`, `AestheticItemNode`, `InferredObjectNode`, `ShotChamberNode`, `MacroStateNode`, `SubStateNode`, `RawTextBranchNode`). |
 | `src/components/canvas/AuteurGraphEdge.tsx` | Custom edge renderer for rounded orthogonal Blueprint/Metro corridor pipes, gliding SVG `<animateMotion>` pulse dots, overhead curved `RECALL` arcs, and `EdgeLabelRenderer` pills. |
 | `src/components/canvas/SculptedSubStateBody.tsx` & `AnnotatedProse.tsx` | Bespoke per-dimension Sub-State renderers and inline clickable entity chips. |
-| `src/components/canvas/GraphHud.tsx`, `SubStateIsolatorDock.tsx`, `ObjectInspectorPanel.tsx`, `graphContext.tsx` | Floating chrome overlays and shared interaction context + CSS color variable mappers. |
+| `src/components/canvas/GraphHud.tsx`, `SubStateIsolatorDock.tsx`, `ObjectInspectorPanel.tsx`, `graphContext.tsx` | Top-left passive context pill, unified bottom Studio Dock (layout controls + dot-badged dimension isolator), top-right Object Inspector, and shared interaction context + CSS color variable mappers. |
 
 ### Safe Extension Recipes
 

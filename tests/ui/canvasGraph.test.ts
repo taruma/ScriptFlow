@@ -9,6 +9,7 @@ import {
   estimateWrappedLines,
   GRAPH_Z_CARD,
   GRAPH_Z_CHAMBER,
+  isGraphViewModified,
   mergeLayoutIntoFlowNodes,
   RAW_GAP,
   RAW_W_LR,
@@ -988,5 +989,129 @@ Featuring @img1 as Detective.
     const lrS1 = lr.nodes.find((n) => n.id === 'node-S1')!;
     const lrZoneExec = lr.nodes.find((n) => n.id === 'zone-execution')!;
     expect(lrS1.position.y - outerDepth).toBeGreaterThan(lrZoneExec.position.y + 34);
+  });
+
+  it('detects modified Graph View state cleanly via isGraphViewModified across LR and TB defaults', () => {
+    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+    const aesBlock = coverage.stagingBlocks.find((b) => b.kind === 'AESTHETIC')!;
+
+    // Resting defaults in LR and TB are unmodified
+    const lrDefaults = createDefaultGraphExpansionState(coverage, 'LR');
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'LR',
+        expandedIds: lrDefaults.expandedIds,
+        expandedStagingIds: lrDefaults.expandedStagingIds,
+        rawOpenIds: lrDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(false);
+
+    const tbDefaults = createDefaultGraphExpansionState(coverage, 'TB');
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'TB',
+        expandedIds: tbDefaults.expandedIds,
+        expandedStagingIds: tbDefaults.expandedStagingIds,
+        rawOpenIds: tbDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(false);
+
+    // Expanding a Macro-State in LR marks view as modified
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'LR',
+        expandedIds: new Set(['S1']),
+        expandedStagingIds: lrDefaults.expandedStagingIds,
+        rawOpenIds: lrDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(true);
+
+    // Folding a Macro-State away from TB's unfolded default marks view as modified
+    const tbFoldedS1 = new Set(tbDefaults.expandedIds);
+    tbFoldedS1.delete('S1');
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'TB',
+        expandedIds: tbFoldedS1,
+        expandedStagingIds: tbDefaults.expandedStagingIds,
+        rawOpenIds: tbDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(true);
+
+    // Toggling [AESTHETIC] Lookbook expansion away from orientation default marks view as modified
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'LR',
+        expandedIds: lrDefaults.expandedIds,
+        expandedStagingIds: new Set([aesBlock.mbId]),
+        rawOpenIds: lrDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(true);
+
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'TB',
+        expandedIds: tbDefaults.expandedIds,
+        expandedStagingIds: new Set(),
+        rawOpenIds: tbDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(true);
+
+    // Opening any Source branch marks view as modified
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'LR',
+        expandedIds: lrDefaults.expandedIds,
+        expandedStagingIds: lrDefaults.expandedStagingIds,
+        rawOpenIds: new Set(['S1']),
+        isolatedDims: new Set(),
+        showAllLinks: false,
+      })
+    ).toBe(true);
+
+    // Isolating any Sub-State dimension marks view as modified
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'LR',
+        expandedIds: lrDefaults.expandedIds,
+        expandedStagingIds: lrDefaults.expandedStagingIds,
+        rawOpenIds: lrDefaults.rawOpenIds,
+        isolatedDims: new Set<GraphDimension>(['camera']),
+        showAllLinks: false,
+      })
+    ).toBe(true);
+
+    // Enabling Threads (showAllLinks) marks view as modified
+    expect(
+      isGraphViewModified({
+        model: coverage,
+        direction: 'LR',
+        expandedIds: lrDefaults.expandedIds,
+        expandedStagingIds: lrDefaults.expandedStagingIds,
+        rawOpenIds: lrDefaults.rawOpenIds,
+        isolatedDims: new Set(),
+        showAllLinks: true,
+      })
+    ).toBe(true);
   });
 });

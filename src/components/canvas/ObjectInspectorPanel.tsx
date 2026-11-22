@@ -22,7 +22,7 @@ export const ObjectInspectorPanel = memo(function ObjectInspectorPanel({
   return (
     <aside
       aria-label={UI_LABELS.graph.inspectorAria}
-      className="pointer-events-auto absolute top-16 right-3 z-30 w-[332px] max-w-[calc(100%-24px)] rounded-2xl border bg-surface/95 backdrop-blur shadow-xl p-4 text-xs"
+      className="pointer-events-auto absolute top-3 right-3 z-30 w-[332px] max-w-[calc(100%-24px)] rounded-2xl border bg-surface/95 backdrop-blur shadow-xl p-4 text-xs"
       style={{
         borderColor: 'color-mix(in srgb, var(--tok-continuity) 55%, var(--border-main))',
       }}
