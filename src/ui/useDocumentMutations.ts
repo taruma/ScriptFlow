@@ -78,6 +78,7 @@ export interface UseDocumentMutationsResult {
   handleRequestDeleteBeat: (beatIndex: number) => void;
   handleReorderBeats: (fromBeatIndex: number, toBeatIndex: number) => void;
   handleUpdateSource: (nextRawText: string) => void;
+  handleCommitSourceCheckpoint: (nextRawText: string, toastMessage?: string) => void;
   handleFormatScript: () => void;
   handleCopyPlainText: () => Promise<void>;
   handleCopyTagless: () => Promise<void>;
@@ -288,6 +289,17 @@ export function useDocumentMutations({
     [commitRawText]
   );
 
+  const handleCommitSourceCheckpoint = useCallback(
+    (nextRawText: string, toastMessage?: string) => {
+      if (isReadOnly) return;
+      commitRawText(nextRawText, {mode: 'checkpoint'});
+      if (toastMessage) {
+        onToast(toastMessage);
+      }
+    },
+    [isReadOnly, commitRawText, onToast]
+  );
+
   const handleFormatScript = useCallback(() => {
     if (isReadOnly) return;
     const formatted = formatAuteurScript(rawText);
@@ -486,6 +498,7 @@ export function useDocumentMutations({
     handleRequestDeleteBeat,
     handleReorderBeats,
     handleUpdateSource,
+    handleCommitSourceCheckpoint,
     handleFormatScript,
     handleCopyPlainText,
     handleCopyTagless,

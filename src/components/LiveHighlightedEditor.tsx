@@ -7,6 +7,7 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import {
   tokenizeAestheticValue,
@@ -15,6 +16,11 @@ import {
   tokenizeStagingBody,
   type HighlightSpan,
 } from '../core/highlighter.ts';
+import {
+  overlayHighlightSpans,
+  type HighlightOverlayRange,
+  type OverlaidHighlightSpan,
+} from '../core/sourceTools.ts';
 import type {AestheticToken, MacroBlockKind} from '../core/types.ts';
 import {getMacroBlockMeta} from '../ui/labels.ts';
 import {EMPTY_AESTHETIC_TOKENS} from '../ui/referenceStability.ts';
@@ -27,6 +33,8 @@ interface LiveHighlightedEditorProps {
   mode: LiveEditorMode;
   stagingKind?: MacroBlockKind;
   aestheticTokens?: AestheticToken[];
+  highlightRanges?: readonly HighlightOverlayRange[];
+  mirrorRef?: RefObject<HTMLDivElement | null>;
   placeholder?: string;
   ariaLabel: string;
   minHeightClass?: string;
@@ -50,7 +58,7 @@ function getToneClass(tone: HighlightSpan['tone'], isProportional: boolean): str
   return '';
 }
 
-function renderHighlightSpan(span: HighlightSpan, key: number, isProportional: boolean): ReactNode {
+function renderBaseSpan(span: HighlightSpan, key: number, isProportional: boolean): ReactNode {
   const toneClass = getToneClass(span.tone, isProportional);
 
   switch (span.kind) {
@@ -197,6 +205,29 @@ function renderHighlightSpan(span: HighlightSpan, key: number, isProportional: b
   }
 }
 
+function renderHighlightSpan(
+  span: OverlaidHighlightSpan,
+  key: number,
+  isProportional: boolean
+): ReactNode {
+  const baseNode = renderBaseSpan(span, key, isProportional);
+  if (!span.overlay) {
+    return baseNode;
+  }
+
+  const overlayClass =
+    span.overlay === 'active' ? 'auteur-source-match-active' : 'auteur-source-match';
+  return (
+    <span
+      key={key}
+      className={overlayClass}
+      data-search-active={span.isActiveAnchor ? 'true' : undefined}
+    >
+      {baseNode}
+    </span>
+  );
+}
+
 const METRIC_STYLE: CSSProperties = {
   fontVariantLigatures: 'none',
   fontKerning: 'none',
@@ -217,6 +248,8 @@ export const LiveHighlightedEditor = memo(
       mode,
       stagingKind = 'CUSTOM',
       aestheticTokens = EMPTY_AESTHETIC_TOKENS,
+      highlightRanges,
+      mirrorRef,
       placeholder,
       ariaLabel,
       minHeightClass = '',
@@ -237,7 +270,7 @@ export const LiveHighlightedEditor = memo(
     const effectiveStagingKind = mode === 'staging' ? stagingKind : 'CUSTOM';
     const effectiveIsLead = mode === 'substate' ? isLead : false;
 
-    const spans = useMemo<HighlightSpan[]>(() => {
+    const baseSpans = useMemo<HighlightSpan[]>(() => {
       if (mode === 'substate') {
         return tokenizeExecutionLine(value, effectiveTokens, effectiveIsLead);
       }
@@ -250,9 +283,16 @@ export const LiveHighlightedEditor = memo(
       return tokenizeSourceDocument(value, effectiveTokens);
     }, [mode, value, effectiveTokens, effectiveStagingKind, effectiveIsLead]);
 
+    const overlaidSpans = useMemo<OverlaidHighlightSpan[]>(() => {
+      if (!highlightRanges || highlightRanges.length === 0) {
+        return baseSpans;
+      }
+      return overlayHighlightSpans(baseSpans, highlightRanges);
+    }, [baseSpans, highlightRanges]);
+
     const renderedSpans = useMemo(
-      () => spans.map((span, idx) => renderHighlightSpan(span, idx, isProportional)),
-      [spans, isProportional]
+      () => overlaidSpans.map((span, idx) => renderHighlightSpan(span, idx, isProportional)),
+      [overlaidSpans, isProportional]
     );
 
     // Ensure empty strings or trailing newlines hold exact matching height in the mirror div
@@ -267,6 +307,7 @@ export const LiveHighlightedEditor = memo(
     return (
       <div className={`grid grid-cols-1 grid-rows-1 w-full ${minHeightClass}`}>
         <div
+          ref={mirrorRef}
           aria-hidden="true"
           className={`${sharedTypography} pointer-events-none select-none ${minHeightClass}`}
           style={METRIC_STYLE}

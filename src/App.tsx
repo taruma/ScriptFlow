@@ -374,9 +374,12 @@ export default function App() {
           ) : effectiveViewMode === 'source' ? (
             <SourceEditor
               rawText={rawText}
+              doc={doc}
+              metadata={metadata}
               aestheticTokens={stableAestheticTokens}
               readOnly={effectiveReadOnly}
               onChange={mutations.handleUpdateSource}
+              onCommitCheckpoint={mutations.handleCommitSourceCheckpoint}
               onFormatScript={mutations.handleFormatScript}
             />
           ) : (
