@@ -5,7 +5,9 @@ import {
   buildCanvasLayout,
   buildGraphSceneModel,
   createDefaultGraphExpansionState,
+  mergeLayoutIntoFlowNodes,
   tokenizeAnnotatedText,
+  type FlowNodeLike,
   type GraphDimension,
   type GraphLayoutOptions,
 } from '../../src/ui/canvas/index.ts';
@@ -338,5 +340,46 @@ Minimal scene.
       x: baseS1.position.x + 42,
       y: baseS1.position.y - 18,
     });
+  });
+
+  it('preserves React Flow measured dimensions, selection, style identity, and active drag positions across layout merges', () => {
+    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+    const layout1 = buildCanvasLayout(coverage, makeLayoutOptions());
+    const initial = mergeLayoutIntoFlowNodes<FlowNodeLike>([], layout1.nodes, {});
+
+    // Simulate React Flow ResizeObserver measuring nodes & user selecting / dragging one node
+    const prevWithMeasured: FlowNodeLike[] = initial.nodes.map((node) =>
+      node.id === 'node-S1'
+        ? {
+            ...node,
+            measured: {width: 320, height: 214},
+            selected: true,
+            dragging: true,
+            position: {x: 999, y: 888},
+          }
+        : {
+            ...node,
+            measured: {width: 240, height: 120},
+          }
+    );
+
+    const prevS1Style = prevWithMeasured.find((n) => n.id === 'node-S1')!.style;
+
+    // Trigger a hover/selection layout recomputation with activeObjectId set
+    const firstObj = coverage.cameraSlotObjects[0];
+    const layout2 = buildCanvasLayout(
+      coverage,
+      makeLayoutOptions({activeObjectId: firstObj.id})
+    );
+    const merged = mergeLayoutIntoFlowNodes(prevWithMeasured, layout2.nodes, {});
+
+    const mergedS1 = merged.nodes.find((n) => n.id === 'node-S1')!;
+    expect(mergedS1.measured).toEqual({width: 320, height: 214});
+    expect(mergedS1.selected).toBe(true);
+    expect(mergedS1.dragging).toBe(true);
+    // Active drag position is preserved instead of snapping back mid-drag
+    expect(mergedS1.position).toEqual({x: 999, y: 888});
+    // Style object reference stays stable when width/height are unchanged
+    expect(mergedS1.style).toBe(prevS1Style);
   });
 });

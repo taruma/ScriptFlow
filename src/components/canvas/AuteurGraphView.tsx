@@ -21,6 +21,7 @@ import {
   buildCanvasLayout,
   buildGraphSceneModel,
   createDefaultGraphExpansionState,
+  mergeLayoutIntoFlowNodes,
   type GraphDimension,
   type GraphDirection,
   type GraphIsolationMode,
@@ -208,32 +209,21 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     ]
   );
 
-  // Convert pure layout descriptors into React Flow nodes & edges, recording base positions
-  const flowNodes = useMemo<Node[]>(() => {
-    const nextBase = new Map<string, {x: number; y: number}>();
-    const mapped = layout.nodes.map((spec): Node => {
-      const offset = nodeOffsets[spec.id];
-      const baseX = spec.position.x - (offset?.dx ?? 0);
-      const baseY = spec.position.y - (offset?.dy ?? 0);
-      nextBase.set(spec.id, {x: baseX, y: baseY});
+  // Keep controlled React Flow node state synced with pure layout while preserving
+  // React Flow's internal `measured`, `selected`, and `dragging` properties so ResizeObserver
+  // does not re-measure every node on hover, selection, or layout updates.
+  const [flowNodes, setFlowNodes] = useState<Node[]>(() => {
+    const initial = mergeLayoutIntoFlowNodes<Node>([], layout.nodes, nodeOffsets);
+    basePosRef.current = initial.basePositions;
+    return initial.nodes;
+  });
 
-      return {
-        id: spec.id,
-        type: spec.type,
-        position: spec.position,
-        ...(spec.parentId ? {parentId: spec.parentId} : {}),
-        draggable: spec.draggable ?? true,
-        selectable: spec.selectable ?? true,
-        ...(spec.zIndex !== undefined ? {zIndex: spec.zIndex} : {}),
-        style: {
-          ...(spec.width !== undefined ? {width: spec.width} : {}),
-          ...(spec.height !== undefined ? {height: spec.height} : {}),
-        },
-        data: spec.data,
-      };
+  useEffect(() => {
+    setFlowNodes((prev) => {
+      const merged = mergeLayoutIntoFlowNodes(prev, layout.nodes, nodeOffsets);
+      basePosRef.current = merged.basePositions;
+      return merged.nodes;
     });
-    basePosRef.current = nextBase;
-    return mapped;
   }, [layout.nodes, nodeOffsets]);
 
   const flowEdges = useMemo<Edge[]>(
@@ -262,33 +252,44 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   // Smooth fitView on initial mount, script switch, orientation change, or layout reset
   const triggerFitView = useCallback(() => {
     requestAnimationFrame(() => {
-      void reactFlow.fitView({padding: 0.14, duration: 240, maxZoom: 0.95});
+      requestAnimationFrame(() => {
+        void reactFlow.fitView({padding: 0.14, duration: 240, maxZoom: 0.95});
+      });
     });
   }, [reactFlow]);
 
   useEffect(() => {
     if (!pendingFitRef.current || flowNodes.length === 0) return;
     pendingFitRef.current = false;
-    const timer = window.setTimeout(() => {
-      void reactFlow.fitView({padding: 0.14, duration: 240, maxZoom: 0.95});
-    }, 45);
-    return () => window.clearTimeout(timer);
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        void reactFlow.fitView({padding: 0.14, duration: 240, maxZoom: 0.95});
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, [flowNodes.length, reactFlow, direction, scriptSessionKey]);
 
-  // Capture ephemeral (dx, dy) deltas during free dragging (including Shift+Drag multi-select)
+  // Apply all React Flow v13 changes (dimensions, selection, position) to controlled node state,
+  // and record ephemeral (dx, dy) deltas once a drag settles so dragging never thrashes layout.
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
-    const posUpdates: Array<{id: string; x: number; y: number}> = [];
+    setFlowNodes((prev) => changes.applyTo(prev));
+
+    const settledPositions: Array<{id: string; x: number; y: number}> = [];
     for (const change of changes) {
-      if (change.type === 'position' && change.position) {
-        posUpdates.push({id: change.id, x: change.position.x, y: change.position.y});
+      if (change.type === 'position' && change.position && !change.dragging) {
+        settledPositions.push({id: change.id, x: change.position.x, y: change.position.y});
       }
     }
-    if (posUpdates.length === 0) return;
+    if (settledPositions.length === 0) return;
 
     setNodeOffsets((prev) => {
       let changed = false;
       const next = {...prev};
-      for (const {id, x, y} of posUpdates) {
+      for (const {id, x, y} of settledPositions) {
         const base = basePosRef.current.get(id);
         if (!base) continue;
         const dx = Math.round((x - base.x) * 10) / 10;
