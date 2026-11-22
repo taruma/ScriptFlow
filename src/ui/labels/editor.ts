@@ -12,6 +12,7 @@ export const EDITOR_LABELS = {
     fileButton: 'File',
     fileMenuAria: 'File actions',
     fileMenuNewBlank: 'New Blank Script',
+    fileMenuDuplicateScript: 'Duplicate Script',
     fileMenuImportFile: 'Import File (.txt / .json)...',
     fileMenuFormatScript: 'Format Script',
     fileMenuVersionHistory: 'Version History...',

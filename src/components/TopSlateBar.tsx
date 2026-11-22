@@ -35,6 +35,7 @@ interface TopSlateBarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onNewBlank: () => void;
+  onDuplicateScript: () => void;
   onImportFile: () => void;
   onFormatScript: () => void;
   onOpenVersionHistory: () => void;
@@ -73,6 +74,7 @@ export function TopSlateBar({
   viewMode,
   onViewModeChange,
   onNewBlank,
+  onDuplicateScript,
   onImportFile,
   onFormatScript,
   onOpenVersionHistory,
@@ -171,6 +173,7 @@ export function TopSlateBar({
               onClose={() => setOpenMenu(null)}
               readOnly={readOnly}
               onNewBlank={onNewBlank}
+              onDuplicateScript={onDuplicateScript}
               onImportFile={onImportFile}
               onFormatScript={onFormatScript}
               onVersionHistory={onOpenVersionHistory}

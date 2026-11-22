@@ -22,7 +22,11 @@ import {getBundledExampleById, type BundledExample} from '../data/examples/index
 import {BLANK_SCRIPT_TEMPLATE, DEFAULT_PRESET} from '../data/presets.ts';
 import {APP_META, UI_LABELS} from './labels.ts';
 import {createScriptId, scriptLibraryDb, type ScriptRecord} from './scriptLibraryDb.ts';
-import {createCopyTitle, type ActiveScriptRef} from './scriptLibraryView.ts';
+import {
+  buildDuplicatedScriptRecord,
+  createCopyTitle,
+  type ActiveScriptRef,
+} from './scriptLibraryView.ts';
 import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
 import {mirrorActiveScriptToLocalStorage} from './scriptStorage.ts';
 import {useLibraryFileIO} from './library/useLibraryFileIO.ts';
@@ -82,6 +86,7 @@ export interface UseScriptLibraryResult {
   handleForkSnapshotAsNewScript: (snapshot: ScriptSnapshot) => Promise<ScriptRecord | null>;
   handleNewBlank: () => Promise<void>;
   handleDuplicateScript: (record: ScriptRecord) => Promise<void>;
+  handleDuplicateActiveScript: () => Promise<void>;
   handleRenameScript: (record: ScriptRecord, nextTitle: string) => Promise<void>;
   handleTogglePinScript: (record: ScriptRecord) => Promise<void>;
   handleUpdateScriptMetadata: (
@@ -395,24 +400,53 @@ export function useScriptLibrary({
       await persistCurrentCustomIfDirty();
       const source = (await scriptLibraryDb.get(record.id)) ?? record;
       const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
-      const title = createCopyTitle(source.title, existingTitles, 'Copy');
-      const now = Date.now();
-      const duplicated: ScriptRecord = {
+      const duplicated = buildDuplicatedScriptRecord({
         id: createScriptId('script'),
-        title,
+        sourceId: source.id,
+        sourceTitle: source.title,
         rawText: source.rawText,
-        createdAt: now,
-        updatedAt: now,
-        forkedFromId: source.id,
-        ...(source.folder ? {folder: source.folder} : {}),
-        ...(source.tags && source.tags.length > 0 ? {tags: source.tags} : {}),
-      };
+        existingTitles,
+        now: Date.now(),
+        folder: source.folder,
+        tags: source.tags,
+      });
       const saved = await scriptLibraryDb.put(duplicated);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
       onToast(UI_LABELS.toasts.duplicatedScript(saved.title));
     },
     [persistCurrentCustomIfDirty, onToast]
   );
+
+  const handleDuplicateActiveScript = useCallback(async () => {
+    await persistCurrentCustomIfDirty();
+    const current = activeScriptRef.current;
+    const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
+    const currentCustom =
+      current.kind === 'custom'
+        ? customScriptsRef.current.find((item) => item.id === current.id)
+        : undefined;
+    const currentExample =
+      current.kind === 'example'
+        ? (getBundledExampleById(current.id) ?? DEFAULT_PRESET)
+        : undefined;
+
+    const duplicated = buildDuplicatedScriptRecord({
+      id: createScriptId('script'),
+      sourceId: current.id,
+      sourceTitle:
+        currentCustom?.title ??
+        (sceneTitleRef.current.trim() || currentExample?.title || APP_META.untitledScene),
+      rawText: current.kind === 'example' ? (currentExample?.content ?? rawTextRef.current) : rawTextRef.current,
+      existingTitles,
+      now: Date.now(),
+      folder: currentCustom?.folder,
+      tags: currentCustom?.tags,
+    });
+    const saved = await scriptLibraryDb.put(duplicated);
+    setCustomScripts((prev) => upsertSortedScript(prev, saved));
+    activateCustomScript(saved);
+    onToast(UI_LABELS.toasts.duplicatedScript(saved.title));
+  }, [persistCurrentCustomIfDirty, activateCustomScript, onToast]);
 
   const handleRenameScript = useCallback(
     async (record: ScriptRecord, nextTitle: string) => {
@@ -628,6 +662,7 @@ export function useScriptLibrary({
     handleForkSnapshotAsNewScript,
     handleNewBlank,
     handleDuplicateScript,
+    handleDuplicateActiveScript,
     handleRenameScript,
     handleTogglePinScript,
     handleUpdateScriptMetadata,

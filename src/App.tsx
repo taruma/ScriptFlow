@@ -285,6 +285,7 @@ export default function App() {
         viewMode={effectiveViewMode}
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
+        onDuplicateScript={() => void library.handleDuplicateActiveScript()}
         onImportFile={library.handleTriggerImportFile}
         onFormatScript={mutations.handleFormatScript}
         onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}

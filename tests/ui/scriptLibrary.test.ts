@@ -40,6 +40,7 @@ import {
   type ScriptRecord,
 } from '../../src/ui/scriptLibraryDb.ts';
 import {
+  buildDuplicatedScriptRecord,
   buildLibraryRows,
   collectLibraryFacets,
   countExecutionBeatsFast,
@@ -788,6 +789,44 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
     await store.clearAll();
     expect(await store.list()).toEqual([]);
     expect(await store.get('beta')).toBeNull();
+  });
+
+  it('builds duplicated ScriptRecords for active custom scripts and read-only examples with folder/tags and unique titles', () => {
+    const existing = new Set(['Heist Teaser', 'Heist Teaser (Copy)']);
+    const dupCustom = buildDuplicatedScriptRecord({
+      id: 'script-dup-1',
+      sourceId: 'script-orig-1',
+      sourceTitle: 'Heist Teaser',
+      rawText: '[INTENT]\nCopy me.',
+      existingTitles: existing,
+      now: 123456,
+      folder: 'Season 1',
+      tags: ['comedy', 'montage'],
+    });
+
+    expect(dupCustom).toEqual({
+      id: 'script-dup-1',
+      title: 'Heist Teaser (Copy 2)',
+      rawText: '[INTENT]\nCopy me.',
+      createdAt: 123456,
+      updatedAt: 123456,
+      forkedFromId: 'script-orig-1',
+      folder: 'Season 1',
+      tags: ['comedy', 'montage'],
+    });
+
+    const dupExample = buildDuplicatedScriptRecord({
+      id: 'script-dup-2',
+      sourceId: BUNDLED_EXAMPLES[0].id,
+      sourceTitle: BUNDLED_EXAMPLES[0].title,
+      rawText: BUNDLED_EXAMPLES[0].content,
+      existingTitles: existing,
+      now: 789000,
+    });
+    expect(dupExample.title).toBe(BUNDLED_EXAMPLES[0].title);
+    expect(dupExample.forkedFromId).toBe(BUNDLED_EXAMPLES[0].id);
+    expect(dupExample.folder).toBeUndefined();
+    expect(dupExample.tags).toBeUndefined();
   });
 });
 

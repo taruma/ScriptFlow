@@ -3,6 +3,7 @@ import {
   ArchiveRestore,
   Braces,
   ChevronDown,
+  CopyPlus,
   Download,
   FileCode2,
   FilePlus2,
@@ -22,6 +23,7 @@ export interface FileMenuDropdownProps {
   onClose: () => void;
   readOnly?: boolean;
   onNewBlank: () => void;
+  onDuplicateScript: () => void;
   onImportFile: () => void;
   onFormatScript: () => void;
   onVersionHistory: () => void;
@@ -46,6 +48,7 @@ export function FileMenuDropdown({
   onClose,
   readOnly = false,
   onNewBlank,
+  onDuplicateScript,
   onImportFile,
   onFormatScript,
   onVersionHistory,
@@ -91,6 +94,17 @@ export function FileMenuDropdown({
               <span className="inline-flex items-center gap-2">
                 <FilePlus2 className="h-3.5 w-3.5 text-text-muted" />
                 <span>{UI_LABELS.topBar.fileMenuNewBlank}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={runAndClose(onDuplicateScript)}
+              className={UI_TOKENS.dropdown.item}
+            >
+              <span className="inline-flex items-center gap-2">
+                <CopyPlus className="h-3.5 w-3.5 text-text-muted" />
+                <span>{UI_LABELS.topBar.fileMenuDuplicateScript}</span>
               </span>
             </button>
             <button

@@ -413,6 +413,44 @@ export function createCopyTitle(
   return `${trimmed} (${suffix} ${index})`;
 }
 
+export interface DuplicatedScriptBuildInput {
+  id: string;
+  sourceId: string;
+  sourceTitle: string;
+  rawText: string;
+  existingTitles: ReadonlySet<string>;
+  now: number;
+  folder?: string;
+  tags?: readonly string[];
+}
+
+/**
+ * Pure builder for duplicating either a custom script or read-only example into My Scripts,
+ * preserving folder/tags and generating a collision-free "(Copy)" title.
+ */
+export function buildDuplicatedScriptRecord({
+  id,
+  sourceId,
+  sourceTitle,
+  rawText,
+  existingTitles,
+  now,
+  folder,
+  tags,
+}: DuplicatedScriptBuildInput): ScriptRecord {
+  const title = createCopyTitle(sourceTitle, existingTitles, 'Copy');
+  return {
+    id,
+    title,
+    rawText,
+    createdAt: now,
+    updatedAt: now,
+    forkedFromId: sourceId,
+    ...(folder ? {folder} : {}),
+    ...(tags && tags.length > 0 ? {tags: [...tags]} : {}),
+  };
+}
+
 /**
  * Pure keyboard selection stepper for the searchable Library list.
  */
