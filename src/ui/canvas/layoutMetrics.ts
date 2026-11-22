@@ -18,11 +18,11 @@ export const STAGING_W_TB = 368;
 export const STAGING_GAP = 22;
 
 export const AES_CARD_W_LR = 232;
-export const AES_GAP_LR = 12;
+export const AES_GAP_LR = 16;
 export const AES_INDENT_TB = 26;
-export const AES_GAP_TB = 10;
-export const AES_BRANCH_GAP_LR = 26;
-export const AES_BRANCH_GAP_TB = 12;
+export const AES_GAP_TB = 14;
+export const AES_BRANCH_GAP_LR = 28;
+export const AES_BRANCH_GAP_TB = 14;
 
 export const OBJ_CHIP_W_LR = 224;
 export const OBJ_RAIL_W_TB = 248;
@@ -35,13 +35,15 @@ export const MS_W_LR = 312;
 export const MS_W_TB = 368;
 export const MS_PILL_W = 84;
 export const MS_PILL_H = 38;
-export const MS_GAP_LR = 52;
-export const MS_GAP_TB = 48;
+export const MS_GAP_LR = 56;
+export const MS_GAP_LR_EXPANDED = 72;
+export const MS_GAP_TB = 56;
+export const MS_GAP_TB_EXPANDED = 82;
 
 export const SUB_W_LR = 296;
-export const SUB_W_TB = 264;
-export const SUB_GAP_LR = 14;
-export const SUB_GAP_TB = 16;
+export const SUB_W_TB = 268;
+export const SUB_GAP_LR = 22;
+export const SUB_GAP_TB = 30;
 
 export const RAW_W_LR = 308;
 export const RAW_W_TB = 286;

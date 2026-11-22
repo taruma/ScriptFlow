@@ -106,7 +106,12 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
       {/* Directional connection ports */}
       <Handle type="target" id="spine-in" position={isLR ? Position.Left : Position.Top} />
       <Handle type="source" id="spine-out" position={isLR ? Position.Right : Position.Bottom} />
-      <Handle type="source" id="sub-out" position={isLR ? Position.Bottom : Position.Right} />
+      <Handle
+        type="source"
+        id="sub-out"
+        position={isLR ? Position.Bottom : Position.Right}
+        style={isLR ? undefined : {top: '34px'}}
+      />
       <Handle type="target" id="raw-in" position={isLR ? Position.Top : Position.Left} />
       <Handle type="source" id="recall-out" position={isLR ? Position.Top : Position.Left} />
       <Handle type="target" id="recall-in" position={isLR ? Position.Top : Position.Left} />

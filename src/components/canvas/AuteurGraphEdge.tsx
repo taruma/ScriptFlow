@@ -123,17 +123,33 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
   } = edgeData;
   const isLR = direction !== 'TB';
 
-  // Curved RECALL arc sweeping gracefully above (LR) or left (TB) of the Execution spine
+  // Stepped rounded-orthogonal RECALL subway lane per camera slot (never overlaps sibling camera slots)
   if (kind === 'recall') {
-    const span = isLR ? Math.abs(targetX - sourceX) : Math.abs(targetY - sourceY);
-    const arcLift = Math.min(130, Math.max(58, span * 0.16));
+    const lane = laneIndex ?? 0;
+    const laneDepth = 44 + lane * 34;
 
     const path = isLR
-      ? `M ${sourceX} ${sourceY} C ${sourceX} ${sourceY - arcLift}, ${targetX} ${targetY - arcLift}, ${targetX} ${targetY}`
-      : `M ${sourceX} ${sourceY} C ${sourceX - arcLift} ${sourceY}, ${targetX - arcLift} ${targetY}, ${targetX} ${targetY}`;
+      ? buildRoundedOrthogonalPath(
+          [
+            {x: sourceX, y: sourceY},
+            {x: sourceX, y: Math.min(sourceY, targetY) - laneDepth},
+            {x: targetX, y: Math.min(sourceY, targetY) - laneDepth},
+            {x: targetX, y: targetY},
+          ],
+          14
+        )
+      : buildRoundedOrthogonalPath(
+          [
+            {x: sourceX, y: sourceY},
+            {x: Math.min(sourceX, targetX) - laneDepth, y: sourceY},
+            {x: Math.min(sourceX, targetX) - laneDepth, y: targetY},
+            {x: targetX, y: targetY},
+          ],
+          14
+        );
 
-    const labelX = isLR ? (sourceX + targetX) / 2 : Math.min(sourceX, targetX) - arcLift * 0.74;
-    const labelY = isLR ? Math.min(sourceY, targetY) - arcLift * 0.74 : (sourceY + targetY) / 2;
+    const labelX = isLR ? (sourceX + targetX) / 2 : Math.min(sourceX, targetX) - laneDepth;
+    const labelY = isLR ? Math.min(sourceY, targetY) - laneDepth : (sourceY + targetY) / 2;
     const stroke = 'var(--graph-dim-camera)';
 
     return (
@@ -143,13 +159,14 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
           path={path}
           style={{
             stroke,
-            strokeWidth: isHot ? 2.4 : 1.75,
-            strokeDasharray: '6 3',
-            opacity: isHot ? 0.96 : isDimmed ? 0.16 : 0.78,
+            strokeWidth: isHot ? 2.25 : 1.5,
+            strokeDasharray: '6 4',
+            opacity: isHot ? 0.94 : isDimmed ? 0.14 : 0.48,
           }}
         />
         {isAnimated && <PulseDot path={path} color={stroke} />}
-        {label && (
+        {isHot && <circle cx={targetX} cy={targetY} r={3.2} fill={stroke} />}
+        {label && !isDimmed && (
           <EdgeLabelRenderer>
             <div
               style={{
@@ -158,7 +175,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
                 pointerEvents: 'none',
                 zIndex: 4,
                 color: stroke,
-                opacity: isDimmed ? 0.2 : 1,
+                opacity: isHot ? 1 : 0.82,
               }}
               className="rounded-md border border-border-main bg-surface/95 px-1.5 py-0.5 font-mono text-[9.5px] font-bold tracking-wider shadow-2xs whitespace-nowrap"
             >

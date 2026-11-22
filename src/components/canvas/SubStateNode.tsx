@@ -37,8 +37,18 @@ export const SubStateNode = memo(function SubStateNode({data}: NodeProps) {
         isGhost ? 'auteur-graph-ghost' : ''
       } ${isTraced ? 'auteur-graph-traced' : ''} ${isDimmed ? 'auteur-graph-dimmed' : ''}`}
     >
-      <Handle type="target" id="chain-in" position={isLR ? Position.Top : Position.Left} />
-      <Handle type="source" id="chain-out" position={isLR ? Position.Bottom : Position.Right} />
+      <Handle
+        type="target"
+        id="chain-in"
+        position={isLR ? Position.Top : Position.Left}
+        style={isLR ? undefined : {top: '34px'}}
+      />
+      <Handle
+        type="source"
+        id="chain-out"
+        position={isLR ? Position.Bottom : Position.Right}
+        style={isLR ? undefined : {top: '34px'}}
+      />
       <Handle type="target" id="match-in" position={isLR ? Position.Left : Position.Top} />
       <Handle type="source" id="match-out" position={isLR ? Position.Right : Position.Bottom} />
       <Handle

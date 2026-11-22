@@ -25,7 +25,9 @@ import {
   LAYER_GAP_LR,
   LAYER_GAP_TB,
   MS_GAP_LR,
+  MS_GAP_LR_EXPANDED,
   MS_GAP_TB,
+  MS_GAP_TB_EXPANDED,
   MS_PILL_H,
   MS_PILL_W,
   MS_W_LR,
@@ -652,7 +654,9 @@ export function buildCanvasLayout(
       placementById.set(ms.id, placement);
 
       if (isLR) {
-        cursorPrimary += width + MS_GAP_LR;
+        const nextMs = i + 1 < model.macroStates.length ? model.macroStates[i + 1] : null;
+        const nextExpanded = Boolean(nextMs && expandedIds.has(nextMs.id));
+        cursorPrimary += width + (isExpanded || nextExpanded ? MS_GAP_LR_EXPANDED : MS_GAP_LR);
       } else {
         const rawH = isRawOpen
           ? resolveMeasuredHeight(
@@ -673,7 +677,8 @@ export function buildCanvasLayout(
               height
             )
           : height;
-        cursorPrimary += Math.max(height, rawH, subHeightTB) + MS_GAP_TB;
+        cursorPrimary +=
+          Math.max(height, rawH, subHeightTB) + (isExpanded ? MS_GAP_TB_EXPANDED : MS_GAP_TB);
       }
     }
 
@@ -799,8 +804,8 @@ export function buildCanvasLayout(
       if (p.isExpanded) {
         const chamberBottomClearance = chamberOrigin ? CHAMBER_PAD_BOTTOM + 16 : 0;
         let subCursor = isLR
-          ? worldY + p.height + 28 + chamberBottomClearance
-          : worldX + p.width + 32 + (chamberOrigin ? CHAMBER_PAD_X : 0);
+          ? worldY + p.height + 30 + chamberBottomClearance
+          : worldX + p.width + 42 + (chamberOrigin ? CHAMBER_PAD_X : 0);
 
         let prevSubNodeId = p.nodeId;
         let prevSourceHandle = 'sub-out';
@@ -877,13 +882,14 @@ export function buildCanvasLayout(
       }
     }
 
-    // Pass 4a: Execution continuity spine, RECALL arcs & animated isolation threads
+    // Pass 4a: Execution continuity spine, on-demand stepped RECALL lanes & animated isolation threads
     edges.push(
       ...buildExecutionContinuityEdges(
         placements,
         activeObj,
         activeObjectId,
         isolatedDims,
+        showAllLinks,
         direction
       )
     );

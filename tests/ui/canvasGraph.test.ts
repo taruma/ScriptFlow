@@ -258,12 +258,29 @@ Location: Rainy alley -> LOC01
     expect(tbS2.position.y).toBeGreaterThan(tbS1.position.y);
     expect(tbRawS1.position.x).toBeLessThan(tbS1Sub.position.x);
 
-    // Interrogation Coverage produces a RECALL arc edge from establishing S1 -> recalled S3
+    // Interrogation Coverage: at rest, RECALL shows cleanly on the spine (`RECALL CAM 01`) with zero lane clutter;
+    // focusing CAM 01, isolating CAM, or toggling Show Threads reveals the stepped RECALL lane (`S1 -> S3`)
     const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
-    const coverageLayout = buildCanvasLayout(coverage, makeLayoutOptions());
+    const restingCoverage = buildCanvasLayout(coverage, makeLayoutOptions());
+    expect(restingCoverage.edges.some((e) => e.kind === 'recall')).toBe(false);
     expect(
-      coverageLayout.edges.some(
-        (e) => e.kind === 'recall' && e.source === 'node-S1' && e.target === 'node-S3'
+      restingCoverage.edges.some(
+        (e) => e.kind === 'spineCut' && e.target === 'node-S3' && e.label === 'RECALL CAM 01'
+      )
+    ).toBe(true);
+
+    const focusedCamCoverage = buildCanvasLayout(
+      coverage,
+      makeLayoutOptions({activeObjectId: 'obj-cam-CAM-01'})
+    );
+    expect(
+      focusedCamCoverage.edges.some(
+        (e) =>
+          e.kind === 'recall' &&
+          e.source === 'node-S1' &&
+          e.target === 'node-S3' &&
+          e.isHot === true &&
+          e.isAnimated === true
       )
     ).toBe(true);
   });
@@ -865,5 +882,61 @@ Featuring @img1 as Evan.
     expect(s2ChainToFirst.isDimmed).toBe(false);
     expect(s2ChainToFirst.isSecondary).toBe(true);
     expect(s2ChainToMatch.isDimmed).toBe(false);
+  });
+
+  it('cascades RECALL lanes chronologically per camera slot on stepped lanes (on-demand for CAM focus, CAM isolation, or Show Threads)', () => {
+    const raw = `[INTENT]
+Multi-camera dialogue.
+
+[EXECUTION]
+[CAM 01] MS two-shot -> [ACT] Beat one
+[CAM 02] CU left -> [ACT] Beat two
+[CAM 01] -> [ACT] Recall cam 1 first time
+[CAM 02] -> [ACT] Recall cam 2
+[CAM 01] -> [ACT] Recall cam 1 second time`;
+
+    const model = buildModelFromRaw(raw);
+
+    // 1. Resting state: zero recall lane wires (only clean spine labels)
+    const rest = buildCanvasLayout(model, makeLayoutOptions());
+    expect(rest.edges.filter((e) => e.kind === 'recall')).toHaveLength(0);
+
+    // 2. Show Threads ON: all camera recalls cascade prev -> next on distinct stepped lanes (static)
+    const threads = buildCanvasLayout(model, makeLayoutOptions({showAllLinks: true}));
+    const threadRecalls = threads.edges.filter((e) => e.kind === 'recall');
+    expect(
+      threadRecalls.map((e) => ({
+        source: e.source,
+        target: e.target,
+        label: e.label,
+        laneIndex: e.laneIndex,
+        isAnimated: e.isAnimated,
+      }))
+    ).toEqual([
+      {source: 'node-S1', target: 'node-S3', label: 'RECALL CAM 01', laneIndex: 0, isAnimated: false},
+      {source: 'node-S2', target: 'node-S4', label: 'RECALL CAM 02', laneIndex: 1, isAnimated: false},
+      {source: 'node-S3', target: 'node-S5', label: 'RECALL CAM 01', laneIndex: 0, isAnimated: false},
+    ]);
+
+    // 3. CAM isolated: all camera recall lanes animate with pulse dots
+    const camIso = buildCanvasLayout(
+      model,
+      makeLayoutOptions({isolatedDims: new Set<GraphDimension>(['camera'])})
+    );
+    const isoRecalls = camIso.edges.filter((e) => e.kind === 'recall');
+    expect(isoRecalls).toHaveLength(3);
+    expect(isoRecalls.every((e) => e.isHot && e.isAnimated)).toBe(true);
+
+    // 4. Focusing CAM 01 shows only CAM 01's animated cascading recall lane (S1 -> S3 -> S5)
+    const focusCam1 = buildCanvasLayout(
+      model,
+      makeLayoutOptions({activeObjectId: 'obj-cam-CAM-01'})
+    );
+    const cam1Recalls = focusCam1.edges.filter((e) => e.kind === 'recall');
+    expect(cam1Recalls.map((e) => `${e.source}->${e.target}`)).toEqual([
+      'node-S1->node-S3',
+      'node-S3->node-S5',
+    ]);
+    expect(cam1Recalls.every((e) => e.isHot && e.isAnimated)).toBe(true);
   });
 });

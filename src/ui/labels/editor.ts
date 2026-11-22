@@ -369,7 +369,7 @@ export const EDITOR_LABELS = {
     allLinks: 'Show Threads',
     allLinksTitle: 'Reveal all character, token, and reference threads across the scene',
     resetLayout: 'Reset',
-    resetLayoutTitle: 'Reset dragged positions, fold Sub-States, hide source, and refit the canvas',
+    resetLayoutTitle: 'Restore default layout posture, hide source, and refit the canvas',
     decoupleCard: 'Sub-States',
     coupleCard: 'Fold',
     decoupleCardTitle: (id: string) => `Fan out Sub-States for ${id}`,

@@ -5,7 +5,6 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
-  SelectionMode,
   useReactFlow,
   useUpdateNodeInternals,
   useViewport,
@@ -64,6 +63,8 @@ const NODE_TYPES: NodeTypes = {
 const EDGE_TYPES: EdgeTypes = {
   auteurEdge: AuteurGraphEdge,
 };
+
+const EMPTY_NODE_OFFSETS: Readonly<Record<string, NodeOffset>> = Object.freeze({});
 
 interface ZoomControlsBarProps {
   showMiniMap: boolean;
@@ -149,11 +150,8 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
   const [showAllLinks, setShowAllLinks] = useState<boolean>(false);
   const [showMiniMap, setShowMiniMap] = useState<boolean>(true);
-  const [nodeOffsets, setNodeOffsets] = useState<Record<string, NodeOffset>>({});
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
 
-  // Track base auto-layout positions so drag deltas stay purely additive & reversible
-  const basePosRef = useRef<Map<string, {x: number; y: number}>>(new Map());
   const pendingFitRef = useRef<boolean>(true);
   const prevScriptKeyRef = useRef<string>(scriptSessionKey);
   const prevDirectionRef = useRef<GraphDirection>(direction);
@@ -169,7 +167,6 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     setIsolatedDims(new Set());
     setSelectedObjectId(null);
     setHoveredObjectId(null);
-    setNodeOffsets({});
     setMeasuredHeights({});
     pendingFitRef.current = true;
   }, [scriptSessionKey, model, direction]);
@@ -223,7 +220,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
         isolationMode,
         activeObjectId,
         showAllLinks,
-        nodeOffsets,
+        nodeOffsets: EMPTY_NODE_OFFSETS,
         measuredHeights,
       }),
     [
@@ -236,27 +233,22 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       isolationMode,
       activeObjectId,
       showAllLinks,
-      nodeOffsets,
       measuredHeights,
     ]
   );
 
   // Keep controlled React Flow node state synced with pure layout while preserving
-  // React Flow's internal `measured`, `selected`, and `dragging` properties so ResizeObserver
-  // does not re-measure every node on hover, selection, or layout updates.
-  const [flowNodes, setFlowNodes] = useState<Node[]>(() => {
-    const initial = mergeLayoutIntoFlowNodes<Node>([], layout.nodes, nodeOffsets);
-    basePosRef.current = initial.basePositions;
-    return initial.nodes;
-  });
+  // React Flow's internal `measured` dimensions so ResizeObserver does not re-measure
+  // every node on hover, selection, or layout updates.
+  const [flowNodes, setFlowNodes] = useState<Node[]>(
+    () => mergeLayoutIntoFlowNodes<Node>([], layout.nodes, EMPTY_NODE_OFFSETS).nodes
+  );
 
   useEffect(() => {
-    setFlowNodes((prev) => {
-      const merged = mergeLayoutIntoFlowNodes(prev, layout.nodes, nodeOffsets);
-      basePosRef.current = merged.basePositions;
-      return merged.nodes;
-    });
-  }, [layout.nodes, nodeOffsets]);
+    setFlowNodes(
+      (prev) => mergeLayoutIntoFlowNodes(prev, layout.nodes, EMPTY_NODE_OFFSETS).nodes
+    );
+  }, [layout.nodes]);
 
   // Refresh React Flow's internal handle-bounds cache whenever layout orientation flips (LR <-> TB)
   // so edges immediately re-anchor to rotated Top/Bottom vs Left/Right ports.
@@ -325,14 +317,12 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     };
   }, [flowNodes.length, reactFlow, direction, scriptSessionKey]);
 
-  // Apply all React Flow v13 changes (dimensions, selection, position) to controlled node state,
-  // capture real DOM heights (for Raw/Staging/MacroState/SubState overlap immunity), and record
-  // ephemeral (dx, dy) deltas once a drag settles so dragging never thrashes layout.
+  // Apply React Flow v13 changes (dimensions) to controlled node state and capture real DOM
+  // heights (for Source/Staging/MacroState/SubState overlap immunity).
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
     setFlowNodes((prev) => changes.applyTo(prev));
 
     const heightUpdates: Array<{id: string; height: number}> = [];
-    const settledPositions: Array<{id: string; x: number; y: number}> = [];
 
     for (const change of changes) {
       if (
@@ -344,8 +334,6 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
         !change.id.startsWith('zone-')
       ) {
         heightUpdates.push({id: change.id, height: Math.ceil(change.dimensions.height)});
-      } else if (change.type === 'position' && change.position && !change.dragging) {
-        settledPositions.push({id: change.id, x: change.position.x, y: change.position.y});
       }
     }
 
@@ -364,24 +352,6 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
         return changed && next ? next : prev;
       });
     }
-
-    if (settledPositions.length === 0) return;
-
-    setNodeOffsets((prev) => {
-      let changed = false;
-      const next = {...prev};
-      for (const {id, x, y} of settledPositions) {
-        const base = basePosRef.current.get(id);
-        if (!base) continue;
-        const dx = Math.round((x - base.x) * 10) / 10;
-        const dy = Math.round((y - base.y) * 10) / 10;
-        if (next[id]?.dx !== dx || next[id]?.dy !== dy) {
-          next[id] = {dx, dy};
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
   }, []);
 
   const handleSelectObject = useCallback((objectId: string) => {
@@ -455,7 +425,6 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       setExpandedIds(defaults.expandedIds);
       setExpandedStagingIds(defaults.expandedStagingIds);
       setRawOpenIds(defaults.rawOpenIds);
-      setNodeOffsets({});
       setMeasuredHeights({});
       pendingFitRef.current = true;
     },
@@ -500,7 +469,6 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
 
   const handleResetLayout = useCallback(() => {
     const defaults = createDefaultGraphExpansionState(model, direction);
-    setNodeOffsets({});
     setMeasuredHeights({});
     setExpandedIds(defaults.expandedIds);
     setExpandedStagingIds(defaults.expandedStagingIds);
@@ -583,10 +551,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     expandedStagingIds.size !== defaultExpansion.expandedStagingIds.size ||
     [...defaultExpansion.expandedStagingIds].some((id) => !expandedStagingIds.has(id));
   const hasCustomOffsets =
-    Object.keys(nodeOffsets).length > 0 ||
-    macroExpansionDiffers ||
-    stagingExpansionDiffers ||
-    rawOpenIds.size > 0;
+    macroExpansionDiffers || stagingExpansionDiffers || rawOpenIds.size > 0;
 
   return (
     <div
@@ -613,14 +578,13 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
             edgeTypes={EDGE_TYPES}
             onNodesChange={handleNodesChange}
             onPaneClick={() => setSelectedObjectId(null)}
+            nodesDraggable={false}
             nodesConnectable={false}
-            elementsSelectable={true}
+            elementsSelectable={false}
             elevateEdgesOnSelect={false}
             zIndexMode="manual"
             selectionOnDrag={false}
             panOnDrag={true}
-            selectionKeyCode="Shift"
-            selectionMode={SelectionMode.Partial}
             minZoom={0.18}
             maxZoom={2.0}
             proOptions={{hideAttribution: true}}

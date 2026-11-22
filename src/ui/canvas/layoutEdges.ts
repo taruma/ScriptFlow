@@ -51,8 +51,9 @@ export function buildExtractionEdges(
 
 /**
  * Emits Phase 2 Execution timeline edges:
- * - Sequential spine links (`HOLD` solid rail, `CUT`/`RECALL` dashed break, `MONTAGE` cut)
- * - Overhead curved `RECALL` arcs linking recalled setups back to their establishing Macro-State
+ * - Sequential spine links (`HOLD` solid rail, `CUT`/`RECALL CAM ##` dashed break, `MONTAGE` cut)
+ * - On-demand stepped cascading `RECALL` subway lanes (prev -> next per camera slot) revealed
+ *   when focusing a `CAM ##` object, isolating `CAM`, or toggling `Show Threads`
  * - Active Dimension Isolation Threads connecting surviving matching Macro-States across gaps
  */
 export function buildExecutionContinuityEdges(
@@ -60,10 +61,12 @@ export function buildExecutionContinuityEdges(
   activeObj: InferredGraphObject | null,
   activeObjectId: string | null,
   isolatedDims: ReadonlySet<GraphDimension>,
+  showAllLinks: boolean,
   direction: GraphDirection
 ): CanvasEdgeSpec[] {
   const edges: CanvasEdgeSpec[] = [];
   const hasIsolation = isolatedDims.size > 0;
+  const isCamIsolated = isolatedDims.has('camera') && !activeObj;
 
   // 1. Continuity Spine (S1 -> S2 -> ... -> SN)
   for (let i = 0; i < placements.length - 1; i++) {
@@ -85,7 +88,9 @@ export function buildExecutionContinuityEdges(
       label:
         !isHold && !isMontage
           ? next.ms.cameraTransition === 'RECALL'
-            ? UI_LABELS.graph.edgeRecallLabel
+            ? next.ms.cameraSlot
+              ? UI_LABELS.graph.edgeRecallSlotLabel(next.ms.cameraSlot)
+              : UI_LABELS.graph.edgeRecallLabel
             : UI_LABELS.graph.edgeCutLabel
           : undefined,
       isDimmed: Boolean(activeObj),
@@ -93,30 +98,53 @@ export function buildExecutionContinuityEdges(
     });
   }
 
-  // 2. Curved RECALL arcs linking recalled Macro-States back to their establishing camera setup
-  for (const p of placements) {
-    if (p.ms.cameraTransition === 'RECALL' && p.ms.recallSourceMacroStateId) {
-      const originNodeId = `node-${p.ms.recallSourceMacroStateId}`;
-      const camObjId = p.ms.cameraSlot
-        ? `obj-cam-${p.ms.cameraSlot.replace(/\s+/g, '-')}`
-        : null;
-      const isHot = Boolean(camObjId && activeObjectId === camObjId);
+  // 2. Stepped cascading RECALL lanes (prev -> next per camera slot, zero hub-and-spoke pileups).
+  //    Shown quietly on demand when a Camera Setup is focused, `CAM` is isolated, or `Show Threads` is ON.
+  const showRecallLanes =
+    activeObj?.kind === 'camera_slot' || isCamIsolated || (showAllLinks && !activeObj);
 
-      edges.push({
-        id: `edge-recall-${p.ms.recallSourceMacroStateId}-${p.ms.id}`,
-        source: originNodeId,
-        target: p.nodeId,
-        sourceHandle: 'recall-out',
-        targetHandle: 'recall-in',
-        kind: 'recall',
-        label: p.ms.cameraSlot
-          ? UI_LABELS.graph.edgeRecallSlotLabel(p.ms.cameraSlot)
-          : UI_LABELS.graph.edgeRecallLabel,
-        isHot,
-        isAnimated: isHot,
-        isDimmed: Boolean(activeObj && !isHot),
-        direction,
-      });
+  if (showRecallLanes) {
+    const slotLaneIndex = new Map<string, number>();
+    const lastSeenBySlot = new Map<string, {nodeId: string; msId: string}>();
+
+    for (const p of placements) {
+      const slot = p.ms.cameraSlot;
+      if (!slot) continue;
+
+      if (!slotLaneIndex.has(slot)) {
+        slotLaneIndex.set(slot, slotLaneIndex.size);
+      }
+
+      const prev = lastSeenBySlot.get(slot);
+      if (p.ms.cameraTransition === 'RECALL' && prev) {
+        const camObjId = `obj-cam-${slot.replace(/\s+/g, '-')}`;
+        const isTargetCam = activeObjectId === camObjId;
+        const shouldEmit =
+          activeObj?.kind === 'camera_slot' ? isTargetCam : true;
+
+        if (shouldEmit) {
+          const isHot = isTargetCam || isCamIsolated;
+          const isAnimated = isHot;
+          const isDimmed = !isHot && hasIsolation && !isCamIsolated;
+
+          edges.push({
+            id: `edge-recall-${prev.msId}-${p.ms.id}`,
+            source: prev.nodeId,
+            target: p.nodeId,
+            sourceHandle: 'recall-out',
+            targetHandle: 'recall-in',
+            kind: 'recall',
+            label: UI_LABELS.graph.edgeRecallSlotLabel(slot),
+            isHot,
+            isAnimated,
+            isDimmed,
+            laneIndex: slotLaneIndex.get(slot) ?? 0,
+            direction,
+          });
+        }
+      }
+
+      lastSeenBySlot.set(slot, {nodeId: p.nodeId, msId: p.ms.id});
     }
   }
 
