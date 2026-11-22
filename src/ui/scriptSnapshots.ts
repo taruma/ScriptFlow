@@ -147,6 +147,96 @@ export function computeRestoreDiff(
   };
 }
 
+export type DiffDisplayRow =
+  | {
+      kind: 'line';
+      line: DiffLine;
+      sourceIndex: number;
+    }
+  | {
+      kind: 'omitted';
+      id: string;
+      count: number;
+      lines: DiffLine[];
+      startIndex: number;
+    };
+
+/**
+ * Compacts a full line diff into Git-style hunks keeping `contextRadius`
+ * unchanged lines around each edit and folding multi-line unchanged stretches
+ * (2+ lines) into expandable `omitted` markers.
+ */
+export function buildCompactDiffRows(
+  lines: readonly DiffLine[],
+  contextRadius: number = 2
+): DiffDisplayRow[] {
+  const total = lines.length;
+  if (total === 0) return [];
+
+  const radius = Math.max(0, Math.floor(contextRadius));
+  const visible = new Uint8Array(total);
+  let hasChange = false;
+
+  for (let i = 0; i < total; i++) {
+    if (lines[i].type !== 'context') {
+      hasChange = true;
+      const start = Math.max(0, i - radius);
+      const end = Math.min(total - 1, i + radius);
+      for (let j = start; j <= end; j++) {
+        visible[j] = 1;
+      }
+    }
+  }
+
+  if (!hasChange) {
+    return lines.map((line, index) => ({
+      kind: 'line',
+      line,
+      sourceIndex: index,
+    }));
+  }
+
+  const rows: DiffDisplayRow[] = [];
+  let i = 0;
+  while (i < total) {
+    if (visible[i] === 1) {
+      rows.push({
+        kind: 'line',
+        line: lines[i],
+        sourceIndex: i,
+      });
+      i++;
+      continue;
+    }
+
+    const start = i;
+    while (i < total && visible[i] === 0) {
+      i++;
+    }
+    const end = i - 1;
+    const count = end - start + 1;
+
+    // Showing 1 unchanged line directly avoids wasting a divider row for a single line.
+    if (count === 1) {
+      rows.push({
+        kind: 'line',
+        line: lines[start],
+        sourceIndex: start,
+      });
+    } else {
+      rows.push({
+        kind: 'omitted',
+        id: `omitted-${start}-${end}`,
+        count,
+        lines: lines.slice(start, end + 1),
+        startIndex: start,
+      });
+    }
+  }
+
+  return rows;
+}
+
 /**
  * Formats a compact, human-readable timestamp for snapshot rows.
  * Accepts an injectable `nowMs` for deterministic unit testing.

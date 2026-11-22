@@ -138,6 +138,9 @@ export const LIBRARY_LABELS = {
     viewModeAria: 'Snapshot preview mode',
     diffLegend: 'Changes to current script if this snapshot is restored',
     diffSummary: (added: number, removed: number) => `+${added} / -${removed} lines`,
+    omittedLines: (count: number) =>
+      `… ${count} unchanged ${count === 1 ? 'line' : 'lines'} …`,
+    expandOmittedTitle: 'Click to expand unchanged lines',
     matchesCurrentNote: 'This snapshot already matches your current script.',
     retentionNote:
       'Auto checkpoints saved before & after AI applies (30 kept) · Manual & pinned versions kept permanently',

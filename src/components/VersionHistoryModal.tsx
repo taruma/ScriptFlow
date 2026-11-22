@@ -16,6 +16,7 @@ import {
 import {scriptLibraryDb} from '../ui/scriptLibraryDb.ts';
 import {countExecutionBeatsFast} from '../ui/scriptLibraryView.ts';
 import {
+  buildCompactDiffRows,
   computeRestoreDiff,
   formatSnapshotTimestamp,
   getSnapshotOrigin,
@@ -116,10 +117,32 @@ function VersionHistoryModalContent({
 
   const selectedOrigin = selectedSnapshot ? getSnapshotOrigin(selectedSnapshot.trigger) : null;
 
+  const [expandedOmittedIds, setExpandedOmittedIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+
   const restoreDiff = useMemo(() => {
     if (!selectedSnapshot) return null;
     return computeRestoreDiff(currentRawText, selectedSnapshot.rawText);
   }, [currentRawText, selectedSnapshot]);
+
+  const compactDiffRows = useMemo(() => {
+    if (!restoreDiff || restoreDiff.isIdentical) return [];
+    return buildCompactDiffRows(restoreDiff.lines, 2);
+  }, [restoreDiff]);
+
+  useEffect(() => {
+    setExpandedOmittedIds(new Set());
+  }, [selectedSnapshot?.id, currentRawText]);
+
+  const handleExpandOmitted = useCallback((id: string) => {
+    setExpandedOmittedIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
 
   // Keyboard navigation: Esc closes, Up/Down navigates snapshot list
   useEffect(() => {
@@ -571,28 +594,79 @@ function VersionHistoryModalContent({
                         ) : (
                           <div className="space-y-2">
                             <p className="text-[11px] text-text-faint">{labels.diffLegend}</p>
-                            <div className="rounded-xl border border-border-subtle bg-surface font-mono text-[11px] leading-relaxed overflow-x-auto">
-                              {restoreDiff?.lines.map((line, index) => (
-                                <div
-                                  key={`${line.type}-${index}`}
-                                  className={`px-3 py-0.5 whitespace-pre-wrap break-words ${
-                                    line.type === 'added'
-                                      ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                                      : line.type === 'removed'
-                                        ? 'bg-red-500/12 text-red-700 dark:text-red-300'
-                                        : 'text-text-muted'
-                                  }`}
-                                >
-                                  <span className="inline-block w-4 select-none opacity-65">
-                                    {line.type === 'added'
-                                      ? '+'
-                                      : line.type === 'removed'
-                                        ? '-'
-                                        : ' '}
-                                  </span>
-                                  {line.text || ' '}
-                                </div>
-                              ))}
+                            <div className="rounded-xl border border-border-subtle bg-surface font-mono text-[11px] leading-relaxed overflow-hidden">
+                              {compactDiffRows.map((row) => {
+                                if (row.kind === 'omitted') {
+                                  if (expandedOmittedIds.has(row.id)) {
+                                    return row.lines.map((line, offset) => {
+                                      const lineNo = line.afterLineNumber ?? line.beforeLineNumber;
+                                      return (
+                                        <div
+                                          key={`expanded-${row.startIndex + offset}`}
+                                          className="flex px-2.5 py-0.5 text-text-muted"
+                                        >
+                                          <span className="w-7 shrink-0 select-none pr-2 text-right text-[10px] opacity-50 tabular-nums">
+                                            {lineNo ?? ''}
+                                          </span>
+                                          <span className="w-4 shrink-0 select-none opacity-65">
+                                            {' '}
+                                          </span>
+                                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                                            {line.text || ' '}
+                                          </span>
+                                        </div>
+                                      );
+                                    });
+                                  }
+
+                                  return (
+                                    <button
+                                      key={row.id}
+                                      type="button"
+                                      onClick={() => handleExpandOmitted(row.id)}
+                                      title={labels.expandOmittedTitle}
+                                      className="w-full flex items-center justify-center px-3 py-1 border-y first:border-t-0 last:border-b-0 border-border-subtle bg-surface-subtle/70 hover:bg-surface-hover text-[10px] font-mono text-text-faint hover:text-text-muted transition-colors cursor-pointer select-none"
+                                    >
+                                      {labels.omittedLines(row.count)}
+                                    </button>
+                                  );
+                                }
+
+                                const {line, sourceIndex} = row;
+                                const lineNo =
+                                  line.type === 'added'
+                                    ? line.afterLineNumber
+                                    : line.type === 'removed'
+                                      ? line.beforeLineNumber
+                                      : (line.afterLineNumber ?? line.beforeLineNumber);
+
+                                return (
+                                  <div
+                                    key={`${line.type}-${sourceIndex}`}
+                                    className={`flex px-2.5 py-0.5 ${
+                                      line.type === 'added'
+                                        ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                                        : line.type === 'removed'
+                                          ? 'bg-red-500/12 text-red-700 dark:text-red-300'
+                                          : 'text-text-muted'
+                                    }`}
+                                  >
+                                    <span className="w-7 shrink-0 select-none pr-2 text-right text-[10px] opacity-50 tabular-nums">
+                                      {lineNo ?? ''}
+                                    </span>
+                                    <span className="w-4 shrink-0 select-none opacity-65">
+                                      {line.type === 'added'
+                                        ? '+'
+                                        : line.type === 'removed'
+                                          ? '-'
+                                          : ' '}
+                                    </span>
+                                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                                      {line.text || ' '}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )

@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {createScriptLibraryStore} from '../../src/ui/scriptLibraryDb.ts';
 import {
   buildAiSnapshotLabel,
+  buildCompactDiffRows,
   computeRestoreDiff,
   formatSnapshotTimestamp,
   getSnapshotOrigin,
@@ -115,6 +116,39 @@ describe('scriptSnapshots pure helpers', () => {
     expect(diff.isIdentical).toBe(false);
     expect(diff.added).toBe(1);
     expect(diff.removed).toBe(1);
+  });
+
+  it('compacts long diffs into hunks with small context and avoids folding 1-line gaps', () => {
+    const baseLines = Array.from({length: 20}, (_, idx) => `line ${idx + 1}`);
+    const currentLines = [...baseLines];
+    const snapshotLines = [...baseLines];
+    // Edit near line 6 (index 5) and line 16 (index 15)
+    snapshotLines[5] = 'line 6 RESTORED';
+    snapshotLines[15] = 'line 16 RESTORED';
+
+    const diff = computeRestoreDiff(currentLines.join('\n'), snapshotLines.join('\n'));
+    const rows = buildCompactDiffRows(diff.lines, 2);
+
+    // Leading lines 1..3 (3 unchanged) folded; lines 4..5 context + line 6 -/+ + lines 7..8 context;
+    // middle lines 9..13 (5 unchanged) folded; lines 14..15 context + line 16 -/+ + lines 17..18 context;
+    // trailing lines 19..20 (2 unchanged) folded.
+    const omittedRows = rows.filter((row) => row.kind === 'omitted');
+    expect(omittedRows.map((row) => row.count)).toEqual([3, 5, 2]);
+    expect(omittedRows[0].lines.map((l) => l.text)).toEqual(['line 1', 'line 2', 'line 3']);
+    expect(omittedRows[2].lines.map((l) => l.text)).toEqual(['line 19', 'line 20']);
+
+    // Verify 1-line gap is shown directly rather than folded into a divider
+    const smallBefore = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8'];
+    const smallAfter = ['l1', 'l2 NEW', 'l3', 'l4', 'l5', 'l6', 'l7 NEW', 'l8'];
+    // With radius 2: edit at idx 1 shows 0..3; edit at idx 6 shows 4..7 -> adjacent, zero omitted
+    const adjacentDiff = computeRestoreDiff(smallBefore.join('\n'), smallAfter.join('\n'));
+    expect(buildCompactDiffRows(adjacentDiff.lines, 2).every((r) => r.kind === 'line')).toBe(true);
+
+    // Add one extra line in the middle so exactly 1 line sits outside radius 2 -> still not folded
+    const oneGapBefore = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9'];
+    const oneGapAfter = ['l1', 'l2 NEW', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8 NEW', 'l9'];
+    const oneGapDiff = computeRestoreDiff(oneGapBefore.join('\n'), oneGapAfter.join('\n'));
+    expect(buildCompactDiffRows(oneGapDiff.lines, 2).every((r) => r.kind === 'line')).toBe(true);
   });
 
   it('formats relative and calendar timestamps deterministically', () => {
