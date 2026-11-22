@@ -3,11 +3,14 @@ import {
   AlertCircle,
   AlertTriangle,
   BookOpen,
+  Braces,
   Check,
   ChevronDown,
   Code2,
   Copy,
   Eye,
+  FileCode2,
+  FileText,
   GitFork,
   Info,
   Redo2,
@@ -258,7 +261,7 @@ export function TopSlateBar({
                   : UI_TOKENS.button.segmentedItem
               }
             >
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               <span>{UI_LABELS.topBar.liveMode}</span>
             </button>
             <button
@@ -272,7 +275,7 @@ export function TopSlateBar({
                   : UI_TOKENS.button.segmentedItem
               }
             >
-              <Workflow className="h-3.5 w-3.5" />
+              <Workflow className="h-3.5 w-3.5 text-sky-500 shrink-0" />
               <span>{UI_LABELS.topBar.graphMode}</span>
             </button>
             <button
@@ -286,7 +289,7 @@ export function TopSlateBar({
                   : UI_TOKENS.button.segmentedItem
               }
             >
-              <Code2 className="h-3.5 w-3.5" />
+              <Code2 className="h-3.5 w-3.5 text-amber-500 shrink-0" />
               <span>{UI_LABELS.topBar.sourceMode}</span>
             </button>
           </div>
@@ -313,7 +316,7 @@ export function TopSlateBar({
                 title={UI_LABELS.topBar.forkToEditTitle}
                 className={UI_TOKENS.button.forkPill}
               >
-                <GitFork className="h-3.5 w-3.5 text-[var(--phase-logic-text)]" />
+                <GitFork className="h-3.5 w-3.5 text-sky-500 shrink-0" />
                 <span>{UI_LABELS.topBar.forkToEditButton}</span>
               </button>
             ) : (
@@ -351,7 +354,7 @@ export function TopSlateBar({
           </>
         )}
 
-        {/* Quiet Icon-Only Library Button */}
+        {/* Standalone Library Button (StageFlow amber Book icon) */}
         <button
           type="button"
           onClick={() => {
@@ -363,7 +366,7 @@ export function TopSlateBar({
           aria-expanded={isLibraryOpen}
           className={isLibraryOpen ? UI_TOKENS.button.iconPillActive : UI_TOKENS.button.iconPill}
         >
-          <BookOpen className="h-3.5 w-3.5" />
+          <BookOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />
         </button>
 
         {/* Quiet Icon-Only Settings Button + Popover */}
@@ -389,7 +392,7 @@ export function TopSlateBar({
             aria-expanded={isAiOpen}
             className={isAiOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
           >
-            <Sparkles className="h-3.5 w-3.5 text-[var(--phase-continuity-text)]" />
+            <Sparkles className="h-3.5 w-3.5 text-purple-500 shrink-0" />
             <span>{UI_LABELS.topBar.aiButton}</span>
           </button>
         )}
@@ -410,7 +413,11 @@ export function TopSlateBar({
                 : UI_TOKENS.button.iconPill
             }
           >
-            {copiedKind ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copiedKind ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Copy className="h-3.5 w-3.5 text-emerald-500" />
+            )}
           </button>
         ) : (
           <div className="relative">
@@ -432,9 +439,9 @@ export function TopSlateBar({
                 }
               >
                 {copiedKind ? (
-                  <Check className="h-3.5 w-3.5" />
+                  <Check className="h-3.5 w-3.5 shrink-0" />
                 ) : (
-                  <Copy className="h-3.5 w-3.5 text-text-muted" />
+                  <Copy className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                 )}
                 <span>
                   {copiedKind === 'plain'
@@ -461,7 +468,11 @@ export function TopSlateBar({
                       : UI_TOKENS.button.splitChevron
                 }
               >
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform duration-150 ${
+                    openMenu === 'copy' ? 'rotate-180' : ''
+                  }`}
+                />
               </button>
             </div>
 
@@ -469,57 +480,83 @@ export function TopSlateBar({
               <div
                 role="menu"
                 aria-label={UI_LABELS.topBar.copyMenuAria}
-                className={UI_TOKENS.dropdown.menuWide}
+                className="absolute top-full right-0 mt-2 w-64 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main p-1.5 space-y-0.5"
               >
-                <div className={UI_TOKENS.dropdown.header}>
-                  <span className={UI_TOKENS.dropdown.headerText}>
-                    {UI_LABELS.topBar.copyHeader}
+                <div className="px-2.5 pt-1 pb-0.5 text-[9.5px] font-black uppercase tracking-widest text-text-faint select-none">
+                  {UI_LABELS.topBar.copyHeader}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onCopyPlainText();
+                    setOpenMenu(null);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-subtle transition-colors group cursor-pointer"
+                >
+                  <div className="flex items-start gap-2 min-w-0">
+                    <FileText className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-text-body group-hover:text-text-main">
+                        {UI_LABELS.topBar.copyPlainTitle}
+                      </span>
+                      <span className="text-[10px] font-normal text-text-faint">
+                        {UI_LABELS.topBar.copyPlainDesc}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
+                    {UI_LABELS.topBar.fileMenuTagTxt}
                   </span>
-                </div>
-                <div className="py-1">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      onCopyPlainText();
-                      setOpenMenu(null);
-                    }}
-                    className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
-                  >
-                    <span>{UI_LABELS.topBar.copyPlainTitle}</span>
-                    <span className="text-[10px] font-normal text-text-faint">
-                      {UI_LABELS.topBar.copyPlainDesc}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      onCopyTagless();
-                      setOpenMenu(null);
-                    }}
-                    className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
-                  >
-                    <span>{UI_LABELS.topBar.copyTaglessTitle}</span>
-                    <span className="text-[10px] font-normal text-text-faint">
-                      {UI_LABELS.topBar.copyTaglessDesc}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      onCopyJsonEnvelope();
-                      setOpenMenu(null);
-                    }}
-                    className={`${UI_TOKENS.dropdown.item} flex-col items-start gap-0.5 py-2`}
-                  >
-                    <span>{UI_LABELS.topBar.copyJsonTitle}</span>
-                    <span className="text-[10px] font-normal text-text-faint">
-                      {UI_LABELS.topBar.copyJsonDesc}
-                    </span>
-                  </button>
-                </div>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onCopyTagless();
+                    setOpenMenu(null);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-subtle transition-colors group cursor-pointer"
+                >
+                  <div className="flex items-start gap-2 min-w-0">
+                    <FileCode2 className="h-3.5 w-3.5 text-teal-500 mt-0.5 shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-text-body group-hover:text-text-main">
+                        {UI_LABELS.topBar.copyTaglessTitle}
+                      </span>
+                      <span className="text-[10px] font-normal text-text-faint">
+                        {UI_LABELS.topBar.copyTaglessDesc}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
+                    {UI_LABELS.topBar.fileMenuTagPlain}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    onCopyJsonEnvelope();
+                    setOpenMenu(null);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-subtle transition-colors group cursor-pointer"
+                >
+                  <div className="flex items-start gap-2 min-w-0">
+                    <Braces className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-medium text-text-body group-hover:text-text-main">
+                        {UI_LABELS.topBar.copyJsonTitle}
+                      </span>
+                      <span className="text-[10px] font-normal text-text-faint">
+                        {UI_LABELS.topBar.copyJsonDesc}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
+                    {UI_LABELS.topBar.fileMenuTagJson}
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -538,7 +575,7 @@ export function TopSlateBar({
             aria-expanded={isInfoOpen}
             className={isInfoOpen ? UI_TOKENS.button.iconPillActive : UI_TOKENS.button.iconPill}
           >
-            <Info className="h-3.5 w-3.5" />
+            <Info className="h-3.5 w-3.5 text-sky-500 shrink-0" />
           </button>
         )}
       </div>

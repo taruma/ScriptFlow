@@ -90,7 +90,11 @@ export function SettingsPopover({
         title={UI_LABELS.topBar.settingsButton}
         className={isOpen ? UI_TOKENS.button.iconPillActive : UI_TOKENS.button.iconPill}
       >
-        <Settings className="h-3.5 w-3.5" />
+        <Settings
+          className={`h-3.5 w-3.5 text-indigo-500 transition-transform duration-200 ${
+            isOpen ? 'rotate-45' : ''
+          }`}
+        />
       </button>
 
       {isOpen && (
@@ -322,7 +326,7 @@ export function SettingsPopover({
                   className="w-full px-3 py-2.5 flex items-center justify-between gap-3 text-left hover:bg-surface-subtle transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <Braces className="h-3.5 w-3.5 text-text-muted shrink-0" />
+                    <Braces className="h-3.5 w-3.5 text-purple-500 shrink-0" />
                     <div className="flex flex-col min-w-0">
                       <span className="text-xs font-medium text-text-body">
                         {UI_LABELS.topBar.settingsJsonIrLabel}

@@ -54,13 +54,13 @@ export const UI_TOKENS = {
     actionPillActive:
       'flex items-center gap-1.5 px-2.5 py-1.5 bg-btn-primary-bg text-btn-primary-text rounded-lg text-xs font-medium transition-colors active:scale-95 border border-btn-primary-bg shadow-2xs cursor-pointer whitespace-nowrap shrink-0',
     filePill:
-      'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-surface-subtle text-text-body hover:text-text-main rounded-xl text-xs font-medium transition-colors active:scale-95 border border-border-main shadow-2xs cursor-pointer whitespace-nowrap shrink-0',
+      'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-surface-subtle text-text-body hover:text-text-main rounded-xl text-xs font-semibold transition-all active:scale-95 border border-border-main shadow-2xs cursor-pointer whitespace-nowrap shrink-0',
     filePillActive:
-      'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-muted text-text-main rounded-xl text-xs font-medium transition-colors active:scale-95 border border-border-main shadow-inner cursor-pointer whitespace-nowrap shrink-0',
+      'flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-muted text-text-main rounded-xl text-xs font-semibold transition-all active:scale-95 border border-border-main shadow-inner cursor-pointer whitespace-nowrap shrink-0',
     iconPill:
-      'inline-flex items-center justify-center h-[30px] w-[30px] bg-surface hover:bg-surface-subtle text-text-muted hover:text-text-main rounded-xl transition-colors active:scale-95 border border-border-main shadow-2xs cursor-pointer shrink-0',
+      'inline-flex items-center justify-center h-[30px] w-[30px] bg-surface hover:bg-surface-subtle text-text-muted hover:text-text-main rounded-xl transition-all active:scale-95 border border-border-main shadow-2xs cursor-pointer shrink-0',
     iconPillActive:
-      'inline-flex items-center justify-center h-[30px] w-[30px] bg-surface-muted text-text-main rounded-xl transition-colors active:scale-95 border border-border-main shadow-inner cursor-pointer shrink-0',
+      'inline-flex items-center justify-center h-[30px] w-[30px] bg-surface-muted text-text-main rounded-xl transition-all active:scale-95 border border-border-main shadow-inner cursor-pointer shrink-0',
     splitGroup:
       'inline-flex items-stretch h-[30px] bg-surface rounded-xl border border-border-main shadow-2xs overflow-hidden shrink-0',
     splitGroupActive:

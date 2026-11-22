@@ -178,7 +178,7 @@ export function FileMenuDropdown({
         aria-label={UI_LABELS.topBar.fileMenuAria}
         className={isOpen ? UI_TOKENS.button.filePillActive : UI_TOKENS.button.filePill}
       >
-        <FileText className="h-3.5 w-3.5 text-text-muted" />
+        <FileText className="h-3.5 w-3.5 text-sky-500 shrink-0" />
         <span className="hidden sm:inline">{UI_LABELS.topBar.fileButton}</span>
         <ChevronDown
           className={`h-3 w-3 transition-transform duration-150 ${
