@@ -1,5 +1,8 @@
 import {
+  extractAestheticStandaloneReferences,
+  extractAestheticTokenSegments,
   inferSceneTopologyFromDocument,
+  parseAestheticLine,
   parseDialogueModifiers,
 } from '../../core/index.ts';
 import type {
@@ -10,6 +13,8 @@ import type {
 } from '../../core/types.ts';
 import {
   GRAPH_DIMENSIONS,
+  type AestheticItemAccentKind,
+  type GraphAestheticItem,
   type GraphDimension,
   type GraphMacroStateItem,
   type GraphSceneModel,
@@ -93,6 +98,66 @@ function classifyAestheticTokenKind(category?: string): InferredObjectKind {
   return 'wardrobe';
 }
 
+function classifyAestheticItemAccent(
+  key: string,
+  hasToken: boolean,
+  hasStandaloneRef: boolean
+): AestheticItemAccentKind {
+  const lower = key.toLowerCase();
+  if (
+    lower.includes('location') ||
+    lower.includes('setting') ||
+    lower.includes('set') ||
+    lower.includes('place') ||
+    lower.includes('env') ||
+    lower.includes('backdrop') ||
+    lower.includes('venue') ||
+    lower.includes('interior') ||
+    lower.includes('exterior') ||
+    lower.includes('room') ||
+    lower.includes('architecture')
+  ) {
+    return 'location';
+  }
+  if (
+    lower.includes('prop') ||
+    lower.includes('item') ||
+    lower.includes('object') ||
+    lower.includes('vehicle') ||
+    lower.includes('weapon') ||
+    lower.includes('tool') ||
+    lower.includes('device') ||
+    lower.includes('artifact') ||
+    lower.includes('gear') ||
+    lower.includes('accessory') ||
+    lower.includes('furniture') ||
+    lower.includes('document') ||
+    lower.includes('dossier') ||
+    lower.includes('evidence')
+  ) {
+    return 'prop';
+  }
+  if (
+    lower.includes('wardrobe') ||
+    lower.includes('costume') ||
+    lower.includes('outfit') ||
+    lower.includes('clothing') ||
+    lower.includes('attire') ||
+    lower.includes('uniform') ||
+    lower.includes('apparel') ||
+    lower.includes('garment')
+  ) {
+    return 'wardrobe';
+  }
+  if (hasStandaloneRef && !hasToken) {
+    return 'staging_ref';
+  }
+  if (hasToken) {
+    return 'wardrobe';
+  }
+  return 'general';
+}
+
 function resolveSubStateTag(sub: SubStateNode): string {
   if (sub.kind === 'camera') {
     return sub.camera?.slot ?? 'CAM';
@@ -129,12 +194,59 @@ export function buildGraphSceneModel(
 
   // Map Staging block uppercase name -> MB# id
   const mbIdByBlockName = new Map<string, string>();
+  const aestheticItemById = new Map<string, GraphAestheticItem>();
+  const aestheticItemIdByToken = new Map<string, string>();
+  const aestheticItemIdByRef = new Map<string, string>();
+
   const stagingBlocks: GraphStagingBlockItem[] = doc.stagingBlocks.map((block, idx) => {
     const mbId = `MB${idx}`;
     const upper = block.name.trim().toUpperCase();
     if (!mbIdByBlockName.has(upper)) {
       mbIdByBlockName.set(upper, mbId);
     }
+
+    const aestheticItems: GraphAestheticItem[] = [];
+    if (block.kind === 'AESTHETIC') {
+      let itemIdx = 0;
+      for (const rawLine of block.lines) {
+        if (!rawLine.trim()) continue;
+        const parsed = parseAestheticLine(rawLine);
+        const key = parsed.type === 'kv' ? parsed.key : 'Note';
+        const value = parsed.type === 'kv' ? parsed.value : parsed.raw;
+        const tokenSegs = extractAestheticTokenSegments(value);
+        const refSegs = extractAestheticStandaloneReferences(value);
+        const itemId = `aes-${mbId}-${itemIdx}`;
+
+        const item: GraphAestheticItem = {
+          id: itemId,
+          parentMbId: mbId,
+          index: itemIdx,
+          key,
+          value,
+          raw: rawLine,
+          accentKind: classifyAestheticItemAccent(key, tokenSegs.length > 0, refSegs.length > 0),
+          extractedObjectIds: [],
+          matchedObjectIds: [],
+        };
+        aestheticItems.push(item);
+        aestheticItemById.set(itemId, item);
+
+        for (const seg of tokenSegs) {
+          const lowerTok = seg.token.toLowerCase();
+          if (!aestheticItemIdByToken.has(lowerTok)) {
+            aestheticItemIdByToken.set(lowerTok, itemId);
+          }
+        }
+        for (const ref of refSegs) {
+          const lowerRef = ref.reference.toLowerCase();
+          if (!aestheticItemIdByRef.has(lowerRef)) {
+            aestheticItemIdByRef.set(lowerRef, itemId);
+          }
+        }
+        itemIdx += 1;
+      }
+    }
+
     return {
       id: `node-${mbId}`,
       mbId,
@@ -142,6 +254,7 @@ export function buildGraphSceneModel(
       kind: block.kind,
       rawBody: block.rawBody,
       lines: block.lines,
+      aestheticItems,
       extractedObjectIds: [],
       matchedObjectIds: [],
     };
@@ -162,6 +275,12 @@ export function buildGraphSceneModel(
     const sourceBlock = stagingByMbId.get(obj.sourceBlockId);
     if (sourceBlock && !sourceBlock.extractedObjectIds.includes(obj.id)) {
       sourceBlock.extractedObjectIds.push(obj.id);
+    }
+    if (obj.sourceAestheticItemId) {
+      const aesItem = aestheticItemById.get(obj.sourceAestheticItemId);
+      if (aesItem && !aesItem.extractedObjectIds.includes(obj.id)) {
+        aesItem.extractedObjectIds.push(obj.id);
+      }
     }
   };
 
@@ -205,6 +324,7 @@ export function buildGraphSceneModel(
 
     const kind = classifyAestheticTokenKind(tok.category);
     const id = `obj-tok-${tok.token}`;
+    const sourceAestheticItemId = aestheticItemIdByToken.get(normalized);
 
     registerRailObject({
       id,
@@ -216,6 +336,7 @@ export function buildGraphSceneModel(
       detail: tok.description || tok.token,
       sourceBlockId: aestheticMbId,
       sourceBlockName: aestheticName,
+      ...(sourceAestheticItemId ? {sourceAestheticItemId} : {}),
       isStagingOnly: false,
       callSites: [],
     });
@@ -234,6 +355,7 @@ export function buildGraphSceneModel(
 
     const sourceBlockId = mbIdByBlockName.get(sRef.sourceBlock.trim().toUpperCase()) ?? aestheticMbId;
     const id = `obj-sref-${sRef.ref}`;
+    const sourceAestheticItemId = aestheticItemIdByRef.get(sRef.ref.toLowerCase());
     registerRailObject({
       id,
       matchToken: sRef.ref,
@@ -244,6 +366,7 @@ export function buildGraphSceneModel(
       detail: sRef.description || `Staging-only visual reference ${sRef.ref}.`,
       sourceBlockId,
       sourceBlockName: sRef.sourceBlock,
+      ...(sourceAestheticItemId ? {sourceAestheticItemId} : {}),
       isStagingOnly: true,
       callSites: [],
     });
@@ -296,7 +419,7 @@ export function buildGraphSceneModel(
     return hits;
   };
 
-  // Match downstream references inside [OPENING], [LOGIC], and other non-definition Staging blocks
+  // Match downstream references inside [OPENING], [LOGIC], [AESTHETIC], and other non-definition Staging blocks
   // (excluding each object's own declaring block so we never emit self-loop call sites).
   for (const sb of stagingBlocks) {
     const hits = findMatchedObjectIds(sb.rawBody).filter((objId) => {
@@ -306,12 +429,31 @@ export function buildGraphSceneModel(
     if (hits.length > 0) {
       sb.matchedObjectIds = hits;
       for (const objId of hits) {
+        // When `[AESTHETIC]` is expanded into Key-Value swatch cards, record the first matching swatch card
+        // as `targetNodeId` with `parentNodeId: sb.id` so links route to the exact key card when open
+        // and fall back cleanly to `node-MB#` when folded.
+        const matchingItem =
+          sb.aestheticItems.length > 0
+            ? sb.aestheticItems.find((item) => {
+                const itemHits = findMatchedObjectIds(item.raw);
+                return itemHits.includes(objId);
+              })
+            : undefined;
+
         objectById[objId]?.callSites.push({
-          targetNodeId: sb.id,
+          targetNodeId: matchingItem ? matchingItem.id : sb.id,
+          ...(matchingItem ? {parentNodeId: sb.id} : {}),
           display: `[${sb.name}]`,
           kind: 'staging',
         });
       }
+    }
+
+    for (const item of sb.aestheticItems) {
+      item.matchedObjectIds = findMatchedObjectIds(item.raw).filter((objId) => {
+        const obj = objectById[objId];
+        return Boolean(obj && obj.sourceBlockId !== sb.mbId);
+      });
     }
   }
 
@@ -599,15 +741,27 @@ export function tokenizeAnnotatedText(
 }
 
 /**
- * Returns default Graph View sets when loading or resetting a script:
- * all Macro-States start compact (coupled) with Raw Input branches collapsed.
+ * Returns default Graph View expansion sets when loading or resetting a script:
+ * - All Execution Macro-States start compact (folded) with Source branches collapsed.
+ * - `[AESTHETIC]` Staging Macro-Blocks with structured Key-Value entries start open (split into
+ *   Lookbook swatch cards) so extraction threads originate from their exact Lookbook keys.
  */
-export function createDefaultGraphExpansionState(_model?: GraphSceneModel): {
+export function createDefaultGraphExpansionState(model?: GraphSceneModel): {
   expandedIds: Set<string>;
+  expandedStagingIds: Set<string>;
   rawOpenIds: Set<string>;
 } {
+  const expandedStagingIds = new Set<string>();
+  if (model) {
+    for (const sb of model.stagingBlocks) {
+      if (sb.kind === 'AESTHETIC' && sb.aestheticItems.length > 0) {
+        expandedStagingIds.add(sb.mbId);
+      }
+    }
+  }
   return {
     expandedIds: new Set(),
+    expandedStagingIds,
     rawOpenIds: new Set(),
   };
 }

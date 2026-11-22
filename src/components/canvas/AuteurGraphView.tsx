@@ -30,6 +30,7 @@ import {
   type ObjectCallSite,
 } from '../../ui/canvas/index.ts';
 import {UI_LABELS} from '../../ui/labels.ts';
+import {AestheticItemNode} from './AestheticItemNode.tsx';
 import {AuteurGraphEdge} from './AuteurGraphEdge.tsx';
 import {GraphHud} from './GraphHud.tsx';
 import {GraphInteractionProvider} from './graphContext.tsx';
@@ -52,6 +53,7 @@ export interface AuteurGraphViewProps {
 const NODE_TYPES: NodeTypes = {
   zoneHeader: ZoneHeaderNode,
   stagingBlock: StagingBlockNode,
+  aestheticItem: AestheticItemNode,
   inferredObject: InferredObjectNode,
   shotChamber: ShotChamberNode,
   macroState: MacroStateNode,
@@ -135,6 +137,9 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     () => createDefaultGraphExpansionState(model).expandedIds
   );
+  const [expandedStagingIds, setExpandedStagingIds] = useState<Set<string>>(
+    () => createDefaultGraphExpansionState(model).expandedStagingIds
+  );
   const [rawOpenIds, setRawOpenIds] = useState<Set<string>>(
     () => createDefaultGraphExpansionState(model).rawOpenIds
   );
@@ -159,6 +164,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     prevScriptKeyRef.current = scriptSessionKey;
     const defaults = createDefaultGraphExpansionState(model);
     setExpandedIds(defaults.expandedIds);
+    setExpandedStagingIds(defaults.expandedStagingIds);
     setRawOpenIds(defaults.rawOpenIds);
     setIsolatedDims(new Set());
     setSelectedObjectId(null);
@@ -211,6 +217,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       buildCanvasLayout(model, {
         direction,
         expandedIds,
+        expandedStagingIds,
         rawOpenIds,
         isolatedDims,
         isolationMode,
@@ -223,6 +230,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       model,
       direction,
       expandedIds,
+      expandedStagingIds,
       rawOpenIds,
       isolatedDims,
       isolationMode,
@@ -283,6 +291,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
           isAnimated: e.isAnimated,
           isCascade: e.isCascade,
           isIntraState: e.isIntraState,
+          isMacroEntryHandoff: e.isMacroEntryHandoff,
           laneIndex: e.laneIndex,
           label: e.label,
           direction: e.direction,
@@ -394,6 +403,32 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     });
   }, []);
 
+  const handleToggleStagingExpand = useCallback((mbId: string) => {
+    setMeasuredHeights((prev) => {
+      const nodeKey = `node-${mbId}`;
+      const aesPrefix = `aes-${mbId}-`;
+      let changed = false;
+      const next = {...prev};
+      if (nodeKey in next) {
+        delete next[nodeKey];
+        changed = true;
+      }
+      for (const k of Object.keys(next)) {
+        if (k.startsWith(aesPrefix)) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setExpandedStagingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(mbId)) next.delete(mbId);
+      else next.add(mbId);
+      return next;
+    });
+  }, []);
+
   const handleToggleRaw = useCallback((id: string) => {
     if (id.includes('.')) {
       setMeasuredHeights((prev) => {
@@ -460,6 +495,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     setNodeOffsets({});
     setMeasuredHeights({});
     setExpandedIds(defaults.expandedIds);
+    setExpandedStagingIds(defaults.expandedStagingIds);
     setRawOpenIds(defaults.rawOpenIds);
     pendingFitRef.current = true;
     triggerFitView();
@@ -511,6 +547,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       onSelectObject: handleSelectObject,
       onHoverObject: setHoveredObjectId,
       onToggleExpand: handleToggleExpand,
+      onToggleStagingExpand: handleToggleStagingExpand,
       onToggleRaw: handleToggleRaw,
     }),
     [
@@ -520,14 +557,25 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       selectedObjectId,
       handleSelectObject,
       handleToggleExpand,
+      handleToggleStagingExpand,
       handleToggleRaw,
     ]
   );
 
   const isEmpty = model.stagingBlocks.length === 0 && model.macroStates.length === 0;
   const selectedObject = selectedObjectId ? model.objectById[selectedObjectId] ?? null : null;
+  const defaultStagingExpanded = useMemo(
+    () => createDefaultGraphExpansionState(model).expandedStagingIds,
+    [model]
+  );
+  const stagingExpansionDiffers =
+    expandedStagingIds.size !== defaultStagingExpanded.size ||
+    [...defaultStagingExpanded].some((id) => !expandedStagingIds.has(id));
   const hasCustomOffsets =
-    Object.keys(nodeOffsets).length > 0 || expandedIds.size > 0 || rawOpenIds.size > 0;
+    Object.keys(nodeOffsets).length > 0 ||
+    expandedIds.size > 0 ||
+    rawOpenIds.size > 0 ||
+    stagingExpansionDiffers;
 
   return (
     <div
@@ -581,6 +629,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
                 maskColor="color-mix(in srgb, var(--app-bg) 72%, transparent)"
                 nodeColor={(node) => {
                   if (node.type === 'shotChamber') return 'var(--graph-chamber-border)';
+                  if (node.type === 'aestheticItem') return 'var(--phase-aesthetic-text)';
                   if (node.type === 'inferredObject') return 'var(--tok-continuity)';
                   if (node.type === 'rawBranch') return 'var(--text-faint)';
                   if (node.type === 'macroState') return 'var(--phase-execution-text)';

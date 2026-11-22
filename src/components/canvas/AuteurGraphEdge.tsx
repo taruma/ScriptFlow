@@ -2,7 +2,7 @@ import {memo} from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
+  getSmoothStepPath,
   type EdgeProps,
 } from '@xyflow/react';
 import type {
@@ -22,12 +22,77 @@ export interface AuteurGraphEdgeData extends Record<string, unknown> {
   isAnimated?: boolean;
   isCascade?: boolean;
   isIntraState?: boolean;
+  isMacroEntryHandoff?: boolean;
   laneIndex?: number;
   label?: string;
   direction: GraphDirection;
 }
 
-const FLOW_DASH_ARRAY = '8 4';
+interface Point2D {
+  x: number;
+  y: number;
+}
+
+/**
+ * Converts an orthogonal polyline into a crisp SVG path with rounded quadratic corners,
+ * automatically collapsing duplicate points and clamping corner radii to short segments.
+ */
+function buildRoundedOrthogonalPath(rawPoints: readonly Point2D[], cornerRadius = 12): string {
+  const pts: Point2D[] = [];
+  for (const pt of rawPoints) {
+    const prev = pts[pts.length - 1];
+    if (!prev || Math.hypot(pt.x - prev.x, pt.y - prev.y) >= 0.5) {
+      pts.push(pt);
+    }
+  }
+  if (pts.length === 0) return '';
+  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = pts[i - 1];
+    const curr = pts[i];
+    const next = pts[i + 1];
+
+    const v1x = curr.x - prev.x;
+    const v1y = curr.y - prev.y;
+    const v2x = next.x - curr.x;
+    const v2y = next.y - curr.y;
+    const len1 = Math.hypot(v1x, v1y);
+    const len2 = Math.hypot(v2x, v2y);
+
+    if (len1 < 0.5 || len2 < 0.5) {
+      d += ` L ${curr.x} ${curr.y}`;
+      continue;
+    }
+
+    const r = Math.min(cornerRadius, len1 * 0.45, len2 * 0.45);
+    const startX = curr.x - (v1x / len1) * r;
+    const startY = curr.y - (v1y / len1) * r;
+    const endX = curr.x + (v2x / len2) * r;
+    const endY = curr.y + (v2y / len2) * r;
+
+    d += ` L ${startX} ${startY} Q ${curr.x} ${curr.y} ${endX} ${endY}`;
+  }
+
+  const last = pts[pts.length - 1];
+  d += ` L ${last.x} ${last.y}`;
+  return d;
+}
+
+function PulseDot({path, color}: {path: string; color: string}) {
+  return (
+    <g className="auteur-graph-pulse-dot pointer-events-none">
+      <circle r={6.5} fill={color} opacity={0.24}>
+        <animateMotion dur="1.75s" repeatCount="indefinite" path={path} />
+      </circle>
+      <circle r={3.2} fill={color}>
+        <animateMotion dur="1.75s" repeatCount="indefinite" path={path} />
+      </circle>
+    </g>
+  );
+}
 
 export const AuteurGraphEdge = memo(function AuteurGraphEdge({
   id,
@@ -49,6 +114,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
     isAnimated,
     isCascade,
     isIntraState,
+    isMacroEntryHandoff,
     laneIndex,
     label,
     direction,
@@ -73,14 +139,14 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
         <BaseEdge
           id={id}
           path={path}
-          className={isAnimated ? 'auteur-graph-edge-flow' : undefined}
           style={{
             stroke,
             strokeWidth: isHot ? 2.4 : 1.75,
-            strokeDasharray: isAnimated ? FLOW_DASH_ARRAY : '6 3',
+            strokeDasharray: '6 3',
             opacity: isHot ? 0.96 : isDimmed ? 0.16 : 0.78,
           }}
         />
+        {isAnimated && <PulseDot path={path} color={stroke} />}
         {label && (
           <EdgeLabelRenderer>
             <div
@@ -103,42 +169,149 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
   }
 
   let edgePath: string;
-  let labelX: number;
-  let labelY: number;
+  let labelX = (sourceX + targetX) / 2;
+  let labelY = (sourceY + targetY) / 2;
+  const lane = laneIndex ?? 0;
 
-  if (kind === 'labelMatch' && isCascade) {
-    const lane = laneIndex ?? 0;
-    if (isIntraState) {
-      // Crisp outward side-bracket linking consecutive split Sub-States within the same Macro-State
-      const bow = 30 + (lane % 4) * 10;
-      edgePath = isLR
-        ? `M ${sourceX} ${sourceY} C ${sourceX + bow} ${sourceY}, ${targetX + bow} ${targetY}, ${targetX} ${targetY}`
-        : `M ${sourceX} ${sourceY} C ${sourceX} ${sourceY + bow}, ${targetX} ${targetY + bow}, ${targetX} ${targetY}`;
-      labelX = (sourceX + targetX) / 2 + (isLR ? bow : 0);
-      labelY = (sourceY + targetY) / 2 + (isLR ? 0 : bow);
+  if (kind === 'labelMatch' && isMacroEntryHandoff) {
+    // First-active Macro-State -> first matched split Sub-State routed along the clean outer margin
+    if (isLR) {
+      const leftX = Math.min(sourceX, targetX) - 18 - (lane % 4) * 7;
+      edgePath = buildRoundedOrthogonalPath(
+        [
+          {x: sourceX, y: sourceY},
+          {x: leftX, y: sourceY},
+          {x: leftX, y: targetY},
+          {x: targetX, y: targetY},
+        ],
+        10
+      );
     } else {
-      // Gentle lane-separated cascade curve sweeping cleanly clear of the Camera Spine & CUT pills
-      const span = isLR ? Math.abs(targetX - sourceX) : Math.abs(targetY - sourceY);
-      const laneOffset = 18 + (lane % 5) * 13;
-      const spanDrop = span > 360 ? Math.min(46, (span - 360) * 0.065) : 0;
-      const drop = laneOffset + spanDrop;
-      const ctrl = Math.max(36, span * 0.28);
-
-      edgePath = isLR
-        ? `M ${sourceX} ${sourceY} C ${sourceX + ctrl} ${sourceY + drop}, ${targetX - ctrl} ${targetY + drop}, ${targetX} ${targetY}`
-        : `M ${sourceX} ${sourceY} C ${sourceX + drop} ${sourceY + ctrl}, ${targetX + drop} ${targetY - ctrl}, ${targetX} ${targetY}`;
-      labelX = (sourceX + targetX) / 2 + (isLR ? 0 : drop * 0.7);
-      labelY = (sourceY + targetY) / 2 + (isLR ? drop * 0.7 : 0);
+      const topY = Math.min(sourceY, targetY) - 18 - (lane % 4) * 7;
+      edgePath = buildRoundedOrthogonalPath(
+        [
+          {x: sourceX, y: sourceY},
+          {x: sourceX, y: topY},
+          {x: targetX, y: topY},
+          {x: targetX, y: targetY},
+        ],
+        10
+      );
+    }
+  } else if (kind === 'labelMatch' && isCascade && isIntraState) {
+    // Crisp orthogonal U-bracket linking consecutive split Sub-States inside the same Macro-State
+    const bow = 20 + (lane % 4) * 9;
+    if (isLR) {
+      const bowX = Math.max(sourceX, targetX) + bow;
+      edgePath = buildRoundedOrthogonalPath(
+        [
+          {x: sourceX, y: sourceY},
+          {x: bowX, y: sourceY},
+          {x: bowX, y: targetY},
+          {x: targetX, y: targetY},
+        ],
+        10
+      );
+    } else {
+      const bowY = Math.max(sourceY, targetY) + bow;
+      edgePath = buildRoundedOrthogonalPath(
+        [
+          {x: sourceX, y: sourceY},
+          {x: sourceX, y: bowY},
+          {x: targetX, y: bowY},
+          {x: targetX, y: targetY},
+        ],
+        10
+      );
+    }
+  } else if (kind === 'labelMatch' && isCascade) {
+    // Rounded orthogonal corridor routing through the empty aisle between Macro-State columns/rows
+    if (isLR && targetX > sourceX + 14) {
+      const isFlatSkip = Math.abs(targetY - sourceY) < 6 && targetX - sourceX > 140;
+      if (isFlatSkip) {
+        const busY = sourceY + 22 + (lane % 4) * 10;
+        const stepX = 16;
+        edgePath = buildRoundedOrthogonalPath(
+          [
+            {x: sourceX, y: sourceY},
+            {x: sourceX + stepX, y: sourceY},
+            {x: sourceX + stepX, y: busY},
+            {x: targetX - stepX, y: busY},
+            {x: targetX - stepX, y: targetY},
+            {x: targetX, y: targetY},
+          ],
+          11
+        );
+      } else {
+        const rawMidX = sourceX + Math.min(28, (targetX - sourceX) * 0.5) + ((lane % 4) - 1.5) * 6;
+        const midX = Math.max(sourceX + 10, Math.min(targetX - 10, rawMidX));
+        edgePath = buildRoundedOrthogonalPath(
+          [
+            {x: sourceX, y: sourceY},
+            {x: midX, y: sourceY},
+            {x: midX, y: targetY},
+            {x: targetX, y: targetY},
+          ],
+          12
+        );
+      }
+    } else if (!isLR && targetY > sourceY + 14) {
+      const isFlatSkip = Math.abs(targetX - sourceX) < 6 && targetY - sourceY > 140;
+      if (isFlatSkip) {
+        const busX = sourceX + 22 + (lane % 4) * 10;
+        const stepY = 16;
+        edgePath = buildRoundedOrthogonalPath(
+          [
+            {x: sourceX, y: sourceY},
+            {x: sourceX, y: sourceY + stepY},
+            {x: busX, y: sourceY + stepY},
+            {x: busX, y: targetY - stepY},
+            {x: targetX, y: targetY - stepY},
+            {x: targetX, y: targetY},
+          ],
+          11
+        );
+      } else {
+        const rawMidY = sourceY + Math.min(28, (targetY - sourceY) * 0.5) + ((lane % 4) - 1.5) * 6;
+        const midY = Math.max(sourceY + 10, Math.min(targetY - 10, rawMidY));
+        edgePath = buildRoundedOrthogonalPath(
+          [
+            {x: sourceX, y: sourceY},
+            {x: sourceX, y: midY},
+            {x: targetX, y: midY},
+            {x: targetX, y: targetY},
+          ],
+          12
+        );
+      }
+    } else {
+      [edgePath, labelX, labelY] = getSmoothStepPath({
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        sourcePosition,
+        targetPosition,
+        borderRadius: 12,
+        offset: 18 + (lane % 4) * 7,
+      });
     }
   } else {
-    [edgePath, labelX, labelY] = getBezierPath({
+    const stepOffset =
+      kind === 'extraction' || kind === 'labelMatch'
+        ? 18 + (lane % 5) * 7
+        : kind === 'aestheticBranch'
+          ? 12
+          : 20;
+    [edgePath, labelX, labelY] = getSmoothStepPath({
       sourceX,
       sourceY,
       targetX,
       targetY,
       sourcePosition,
       targetPosition,
-      curvature: kind === 'isolationThread' ? 0.35 : 0.28,
+      borderRadius: kind === 'aestheticBranch' ? 8 : 12,
+      offset: stepOffset,
     });
   }
 
@@ -148,17 +321,23 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
   let opacity = 0.75;
 
   switch (kind) {
+    case 'aestheticBranch':
+      stroke = 'var(--phase-aesthetic-text)';
+      strokeWidth = 1.3;
+      strokeDasharray = '3 3';
+      opacity = isDimmed ? 0.14 : 0.45;
+      break;
     case 'extraction':
       stroke = objectKind ? getObjectColorVar(objectKind) : 'var(--tok-continuity)';
-      strokeWidth = isHot ? 2.25 : 1.15;
-      strokeDasharray = isAnimated ? FLOW_DASH_ARRAY : undefined;
-      opacity = isHot ? 0.95 : isDimmed ? 0.08 : 0.28;
+      strokeWidth = isHot ? 2.15 : 1.15;
+      strokeDasharray = isHot ? '6 4' : undefined;
+      opacity = isHot ? 0.92 : isDimmed ? 0.08 : 0.28;
       break;
     case 'labelMatch':
       stroke = objectKind ? getObjectColorVar(objectKind) : 'var(--tok-continuity)';
-      strokeWidth = isHot ? 2.2 : 1.25;
-      strokeDasharray = isAnimated ? FLOW_DASH_ARRAY : undefined;
-      opacity = isHot ? 0.94 : isDimmed ? 0.1 : 0.32;
+      strokeWidth = isHot ? 2.15 : 1.3;
+      strokeDasharray = isHot ? '6 4' : '5 4';
+      opacity = isHot ? 0.92 : isDimmed ? 0.1 : 0.36;
       break;
     case 'spineHold':
       stroke = 'var(--graph-dim-camera)';
@@ -190,8 +369,8 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
       break;
     case 'isolationThread':
       stroke = dimension ? getDimensionColorVar(dimension) : 'var(--tok-continuity)';
-      strokeWidth = 2.5;
-      strokeDasharray = isAnimated ? FLOW_DASH_ARRAY : undefined;
+      strokeWidth = 2.35;
+      strokeDasharray = '6 4';
       opacity = 0.92;
       break;
   }
@@ -201,7 +380,6 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
       <BaseEdge
         id={id}
         path={edgePath}
-        className={isAnimated ? 'auteur-graph-edge-flow' : undefined}
         style={{
           stroke,
           strokeWidth,
@@ -210,8 +388,10 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
         }}
       />
 
+      {isAnimated && <PulseDot path={edgePath} color={stroke} />}
+
       {((kind === 'labelMatch' && isHot) || kind === 'isolationThread') && (
-        <circle cx={targetX} cy={targetY} r={3.5} fill={stroke} />
+        <circle cx={targetX} cy={targetY} r={3.2} fill={stroke} />
       )}
 
       {kind === 'spineCut' && label && !isDimmed && (

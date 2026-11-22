@@ -5,10 +5,17 @@ import {
   buildExtractionEdges,
 } from './layoutEdges.ts';
 import {
+  AES_BRANCH_GAP_LR,
+  AES_BRANCH_GAP_TB,
+  AES_CARD_W_LR,
+  AES_GAP_LR,
+  AES_GAP_TB,
+  AES_INDENT_TB,
   applyOffset,
   CHAMBER_PAD_BOTTOM,
   CHAMBER_PAD_TOP,
   CHAMBER_PAD_X,
+  estimateAestheticItemHeight,
   estimateDecoupledSubNodeHeight,
   estimateMacroStateHeight,
   estimateRawBranchHeight,
@@ -65,6 +72,7 @@ export function buildCanvasLayout(
   const {
     direction,
     expandedIds,
+    expandedStagingIds = new Set<string>(),
     rawOpenIds,
     isolatedDims,
     isolationMode,
@@ -86,9 +94,20 @@ export function buildCanvasLayout(
     model.railObjects.length > 0 ? model.railObjects : model.cameraSlotObjects;
   const hasRail = displayRailObjects.length > 0;
 
-  // Reserve perpendicular headroom for opposite-side </> Source branches
+  // Reserve perpendicular headroom for opposite-side </> Source branches in Tier 1 & Tier 3
+  let maxStagingRawHeightAboveLR = 0;
   let maxRawHeightAboveLR = 0;
   if (isLR) {
+    for (const sb of model.stagingBlocks) {
+      if (rawOpenIds.has(sb.mbId)) {
+        const h = resolveMeasuredHeight(
+          `raw-${sb.mbId}`,
+          estimateRawBranchHeight(sb.rawBody, RAW_W_LR),
+          measuredHeights
+        );
+        if (h > maxStagingRawHeightAboveLR) maxStagingRawHeightAboveLR = h;
+      }
+    }
     for (const ms of model.macroStates) {
       if (rawOpenIds.has(ms.id)) {
         const h = resolveMeasuredHeight(
@@ -101,8 +120,12 @@ export function buildCanvasLayout(
     }
   }
 
+  let maxStagingRawWidthLeftTB = 0;
   let maxRawWidthLeftTB = 0;
   if (!isLR) {
+    if (model.stagingBlocks.some((sb) => rawOpenIds.has(sb.mbId))) {
+      maxStagingRawWidthLeftTB = RAW_W_TB + RAW_GAP;
+    }
     for (const ms of model.macroStates) {
       if (rawOpenIds.has(ms.id)) {
         maxRawWidthLeftTB = RAW_W_TB + RAW_GAP + (ms.shotChamberId ? CHAMBER_PAD_X : 0);
@@ -112,12 +135,13 @@ export function buildCanvasLayout(
   }
 
   // ---------------------------------------------------------------------------
-  // TIER 1: PHASE 1 STAGING MACRO-BLOCKS
+  // TIER 1: PHASE 1 STAGING MACRO-BLOCKS (+ EXPANDED [AESTHETIC] LOOKBOOK CARDS)
   // LR: horizontal row (L -> R) above Tier 2
   // TB: vertical column (T -> B) left of Tier 2
   // ---------------------------------------------------------------------------
   let stagingRightEdge = 0;
   let stagingBottomEdge = 0;
+  const visibleAestheticItemIds = new Set<string>();
 
   if (model.stagingBlocks.length > 0) {
     nodes.push({
@@ -136,66 +160,266 @@ export function buildCanvasLayout(
 
     if (isLR) {
       let curX = 0;
-      const rowY = ZONE_HEADER_H + 16;
-      let maxStagingH = 0;
+      const rowY =
+        ZONE_HEADER_H +
+        16 +
+        (maxStagingRawHeightAboveLR > 0 ? maxStagingRawHeightAboveLR + RAW_GAP + 14 : 0);
+      let maxStagingBottom = rowY;
 
       for (const sb of model.stagingBlocks) {
+        const canSplitAesthetic = sb.kind === 'AESTHETIC' && sb.aestheticItems.length > 0;
+        const isAestheticExpanded = canSplitAesthetic && expandedStagingIds.has(sb.mbId);
+        const isStagingRawOpen = rawOpenIds.has(sb.mbId);
+
         const h = resolveMeasuredHeight(
           sb.id,
-          estimateStagingHeight(sb, STAGING_W_LR),
+          estimateStagingHeight(sb, STAGING_W_LR, isAestheticExpanded),
           measuredHeights
         );
-        if (h > maxStagingH) maxStagingH = h;
-
         const isHit = activeObj
           ? activeObj.sourceBlockId === sb.mbId || sb.matchedObjectIds.includes(activeObj.id)
           : false;
 
+        const aesClusterW = isAestheticExpanded
+          ? sb.aestheticItems.length * AES_CARD_W_LR +
+            Math.max(0, sb.aestheticItems.length - 1) * AES_GAP_LR
+          : 0;
+        const slotW = Math.max(STAGING_W_LR, aesClusterW);
+        const sbX = curX + (slotW - STAGING_W_LR) / 2;
+
         nodes.push({
           id: sb.id,
           type: 'stagingBlock',
-          position: applyOffset(sb.id, {x: curX, y: rowY}, nodeOffsets),
+          position: applyOffset(sb.id, {x: sbX, y: rowY}, nodeOffsets),
           width: STAGING_W_LR,
           zIndex: GRAPH_Z_CARD,
           data: {
             block: sb,
             direction,
+            isExpanded: isAestheticExpanded,
+            isRawOpen: isStagingRawOpen,
             isTraced: isHit,
             isDimmed: Boolean(activeObj && !isHit),
           },
         });
-        curX += STAGING_W_LR + STAGING_GAP;
+        maxStagingBottom = Math.max(maxStagingBottom, rowY + h);
+
+        if (isStagingRawOpen) {
+          const rawId = `raw-${sb.mbId}`;
+          const rawH = resolveMeasuredHeight(
+            rawId,
+            estimateRawBranchHeight(sb.rawBody, RAW_W_LR),
+            measuredHeights
+          );
+          const sbDrag = nodeOffsets[sb.id];
+          const rawBasePos = {
+            x: sbX + (sbDrag?.dx ?? 0) + (STAGING_W_LR - RAW_W_LR) / 2,
+            y: rowY + (sbDrag?.dy ?? 0) - rawH - RAW_GAP,
+          };
+          nodes.push({
+            id: rawId,
+            type: 'rawBranch',
+            position: applyOffset(rawId, rawBasePos, nodeOffsets),
+            width: RAW_W_LR,
+            zIndex: GRAPH_Z_CARD,
+            data: {
+              macroStateId: sb.mbId,
+              displayLabel: `[${sb.name}]`,
+              raw: sb.rawBody,
+              direction,
+              isDimmed: Boolean(activeObj && !isHit),
+            },
+          });
+          edges.push({
+            id: `edge-raw-${sb.mbId}`,
+            source: rawId,
+            target: sb.id,
+            sourceHandle: 'raw-out',
+            targetHandle: 'raw-in',
+            kind: 'rawBranch',
+            isDimmed: Boolean(activeObj && !isHit),
+            direction,
+          });
+        }
+
+        if (isAestheticExpanded) {
+          const sbDrag = nodeOffsets[sb.id];
+          const aesStartX = curX + (slotW - aesClusterW) / 2 + (sbDrag?.dx ?? 0);
+          const aesY = rowY + (sbDrag?.dy ?? 0) + h + AES_BRANCH_GAP_LR;
+
+          sb.aestheticItems.forEach((item, idx) => {
+            visibleAestheticItemIds.add(item.id);
+            const itemH = resolveMeasuredHeight(
+              item.id,
+              estimateAestheticItemHeight(item, AES_CARD_W_LR),
+              measuredHeights
+            );
+            const itemX = aesStartX + idx * (AES_CARD_W_LR + AES_GAP_LR);
+            const isItemHit = activeObj
+              ? item.extractedObjectIds.includes(activeObj.id) ||
+                item.matchedObjectIds.includes(activeObj.id)
+              : false;
+
+            nodes.push({
+              id: item.id,
+              type: 'aestheticItem',
+              position: applyOffset(item.id, {x: itemX, y: aesY}, nodeOffsets),
+              width: AES_CARD_W_LR,
+              zIndex: GRAPH_Z_CARD,
+              data: {
+                item,
+                direction,
+                isTraced: isItemHit,
+                isDimmed: Boolean(activeObj && !isItemHit),
+              },
+            });
+
+            edges.push({
+              id: `edge-aes-${sb.id}-${item.id}`,
+              source: sb.id,
+              target: item.id,
+              sourceHandle: 'aes-branch-out',
+              targetHandle: 'aes-branch-in',
+              kind: 'aestheticBranch',
+              isDimmed: Boolean(activeObj && !isItemHit),
+              direction,
+            });
+
+            maxStagingBottom = Math.max(maxStagingBottom, aesY + itemH);
+          });
+        }
+
+        curX += slotW + STAGING_GAP;
       }
       stagingRightEdge = Math.max(0, curX - STAGING_GAP);
-      stagingBottomEdge = rowY + maxStagingH;
+      stagingBottomEdge = maxStagingBottom;
     } else {
+      const stagingColX = maxStagingRawWidthLeftTB;
       let curY = ZONE_HEADER_H + 16;
+
       for (const sb of model.stagingBlocks) {
+        const canSplitAesthetic = sb.kind === 'AESTHETIC' && sb.aestheticItems.length > 0;
+        const isAestheticExpanded = canSplitAesthetic && expandedStagingIds.has(sb.mbId);
+        const isStagingRawOpen = rawOpenIds.has(sb.mbId);
+
         const h = resolveMeasuredHeight(
           sb.id,
-          estimateStagingHeight(sb, STAGING_W_TB),
+          estimateStagingHeight(sb, STAGING_W_TB, isAestheticExpanded),
           measuredHeights
         );
         const isHit = activeObj
           ? activeObj.sourceBlockId === sb.mbId || sb.matchedObjectIds.includes(activeObj.id)
           : false;
+        const sbY = curY;
 
         nodes.push({
           id: sb.id,
           type: 'stagingBlock',
-          position: applyOffset(sb.id, {x: 0, y: curY}, nodeOffsets),
+          position: applyOffset(sb.id, {x: stagingColX, y: sbY}, nodeOffsets),
           width: STAGING_W_TB,
           zIndex: GRAPH_Z_CARD,
           data: {
             block: sb,
             direction,
+            isExpanded: isAestheticExpanded,
+            isRawOpen: isStagingRawOpen,
             isTraced: isHit,
             isDimmed: Boolean(activeObj && !isHit),
           },
         });
-        curY += h + STAGING_GAP;
+
+        let rawBottomY = sbY + h;
+        if (isStagingRawOpen) {
+          const rawId = `raw-${sb.mbId}`;
+          const rawH = resolveMeasuredHeight(
+            rawId,
+            estimateRawBranchHeight(sb.rawBody, RAW_W_TB),
+            measuredHeights
+          );
+          const sbDrag = nodeOffsets[sb.id];
+          const rawBasePos = {
+            x: stagingColX + (sbDrag?.dx ?? 0) - RAW_W_TB - RAW_GAP,
+            y: sbY + (sbDrag?.dy ?? 0),
+          };
+          nodes.push({
+            id: rawId,
+            type: 'rawBranch',
+            position: applyOffset(rawId, rawBasePos, nodeOffsets),
+            width: RAW_W_TB,
+            zIndex: GRAPH_Z_CARD,
+            data: {
+              macroStateId: sb.mbId,
+              displayLabel: `[${sb.name}]`,
+              raw: sb.rawBody,
+              direction,
+              isDimmed: Boolean(activeObj && !isHit),
+            },
+          });
+          edges.push({
+            id: `edge-raw-${sb.mbId}`,
+            source: rawId,
+            target: sb.id,
+            sourceHandle: 'raw-out',
+            targetHandle: 'raw-in',
+            kind: 'rawBranch',
+            isDimmed: Boolean(activeObj && !isHit),
+            direction,
+          });
+          rawBottomY = Math.max(rawBottomY, sbY + rawH);
+        }
+
+        let blockBottomY = sbY + h;
+        if (isAestheticExpanded) {
+          const sbDrag = nodeOffsets[sb.id];
+          const aesW = STAGING_W_TB - AES_INDENT_TB;
+          const aesX = stagingColX + AES_INDENT_TB + (sbDrag?.dx ?? 0);
+          let aesY = sbY + (sbDrag?.dy ?? 0) + h + AES_BRANCH_GAP_TB;
+
+          for (const item of sb.aestheticItems) {
+            visibleAestheticItemIds.add(item.id);
+            const itemH = resolveMeasuredHeight(
+              item.id,
+              estimateAestheticItemHeight(item, aesW),
+              measuredHeights
+            );
+            const isItemHit = activeObj
+              ? item.extractedObjectIds.includes(activeObj.id) ||
+                item.matchedObjectIds.includes(activeObj.id)
+              : false;
+
+            nodes.push({
+              id: item.id,
+              type: 'aestheticItem',
+              position: applyOffset(item.id, {x: aesX, y: aesY}, nodeOffsets),
+              width: aesW,
+              zIndex: GRAPH_Z_CARD,
+              data: {
+                item,
+                direction,
+                isTraced: isItemHit,
+                isDimmed: Boolean(activeObj && !isItemHit),
+              },
+            });
+
+            edges.push({
+              id: `edge-aes-${sb.id}-${item.id}`,
+              source: sb.id,
+              target: item.id,
+              sourceHandle: 'aes-branch-out',
+              targetHandle: 'aes-branch-in',
+              kind: 'aestheticBranch',
+              isDimmed: Boolean(activeObj && !isItemHit),
+              direction,
+            });
+
+            aesY += itemH + AES_GAP_TB;
+          }
+          blockBottomY = aesY - AES_GAP_TB;
+        }
+
+        curY = Math.max(blockBottomY, rawBottomY) + STAGING_GAP;
       }
-      stagingRightEdge = STAGING_W_TB;
+      stagingRightEdge = stagingColX + STAGING_W_TB;
       stagingBottomEdge = Math.max(0, curY - STAGING_GAP);
     }
   }
@@ -312,7 +536,15 @@ export function buildCanvasLayout(
       railBottomEdge = Math.max(stagingBottomEdge, curY);
     }
 
-    edges.push(...buildExtractionEdges(displayRailObjects, activeObj, activeObjectId, direction));
+    edges.push(
+      ...buildExtractionEdges(
+        displayRailObjects,
+        visibleAestheticItemIds,
+        activeObj,
+        activeObjectId,
+        direction
+      )
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -653,6 +885,7 @@ export function buildCanvasLayout(
         showAllLinks,
         expandedIds,
         visibleSubNodeIds,
+        visibleAestheticItemIds,
         hasIsolation,
         direction
       )

@@ -382,6 +382,14 @@ export const EDITOR_LABELS = {
       `Split into ${count} ${count === 1 ? 'Sub-State' : 'Sub-States'} ${arrow}`,
     subStatesCount: (count: number) =>
       `${count} ${count === 1 ? 'Sub-State' : 'Sub-States'}`,
+    aestheticKeysCard: 'Keys',
+    aestheticFoldCard: 'Fold',
+    aestheticExpandTitle: (name: string) => `Split [${name}] into Key–Value lookbook cards`,
+    aestheticFoldTitle: (name: string) => `Fold [${name}] Key–Value cards`,
+    aestheticKeysCount: (count: number) => `${count} ${count === 1 ? 'Key' : 'Keys'}`,
+    aestheticExpandedSummary: (count: number, arrow: string) =>
+      `Split into ${count} Lookbook ${count === 1 ? 'Key' : 'Keys'} ${arrow}`,
+    aestheticTokensBadge: (count: number) => `${count} ${count === 1 ? 'token' : 'tokens'}`,
     shotChamberMeta: (slot: string, count: number) =>
       `${slot} · ${count} ${count === 1 ? 'State' : 'States'}`,
     zoneStagingBadge: 'PHASE 1 · STAGING',

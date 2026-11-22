@@ -268,14 +268,14 @@ Location: Rainy alley -> LOC01
     ).toBe(true);
   });
 
-  it('routes label-match wires directly to decoupled Sub-States and falls back to Macro-State when coupled', () => {
+  it('enters through the first active Macro-State before handing off to split Sub-States and falls back cleanly when folded', () => {
     const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
     const firstChar = oner.railObjects.find(
       (o) => o.kind === 'character' && o.callSites.some((cs) => cs.parentNodeId === 'node-S1')
     );
     expect(firstChar).toBeDefined();
 
-    // When S1 is decoupled, labelMatch edge targets subnode-S1.#
+    // When S1 is split, Tier 2 drops into node-S1 first (first active Macro-State), then hands off to subnode-S1.#
     const expandedLayout = buildCanvasLayout(
       oner,
       makeLayoutOptions({
@@ -283,12 +283,21 @@ Location: Rainy alley -> LOC01
         activeObjectId: firstChar!.id,
       })
     );
-    const expandedEdges = expandedLayout.edges.filter(
-      (e) => e.kind === 'labelMatch' && e.source === firstChar!.id
+    const expandedDropIns = expandedLayout.edges.filter(
+      (e) => e.kind === 'labelMatch' && e.source === firstChar!.id && !e.target.startsWith('node-MB')
     );
-    expect(expandedEdges.some((e) => e.target.startsWith('subnode-S1.'))).toBe(true);
+    expect(expandedDropIns.some((e) => e.target === 'node-S1')).toBe(true);
+    expect(
+      expandedLayout.edges.some(
+        (e) =>
+          e.kind === 'labelMatch' &&
+          e.source === 'node-S1' &&
+          e.target.startsWith('subnode-S1.') &&
+          e.isMacroEntryHandoff === true
+      )
+    ).toBe(true);
 
-    // When S1 is coupled, labelMatch edge routes to node-S1
+    // When S1 is folded, labelMatch edge routes directly to node-S1 with zero subnode handoffs
     const coupledLayout = buildCanvasLayout(
       oner,
       makeLayoutOptions({
@@ -300,7 +309,9 @@ Location: Rainy alley -> LOC01
       (e) => e.kind === 'labelMatch' && e.source === firstChar!.id
     );
     expect(coupledEdges.some((e) => e.target === 'node-S1')).toBe(true);
-    expect(coupledEdges.some((e) => e.target.startsWith('subnode-S1.'))).toBe(false);
+    expect(
+      coupledLayout.edges.some((e) => e.kind === 'labelMatch' && e.target.startsWith('subnode-S1.'))
+    ).toBe(false);
   });
 
   it('supports Sub-State isolation Ghost vs Compact modes, Milestone Pills, Dimension Threads, and ephemeral drag offsets', () => {
@@ -612,7 +623,8 @@ Robbie waits beside the door.
       isAnimated: true,
     });
 
-    // 2. Split S1 + folded S3: weaves intra-state subnode-S1.2 -> subnode-S1.3 -> subnode-S1.4 -> node-S3
+    // 2. Split S1 + folded S3: enters through first active Macro-State (Robbie -> node-S1 -> subnode-S1.2)
+    //    then cascades directly subnode-S1.2 -> subnode-S1.3 -> subnode-S1.4 -> node-S3
     const splitS1 = buildCanvasLayout(
       model,
       makeLayoutOptions({
@@ -625,8 +637,8 @@ Robbie waits beside the door.
     );
     expect(splitDropIns).toHaveLength(1);
     expect(splitDropIns[0]).toMatchObject({
-      target: 'subnode-S1.2',
-      targetHandle: 'match-in',
+      target: 'node-S1',
+      targetHandle: 'thread-entry',
     });
 
     const splitCascades = splitS1.edges.filter((e) => e.kind === 'labelMatch' && e.isCascade);
@@ -634,12 +646,14 @@ Robbie waits beside the door.
       splitCascades.map((e) => ({
         source: e.source,
         target: e.target,
-        isIntraState: e.isIntraState,
+        isMacroEntryHandoff: Boolean(e.isMacroEntryHandoff),
+        isIntraState: Boolean(e.isIntraState),
       }))
     ).toEqual([
-      {source: 'subnode-S1.2', target: 'subnode-S1.3', isIntraState: true},
-      {source: 'subnode-S1.3', target: 'subnode-S1.4', isIntraState: true},
-      {source: 'subnode-S1.4', target: 'node-S3', isIntraState: false},
+      {source: 'node-S1', target: 'subnode-S1.2', isMacroEntryHandoff: true, isIntraState: false},
+      {source: 'subnode-S1.2', target: 'subnode-S1.3', isMacroEntryHandoff: false, isIntraState: true},
+      {source: 'subnode-S1.3', target: 'subnode-S1.4', isMacroEntryHandoff: false, isIntraState: true},
+      {source: 'subnode-S1.4', target: 'node-S3', isMacroEntryHandoff: false, isIntraState: false},
     ]);
   });
 
@@ -684,5 +698,116 @@ Featuring @img1 as Robbie and @img2 as Arthur.
     const bgMatchEdges = isolated.edges.filter((e) => e.kind === 'labelMatch');
     expect(bgMatchEdges.length).toBeGreaterThan(0);
     expect(bgMatchEdges.every((e) => !e.isAnimated && e.isDimmed === true)).toBe(true);
+  });
+
+  it('expands [AESTHETIC] into Key-Value Lookbook cards by default, routes extraction from exact keys, and prevents overlaps across LR & TB with Show Source open', () => {
+    const raw = `[INTENT]
+Featuring @img1 as Rosa.
+
+[AESTHETIC]
+Camera & Lens: 35mm anamorphic vintage glass
+Location Mapping: Rainy cobblestone alley -> LOC01; Lantern courtyard -> LOC02
+Wardrobe Mapping: Rosa in olive wool cape -> RS01
+
+[OPENING]
+Rosa stands in LOC01 wearing RS01.
+
+[EXECUTION]
+[CAM 01] MS in LOC01 -> [ACT] Rosa checks her watch`;
+
+    const model = buildModelFromRaw(raw);
+    const defaults = createDefaultGraphExpansionState(model);
+    const aesBlock = model.stagingBlocks.find((b) => b.kind === 'AESTHETIC')!;
+
+    // [AESTHETIC] starts open by default while Execution Macro-States stay folded and Source stays closed
+    expect(defaults.expandedStagingIds.has(aesBlock.mbId)).toBe(true);
+    expect(defaults.expandedIds.size).toBe(0);
+    expect(defaults.rawOpenIds.size).toBe(0);
+    expect(aesBlock.aestheticItems).toHaveLength(3);
+
+    // 1. LR mode with [AESTHETIC] open + [AESTHETIC] Source open + tall measured heights
+    const lrOpen = buildCanvasLayout(
+      model,
+      makeLayoutOptions({
+        direction: 'LR',
+        expandedStagingIds: defaults.expandedStagingIds,
+        rawOpenIds: new Set([aesBlock.mbId]),
+        activeObjectId: model.railObjects.find((o) => o.matchToken === 'LOC01')!.id,
+        measuredHeights: {
+          [`raw-${aesBlock.mbId}`]: 210,
+          'aes-MB1-1': 160,
+        },
+      })
+    );
+
+    const aesNodesLR = lrOpen.nodes.filter((n) => n.type === 'aestheticItem');
+    expect(aesNodesLR).toHaveLength(3);
+
+    // Extraction wire for LOC01 originates from its exact Lookbook Key card (`aes-MB1-1`), not node-MB1
+    expect(
+      lrOpen.edges.some(
+        (e) =>
+          e.kind === 'extraction' &&
+          e.source === 'aes-MB1-1' &&
+          e.sourceHandle === 'aes-out' &&
+          e.target === 'obj-tok-LOC01'
+      )
+    ).toBe(true);
+
+    // Zero overlap in LR: Source card sits above [AESTHETIC], [OPENING] clears the rightmost Lookbook card,
+    // and Tier 2 Objects sit strictly below the tallest Lookbook card
+    const lrRawAes = lrOpen.nodes.find((n) => n.id === `raw-${aesBlock.mbId}`)!;
+    const lrAesHeader = lrOpen.nodes.find((n) => n.id === aesBlock.id)!;
+    const lrOpening = lrOpen.nodes.find((n) => n.id === 'node-MB2')!;
+    const lrZoneObjects = lrOpen.nodes.find((n) => n.id === 'zone-objects')!;
+    const rightmostAes = aesNodesLR[aesNodesLR.length - 1];
+
+    expect(lrRawAes.position.y + 210).toBeLessThanOrEqual(lrAesHeader.position.y - RAW_GAP);
+    expect(rightmostAes.position.x + (rightmostAes.width ?? 0)).toBeLessThan(lrOpening.position.x);
+    expect(lrZoneObjects.position.y).toBeGreaterThan(aesNodesLR[1].position.y + 160);
+
+    // 2. TB mode with [AESTHETIC] open + tall Source card open -> zero overlap with [OPENING] or Tier 2
+    const tbOpen = buildCanvasLayout(
+      model,
+      makeLayoutOptions({
+        direction: 'TB',
+        expandedStagingIds: defaults.expandedStagingIds,
+        rawOpenIds: new Set([aesBlock.mbId]),
+        measuredHeights: {
+          [`raw-${aesBlock.mbId}`]: 480,
+        },
+      })
+    );
+    const tbRawAes = tbOpen.nodes.find((n) => n.id === `raw-${aesBlock.mbId}`)!;
+    const tbAesHeader = tbOpen.nodes.find((n) => n.id === aesBlock.id)!;
+    const tbOpening = tbOpen.nodes.find((n) => n.id === 'node-MB2')!;
+    const tbZoneObjects = tbOpen.nodes.find((n) => n.id === 'zone-objects')!;
+
+    expect(tbRawAes.position.x + (tbRawAes.width ?? 0)).toBeLessThanOrEqual(
+      tbAesHeader.position.x - RAW_GAP
+    );
+    expect(tbRawAes.position.y + 480).toBeLessThan(tbOpening.position.y);
+    expect(tbZoneObjects.position.x).toBeGreaterThan(
+      tbAesHeader.position.x + (tbAesHeader.width ?? 0)
+    );
+
+    // 3. When [AESTHETIC] is folded, extraction falls back cleanly to node-MB1
+    const lrFolded = buildCanvasLayout(
+      model,
+      makeLayoutOptions({
+        direction: 'LR',
+        expandedStagingIds: new Set(),
+      })
+    );
+    expect(lrFolded.nodes.filter((n) => n.type === 'aestheticItem')).toHaveLength(0);
+    expect(
+      lrFolded.edges.some(
+        (e) =>
+          e.kind === 'extraction' &&
+          e.source === aesBlock.id &&
+          e.sourceHandle === 'staging-out' &&
+          e.target === 'obj-tok-LOC01'
+      )
+    ).toBe(true);
   });
 });

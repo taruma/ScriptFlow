@@ -61,6 +61,8 @@ export interface InferredGraphObject {
   detail: string;
   sourceBlockId: string;
   sourceBlockName: string;
+  /** Exact [AESTHETIC] Key-Value mini-card node id (e.g. `aes-MB2-1`) when declared inside [AESTHETIC] */
+  sourceAestheticItemId?: string;
   isStagingOnly: boolean;
   callSites: ObjectCallSite[];
 }
@@ -72,6 +74,32 @@ export interface InlineEntityMatchRule {
   isRefToken: boolean;
 }
 
+export type AestheticItemAccentKind =
+  | 'location'
+  | 'wardrobe'
+  | 'prop'
+  | 'staging_ref'
+  | 'general';
+
+export interface GraphAestheticItem {
+  /** Stable React Flow node id (e.g. `aes-MB2-0`) */
+  id: string;
+  /** Parent Staging Macro-Block id (e.g. `MB2`) */
+  parentMbId: string;
+  index: number;
+  /** Display key (e.g. `Location Mapping`, `Wardrobe`, or `Note` for freeform lines) */
+  key: string;
+  /** Value text after `Key:` (or raw text for freeform lines) */
+  value: string;
+  /** Original raw line text */
+  raw: string;
+  accentKind: AestheticItemAccentKind;
+  /** Tier 2 Inferred Object IDs declared on this exact line */
+  extractedObjectIds: string[];
+  /** Tier 2 Inferred Object IDs referenced (not declared) on this line */
+  matchedObjectIds: string[];
+}
+
 export interface GraphStagingBlockItem {
   id: string;
   mbId: string;
@@ -79,6 +107,8 @@ export interface GraphStagingBlockItem {
   kind: MacroBlockKind;
   rawBody: string;
   lines: string[];
+  /** Parsed Key-Value lookbook swatch items when this block is `[AESTHETIC]` */
+  aestheticItems: GraphAestheticItem[];
   extractedObjectIds: string[];
   matchedObjectIds: string[];
 }
@@ -155,6 +185,8 @@ export interface NodeOffset {
 export interface GraphLayoutOptions {
   direction: GraphDirection;
   expandedIds: ReadonlySet<string>;
+  /** Staging Macro-Block MB# IDs whose Key-Value lookbook cards are expanded (e.g. `[AESTHETIC]`) */
+  expandedStagingIds?: ReadonlySet<string>;
   rawOpenIds: ReadonlySet<string>;
   isolatedDims: ReadonlySet<GraphDimension>;
   isolationMode: GraphIsolationMode;
@@ -168,6 +200,7 @@ export interface GraphLayoutOptions {
 export type CanvasNodeType =
   | 'zoneHeader'
   | 'stagingBlock'
+  | 'aestheticItem'
   | 'inferredObject'
   | 'shotChamber'
   | 'macroState'
@@ -175,6 +208,7 @@ export type CanvasNodeType =
   | 'rawBranch';
 
 export type CanvasEdgeKind =
+  | 'aestheticBranch'
   | 'extraction'
   | 'labelMatch'
   | 'spineHold'
@@ -209,12 +243,14 @@ export interface CanvasEdgeSpec {
   objectKind?: InferredObjectKind;
   isHot?: boolean;
   isDimmed?: boolean;
-  /** True when the edge renders subtle directional flow animation (source -> target) */
+  /** True when the edge renders subtle directional flow animation (source -> target pulse dot) */
   isAnimated?: boolean;
   /** True when a labelMatch edge cascades chronologically between consecutive Execution appearances */
   isCascade?: boolean;
   /** True when a cascading labelMatch connects two split Sub-States inside the same Macro-State */
   isIntraState?: boolean;
+  /** True when a labelMatch hands off from the first active Macro-State header into its first split Sub-State */
+  isMacroEntryHandoff?: boolean;
   /** Per-object lane index used to separate parallel cascading threads cleanly */
   laneIndex?: number;
   label?: string;

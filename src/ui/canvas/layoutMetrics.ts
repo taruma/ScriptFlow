@@ -1,4 +1,5 @@
 import type {
+  GraphAestheticItem,
   GraphLayoutOptions,
   GraphMacroStateItem,
   GraphStagingBlockItem,
@@ -14,7 +15,14 @@ export const LAYER_GAP_TB = 96;
 
 export const STAGING_W_LR = 344;
 export const STAGING_W_TB = 368;
-export const STAGING_GAP = 20;
+export const STAGING_GAP = 22;
+
+export const AES_CARD_W_LR = 232;
+export const AES_GAP_LR = 12;
+export const AES_INDENT_TB = 26;
+export const AES_GAP_TB = 10;
+export const AES_BRANCH_GAP_LR = 26;
+export const AES_BRANCH_GAP_TB = 12;
 
 export const OBJ_CHIP_W_LR = 224;
 export const OBJ_RAIL_W_TB = 248;
@@ -109,13 +117,34 @@ export function estimateWrappedLines(text: string, charsPerLine: number): number
   }, 0);
 }
 
-export function estimateStagingHeight(sb: GraphStagingBlockItem, width: number): number {
+export function estimateStagingHeight(
+  sb: GraphStagingBlockItem,
+  width: number,
+  isExpandedAesthetic = false
+): number {
+  if (isExpandedAesthetic) {
+    return 82;
+  }
   const charsPerLine = Math.max(26, Math.floor((width - 36) / 6.7));
   const totalLines = sb.lines.reduce(
     (sum, line) => sum + estimateWrappedLines(line, charsPerLine),
     0
   );
-  return Math.max(88, 54 + totalLines * 19 + Math.max(0, sb.lines.length - 1) * 5);
+  return Math.max(88, 56 + totalLines * 19 + Math.max(0, sb.lines.length - 1) * 6);
+}
+
+export function estimateAestheticItemHeight(item: GraphAestheticItem, width: number): number {
+  const charsPerLine = Math.max(20, Math.floor((width - 28) / 6.6));
+  const segments = item.value
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const effectiveSegments = segments.length > 0 ? segments : [item.value || '—'];
+  const totalLines = effectiveSegments.reduce(
+    (sum, seg) => sum + estimateWrappedLines(seg, charsPerLine),
+    0
+  );
+  return Math.max(68, 44 + totalLines * 17.5 + Math.max(0, effectiveSegments.length - 1) * 6);
 }
 
 export function estimateSubStateRowHeight(ss: GraphSubStateItem, width: number): number {

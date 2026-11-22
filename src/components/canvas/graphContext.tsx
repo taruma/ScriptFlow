@@ -14,6 +14,7 @@ export interface GraphInteractionContextValue {
   onSelectObject: (objectId: string) => void;
   onHoverObject: (objectId: string | null) => void;
   onToggleExpand: (macroStateId: string) => void;
+  onToggleStagingExpand: (mbId: string) => void;
   onToggleRaw: (id: string) => void;
 }
 

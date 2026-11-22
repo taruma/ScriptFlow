@@ -114,6 +114,12 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
         position={isLR ? Position.Right : Position.Bottom}
         style={threadSideStyle}
       />
+      <Handle
+        type="source"
+        id="sub-thread-out"
+        position={isLR ? Position.Left : Position.Top}
+        style={threadSideStyle}
+      />
 
       {/* Scene DNA Bar along top edge */}
       <div className="flex w-full h-1.5 gap-0.5 bg-app" aria-hidden="true">

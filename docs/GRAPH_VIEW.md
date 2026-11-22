@@ -104,39 +104,38 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 
 | Axis / Tier | `L → R` (`direction: 'LR'`, Default) | `T ↓ B` (`direction: 'TB'`, 90° Transpose) |
 |---|---|---|
-| **Tier 1 — Phase 1 Staging** | Horizontal row (`L → R`) across the top band (`[INTENT]` → `[LOGIC]` → `[AESTHETIC]` → `[OPENING]`) | Single vertical column (`T ↓ B`) on the left |
+| **Tier 1 — Phase 1 Staging** | Horizontal row (`L → R`) across the top band (`[INTENT]` → `[LOGIC]` → `[AESTHETIC]` → `[OPENING]`). **`[AESTHETIC]`** starts **open**, fanning its Key–Value Lookbook swatch cards (`AestheticItemNode`) horizontally beneath its header (with a **`Keys`/`Fold`** toggle and opposite-side **`Source`** button branching above). | Single vertical column (`T ↓ B`) on the left. **`[AESTHETIC]`** starts **open**, stacking indented Lookbook swatch cards beneath its header (flush with Tier 1's right edge, with **`Source`** branching left). |
 | **Tier 2 — Inferred Objects** | Horizontal band (`L → R`) directly beneath Tier 1, grouped by kind on one unified baseline | Vertical column (`T ↓ B`) directly right of Tier 1, grouped by kind |
 | **Tier 3 — Phase 2 Execution** | Horizontal spine (`S1 → SN`, `L → R`) directly beneath Tier 2 | Vertical spine (`S1 ↓ SN`, `T ↓ B`) directly right of Tier 2 |
 | **Split Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
-| **Opposite-Side `Source` Branch** | Branches **above** the Macro-State | Branches **left** of the Macro-State |
+| **Opposite-Side `Source` Branch** | Branches **above** the Macro-State (or `[AESTHETIC]`) with reserved headroom | Branches **left** of the Macro-State (or `[AESTHETIC]`) with reserved gutter width |
 
-- **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset`**, all Macro-States start **folded (compact)** with **Source** branches collapsed and all ephemeral drag offsets cleared—keeping the initial view calm until the presenter explicitly splits a Macro-State's Sub-States or toggles source text.
+- **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset`**, all Execution Macro-States start **folded (compact)**, all **Source** branches start collapsed, all ephemeral drag offsets are cleared, and **`[AESTHETIC]`** blocks with structured Key–Value entries start **open** (`expandedStagingIds`) as distinct Lookbook swatch cards.
 
 ### 3.2 Sub-State Isolation (`Ghost` vs. `Compact`)
 
 When one or more dimensions are toggled in `SubStateIsolatorDock`:
 - **Non-matching Sub-States:** Dimmed (`opacity: 0.14`) in **`Ghost`** mode, or omitted from cards and split branches in **`Compact`** mode.
 - **Zero-Match Macro-States:** Collapse into compact dashed **Milestone Pills** (`S3`) on the spine so temporal ordering remains intact.
-- **Animated Dimension Thread (`isolationThread`):** Connects surviving matching Macro-States directly across Milestone Pill gaps in the active dimension's color with a smooth forward directional flow animation (`L → R` in `LR`, `T ↓ B` in `TB`). While a tag is isolated, any background **`Show Threads`** entity wires stay static and dimmed so they never compete visually with the isolated craft thread.
+- **Animated Dimension Thread (`isolationThread`):** Connects surviving matching Macro-States directly across Milestone Pill gaps in the active dimension's color as a crisp dashed orthogonal pipe with a **gliding SVG pulse dot** (`L → R` in `LR`, `T ↓ B` in `TB`). While a tag is isolated, any background **`Show Threads`** entity wires stay static and dimmed so they never compete visually with the isolated craft thread.
 
-### 3.3 Strict Tier Boundaries, Cascading State-Flow Threads & Selective Animation (`src/ui/canvas/layoutEdges.ts`)
+### 3.3 Strict Tier Boundaries, Cascading State-Flow Threads & Blueprint Routing (`src/ui/canvas/layoutEdges.ts`, `AuteurGraphEdge.tsx`)
 
-1. **Zero Tier 1 → Tier 3 Bypasses:** Staging Macro-Blocks (`MB#`) never wire directly into Execution Macro-States (`S#`) or Sub-States (`S#.#`). Every cross-phase relationship flows strictly through its intermediate Tier 2 Inferred Object.
+1. **Zero Tier 1 → Tier 3 Bypasses:** Staging Macro-Blocks (`MB#`) and `[AESTHETIC]` Lookbook cards never wire directly into Execution Macro-States (`S#`) or Sub-States (`S#.#`). Every cross-phase relationship flows strictly through its intermediate Tier 2 Inferred Object.
 2. **Tier 1 ↔ Tier 2 (`extraction` & Staging references):**
-   - **Extraction (`extraction`):** Declaring Staging block → Inferred Object (`staging-out` → `obj-in`).
-   - **Downstream Staging References (`labelMatch`, `obj-back` → `staging-match-in`):** Connects an extracted Tier 2 Object to subsequent Staging blocks (`[LOGIC]`, `[OPENING]`, etc.) that reference its label without self-linking the declaring block.
-3. **Tier 2 → Tier 3 → Tier 3 Cascading State-Flow (`labelMatch` + `isCascade`):**
-   - **Single Entry Drop-In:** Emits exactly **one** wire from the Tier 2 Object (`obj-out`) to its **first** visible Execution appearance (`node-S#` via `thread-entry` when folded, or `subnode-S#.#` via `match-in` when split).
+   - **Extraction (`extraction`):** Declaring Staging block—or the exact expanded `[AESTHETIC]` Lookbook Key–Value card (`aes-MB#-#`, `aes-out`) when open—wires into its Tier 2 Inferred Object (`obj-in`), falling back cleanly to `node-MB#` when `[AESTHETIC]` is folded.
+   - **Downstream Staging References (`labelMatch`, `obj-back` → `staging-match-in` / `aes-match-in`):** Connects an extracted Tier 2 Object to subsequent Staging blocks (`[LOGIC]`, `[OPENING]`, or the exact matching `[AESTHETIC]` Key card when open) without self-linking the declaring block.
+3. **Tier 2 → First Active Macro-State → Cascading State-Flow (`labelMatch` + `isCascade`):**
+   - **First Active Macro-State Entry:** Always drops **one** wire from the Tier 2 Object (`obj-out`) into the **first active Macro-State** (`node-S#` via `thread-entry`). When that Macro-State is split into Sub-States, `node-S#` hands off along the clean outer margin (`sub-thread-out` → `match-in`, `isMacroEntryHandoff: true`) into the first matched Sub-State (`subnode-S#.#`)—making the first active Macro-State unmistakable without cutting across intermediate Sub-States.
    - **Chronological Execution Cascade (`prev → next`):** Subsequent appearances chain sequentially in timeline order rather than fanning out from Tier 2:
-     - **Folded Macro-States:** `node-S1` (`thread-out`) → `node-S2` (`thread-in`) → `node-S4` (`thread-in`), using dedicated lower-side ports (`82%`) and gentle lane-separated curves (`laneIndex`) so parallel entity threads stay clear of the Camera Spine and `CUT` pills.
-     - **Split Sub-States (Intra-State & Cross-State):** Consecutive mentions inside the same split Macro-State (e.g., `S1.2 → S1.3`) connect via an outward side-bracket (`match-out` → `match-same-in`, `isIntraState: true`); mentions crossing into the next Macro-State (`S1.3 → S2.2` or `S1.3 → S2`) sweep across cleanly (`match-out` → `match-in` / `thread-in`).
-4. **Continuity Spine & Curved Recall Arcs:**
-   - **Continuity Spine (`spineHold`, `spineCut`, `spineMontage`):** Sequential `S1 → S2 → … → SN` links.
-   - **Curved Recall Arc (`recall`):** Establishing `S#` → recalled `S#` (`recall-out` → `recall-in`), rendered with a custom cubic bezier lift in `AuteurGraphEdge.tsx`.
-5. **Selective Flow Animation (Performance & Clarity Guardrail):**
-   - `.auteur-graph-edge-flow` (`src/index.css`) animates SVG `stroke-dashoffset` (`24 → 0` over a seamless `8 4` dash cycle, disabled automatically under `@media (prefers-reduced-motion: reduce)`).
-   - **Animated (`isAnimated: true`):** Active **isolated Dimension Threads** (`isolationThread`) and **single-object focused traces** (hover/click an Inferred Object or Camera Setup)—keeping animated SVG paths small and focused.
-   - **Static (`isAnimated: false`):** Unfiltered **`Show Threads`** (all entities visible at once) renders static lane-separated curves to avoid heavy repaints and visual noise.
+     - **Folded Macro-States:** `node-S1` (`thread-out`) → `node-S2` (`thread-in`) → `node-S4` (`thread-in`) via dedicated lower-side ports (`82%`) and rounded orthogonal corridor pipes clear of `CUT` pills.
+     - **Split Sub-States (Intra-State & Cross-State):** Consecutive mentions inside the same split Macro-State (`S1.2 → S1.3`) connect via a rounded orthogonal U-bracket (`match-out` → `match-same-in`, `isIntraState: true`); mentions crossing to a later Macro-State (`S1.3 → S2.3`, `S3.4 → S4.2`) route cleanly through the empty horizontal/vertical aisle between rows/columns with per-lane channel stepping (`laneIndex`)—eliminating diagonal spaghetti.
+4. **Rounded Orthogonal Blueprint Pipes vs. Curved `RECALL` Arcs:**
+   - All structural threads (`extraction`, `labelMatch`, `aestheticBranch`, `isolationThread`, `spine*`, `subStateChain`, `rawBranch`) use **rounded orthogonal pipes** (`getSmoothStepPath` + `buildRoundedOrthogonalPath` in `AuteurGraphEdge.tsx`) with dashed styling on state-flow & isolation threads.
+   - **Curved `RECALL` Arcs (`recall`):** Reserved exclusively for camera setup flashbacks (`establishing S#` → `recalled S#`) so optical continuity stays visually distinct from state-flow pipes.
+5. **Selective Gliding Pulse-Dot Animation (Performance & Clarity Guardrail):**
+   - Active **isolated Dimension Threads** (`isolationThread`) and **single-object focused traces** (hover/click an Inferred Object or Camera Setup) render a native SVG `<animateMotion>` **gliding pulse dot** (translucent halo + solid core moving strictly `source → target`) along their dashed wire—automatically hidden under `@media (prefers-reduced-motion: reduce)` (`.auteur-graph-pulse-dot` in `src/index.css`).
+   - Unfiltered **`Show Threads`** (all entities visible at once) renders static dashed orthogonal lane pipes with zero pulse dots to avoid visual clutter and repaint load.
 
 ### 3.4 Explicit Z-Index Stacking Hierarchy
 
@@ -183,8 +182,8 @@ When one or more dimensions are toggled in `SubStateIsolatorDock`:
 | `src/ui/canvas/canvasLayout.ts` | Deterministic 3-layer `LR` / `TB` node placement orchestrating `layoutMetrics.ts` and `layoutEdges.ts`. |
 | `src/ui/canvas/flowSync.ts` | Pure `mergeLayoutIntoFlowNodes` reconciling layout specs with React Flow internal node state. |
 | `src/components/canvas/AuteurGraphView.tsx` | Lazy-loaded React Flow shell, HUD/Dock/Inspector wiring, drag-offset capture, `fitView`, and `useUpdateNodeInternals`. |
-| `src/components/canvas/*Node.tsx` | Thin `memo()`'d custom node renderers (`ZoneHeaderNode`, `StagingBlockNode`, `InferredObjectNode`, `ShotChamberNode`, `MacroStateNode`, `SubStateNode`, `RawTextBranchNode`). |
-| `src/components/canvas/AuteurGraphEdge.tsx` | Custom edge renderer for standard bezier links, overhead curved `RECALL` arcs, and `EdgeLabelRenderer` pills. |
+| `src/components/canvas/*Node.tsx` | Thin `memo()`'d custom node renderers (`ZoneHeaderNode`, `StagingBlockNode`, `AestheticItemNode`, `InferredObjectNode`, `ShotChamberNode`, `MacroStateNode`, `SubStateNode`, `RawTextBranchNode`). |
+| `src/components/canvas/AuteurGraphEdge.tsx` | Custom edge renderer for rounded orthogonal Blueprint/Metro corridor pipes, gliding SVG `<animateMotion>` pulse dots, overhead curved `RECALL` arcs, and `EdgeLabelRenderer` pills. |
 | `src/components/canvas/SculptedSubStateBody.tsx` & `AnnotatedProse.tsx` | Bespoke per-dimension Sub-State renderers and inline clickable entity chips. |
 | `src/components/canvas/GraphHud.tsx`, `SubStateIsolatorDock.tsx`, `ObjectInspectorPanel.tsx`, `graphContext.tsx` | Floating chrome overlays and shared interaction context + CSS color variable mappers. |
 

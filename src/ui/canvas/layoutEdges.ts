@@ -9,35 +9,42 @@ import type {
 
 /**
  * Emits Tier 1 -> Tier 2 extraction wires connecting each declaring Staging Macro-Block
- * to the Inferred Objects extracted from its plain text.
- * Animates directionally when the target object is actively focused.
+ * (or its expanded `[AESTHETIC]` Key-Value Lookbook card) to the Inferred Objects extracted
+ * from its plain text. Animates with a gliding pulse dot when the target object is focused.
  */
 export function buildExtractionEdges(
   displayRailObjects: readonly InferredGraphObject[],
+  visibleAestheticItemIds: ReadonlySet<string>,
   activeObj: InferredGraphObject | null,
   activeObjectId: string | null,
   direction: GraphDirection
 ): CanvasEdgeSpec[] {
   const edges: CanvasEdgeSpec[] = [];
 
-  for (const obj of displayRailObjects) {
-    if (obj.kind === 'camera_slot') continue;
-    const sourceId = `node-${obj.sourceBlockId}`;
+  displayRailObjects.forEach((obj, laneIndex) => {
+    if (obj.kind === 'camera_slot') return;
+    const fromAestheticItem = Boolean(
+      obj.sourceAestheticItemId && visibleAestheticItemIds.has(obj.sourceAestheticItemId)
+    );
+    const sourceId = fromAestheticItem
+      ? obj.sourceAestheticItemId!
+      : `node-${obj.sourceBlockId}`;
     const isHot = activeObjectId === obj.id;
     edges.push({
-      id: `edge-extract-${obj.sourceBlockId}-${obj.id}`,
+      id: `edge-extract-${sourceId}-${obj.id}`,
       source: sourceId,
       target: obj.id,
-      sourceHandle: 'staging-out',
+      sourceHandle: fromAestheticItem ? 'aes-out' : 'staging-out',
       targetHandle: 'obj-in',
       kind: 'extraction',
       objectKind: obj.kind,
       isHot,
       isAnimated: isHot,
       isDimmed: Boolean(activeObj && !isHot),
+      laneIndex,
       direction,
     });
-  }
+  });
 
   return edges;
 }
@@ -147,15 +154,18 @@ interface ResolvedExecStop {
 
 /**
  * Emits strict 3-tier cascading state-flow threads (zero direct Tier 1 -> Tier 3 bypasses):
- * - Tier 2 -> Tier 1: downstream Staging references (`obj -> [LOGIC]`, `obj -> [OPENING]`, etc.)
- * - Tier 2 -> Tier 3 (1st appearance): single drop-in wire from the Tier 2 Object to its first
- *   visible Execution appearance (`node-S#` when folded, `subnode-S#.#` when split)
+ * - Tier 2 -> Tier 1: downstream Staging references (`obj -> [LOGIC]`, `obj -> [OPENING]`, or
+ *   the exact expanded `[AESTHETIC]` Lookbook Key card when open)
+ * - Tier 2 -> Tier 3 (first active Macro-State): always enters through the first active
+ *   Macro-State (`obj -> node-S#`), and when that Macro-State is split into Sub-States,
+ *   hands off cleanly from `node-S#` into the first matched Sub-State (`node-S# -> subnode-S#.#`)
  * - Tier 3 -> Tier 3 (subsequent appearances): chronological cascading chain (`prev -> next`),
- *   hopping Macro-State to Macro-State when folded or weaving Sub-State to Sub-State when split.
+ *   hopping Macro-State to Macro-State when folded or weaving Sub-State to Sub-State directly
+ *   once inside the split timeline.
  *
  * Animation discipline:
- * - Single-object focus (`activeObj`): animates that object's full lifecycle thread smoothly.
- * - Unfiltered `Show Threads`: renders static parallel-lane curves (zero animation load).
+ * - Single-object focus (`activeObj`): animates that object's full lifecycle thread with a gliding dot.
+ * - Unfiltered `Show Threads`: renders static dashed orthogonal lane pipes (zero animation load).
  * - Active tag isolation + `Show Threads`: dims and keeps entity threads static so the isolated
  *   dimension thread stays visually primary.
  */
@@ -166,6 +176,7 @@ export function buildDownstreamLabelMatchEdges(
   showAllLinks: boolean,
   expandedIds: ReadonlySet<string>,
   visibleSubNodeIds: ReadonlySet<string>,
+  visibleAestheticItemIds: ReadonlySet<string>,
   hasIsolation: boolean,
   direction: GraphDirection
 ): CanvasEdgeSpec[] {
@@ -186,19 +197,34 @@ export function buildDownstreamLabelMatchEdges(
     const isAnimated = isHot;
     const isDimmed = !isHot && hasIsolation;
 
-    // 1. Tier 2 -> Tier 1 downstream Staging references (deduplicated per Staging block)
+    // 1. Tier 2 -> Tier 1 downstream Staging references (routing to expanded [AESTHETIC] key card when visible)
     const seenStagingTargets = new Set<string>();
     for (const cs of obj.callSites) {
       if (cs.kind !== 'staging') continue;
-      if (seenStagingTargets.has(cs.targetNodeId)) continue;
-      seenStagingTargets.add(cs.targetNodeId);
+      let resolvedTarget = cs.targetNodeId;
+      let targetHandle = 'staging-match-in';
+
+      if (cs.targetNodeId.startsWith('aes-')) {
+        if (visibleAestheticItemIds.has(cs.targetNodeId)) {
+          resolvedTarget = cs.targetNodeId;
+          targetHandle = 'aes-match-in';
+        } else if (cs.parentNodeId) {
+          resolvedTarget = cs.parentNodeId;
+          targetHandle = 'staging-match-in';
+        } else {
+          continue;
+        }
+      }
+
+      if (seenStagingTargets.has(resolvedTarget)) continue;
+      seenStagingTargets.add(resolvedTarget);
 
       edges.push({
-        id: `edge-match-${obj.id}-${cs.targetNodeId}`,
+        id: `edge-match-${obj.id}-${resolvedTarget}`,
         source: obj.id,
-        target: cs.targetNodeId,
+        target: resolvedTarget,
         sourceHandle: 'obj-back',
-        targetHandle: 'staging-match-in',
+        targetHandle,
         kind: 'labelMatch',
         objectKind: obj.kind,
         isHot,
@@ -253,14 +279,18 @@ export function buildDownstreamLabelMatchEdges(
 
     if (execStops.length === 0) return;
 
-    // 2a. Single Tier 2 -> Tier 3 drop-in wire to the first Execution appearance
+    // 2a. Tier 2 -> Tier 3 Entry: always anchor on the first active Macro-State (`node-S#`).
+    // If that first active Macro-State is split, hand off cleanly (`node-S# -> subnode-S#.#`)
+    // before continuing the direct Sub-State-to-Sub-State cascade.
     const first = execStops[0];
+    const firstMacroNodeId = `node-${first.macroStateId}`;
+
     edges.push({
-      id: `edge-match-${obj.id}-${first.nodeId}`,
+      id: `edge-match-${obj.id}-${firstMacroNodeId}`,
       source: obj.id,
-      target: first.nodeId,
+      target: firstMacroNodeId,
       sourceHandle: 'obj-out',
-      targetHandle: first.isSubState ? 'match-in' : 'thread-entry',
+      targetHandle: 'thread-entry',
       kind: 'labelMatch',
       objectKind: obj.kind,
       isHot,
@@ -270,6 +300,25 @@ export function buildDownstreamLabelMatchEdges(
       laneIndex,
       direction,
     });
+
+    if (first.isSubState) {
+      edges.push({
+        id: `edge-cascade-entry-${obj.id}-${firstMacroNodeId}-${first.nodeId}`,
+        source: firstMacroNodeId,
+        target: first.nodeId,
+        sourceHandle: 'sub-thread-out',
+        targetHandle: 'match-in',
+        kind: 'labelMatch',
+        objectKind: obj.kind,
+        isHot,
+        isAnimated,
+        isDimmed,
+        isCascade: true,
+        isMacroEntryHandoff: true,
+        laneIndex,
+        direction,
+      });
+    }
 
     // 2b. Chronological Tier 3 -> Tier 3 cascading state-flow chain (prev -> next)
     for (let i = 0; i < execStops.length - 1; i++) {

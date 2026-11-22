@@ -7,15 +7,18 @@ import {useGraphInteraction} from './graphContext.tsx';
 
 export interface RawTextBranchNodeData extends Record<string, unknown> {
   macroStateId: string;
+  /** Optional override heading label (e.g. `[AESTHETIC]`); defaults to `macroStateId` */
+  displayLabel?: string;
   raw: string;
   direction: GraphDirection;
   isDimmed: boolean;
 }
 
 export const RawTextBranchNode = memo(function RawTextBranchNode({data}: NodeProps) {
-  const {macroStateId, raw, direction, isDimmed} = data as RawTextBranchNodeData;
+  const {macroStateId, displayLabel, raw, direction, isDimmed} = data as RawTextBranchNodeData;
   const {onToggleRaw} = useGraphInteraction();
   const isLR = direction === 'LR';
+  const headingId = displayLabel ?? macroStateId;
 
   return (
     <div
@@ -28,7 +31,7 @@ export const RawTextBranchNode = memo(function RawTextBranchNode({data}: NodePro
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-text-muted">
           <Code2 className="h-3 w-3" aria-hidden="true" />
-          <span>{UI_LABELS.graph.rawBranchHeading(macroStateId)}</span>
+          <span>{UI_LABELS.graph.rawBranchHeading(headingId)}</span>
         </span>
         <button
           type="button"
