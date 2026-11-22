@@ -383,6 +383,17 @@ export const EDITOR_LABELS = {
       `${count} ${count === 1 ? 'Sub-State' : 'Sub-States'}`,
     shotChamberMeta: (slot: string, count: number) =>
       `${slot} · ${count} ${count === 1 ? 'State' : 'States'}`,
+    zoneStagingBadge: 'PHASE 1 · STAGING',
+    zoneStagingSubtitle: 'Exact written text',
+    zoneObjectsBadge: 'INFERRED OBJECTS',
+    zoneObjectsSubtitle: 'Extracted from plain text',
+    zoneCamerasBadge: 'CAMERA SETUPS',
+    zoneCamerasSubtitle: 'Numbered optical slots',
+    zoneExecutionBadge: (count: number) => `PHASE 2 · EXECUTION (S1 → S${count})`,
+    zoneExecutionSubtitle: 'Sculpted Sub-States · Click </> to branch exact plain text',
+    edgeCutLabel: 'CUT',
+    edgeRecallLabel: 'RECALL',
+    edgeRecallSlotLabel: (slot: string) => `RECALL ${slot}`,
     titleCardKicker: 'On-Screen Title',
     stagingOnlyBadge: 'Staging',
     objectGroups: {
