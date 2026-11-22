@@ -39,13 +39,13 @@ export const RawTextBranchNode = memo(function RawTextBranchNode({data}: NodePro
             e.stopPropagation();
             onToggleRaw(macroStateId);
           }}
-          className="nodrag nopan rounded px-1.5 py-0.5 text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
+          className="auteur-graph-touch-card-btn rounded px-1.5 py-0.5 text-[10px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
         >
           {UI_LABELS.graph.rawHide}
         </button>
       </div>
 
-      <pre className="nodrag nopan select-text m-0 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-text-body">
+      <pre className="nopan select-text m-0 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-text-body">
         {raw}
       </pre>
     </div>

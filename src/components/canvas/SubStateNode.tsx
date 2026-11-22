@@ -96,7 +96,7 @@ export const SubStateNode = memo(function SubStateNode({data}: NodeProps) {
                       }
                     : undefined
                 }
-                className={`nodrag nopan inline-flex items-center justify-center rounded border px-1 py-0.5 transition-colors cursor-pointer ${
+                className={`auteur-graph-touch-card-btn inline-flex items-center justify-center rounded border px-1 py-0.5 transition-colors cursor-pointer ${
                   isRawOpen
                     ? ''
                     : 'border-transparent text-text-faint hover:border-border-main hover:text-text-main'
@@ -110,7 +110,7 @@ export const SubStateNode = memo(function SubStateNode({data}: NodeProps) {
           <SculptedSubStateBody subState={subState} />
 
           {isRawOpen && (
-            <div className="nodrag nopan select-text mt-2 pt-2 border-t border-dashed border-border-main font-mono text-[10.5px] leading-relaxed text-text-muted break-words">
+            <div className="nopan select-text mt-2 pt-2 border-t border-dashed border-border-main font-mono text-[10.5px] leading-relaxed text-text-muted break-words">
               {subState.raw}
             </div>
           )}

@@ -33,10 +33,14 @@ export const ShotChamberNode = memo(function ShotChamberNode({data}: NodeProps) 
             e.stopPropagation();
             onSelectObject(cameraObjectId);
           }}
-          onMouseEnter={() => onHoverObject(cameraObjectId)}
-          onMouseLeave={() => onHoverObject(null)}
+          onPointerEnter={(e) => {
+            if (e.pointerType === 'mouse') onHoverObject(cameraObjectId);
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === 'mouse') onHoverObject(null);
+          }}
           style={{color: 'var(--graph-dim-camera)'}}
-          className="nodrag nopan inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-[10.5px] font-bold tracking-wider hover:bg-surface/70 transition-colors cursor-pointer whitespace-nowrap"
+          className="auteur-graph-touch-card-btn inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-[10.5px] font-bold tracking-wider hover:bg-surface/70 transition-colors cursor-pointer whitespace-nowrap"
         >
           <span>{UI_LABELS.graph.shotChamberMeta(slot, stateCount)}</span>
         </button>

@@ -53,7 +53,7 @@ export const ObjectInspectorPanel = memo(function ObjectInspectorPanel({
           type="button"
           onClick={onClose}
           aria-label={UI_LABELS.graph.inspectorCloseAria}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer shrink-0"
+          className="auteur-graph-touch-card-btn inline-flex h-6 w-6 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer shrink-0"
         >
           <X className="h-3.5 w-3.5" />
         </button>

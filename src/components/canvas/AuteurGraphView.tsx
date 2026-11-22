@@ -68,6 +68,13 @@ const EDGE_TYPES: EdgeTypes = {
 
 const EMPTY_NODE_OFFSETS: Readonly<Record<string, NodeOffset>> = Object.freeze({});
 
+// React Flow v13 sets inline `pointer-events: none` on `.react-flow__node` wrappers
+// whenever `draggable`, `selectable`, and all node pointer handlers are falsy.
+// Passing this stable no-op restores `pointer-events: all` for inner card controls
+// (entity chips, toggles, hover tracing, raw text selection) while keeping cards
+// non-draggable and non-selectable.
+const NOOP_NODE_CLICK = () => {};
+
 interface ZoomControlsBarProps {
   showMiniMap: boolean;
   onToggleMiniMap: () => void;
@@ -95,7 +102,7 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
         type="button"
         onClick={() => void zoomOut({duration: 180})}
         aria-label={UI_LABELS.graph.zoomOutAria}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
+        className="auteur-graph-touch-icon inline-flex h-6 w-6 items-center justify-center rounded-md text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
@@ -108,7 +115,7 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
         type="button"
         onClick={() => void zoomIn({duration: 180})}
         aria-label={UI_LABELS.graph.zoomInAria}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
+        className="auteur-graph-touch-icon inline-flex h-6 w-6 items-center justify-center rounded-md text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -119,7 +126,7 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
         type="button"
         onClick={onFitView}
         title={UI_LABELS.graph.zoomFitTitle}
-        className="rounded-md px-2 py-0.5 text-xs font-medium text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer whitespace-nowrap"
+        className="auteur-graph-touch-chip rounded-md px-2 py-0.5 text-xs font-medium text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer whitespace-nowrap"
       >
         {UI_LABELS.graph.zoomFit}
       </button>
@@ -129,7 +136,7 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
         onClick={onToggleMiniMap}
         title={UI_LABELS.graph.miniMapToggleTitle}
         aria-pressed={showMiniMap}
-        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+        className={`auteur-graph-touch-chip inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
           showMiniMap
             ? 'bg-surface-muted text-text-main'
             : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -148,7 +155,7 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
           aria-label={UI_LABELS.graph.helpButtonAria}
           title={UI_LABELS.graph.helpButtonTitle}
           aria-expanded={isHelpOpen}
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors cursor-pointer ${
+          className={`auteur-graph-touch-icon inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors cursor-pointer ${
             isHelpOpen
               ? 'bg-surface-muted text-text-main'
               : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -204,7 +211,9 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [hoveredObjectId, setHoveredObjectId] = useState<string | null>(null);
   const [showAllLinks, setShowAllLinks] = useState<boolean>(false);
-  const [showMiniMap, setShowMiniMap] = useState<boolean>(true);
+  const [showMiniMap, setShowMiniMap] = useState<boolean>(() =>
+    typeof window === 'undefined' ? true : window.innerWidth >= 1024
+  );
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
 
   const pendingFitRef = useRef<boolean>(true);
@@ -372,10 +381,15 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     };
   }, [flowNodes.length, reactFlow, direction, scriptSessionKey]);
 
-  // Apply React Flow v13 changes (dimensions) to controlled node state and capture real DOM
-  // heights (for Source/Staging/MacroState/SubState overlap immunity).
+  // Apply React Flow v13 changes (dimensions only; ignore any position changes so cards remain locked)
+  // and capture real DOM heights (for Source/Staging/MacroState/SubState overlap immunity).
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
-    setFlowNodes((prev) => changes.applyTo(prev));
+    for (const posChange of changes.getByType('position')) {
+      changes.remove(posChange);
+    }
+    if (!changes.isEmpty()) {
+      setFlowNodes((prev) => changes.applyTo(prev));
+    }
 
     const heightUpdates: Array<{id: string; height: number}> = [];
 
@@ -615,7 +629,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   return (
     <div
       aria-label={UI_LABELS.graph.canvasAria}
-      className="auteur-graph-canvas relative isolate z-0 h-full w-full overflow-hidden bg-app select-none"
+      className="auteur-graph-canvas relative isolate z-0 h-full w-full overflow-hidden bg-app select-none touch-none overscroll-none"
     >
       {isEmpty ? (
         <div className="flex h-full w-full items-center justify-center p-8">
@@ -636,6 +650,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             onNodesChange={handleNodesChange}
+            onNodeClick={NOOP_NODE_CLICK}
             onPaneClick={() => setSelectedObjectId(null)}
             nodesDraggable={false}
             nodesConnectable={false}
@@ -644,6 +659,11 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
             zIndexMode="manual"
             selectionOnDrag={false}
             panOnDrag={true}
+            zoomOnScroll={true}
+            panOnScroll={false}
+            zoomOnPinch={true}
+            zoomOnDoubleClick={false}
+            paneDragThreshold={4}
             minZoom={0.18}
             maxZoom={2.0}
             proOptions={{hideAttribution: true}}

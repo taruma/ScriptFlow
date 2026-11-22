@@ -56,8 +56,12 @@ export const InferredObjectNode = memo(function InferredObjectNode({data}: NodeP
             e.stopPropagation();
             onSelectObject(object.id);
           }}
-          onMouseEnter={() => onHoverObject(object.id)}
-          onMouseLeave={() => onHoverObject(null)}
+          onPointerEnter={(e) => {
+            if (e.pointerType === 'mouse') onHoverObject(object.id);
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === 'mouse') onHoverObject(null);
+          }}
           className={`w-full text-left rounded-xl border bg-surface px-3 py-2 shadow-2xs flex items-center justify-between gap-2 cursor-pointer transition-[transform,opacity,box-shadow,border-color] duration-150 hover:-translate-y-px ${
             isTraced
               ? 'auteur-graph-traced border-[var(--tok-continuity)]'

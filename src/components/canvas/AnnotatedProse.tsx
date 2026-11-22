@@ -42,8 +42,12 @@ export const AnnotatedProse = memo(function AnnotatedProse({
               e.stopPropagation();
               onSelectObject(objectId);
             }}
-            onMouseEnter={() => onHoverObject(objectId)}
-            onMouseLeave={() => onHoverObject(null)}
+            onPointerEnter={(e) => {
+              if (e.pointerType === 'mouse') onHoverObject(objectId);
+            }}
+            onPointerLeave={(e) => {
+              if (e.pointerType === 'mouse') onHoverObject(null);
+            }}
             style={{
               color: colorVar,
               backgroundColor: `color-mix(in srgb, ${colorVar} 12%, transparent)`,
@@ -52,7 +56,7 @@ export const AnnotatedProse = memo(function AnnotatedProse({
                 : `1px solid color-mix(in srgb, ${colorVar} 44%, transparent)`,
               boxShadow: isActive ? `0 0 0 1.5px ${colorVar}` : undefined,
             }}
-            className={`nodrag nopan inline rounded px-1 py-0 font-semibold transition-shadow cursor-pointer align-baseline ${
+            className={`inline rounded px-1 py-0 font-semibold transition-shadow cursor-pointer align-baseline ${
               useMono ? 'font-mono text-[0.92em]' : ''
             }`}
           >

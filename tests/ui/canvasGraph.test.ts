@@ -1114,4 +1114,22 @@ Featuring @img1 as Detective.
       })
     ).toBe(true);
   });
+
+  it('defaults all merged flow nodes to non-draggable and non-selectable so cards stay locked for pan-anywhere navigation', () => {
+    const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
+    const layout = buildCanvasLayout(
+      oner,
+      makeLayoutOptions({
+        direction: 'LR',
+        expandedIds: new Set(['S1']),
+        rawOpenIds: new Set(['S1']),
+      })
+    );
+    const merged = mergeLayoutIntoFlowNodes<FlowNodeLike>([], layout.nodes, {});
+
+    expect(merged.nodes.length).toBeGreaterThan(0);
+    expect(merged.nodes.every((n) => n.draggable === false)).toBe(true);
+    expect(merged.nodes.every((n) => n.selectable === false)).toBe(true);
+  });
 });
+

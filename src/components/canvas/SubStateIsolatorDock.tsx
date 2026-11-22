@@ -54,7 +54,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
 
   return (
     <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5 max-w-[calc(100%-24px)]">
-      {/* Upper Row: Slim Icon-Only Canvas View Pill + Detached Right Reset Satellite (0px shift) */}
+      {/* Upper Row: Slim Icon-Only Canvas View Pill (Reset always visible, subtly emphasized when modified) */}
       <div className="relative flex items-center justify-center">
         <div
           role="toolbar"
@@ -72,7 +72,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
               title={UI_LABELS.graph.directionLRTitle}
               aria-label={UI_LABELS.graph.directionLRTitle}
               aria-pressed={direction === 'LR'}
-              className={`px-2 py-0.5 rounded-md text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`auteur-graph-touch-chip px-2 py-0.5 rounded-md text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 direction === 'LR'
                   ? 'bg-surface font-semibold text-text-main shadow-2xs'
                   : 'font-medium text-text-muted hover:text-text-main'
@@ -86,7 +86,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
               title={UI_LABELS.graph.directionTBTitle}
               aria-label={UI_LABELS.graph.directionTBTitle}
               aria-pressed={direction === 'TB'}
-              className={`px-2 py-0.5 rounded-md text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`auteur-graph-touch-chip px-2 py-0.5 rounded-md text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 direction === 'TB'
                   ? 'bg-surface font-semibold text-text-main shadow-2xs'
                   : 'font-medium text-text-muted hover:text-text-main'
@@ -119,7 +119,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                       }
                     : undefined
                 }
-                className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
+                className={`auteur-graph-touch-icon inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
                   allExpanded
                     ? ''
                     : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -147,7 +147,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                       }
                     : undefined
                 }
-                className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
+                className={`auteur-graph-touch-icon inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
                   allRawOpen
                     ? ''
                     : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -172,7 +172,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                   }
                 : undefined
             }
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
+            className={`auteur-graph-touch-icon inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
               showAllLinks
                 ? ''
                 : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -188,7 +188,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
             onClick={onResetLayout}
             title={UI_LABELS.graph.resetLayoutTitle}
             aria-label={UI_LABELS.graph.resetLayoutTitle}
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
+            className={`auteur-graph-touch-icon inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
               isModified
                 ? 'bg-surface-muted/80 text-text-main hover:bg-surface-hover'
                 : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -199,9 +199,9 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
         </div>
       </div>
 
-      {/* Lower Row: Sub-State Dimension Isolator Base Pill + Detached Ghost|Compact Satellite (0px shift) */}
+      {/* Lower Row: Sub-State Dimension Isolator Base Pill + Ghost|Compact Satellite (0px shift on desktop & tablet) */}
       {showIsolatorSection && (
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex flex-col-reverse lg:flex-row items-center justify-center gap-1.5 lg:gap-0">
           <div
             role="group"
             aria-label={UI_LABELS.graph.isolatorGroupAria}
@@ -211,7 +211,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
               type="button"
               onClick={onClearIsolation}
               aria-pressed={isAllActive}
-              className={`rounded-lg border px-2.5 py-1 text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`auteur-graph-touch-chip rounded-lg border px-2.5 py-1 text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 isAllActive
                   ? 'border-border-main bg-surface-muted font-semibold text-text-main shadow-2xs'
                   : 'border-transparent bg-transparent font-medium text-text-muted hover:bg-surface-hover hover:text-text-main'
@@ -239,7 +239,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                         }
                       : undefined
                   }
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`auteur-graph-touch-chip inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     isActive
                       ? 'shadow-2xs'
                       : 'border-transparent bg-transparent text-text-body hover:bg-surface-hover hover:text-text-main'
@@ -258,9 +258,9 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
             })}
           </div>
 
-          {/* Progressive Disclosure Satellite: Ghost | Compact floats outside flow so Dimension chips never shift */}
+          {/* Progressive Disclosure Satellite: docks above Filter on tablets (< lg) to avoid ZoomControlsBar collision, floats outside flow on desktop (>= lg) */}
           {!isAllActive && (
-            <div className="pointer-events-auto absolute left-full ml-1.5 top-1/2 -translate-y-1/2 flex items-center rounded-xl border border-border-main bg-surface/95 backdrop-blur p-1 shadow-md">
+            <div className="pointer-events-auto lg:absolute lg:left-full lg:ml-1.5 lg:top-1/2 lg:-translate-y-1/2 flex items-center rounded-xl border border-border-main bg-surface/95 backdrop-blur p-1 shadow-md">
               <div
                 role="group"
                 aria-label={UI_LABELS.graph.isolationModeGroupAria}
@@ -271,7 +271,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                   onClick={() => onIsolationModeChange('ghost')}
                   title={UI_LABELS.graph.isolationGhostTitle}
                   aria-pressed={isolationMode === 'ghost'}
-                  className={`rounded-md px-2 py-0.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`auteur-graph-touch-chip rounded-md px-2 py-0.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     isolationMode === 'ghost'
                       ? 'bg-surface font-semibold text-text-main shadow-2xs'
                       : 'font-medium text-text-muted hover:text-text-main'
@@ -284,7 +284,7 @@ export const SubStateIsolatorDock = memo(function SubStateIsolatorDock({
                   onClick={() => onIsolationModeChange('compact')}
                   title={UI_LABELS.graph.isolationCompactTitle}
                   aria-pressed={isolationMode === 'compact'}
-                  className={`rounded-md px-2 py-0.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`auteur-graph-touch-chip rounded-md px-2 py-0.5 text-[11px] transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     isolationMode === 'compact'
                       ? 'bg-surface font-semibold text-text-main shadow-2xs'
                       : 'font-medium text-text-muted hover:text-text-main'

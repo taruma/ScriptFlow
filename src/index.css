@@ -791,6 +791,9 @@
 .auteur-graph-canvas .react-flow__pane.dragging .react-flow__node {
   cursor: grabbing;
 }
+.auteur-graph-canvas .select-text {
+  cursor: text;
+}
 .auteur-graph-canvas .react-flow__selection {
   background: color-mix(in srgb, var(--tok-continuity) 12%, transparent);
   border: 1px dashed var(--tok-continuity);
@@ -810,6 +813,25 @@
   border: 0;
 }
 
+/* Comfortable touch hit targets on tablets & touchscreens (zero visual impact on desktop mouse) */
+@media (pointer: coarse) {
+  .auteur-graph-touch-icon {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .auteur-graph-touch-chip {
+    min-height: 36px;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+  .auteur-graph-touch-card-btn {
+    min-height: 32px;
+    min-width: 32px;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
 /* Gliding pulse dot along active isolated Dimension Threads & single-object traces
    (native SVG <animateMotion>; automatically hidden when reduced motion is requested) */
 @media (prefers-reduced-motion: reduce) {
@@ -817,4 +839,5 @@
     display: none;
   }
 }
+
 

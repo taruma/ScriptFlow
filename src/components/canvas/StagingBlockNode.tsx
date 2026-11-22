@@ -119,7 +119,7 @@ export const StagingBlockNode = memo(function StagingBlockNode({data}: NodeProps
                     }
                   : undefined
               }
-              className={`nodrag nopan inline-flex items-center justify-center rounded-md border px-1.5 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`auteur-graph-touch-card-btn inline-flex items-center justify-center rounded-md border px-1.5 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 isRawOpen
                   ? ''
                   : 'border-border-main bg-surface text-text-muted hover:text-text-main hover:bg-surface-hover'
@@ -141,7 +141,7 @@ export const StagingBlockNode = memo(function StagingBlockNode({data}: NodeProps
                     : UI_LABELS.graph.aestheticExpandTitle(block.name)
                 }
                 aria-expanded={isExpanded}
-                className="nodrag nopan inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className="auteur-graph-touch-card-btn inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 {isExpanded ? (
                   <Minimize2 className="h-3 w-3" aria-hidden="true" />
