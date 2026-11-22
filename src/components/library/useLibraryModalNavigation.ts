@@ -14,6 +14,7 @@ import {
   countExecutionBeatsFast,
   LIBRARY_PAGE_SIZE,
   paginateLibraryRows,
+  resolveScriptLineage,
   stepLibrarySelectionIndex,
   type ActiveScriptRef,
   type LibraryFacets,
@@ -52,6 +53,9 @@ export interface UseLibraryModalNavigationResult {
   clearFacetFilters: () => void;
   selectedKey: string | null;
   setSelectedKey: (key: string | null) => void;
+  expandedRootIds: ReadonlySet<string>;
+  toggleExpandFamily: (rootId: string) => void;
+  ensureFamilyExpanded: (scriptId: string) => void;
   isBulkMode: boolean;
   toggleBulkMode: () => void;
   exitBulkMode: () => void;
@@ -113,6 +117,32 @@ export function useLibraryModalNavigation({
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const shouldScrollSelectedIntoViewRef = useRef<boolean>(false);
 
+  const lineageIndex = useMemo(
+    () => resolveScriptLineage(customScripts, examples),
+    [customScripts, examples]
+  );
+
+  const [expandedRootIds, setExpandedRootIds] = useState<ReadonlySet<string>>(() => {
+    if (activeScript.kind === 'custom') {
+      const rootId = lineageIndex.nodeById.get(activeScript.id)?.rootId;
+      if (rootId) return new Set([rootId]);
+    }
+    return new Set();
+  });
+
+  // Auto-expand the family containing the currently active custom script
+  useEffect(() => {
+    if (activeScript.kind !== 'custom') return;
+    const rootId = lineageIndex.nodeById.get(activeScript.id)?.rootId;
+    if (!rootId) return;
+    setExpandedRootIds((prev) => {
+      if (prev.has(rootId)) return prev;
+      const next = new Set(prev);
+      next.add(rootId);
+      return next;
+    });
+  }, [activeScript.kind, activeScript.id, lineageIndex]);
+
   const facets = useMemo(() => collectLibraryFacets(customScripts), [customScripts]);
 
   // Clear stale folder/tag filters if the last script with that facet was removed or edited
@@ -134,8 +164,20 @@ export function useLibraryModalNavigation({
         sortBy,
         folder: activeFolder,
         tag: activeTag,
+        expandedRootIds,
+        activeScriptId: activeScript.id,
       }),
-    [customScripts, examples, filterTab, query, sortBy, activeFolder, activeTag]
+    [
+      customScripts,
+      examples,
+      filterTab,
+      query,
+      sortBy,
+      activeFolder,
+      activeTag,
+      expandedRootIds,
+      activeScript.id,
+    ]
   );
 
   const paginated = useMemo(
@@ -244,6 +286,29 @@ export function useLibraryModalNavigation({
   const handleShowMore = useCallback(() => {
     setVisibleLimit((prev) => prev + LIBRARY_PAGE_SIZE);
   }, []);
+
+  const toggleExpandFamily = useCallback((rootId: string) => {
+    setExpandedRootIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rootId)) next.delete(rootId);
+      else next.add(rootId);
+      return next;
+    });
+  }, []);
+
+  const ensureFamilyExpanded = useCallback(
+    (scriptId: string) => {
+      const rootId = lineageIndex.nodeById.get(scriptId)?.rootId;
+      if (!rootId) return;
+      setExpandedRootIds((prev) => {
+        if (prev.has(rootId)) return prev;
+        const next = new Set(prev);
+        next.add(rootId);
+        return next;
+      });
+    },
+    [lineageIndex]
+  );
 
   const registerRowRef = useCallback((index: number, el: HTMLDivElement | null) => {
     if (el) rowRefs.current.set(index, el);
@@ -383,6 +448,9 @@ export function useLibraryModalNavigation({
     clearFacetFilters,
     selectedKey,
     setSelectedKey,
+    expandedRootIds,
+    toggleExpandFamily,
+    ensureFamilyExpanded,
     isBulkMode,
     toggleBulkMode,
     exitBulkMode,

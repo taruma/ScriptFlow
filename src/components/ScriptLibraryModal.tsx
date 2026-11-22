@@ -30,7 +30,7 @@ export interface ScriptLibraryModalProps {
   onTogglePinScript: (record: ScriptRecord) => void;
   onUpdateScriptMetadata: (
     record: ScriptRecord,
-    patch: {folder?: string | null; tags?: string[]}
+    patch: {folder?: string | null; tags?: string[]; branchNote?: string | null}
   ) => void;
   onExportScriptTxt: (record: ScriptRecord) => void;
   onBulkExportScripts: (records: readonly ScriptRecord[]) => void;
@@ -208,6 +208,7 @@ function ScriptLibraryModalContent({
               filterTab={nav.filterTab}
               registerRowRef={nav.registerRowRef}
               onSelectKey={nav.setSelectedKey}
+              onToggleExpandFamily={nav.toggleExpandFamily}
               onToggleCheckedId={nav.toggleCheckedId}
               onOpenRow={nav.handleOpenRow}
               onShowMore={nav.handleShowMore}
@@ -239,7 +240,24 @@ function ScriptLibraryModalContent({
               readOnly={readOnly}
               openedAt={nav.openedAt}
               existingFolders={nav.facets.folders}
+              customScripts={customScripts}
+              examples={examples}
+              activeScript={activeScript}
               onOpen={nav.handleOpenRow}
+              onOpenCustomScript={(record) => {
+                onOpenCustomScript(record);
+                onClose();
+              }}
+              onOpenExample={(example) => {
+                onOpenExample(example);
+                onClose();
+              }}
+              onSelectRowKey={(rowKey, expandCustomId) => {
+                if (expandCustomId) {
+                  nav.ensureFamilyExpanded(expandCustomId);
+                }
+                nav.setSelectedKey(rowKey);
+              }}
               onForkExample={nav.handleForkAndClose}
               onTogglePin={onTogglePinScript}
               onRename={onRenameScript}

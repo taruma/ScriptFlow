@@ -25,6 +25,7 @@ import {createScriptId, scriptLibraryDb, type ScriptRecord} from './scriptLibrar
 import {
   buildDuplicatedScriptRecord,
   createCopyTitle,
+  repairLineageOnDelete,
   type ActiveScriptRef,
 } from './scriptLibraryView.ts';
 import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
@@ -89,14 +90,22 @@ export interface UseScriptLibraryResult {
   handleRestoreSnapshot: (snapshot: ScriptSnapshot) => Promise<boolean>;
   handleForkSnapshotAsNewScript: (snapshot: ScriptSnapshot) => Promise<ScriptRecord | null>;
   handleNewBlank: () => Promise<void>;
-  handleDuplicateScript: (record: ScriptRecord) => Promise<void>;
-  handleDuplicateActiveScript: () => Promise<void>;
+  handleDuplicateScript: (
+    record: ScriptRecord,
+    options?: {title?: string; branchNote?: string; suffix?: string; activate?: boolean}
+  ) => Promise<ScriptRecord>;
+  handleDuplicateActiveScript: (options?: {
+    title?: string;
+    branchNote?: string;
+    suffix?: string;
+  }) => Promise<ScriptRecord | null>;
   handleRenameScript: (record: ScriptRecord, nextTitle: string) => Promise<void>;
   handleTogglePinScript: (record: ScriptRecord) => Promise<void>;
   handleUpdateScriptMetadata: (
     record: ScriptRecord,
-    patch: {folder?: string | null; tags?: string[]}
+    patch: {folder?: string | null; tags?: string[]; branchNote?: string | null}
   ) => Promise<void>;
+  handleUpdateActiveBranchNote: (nextBranchNote: string) => Promise<void>;
   handleExportScriptTxt: (record: ScriptRecord) => Promise<void>;
   handleBulkExportScripts: (records: readonly ScriptRecord[]) => Promise<void>;
   handleRequestDeleteScript: (record: ScriptRecord) => void;
@@ -413,7 +422,10 @@ export function useScriptLibrary({
   }, [persistCurrentCustomIfDirty, activateCustomScript, onToast]);
 
   const handleDuplicateScript = useCallback(
-    async (record: ScriptRecord) => {
+    async (
+      record: ScriptRecord,
+      options?: {title?: string; branchNote?: string; suffix?: string; activate?: boolean}
+    ): Promise<ScriptRecord> => {
       await persistCurrentCustomIfDirty();
       const source = (await scriptLibraryDb.get(record.id)) ?? record;
       const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
@@ -426,44 +438,63 @@ export function useScriptLibrary({
         now: Date.now(),
         folder: source.folder,
         tags: source.tags,
+        branchNote: options?.branchNote,
+        explicitTitle: options?.title,
+        suffix: options?.suffix ?? 'Branch',
       });
       const saved = await scriptLibraryDb.put(duplicated);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
-      onToast(UI_LABELS.toasts.duplicatedScript(saved.title));
+      if (options?.activate) {
+        activateCustomScript(saved);
+      }
+      onToast(UI_LABELS.toasts.branchedScript(saved.title));
+      return saved;
     },
-    [persistCurrentCustomIfDirty, onToast]
+    [persistCurrentCustomIfDirty, activateCustomScript, onToast]
   );
 
-  const handleDuplicateActiveScript = useCallback(async () => {
-    await persistCurrentCustomIfDirty();
-    const current = activeScriptRef.current;
-    const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
-    const currentCustom =
-      current.kind === 'custom'
-        ? customScriptsRef.current.find((item) => item.id === current.id)
-        : undefined;
-    const currentExample =
-      current.kind === 'example'
-        ? (getBundledExampleById(current.id) ?? DEFAULT_PRESET)
-        : undefined;
+  const handleDuplicateActiveScript = useCallback(
+    async (options?: {
+      title?: string;
+      branchNote?: string;
+      suffix?: string;
+    }): Promise<ScriptRecord | null> => {
+      await persistCurrentCustomIfDirty();
+      const current = activeScriptRef.current;
+      const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
+      const currentCustom =
+        current.kind === 'custom'
+          ? customScriptsRef.current.find((item) => item.id === current.id)
+          : undefined;
+      const currentExample =
+        current.kind === 'example'
+          ? (getBundledExampleById(current.id) ?? DEFAULT_PRESET)
+          : undefined;
 
-    const duplicated = buildDuplicatedScriptRecord({
-      id: createScriptId('script'),
-      sourceId: current.id,
-      sourceTitle:
-        currentCustom?.title ??
-        (sceneTitleRef.current.trim() || currentExample?.title || APP_META.untitledScene),
-      rawText: current.kind === 'example' ? (currentExample?.content ?? rawTextRef.current) : rawTextRef.current,
-      existingTitles,
-      now: Date.now(),
-      folder: currentCustom?.folder,
-      tags: currentCustom?.tags,
-    });
-    const saved = await scriptLibraryDb.put(duplicated);
-    setCustomScripts((prev) => upsertSortedScript(prev, saved));
-    activateCustomScript(saved);
-    onToast(UI_LABELS.toasts.duplicatedScript(saved.title));
-  }, [persistCurrentCustomIfDirty, activateCustomScript, onToast]);
+      const duplicated = buildDuplicatedScriptRecord({
+        id: createScriptId('script'),
+        sourceId: current.id,
+        sourceTitle:
+          currentCustom?.title ??
+          (sceneTitleRef.current.trim() || currentExample?.title || APP_META.untitledScene),
+        rawText:
+          current.kind === 'example' ? (currentExample?.content ?? rawTextRef.current) : rawTextRef.current,
+        existingTitles,
+        now: Date.now(),
+        folder: currentCustom?.folder,
+        tags: currentCustom?.tags,
+        branchNote: options?.branchNote,
+        explicitTitle: options?.title,
+        suffix: options?.suffix ?? 'Branch',
+      });
+      const saved = await scriptLibraryDb.put(duplicated);
+      setCustomScripts((prev) => upsertSortedScript(prev, saved));
+      activateCustomScript(saved);
+      onToast(UI_LABELS.toasts.branchedScript(saved.title));
+      return saved;
+    },
+    [persistCurrentCustomIfDirty, activateCustomScript, onToast]
+  );
 
   const handleRenameScript = useCallback(
     async (record: ScriptRecord, nextTitle: string) => {
@@ -517,21 +548,42 @@ export function useScriptLibrary({
   }, []);
 
   const handleUpdateScriptMetadata = useCallback(
-    async (record: ScriptRecord, patch: {folder?: string | null; tags?: string[]}) => {
+    async (
+      record: ScriptRecord,
+      patch: {folder?: string | null; tags?: string[]; branchNote?: string | null}
+    ) => {
       const latest = customScriptsRef.current.find((item) => item.id === record.id) ?? record;
       const nextFolder =
         patch.folder !== undefined ? (patch.folder?.trim() || undefined) : latest.folder;
       const nextTags = patch.tags !== undefined ? patch.tags : latest.tags;
+      const nextBranchNote =
+        patch.branchNote !== undefined
+          ? (patch.branchNote?.trim().replace(/\s+/g, ' ').slice(0, 160) || undefined)
+          : latest.branchNote;
 
       const updated: ScriptRecord = {
         ...latest,
         folder: nextFolder,
         tags: nextTags,
+        branchNote: nextBranchNote,
       };
       const saved = await scriptLibraryDb.put(updated);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
     },
     []
+  );
+
+  const handleUpdateActiveBranchNote = useCallback(
+    async (nextBranchNote: string) => {
+      const current = activeScriptRef.current;
+      if (current.kind !== 'custom') return;
+      const latest =
+        customScriptsRef.current.find((item) => item.id === current.id) ??
+        (await scriptLibraryDb.get(current.id));
+      if (!latest) return;
+      await handleUpdateScriptMetadata(latest, {branchNote: nextBranchNote});
+    },
+    [handleUpdateScriptMetadata]
   );
 
   const handleRequestBulkDeleteScripts = useCallback(
@@ -555,8 +607,16 @@ export function useScriptLibrary({
               cancelPendingSave();
             }
 
+            const previousScripts = customScriptsRef.current;
             await scriptLibraryDb.bulkDelete(ids);
-            const remaining = customScriptsRef.current.filter((item) => !idSet.has(item.id));
+            let remaining = previousScripts.filter((item) => !idSet.has(item.id));
+            const repaired = repairLineageOnDelete(remaining, idSet, previousScripts);
+            if (repaired.length > 0) {
+              const savedRepaired = await scriptLibraryDb.bulkPut(repaired);
+              const repairedById = new Map(savedRepaired.map((item) => [item.id, item]));
+              remaining = remaining.map((item) => repairedById.get(item.id) ?? item);
+            }
+
             setCustomScripts(remaining);
             customScriptsRef.current = remaining;
 
@@ -595,8 +655,17 @@ export function useScriptLibrary({
               cancelPendingSave();
             }
 
+            const previousScripts = customScriptsRef.current;
+            const deletedIdSet = new Set([record.id]);
             await scriptLibraryDb.delete(record.id);
-            const remaining = customScriptsRef.current.filter((item) => item.id !== record.id);
+            let remaining = previousScripts.filter((item) => item.id !== record.id);
+            const repaired = repairLineageOnDelete(remaining, deletedIdSet, previousScripts);
+            if (repaired.length > 0) {
+              const savedRepaired = await scriptLibraryDb.bulkPut(repaired);
+              const repairedById = new Map(savedRepaired.map((item) => [item.id, item]));
+              remaining = remaining.map((item) => repairedById.get(item.id) ?? item);
+            }
+
             setCustomScripts(remaining);
             customScriptsRef.current = remaining;
 
@@ -683,6 +752,7 @@ export function useScriptLibrary({
     handleRenameScript,
     handleTogglePinScript,
     handleUpdateScriptMetadata,
+    handleUpdateActiveBranchNote,
     handleExportScriptTxt,
     handleBulkExportScripts,
     handleRequestDeleteScript,

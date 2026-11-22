@@ -140,6 +140,7 @@ export function useLibrarySnapshots({
         createdAt: now,
         updatedAt: now,
         forkedFromId: snapshot.scriptId,
+        branchNote: UI_LABELS.versionHistory.branchedFromSnapshotNote(snapshot.label),
       };
       const saved = await scriptLibraryDb.put(forked);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));

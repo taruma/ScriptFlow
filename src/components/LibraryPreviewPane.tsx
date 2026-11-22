@@ -10,11 +10,11 @@ import {
   BookOpen,
   Check,
   Code2,
-  CopyPlus,
   Download,
   Eye,
   Folder,
   GitFork,
+  MessageSquareText,
   Pencil,
   Pin,
   PinOff,
@@ -28,9 +28,12 @@ import type {ScriptRecord} from '../ui/scriptLibraryDb.ts';
 import {
   extractLibraryScriptPreview,
   formatRelativeUpdatedTime,
+  getScriptFamilyTree,
+  type ActiveScriptRef,
   type LibraryRowItem,
 } from '../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {ScriptLineageTree} from './library/ScriptLineageTree.tsx';
 
 export interface LibraryPreviewPaneProps {
   row: LibraryRowItem | null;
@@ -38,20 +41,26 @@ export interface LibraryPreviewPaneProps {
   readOnly?: boolean;
   openedAt: number;
   existingFolders: readonly string[];
+  customScripts: readonly ScriptRecord[];
+  examples: readonly BundledExample[];
+  activeScript: ActiveScriptRef;
   onOpen: (row: LibraryRowItem) => void;
+  onOpenCustomScript: (record: ScriptRecord) => void;
+  onOpenExample: (example: BundledExample) => void;
+  onSelectRowKey: (rowKey: string, expandCustomId?: string) => void;
   onForkExample: (example: BundledExample) => void;
   onTogglePin: (record: ScriptRecord) => void;
   onRename: (record: ScriptRecord, nextTitle: string) => void;
   onUpdateMetadata: (
     record: ScriptRecord,
-    patch: {folder?: string | null; tags?: string[]}
+    patch: {folder?: string | null; tags?: string[]; branchNote?: string | null}
   ) => void;
   onDuplicate: (record: ScriptRecord) => void;
   onExportTxt: (record: ScriptRecord) => void;
   onRequestDelete: (record: ScriptRecord) => void;
 }
 
-type PreviewMode = 'structured' | 'source';
+type PreviewMode = 'structured' | 'source' | 'lineage';
 
 export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   row,
@@ -59,7 +68,13 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   readOnly = false,
   openedAt,
   existingFolders,
+  customScripts,
+  examples,
+  activeScript,
   onOpen,
+  onOpenCustomScript,
+  onOpenExample,
+  onSelectRowKey,
   onForkExample,
   onTogglePin,
   onRename,
@@ -72,12 +87,26 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
   const [renameDraft, setRenameDraft] = useState<string>('');
   const [folderDraft, setFolderDraft] = useState<string>('');
+  const [branchNoteDraft, setBranchNoteDraft] = useState<string>('');
   const [tagDraft, setTagDraft] = useState<string>('');
 
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
   const rowKey = row ? `${row.kind}:${row.id}` : null;
   const rowFolder = row?.kind === 'custom' ? (row.folder ?? '') : '';
+  const rowBranchNote = row?.kind === 'custom' ? (row.branchNote ?? '') : '';
+
+  const familyTree = useMemo(
+    () => (row ? getScriptFamilyTree(row.id, customScripts, examples) : null),
+    [row, customScripts, examples]
+  );
+
+  const hasLineageTab = Boolean(
+    familyTree &&
+      ((familyTree.kind === 'custom' &&
+        (familyTree.totalMembers > 1 || familyTree.originExample !== null)) ||
+        (familyTree.kind === 'example' && familyTree.nodes.length > 0))
+  );
 
   // Reset transient drafts and scroll position whenever the selected script changes
   useEffect(() => {
@@ -89,8 +118,18 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   }, [rowKey]);
 
   useEffect(() => {
+    if (previewMode === 'lineage' && !hasLineageTab) {
+      setPreviewMode('structured');
+    }
+  }, [previewMode, hasLineageTab]);
+
+  useEffect(() => {
     setFolderDraft(rowFolder);
   }, [rowKey, rowFolder]);
+
+  useEffect(() => {
+    setBranchNoteDraft(rowBranchNote);
+  }, [rowKey, rowBranchNote]);
 
   useEffect(() => {
     if (!isRenaming) return;
@@ -164,6 +203,30 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
     }
   };
 
+  const commitBranchNote = () => {
+    if (!isCustom) return;
+    const cleaned = branchNoteDraft.trim().replace(/\s+/g, ' ').slice(0, 160);
+    const current = row.branchNote ?? '';
+    setBranchNoteDraft(cleaned);
+    if (cleaned !== current) {
+      onUpdateMetadata(row.record, {branchNote: cleaned || null});
+    }
+  };
+
+  const handleBranchNoteKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      commitBranchNote();
+      event.currentTarget.blur();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setBranchNoteDraft(rowBranchNote);
+      event.currentTarget.blur();
+    }
+  };
+
   const commitTag = () => {
     if (!isCustom) return;
     const cleaned = tagDraft.trim().replace(/^#+/, '').replace(/\s+/g, ' ').toLowerCase();
@@ -195,7 +258,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   return (
     <div className="flex flex-1 min-h-0 flex-col bg-app/35">
       {/* Editorial Header */}
-      <div className="px-5 py-4 border-b border-border-subtle bg-surface shrink-0 space-y-3">
+      <div className="px-5 py-4 border-b border-border-subtle bg-surface shrink-0 space-y-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {isCustom && !readOnly && isRenaming ? (
@@ -281,6 +344,43 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                   </span>
                   <span aria-hidden="true">·</span>
                   <span>{formatRelativeUpdatedTime(row.updatedAt, openedAt)}</span>
+                  {familyTree?.parentRecord && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSelectRowKey(
+                            `custom:${familyTree.parentRecord!.id}`,
+                            familyTree.parentRecord!.id
+                          )
+                        }
+                        title={UI_LABELS.library.jumpToParentTitle(familyTree.parentRecord.title)}
+                        className="inline-flex items-center gap-1 rounded border border-border-subtle bg-surface-subtle px-1.5 py-px text-[10px] font-sans text-text-muted hover:text-text-main hover:border-border-main transition-colors cursor-pointer max-w-[190px]"
+                      >
+                        <GitFork className="h-2.5 w-2.5 text-sky-500 shrink-0" />
+                        <span className="truncate">
+                          {UI_LABELS.library.parentBreadcrumbPrefix} {familyTree.parentRecord.title}
+                        </span>
+                      </button>
+                    </>
+                  )}
+                  {!familyTree?.parentRecord && familyTree?.originExample && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <button
+                        type="button"
+                        onClick={() => onSelectRowKey(`example:${familyTree.originExample!.id}`)}
+                        title={UI_LABELS.library.jumpToParentTitle(familyTree.originExample.title)}
+                        className="inline-flex items-center gap-1 rounded border border-border-subtle bg-surface-subtle px-1.5 py-px text-[10px] font-sans text-text-muted hover:text-text-main hover:border-border-main transition-colors cursor-pointer max-w-[190px]"
+                      >
+                        <BookOpen className="h-2.5 w-2.5 text-text-faint shrink-0" />
+                        <span className="truncate">
+                          {UI_LABELS.library.fromExampleLabel(familyTree.originExample.title)}
+                        </span>
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -350,81 +450,109 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
           </div>
         </div>
 
-        {/* Quiet Folder & Tags Organizer (Custom Scripts Only) */}
+        {/* Quiet Branch Note, Folder & Tags Organizer (Custom Scripts Only) */}
         {isCustom ? (
           readOnly ? (
-            (row.folder || currentTags.length > 0) && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border-subtle/80 text-xs">
-                {row.folder && (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
-                    <Folder className="h-2.5 w-2.5 shrink-0" />
-                    <span>{row.folder}</span>
-                  </span>
+            (row.branchNote || row.folder || currentTags.length > 0) && (
+              <div className="space-y-1.5 pt-2 border-t border-border-subtle/80 text-xs">
+                {row.branchNote && (
+                  <p className="text-[11.5px] text-text-muted">{row.branchNote}</p>
                 )}
-                {currentTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-                  >
-                    #{tag}
-                  </span>
-                ))}
+                {(row.folder || currentTags.length > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {row.folder && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
+                        <Folder className="h-2.5 w-2.5 shrink-0" />
+                        <span>{row.folder}</span>
+                      </span>
+                    )}
+                    {currentTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           ) : (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 border-t border-border-subtle/80 text-xs">
-              <div className="inline-flex items-center gap-1.5 min-w-[140px] max-w-[200px]">
-                <Folder className="h-3 w-3 text-text-faint shrink-0" />
+            <div className="space-y-1.5 pt-2 border-t border-border-subtle/80 text-xs">
+              {/* Branch Intention / Note 1-Line Editor */}
+              <div className="flex items-center gap-1.5">
+                <MessageSquareText className="h-3 w-3 text-text-faint shrink-0" />
                 <input
                   type="text"
-                  list="library-existing-folders"
                   data-native-undo="true"
-                  value={folderDraft}
-                  onChange={(e) => setFolderDraft(e.target.value)}
-                  onBlur={commitFolder}
-                  onKeyDown={handleFolderKeyDown}
-                  placeholder={UI_LABELS.library.folderPlaceholder}
-                  aria-label={UI_LABELS.library.folderInputAria}
+                  value={branchNoteDraft}
+                  onChange={(e) => setBranchNoteDraft(e.target.value)}
+                  onBlur={commitBranchNote}
+                  onKeyDown={handleBranchNoteKeyDown}
+                  placeholder={UI_LABELS.library.branchNotePlaceholder}
+                  aria-label={UI_LABELS.library.branchNoteInputAria}
                   className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
                 />
-                <datalist id="library-existing-folders">
-                  {existingFolders.map((folder) => (
-                    <option key={folder} value={folder} />
-                  ))}
-                </datalist>
               </div>
 
-              <span aria-hidden="true" className="h-3.5 w-px bg-border-main/80 hidden sm:inline-block" />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="inline-flex items-center gap-1.5 min-w-[140px] max-w-[200px]">
+                  <Folder className="h-3 w-3 text-text-faint shrink-0" />
+                  <input
+                    type="text"
+                    list="library-existing-folders"
+                    data-native-undo="true"
+                    value={folderDraft}
+                    onChange={(e) => setFolderDraft(e.target.value)}
+                    onBlur={commitFolder}
+                    onKeyDown={handleFolderKeyDown}
+                    placeholder={UI_LABELS.library.folderPlaceholder}
+                    aria-label={UI_LABELS.library.folderInputAria}
+                    className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
+                  />
+                  <datalist id="library-existing-folders">
+                    {existingFolders.map((folder) => (
+                      <option key={folder} value={folder} />
+                    ))}
+                  </datalist>
+                </div>
 
-              <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-[160px]">
-                <Tag className="h-3 w-3 text-text-faint shrink-0" />
-                {currentTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-                  >
-                    <span>#{tag}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      aria-label={UI_LABELS.library.removeTagAria(tag)}
-                      className="text-text-faint hover:text-text-main cursor-pointer"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  data-native-undo="true"
-                  value={tagDraft}
-                  onChange={(e) => setTagDraft(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  onBlur={commitTag}
-                  placeholder={UI_LABELS.library.tagPlaceholder}
-                  aria-label={UI_LABELS.library.tagInputAria}
-                  className="w-24 min-w-[84px] rounded-md bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:w-36 focus:outline-none focus:ring-1 focus:ring-border-main transition-all"
+                <span
+                  aria-hidden="true"
+                  className="h-3.5 w-px bg-border-main/80 hidden sm:inline-block"
                 />
+
+                <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-[160px]">
+                  <Tag className="h-3 w-3 text-text-faint shrink-0" />
+                  {currentTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+                    >
+                      <span>#{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        aria-label={UI_LABELS.library.removeTagAria(tag)}
+                        className="text-text-faint hover:text-text-main cursor-pointer"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    data-native-undo="true"
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
+                    onBlur={commitTag}
+                    placeholder={UI_LABELS.library.tagPlaceholder}
+                    aria-label={UI_LABELS.library.tagInputAria}
+                    className="w-24 min-w-[84px] rounded-md bg-transparent px-1.5 py-0.5 font-mono text-[10.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:w-36 focus:outline-none focus:ring-1 focus:ring-border-main transition-all"
+                  />
+                </div>
               </div>
             </div>
           )
@@ -435,7 +563,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
         )}
       </div>
 
-      {/* Preview Mode Switcher Strip */}
+      {/* Preview Mode Switcher Strip: [ Preview | Source | Lineage ] */}
       <div className="flex items-center justify-between gap-2 px-5 py-2 border-b border-border-main/80 bg-surface-subtle shrink-0">
         <div className="inline-flex items-center bg-surface-muted p-0.5 rounded-lg border border-border-main">
           <button
@@ -462,6 +590,20 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
             <Code2 className="h-3 w-3" />
             <span>{UI_LABELS.library.previewModeSource}</span>
           </button>
+          {hasLineageTab && (
+            <button
+              type="button"
+              onClick={() => setPreviewMode('lineage')}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                previewMode === 'lineage'
+                  ? 'bg-surface text-text-main shadow-2xs'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
+            >
+              <GitFork className="h-3 w-3 text-sky-500" />
+              <span>{UI_LABELS.library.previewModeLineage}</span>
+            </button>
+          )}
         </div>
 
         {!isCustom && (
@@ -476,7 +618,37 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
         ref={previewScrollRef}
         className="auteur-pane-scroll flex-1 min-h-0 overflow-y-auto px-5 py-4"
       >
-        {previewMode === 'source' ? (
+        {previewMode === 'lineage' && familyTree ? (
+          <div className="space-y-3">
+            <h4 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+              {familyTree.kind === 'example'
+                ? UI_LABELS.library.lineageExampleForksHeading
+                : UI_LABELS.library.lineageHeading}
+            </h4>
+            {familyTree.nodes.length > 0 ? (
+              <ScriptLineageTree
+                nodes={familyTree.nodes}
+                activeScriptId={activeScript.id}
+                selectedNodeId={row.kind === 'custom' ? row.id : null}
+                originExample={familyTree.kind === 'custom' ? familyTree.originExample : null}
+                nowMs={openedAt}
+                compact
+                onSelectNode={(record) => onSelectRowKey(`custom:${record.id}`, record.id)}
+                onActivateNode={(record) => onOpenCustomScript(record)}
+                onSelectOriginExample={(exampleId) => {
+                  const matched = examples.find((ex) => ex.id === exampleId);
+                  if (matched) onOpenExample(matched);
+                }}
+              />
+            ) : (
+              <p className="text-xs italic text-text-faint">
+                {familyTree.kind === 'example'
+                  ? UI_LABELS.library.lineageExampleEmptyNote
+                  : UI_LABELS.library.lineageEmptyNote}
+              </p>
+            )}
+          </div>
+        ) : previewMode === 'source' ? (
           <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-text-body bg-surface rounded-xl border border-border-subtle p-4">
             {row.rawText}
           </pre>
@@ -567,7 +739,7 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
               onClick={() => onDuplicate(row.record)}
               className={UI_TOKENS.button.actionPill}
             >
-              <CopyPlus className="h-3.5 w-3.5 text-text-muted" />
+              <GitFork className="h-3.5 w-3.5 text-sky-500" />
               <span>{UI_LABELS.library.duplicateAction}</span>
             </button>
             <button

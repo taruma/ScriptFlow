@@ -30,6 +30,7 @@ const BackupScriptRecordSchema = z.object({
   createdAt: z.number().finite().nonnegative(),
   updatedAt: z.number().finite().nonnegative(),
   forkedFromId: z.string().trim().min(1).optional(),
+  branchNote: z.string().optional(),
   pinned: z.boolean().optional(),
   folder: z.string().optional(),
   tags: z.array(z.string()).optional(),

@@ -257,6 +257,7 @@ export function useLibraryPersistence({
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       ...(existing?.forkedFromId ? {forkedFromId: existing.forkedFromId} : {}),
+      ...(existing?.branchNote ? {branchNote: existing.branchNote} : {}),
       ...(existing?.pinned ? {pinned: true} : {}),
       ...(existing?.folder ? {folder: existing.folder} : {}),
       ...(existing?.tags && existing.tags.length > 0 ? {tags: existing.tags} : {}),

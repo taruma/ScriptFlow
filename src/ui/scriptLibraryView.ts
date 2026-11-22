@@ -1,6 +1,27 @@
 import {parseAuteurScript, type MacroBlockKind} from '../core/index.ts';
 import type {BundledExample} from '../data/examples/index.ts';
 import type {ScriptRecord} from './scriptLibraryDb.ts';
+import {
+  getScriptFamilyTree,
+  repairLineageOnDelete,
+  resolveScriptLineage,
+  type ScriptFamilyTree,
+  type ScriptLineageFamily,
+  type ScriptLineageIndex,
+  type ScriptLineageNode,
+  type ScriptOriginExample,
+} from './library/scriptLineage.ts';
+
+export {
+  getScriptFamilyTree,
+  repairLineageOnDelete,
+  resolveScriptLineage,
+  type ScriptFamilyTree,
+  type ScriptLineageFamily,
+  type ScriptLineageIndex,
+  type ScriptLineageNode,
+  type ScriptOriginExample,
+};
 
 export interface ActiveScriptRef {
   kind: 'custom' | 'example';
@@ -15,6 +36,8 @@ export interface LibraryQueryOptions {
   sortBy?: LibrarySortBy;
   folder?: string | null;
   tag?: string | null;
+  expandedRootIds?: ReadonlySet<string>;
+  activeScriptId?: string | null;
 }
 
 export type LibraryRowItem =
@@ -26,6 +49,13 @@ export type LibraryRowItem =
       createdAt: number;
       updatedAt: number;
       forkedFromId?: string;
+      branchNote?: string;
+      rootId?: string;
+      parentTitle?: string;
+      originExampleTitle?: string;
+      depth?: number;
+      branchCount?: number;
+      isFamilyExpanded?: boolean;
       pinned?: boolean;
       folder?: string;
       tags?: string[];
@@ -195,9 +225,46 @@ export function collectLibraryFacets(customScripts: readonly ScriptRecord[]): Li
   };
 }
 
+function buildCustomRowFromNode(
+  node: ScriptLineageNode,
+  options: {
+    branchCount?: number;
+    isFamilyExpanded?: boolean;
+    matchSnippet?: string;
+    includeDepth?: boolean;
+  } = {}
+): Extract<LibraryRowItem, {kind: 'custom'}> {
+  const {record} = node;
+  return {
+    kind: 'custom',
+    id: record.id,
+    title: record.title,
+    rawText: record.rawText,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    ...(record.forkedFromId ? {forkedFromId: record.forkedFromId} : {}),
+    ...(record.branchNote ? {branchNote: record.branchNote} : {}),
+    rootId: node.rootId,
+    ...(node.parentTitle ? {parentTitle: node.parentTitle} : {}),
+    ...(node.originExample ? {originExampleTitle: node.originExample.title} : {}),
+    ...(options.includeDepth !== false ? {depth: node.depth} : {}),
+    ...(options.branchCount !== undefined && options.branchCount > 0
+      ? {branchCount: options.branchCount}
+      : {}),
+    ...(options.isFamilyExpanded !== undefined ? {isFamilyExpanded: options.isFamilyExpanded} : {}),
+    ...(record.pinned ? {pinned: true} : {}),
+    ...(record.folder ? {folder: record.folder} : {}),
+    ...(record.tags && record.tags.length > 0 ? {tags: record.tags} : {}),
+    ...(options.matchSnippet ? {matchSnippet: options.matchSnippet} : {}),
+    record,
+  };
+}
+
 /**
- * Filters and orders library rows across titles, folders, tags, example metadata, and full script bodies.
- * Pinned custom scripts float to the top; supports recent, alphabetical (title), and beat-count sorting.
+ * Filters and orders library rows across titles, branch notes, folders, tags, example metadata, and full script bodies.
+ * - Unfiltered browsing groups custom script families under their root with collapsible branch rows,
+ *   bubbling recently edited families by `familyMaxUpdatedAt`.
+ * - Active search or facet filters flatten and surface every matching script with its parent breadcrumb.
  */
 export function buildLibraryRows(
   customScripts: readonly ScriptRecord[],
@@ -211,47 +278,143 @@ export function buildLibraryRows(
   const folderFilter = options.folder ? options.folder.trim().toLowerCase() : null;
   const tagFilter = options.tag ? options.tag.trim().toLowerCase() : null;
   const hasCustomFacetFilter = folderFilter !== null || tagFilter !== null;
+  const isUnfilteredBrowse = normalizedQuery.length === 0 && !hasCustomFacetFilter;
+
+  const beatCountCache = sortBy === 'beats' ? new Map<string, number>() : null;
+  const getBeatsById = (key: string, rawText: string): number => {
+    if (!beatCountCache) return 0;
+    const cached = beatCountCache.get(key);
+    if (cached !== undefined) return cached;
+    const count = countExecutionBeatsFast(rawText);
+    beatCountCache.set(key, count);
+    return count;
+  };
 
   const customRows: Extract<LibraryRowItem, {kind: 'custom'}>[] = [];
   const exampleRows: Extract<LibraryRowItem, {kind: 'example'}>[] = [];
 
   if (filter === 'all' || filter === 'custom') {
-    for (const record of customScripts) {
-      if (folderFilter !== null && (record.folder?.trim().toLowerCase() ?? '') !== folderFilter) {
-        continue;
-      }
-      if (
-        tagFilter !== null &&
-        !(record.tags?.some((t) => t.trim().toLowerCase() === tagFilter) ?? false)
-      ) {
-        continue;
-      }
+    const lineage = resolveScriptLineage(customScripts, examples);
 
-      let matchSnippet: string | undefined;
-      if (normalizedQuery.length > 0) {
-        const titleMatch = record.title.toLowerCase().includes(normalizedQuery);
-        const folderMatch = record.folder?.toLowerCase().includes(normalizedQuery) ?? false;
-        const tagMatch = record.tags?.some((t) => t.toLowerCase().includes(normalizedQuery)) ?? false;
+    if (isUnfilteredBrowse) {
+      const activeNodeRootId =
+        options.expandedRootIds === undefined && options.activeScriptId
+          ? (lineage.nodeById.get(options.activeScriptId)?.rootId ?? null)
+          : null;
 
-        if (!titleMatch && !folderMatch && !tagMatch) {
-          matchSnippet = extractBodyMatchSnippet(record.rawText, normalizedQuery);
-          if (!matchSnippet) continue;
+      const sortedFamilies = [...lineage.families].sort((a, b) => {
+        const pinDiff = (b.rootRecord.pinned ? 1 : 0) - (a.rootRecord.pinned ? 1 : 0);
+        if (pinDiff !== 0) return pinDiff;
+
+        if (sortBy === 'title') {
+          return (
+            a.rootRecord.title.localeCompare(b.rootRecord.title) ||
+            b.familyMaxUpdatedAt - a.familyMaxUpdatedAt
+          );
+        }
+        if (sortBy === 'beats') {
+          const beatsA = getBeatsById(`custom:${a.rootId}`, a.rootRecord.rawText);
+          const beatsB = getBeatsById(`custom:${b.rootId}`, b.rootRecord.rawText);
+          return beatsB - beatsA || b.familyMaxUpdatedAt - a.familyMaxUpdatedAt;
+        }
+        return (
+          b.familyMaxUpdatedAt - a.familyMaxUpdatedAt ||
+          b.rootRecord.updatedAt - a.rootRecord.updatedAt ||
+          b.rootRecord.createdAt - a.rootRecord.createdAt ||
+          a.rootId.localeCompare(b.rootId)
+        );
+      });
+
+      for (const family of sortedFamilies) {
+        const rootNode = family.nodes[0];
+        if (!rootNode) continue;
+        const isExpanded =
+          family.branchCount > 0 &&
+          (options.expandedRootIds !== undefined
+            ? options.expandedRootIds.has(family.rootId)
+            : activeNodeRootId === family.rootId);
+
+        customRows.push(
+          buildCustomRowFromNode(rootNode, {
+            branchCount: family.branchCount,
+            isFamilyExpanded: isExpanded,
+          })
+        );
+
+        if (isExpanded) {
+          for (let i = 1; i < family.nodes.length; i += 1) {
+            customRows.push(buildCustomRowFromNode(family.nodes[i]));
+          }
+        }
+      }
+    } else {
+      for (const record of customScripts) {
+        if (folderFilter !== null && (record.folder?.trim().toLowerCase() ?? '') !== folderFilter) {
+          continue;
+        }
+        if (
+          tagFilter !== null &&
+          !(record.tags?.some((t) => t.trim().toLowerCase() === tagFilter) ?? false)
+        ) {
+          continue;
+        }
+
+        let matchSnippet: string | undefined;
+        if (normalizedQuery.length > 0) {
+          const titleMatch = record.title.toLowerCase().includes(normalizedQuery);
+          const branchNoteMatch = record.branchNote?.toLowerCase().includes(normalizedQuery) ?? false;
+          const folderMatch = record.folder?.toLowerCase().includes(normalizedQuery) ?? false;
+          const tagMatch = record.tags?.some((t) => t.toLowerCase().includes(normalizedQuery)) ?? false;
+
+          if (!titleMatch && !branchNoteMatch && !folderMatch && !tagMatch) {
+            matchSnippet = extractBodyMatchSnippet(record.rawText, normalizedQuery);
+            if (!matchSnippet) continue;
+          }
+        }
+
+        const node = lineage.nodeById.get(record.id);
+        if (node) {
+          const family = lineage.familyByRootId.get(node.rootId);
+          customRows.push(
+            buildCustomRowFromNode(node, {
+              branchCount: node.depth === 0 ? family?.branchCount : undefined,
+              matchSnippet,
+              includeDepth: false,
+            })
+          );
+        } else {
+          customRows.push({
+            kind: 'custom',
+            id: record.id,
+            title: record.title,
+            rawText: record.rawText,
+            createdAt: record.createdAt,
+            updatedAt: record.updatedAt,
+            ...(record.forkedFromId ? {forkedFromId: record.forkedFromId} : {}),
+            ...(record.branchNote ? {branchNote: record.branchNote} : {}),
+            ...(record.pinned ? {pinned: true} : {}),
+            ...(record.folder ? {folder: record.folder} : {}),
+            ...(record.tags && record.tags.length > 0 ? {tags: record.tags} : {}),
+            ...(matchSnippet ? {matchSnippet} : {}),
+            record,
+          });
         }
       }
 
-      customRows.push({
-        kind: 'custom',
-        id: record.id,
-        title: record.title,
-        rawText: record.rawText,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
-        ...(record.forkedFromId ? {forkedFromId: record.forkedFromId} : {}),
-        ...(record.pinned ? {pinned: true} : {}),
-        ...(record.folder ? {folder: record.folder} : {}),
-        ...(record.tags && record.tags.length > 0 ? {tags: record.tags} : {}),
-        ...(matchSnippet ? {matchSnippet} : {}),
-        record,
+      customRows.sort((a, b) => {
+        const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+        if (pinDiff !== 0) return pinDiff;
+
+        if (sortBy === 'title') {
+          return a.title.localeCompare(b.title) || b.updatedAt - a.updatedAt;
+        }
+        if (sortBy === 'beats') {
+          return (
+            getBeatsById(`custom:${b.id}`, b.rawText) - getBeatsById(`custom:${a.id}`, a.rawText) ||
+            b.updatedAt - a.updatedAt
+          );
+        }
+        return b.updatedAt - a.updatedAt || b.createdAt - a.createdAt || a.id.localeCompare(b.id);
       });
     }
   }
@@ -285,34 +448,14 @@ export function buildLibraryRows(
     }
   }
 
-  const beatCountCache = sortBy === 'beats' ? new Map<string, number>() : null;
-  const getBeats = (row: LibraryRowItem): number => {
-    if (!beatCountCache) return 0;
-    const key = `${row.kind}:${row.id}`;
-    const cached = beatCountCache.get(key);
-    if (cached !== undefined) return cached;
-    const count = countExecutionBeatsFast(row.rawText);
-    beatCountCache.set(key, count);
-    return count;
-  };
-
-  customRows.sort((a, b) => {
-    const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-    if (pinDiff !== 0) return pinDiff;
-
-    if (sortBy === 'title') {
-      return a.title.localeCompare(b.title) || b.updatedAt - a.updatedAt;
-    }
-    if (sortBy === 'beats') {
-      return getBeats(b) - getBeats(a) || b.updatedAt - a.updatedAt;
-    }
-    return b.updatedAt - a.updatedAt || b.createdAt - a.createdAt || a.id.localeCompare(b.id);
-  });
-
   if (sortBy === 'title') {
     exampleRows.sort((a, b) => a.title.localeCompare(b.title));
   } else if (sortBy === 'beats') {
-    exampleRows.sort((a, b) => getBeats(b) - getBeats(a) || a.title.localeCompare(b.title));
+    exampleRows.sort(
+      (a, b) =>
+        getBeatsById(`example:${b.id}`, b.rawText) - getBeatsById(`example:${a.id}`, a.rawText) ||
+        a.title.localeCompare(b.title)
+    );
   }
 
   return [...customRows, ...exampleRows];
@@ -384,7 +527,7 @@ export function paginateLibraryRows(
 }
 
 /**
- * Produces a clean, non-colliding copy/fork title (e.g. "Scene (Copy)", "Scene (Copy 2)").
+ * Produces a clean, non-colliding copy/fork/branch title (e.g. "Scene (Branch)", "Scene (Branch 2)").
  */
 export function createCopyTitle(
   baseTitle: string,
@@ -422,11 +565,14 @@ export interface DuplicatedScriptBuildInput {
   now: number;
   folder?: string;
   tags?: readonly string[];
+  branchNote?: string;
+  suffix?: string;
+  explicitTitle?: string;
 }
 
 /**
- * Pure builder for duplicating either a custom script or read-only example into My Scripts,
- * preserving folder/tags and generating a collision-free "(Copy)" title.
+ * Pure builder for duplicating or branching either a custom script or read-only example into My Scripts,
+ * preserving folder/tags, attaching optional branchNote, and generating a collision-free title.
  */
 export function buildDuplicatedScriptRecord({
   id,
@@ -437,8 +583,16 @@ export function buildDuplicatedScriptRecord({
   now,
   folder,
   tags,
+  branchNote,
+  suffix = 'Copy',
+  explicitTitle,
 }: DuplicatedScriptBuildInput): ScriptRecord {
-  const title = createCopyTitle(sourceTitle, existingTitles, 'Copy');
+  const cleanedExplicit = explicitTitle?.trim();
+  const title = cleanedExplicit
+    ? createCopyTitle(cleanedExplicit, existingTitles, suffix)
+    : createCopyTitle(sourceTitle, existingTitles, suffix);
+  const cleanBranchNote = branchNote?.trim().replace(/\s+/g, ' ').slice(0, 160);
+
   return {
     id,
     title,
@@ -446,6 +600,7 @@ export function buildDuplicatedScriptRecord({
     createdAt: now,
     updatedAt: now,
     forkedFromId: sourceId,
+    ...(cleanBranchNote ? {branchNote: cleanBranchNote} : {}),
     ...(folder ? {folder} : {}),
     ...(tags && tags.length > 0 ? {tags: [...tags]} : {}),
   };

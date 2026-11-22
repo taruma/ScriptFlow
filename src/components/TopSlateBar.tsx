@@ -31,9 +31,10 @@ export type CopyFormatKind = 'plain' | 'tagless' | 'json';
 
 interface TopSlateBarProps {
   title: string;
-  onTitleChange: (nextTitle: string) => void;
   readOnly?: boolean;
   isNarrow?: boolean;
+  familyBranchCount?: number;
+  isVersionHistoryOpen?: boolean;
   onForkExample?: () => void;
   diagnostics: LintDiagnostic[];
   onJumpToFirstDiagnostic: () => void;
@@ -72,9 +73,10 @@ type OpenMenu = 'file' | 'settings' | 'copy' | null;
 
 export function TopSlateBar({
   title,
-  onTitleChange,
   readOnly = false,
   isNarrow = false,
+  familyBranchCount = 0,
+  isVersionHistoryOpen = false,
   onForkExample,
   diagnostics,
   onJumpToFirstDiagnostic,
@@ -141,10 +143,31 @@ export function TopSlateBar({
 
             <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
 
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <span className="min-w-0 truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenu(null);
+                onOpenVersionHistory();
+              }}
+              aria-label={UI_LABELS.topBar.sceneTitleButtonAria}
+              aria-expanded={isVersionHistoryOpen}
+              title={UI_LABELS.topBar.sceneTitleButtonTitle}
+              className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-colors cursor-pointer ${
+                isVersionHistoryOpen ? 'bg-surface-muted' : 'hover:bg-surface-subtle'
+              }`}
+            >
+              <span className="min-w-0 truncate font-serif text-sm font-bold tracking-tight text-text-main">
                 {title || APP_META.untitledScene}
               </span>
+              {familyBranchCount > 1 && (
+                <span
+                  title={UI_LABELS.topBar.familyBranchBadgeTitle(familyBranchCount)}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-text-muted"
+                >
+                  <GitFork className="h-3 w-3 text-sky-500 shrink-0" />
+                  <span>{familyBranchCount}</span>
+                </span>
+              )}
               {readOnly && (
                 <span
                   title={UI_LABELS.topBar.exampleBadgeTitle}
@@ -153,7 +176,7 @@ export function TopSlateBar({
                   {UI_LABELS.topBar.exampleBadge}
                 </span>
               )}
-            </div>
+            </button>
           </>
         ) : (
           <>
@@ -183,37 +206,40 @@ export function TopSlateBar({
 
             <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
 
-            {readOnly ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 max-w-[240px] truncate px-1 py-1 font-serif text-sm font-bold tracking-tight text-text-main">
-                  {title || APP_META.untitledScene}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMenu(null);
+                onOpenVersionHistory();
+              }}
+              aria-label={UI_LABELS.topBar.sceneTitleButtonAria}
+              aria-expanded={isVersionHistoryOpen}
+              title={UI_LABELS.topBar.sceneTitleButtonTitle}
+              className={`group flex min-w-0 max-w-[300px] items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-colors cursor-pointer ${
+                isVersionHistoryOpen ? 'bg-surface-muted' : 'hover:bg-surface-subtle'
+              }`}
+            >
+              <span className="min-w-0 truncate font-serif text-sm font-bold tracking-tight text-text-main">
+                {title || APP_META.untitledScene}
+              </span>
+              {familyBranchCount > 1 && (
+                <span
+                  title={UI_LABELS.topBar.familyBranchBadgeTitle(familyBranchCount)}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-text-muted group-hover:bg-surface"
+                >
+                  <GitFork className="h-3 w-3 text-sky-500 shrink-0" />
+                  <span>{familyBranchCount}</span>
                 </span>
+              )}
+              {readOnly && (
                 <span
                   title={UI_LABELS.topBar.exampleBadgeTitle}
                   className="auteur-phase-logic inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide"
                 >
                   {UI_LABELS.topBar.exampleBadge}
                 </span>
-              </div>
-            ) : (
-              <div className="inline-grid min-w-0 max-w-[240px] items-center">
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1 whitespace-pre truncate px-1.5 py-1 font-serif text-sm font-bold tracking-tight"
-                >
-                  {title || APP_META.untitledScene}
-                </span>
-                <input
-                  type="text"
-                  data-native-undo="true"
-                  value={title}
-                  onChange={(e) => onTitleChange(e.target.value)}
-                  aria-label={UI_LABELS.topBar.sceneTitleAria}
-                  placeholder={APP_META.untitledScene}
-                  className="col-start-1 row-start-1 min-w-[4ch] w-full truncate rounded-md bg-transparent px-1.5 py-1 font-serif text-sm font-bold tracking-tight text-text-main hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
-                />
-              </div>
-            )}
+              )}
+            </button>
 
             {diagnostics.length > 0 && (
               <button

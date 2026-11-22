@@ -1,6 +1,9 @@
 export const EDITOR_LABELS = {
   topBar: {
     sceneTitleAria: 'Scene title',
+    sceneTitleButtonAria: 'Open project lineage, title & version history',
+    sceneTitleButtonTitle: 'Project lineage, title & version history',
+    familyBranchBadgeTitle: (count: number) => `${count} connected scripts in this branch family`,
     beatUnit: (count: number) => (count === 1 ? 'Macro-State' : 'Macro-States'),
     errorShort: (count: number) => `${count} err`,
     warningShort: (count: number) => `${count} warn`,
@@ -284,6 +287,7 @@ export const EDITOR_LABELS = {
       'Read-only on narrow screens — open on a wider screen to edit or paste',
     forkedExample: (title: string) => `Forked "${title}" to My Scripts`,
     duplicatedScript: (title: string) => `Duplicated "${title}"`,
+    branchedScript: (title: string) => `Branched "${title}"`,
     createdBlankScript: 'Created new blank script',
     importedScript: (title: string) => `Imported "${title}"`,
     renamedScript: (title: string) => `Renamed to "${title}"`,

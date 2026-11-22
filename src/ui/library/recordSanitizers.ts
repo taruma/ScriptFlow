@@ -53,6 +53,13 @@ export function sanitizeScriptRecord(record: ScriptRecord): ScriptRecord {
     sanitized.forkedFromId = record.forkedFromId.trim();
   }
 
+  if (typeof record.branchNote === 'string') {
+    const cleanNote = record.branchNote.trim().replace(/\s+/g, ' ').slice(0, 160);
+    if (cleanNote.length > 0) {
+      sanitized.branchNote = cleanNote;
+    }
+  }
+
   if (record.pinned === true) {
     sanitized.pinned = true;
   }

@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest';
+import {UI_LABELS} from '../../src/ui/labels.ts';
 import {createScriptLibraryStore} from '../../src/ui/scriptLibraryDb.ts';
 import {
   buildAiSnapshotLabel,
@@ -365,4 +366,25 @@ describe('scriptLibraryDb snapshot persistence & cascade lifecycle', () => {
     ]);
     expect(finalList[0].createdAt).toBeGreaterThan(finalList[1].createdAt);
   });
+
+  it('formats snapshot-fork branchNote labels and persists forked scripts with branchNote metadata', async () => {
+    const store = createScriptLibraryStore({indexedDB: null, fallbackStorageKey: null});
+    const note = UI_LABELS.versionHistory.branchedFromSnapshotNote('AI Patch: Tighten opening');
+    expect(note).toBe('Branched from snapshot: AI Patch: Tighten opening');
+
+    await store.put({
+      id: 'forked-from-snap',
+      title: 'Interrogation (Branch)',
+      rawText: '[INTENT]\nAlternate interrogation.\n\n[EXECUTION]\n[CAM 01] CU',
+      createdAt: 1000,
+      updatedAt: 1000,
+      forkedFromId: 'parent-script',
+      branchNote: note,
+    });
+
+    const loaded = await store.get('forked-from-snap');
+    expect(loaded?.forkedFromId).toBe('parent-script');
+    expect(loaded?.branchNote).toBe('Branched from snapshot: AI Patch: Tighten opening');
+  });
 });
+

@@ -13,6 +13,7 @@ import {useEditorSettings} from './ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
 import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
+import {getScriptFamilyTree} from './ui/scriptLibraryView.ts';
 import {useDocumentMutations} from './ui/useDocumentMutations.ts';
 import {useGlobalEditorShortcuts} from './ui/useGlobalEditorShortcuts.ts';
 import {resolveNarrowWorkspaceState, useNarrowViewport} from './ui/useNarrowViewport.ts';
@@ -100,12 +101,11 @@ export default function App() {
     }
   }, [isAiOpen]);
 
-  // Close desktop-only drawers/modals when entering narrow read-only mode (< 640px)
+  // Close desktop-only drawers when entering narrow read-only mode (< 640px)
   useEffect(() => {
     if (!isNarrow) return;
     setIsAiOpen(false);
     setIsDebugOpen(false);
-    setIsVersionHistoryOpen(false);
   }, [isNarrow]);
 
   const handleToggleAi = useCallback(() => {
@@ -200,6 +200,12 @@ export default function App() {
     viewMode
   );
 
+  const activeFamilyCount = useMemo(() => {
+    if (activeScript.kind !== 'custom') return 0;
+    const tree = getScriptFamilyTree(activeScript.id, customScripts, BUNDLED_EXAMPLES);
+    return tree?.kind === 'custom' ? tree.totalMembers : 0;
+  }, [activeScript.kind, activeScript.id, customScripts]);
+
   const isModalOpen =
     isDebugOpen ||
     confirmRequest !== null ||
@@ -287,9 +293,10 @@ export default function App() {
     <div className="min-h-screen lg:h-dvh lg:overflow-hidden bg-app text-text-main flex flex-col">
       <TopSlateBar
         title={sceneTitle}
-        onTitleChange={handleTitleChange}
         readOnly={isReadOnly}
         isNarrow={isNarrow}
+        familyBranchCount={activeFamilyCount}
+        isVersionHistoryOpen={isVersionHistoryOpen}
         onForkExample={library.handleForkCurrentExample}
         diagnostics={diagnostics}
         onJumpToFirstDiagnostic={handleJumpToFirstDiagnostic}
@@ -461,15 +468,26 @@ export default function App() {
         />
       )}
 
-      {!isNarrow && isVersionHistoryOpen && (
+      {isVersionHistoryOpen && (
         <Suspense fallback={null}>
           <VersionHistoryModal
             isOpen={isVersionHistoryOpen}
             onClose={() => setIsVersionHistoryOpen(false)}
+            activeScript={activeScript}
             scriptId={activeScript.id}
-            scriptTitle={sceneTitle || APP_META.untitledScene}
+            scriptTitle={sceneTitle}
             currentRawText={rawText}
-            isReadOnly={isReadOnly}
+            isReadOnly={effectiveReadOnly}
+            customScripts={customScripts}
+            examples={BUNDLED_EXAMPLES}
+            onTitleChange={handleTitleChange}
+            onUpdateBranchNote={(nextNote) => void library.handleUpdateActiveBranchNote(nextNote)}
+            onBranchCurrentScript={(options) => library.handleDuplicateActiveScript(options)}
+            onBranchFromScript={(record) =>
+              library.handleDuplicateScript(record, {activate: true}).then(() => undefined)
+            }
+            onOpenCustomScript={library.handleOpenCustomScript}
+            onOpenExample={library.handleOpenExample}
             onForkCurrentExample={library.handleForkCurrentExample}
             onSaveMilestone={(label) =>
               library.handleCreateSnapshot({

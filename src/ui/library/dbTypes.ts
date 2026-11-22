@@ -26,6 +26,7 @@ export interface ScriptRecord {
   createdAt: number;
   updatedAt: number;
   forkedFromId?: string;
+  branchNote?: string;
   pinned?: boolean;
   folder?: string;
   tags?: string[];

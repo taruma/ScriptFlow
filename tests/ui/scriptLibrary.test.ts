@@ -47,8 +47,11 @@ import {
   createCopyTitle,
   extractLibraryScriptPreview,
   formatRelativeUpdatedTime,
+  getScriptFamilyTree,
   LIBRARY_PAGE_SIZE,
   paginateLibraryRows,
+  repairLineageOnDelete,
+  resolveScriptLineage,
   stepLibrarySelectionIndex,
 } from '../../src/ui/scriptLibraryView.ts';
 
@@ -828,5 +831,244 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
     expect(dupExample.folder).toBeUndefined();
     expect(dupExample.tags).toBeUndefined();
   });
+
+  it('supports branch suffix, explicit title, and normalized branchNote on buildDuplicatedScriptRecord', () => {
+    const existing = new Set(['Warehouse Ambush', 'Warehouse Ambush (Branch)']);
+    const branched = buildDuplicatedScriptRecord({
+      id: 'script-branch-1',
+      sourceId: 'script-root-1',
+      sourceTitle: 'Warehouse Ambush',
+      rawText: '[INTENT]\nAlternate single-take approach.',
+      existingTitles: existing,
+      now: 555000,
+      suffix: 'Branch',
+      branchNote: '  Try single-take   handheld approach  ',
+    });
+
+    expect(branched.title).toBe('Warehouse Ambush (Branch 2)');
+    expect(branched.forkedFromId).toBe('script-root-1');
+    expect(branched.branchNote).toBe('Try single-take handheld approach');
+
+    const namedBranch = buildDuplicatedScriptRecord({
+      id: 'script-branch-2',
+      sourceId: 'script-root-1',
+      sourceTitle: 'Warehouse Ambush',
+      rawText: '[INTENT]\nNoir rain cut.',
+      existingTitles: existing,
+      now: 556000,
+      explicitTitle: 'Noir Rain Cut',
+      branchNote: '   ',
+    });
+
+    expect(namedBranch.title).toBe('Noir Rain Cut');
+    expect(namedBranch.branchNote).toBeUndefined();
+  });
 });
+
+describe('Script lineage, branching, and anti-clutter library grouping', () => {
+  const makeScript = (
+    id: string,
+    title: string,
+    createdAt: number,
+    updatedAt: number,
+    extra: Partial<ScriptRecord> = {}
+  ): ScriptRecord => ({
+    id,
+    title,
+    rawText: `[INTENT]\n${title} premise.\n\n[EXECUTION]\n[CAM 01] MS\n`,
+    createdAt,
+    updatedAt,
+    ...extra,
+  });
+
+  it('sanitizes and round-trips branchNote and forkedFromId across store persistence and library backup codec', async () => {
+    const store = createScriptLibraryStore({indexedDB: null, fallbackStorageKey: null});
+    const overlongNote = `  ${'A'.repeat(200)}   extra  `;
+
+    await store.put({
+      id: 'root-1',
+      title: 'Subway Oner',
+      rawText: '[INTENT]\nRoot version.\n\n[EXECUTION]\n[CAM 01] WS',
+      createdAt: 1000,
+      updatedAt: 1000,
+      branchNote: '   ',
+    });
+    await store.put({
+      id: 'branch-1',
+      title: 'Subway Oner (Branch)',
+      rawText: '[INTENT]\nPOV handheld version.\n\n[EXECUTION]\n[CAM 01] POV',
+      createdAt: 2000,
+      updatedAt: 2000,
+      forkedFromId: 'root-1',
+      branchNote: overlongNote,
+    });
+
+    const loadedRoot = await store.get('root-1');
+    const loadedBranch = await store.get('branch-1');
+    expect(loadedRoot?.branchNote).toBeUndefined();
+    expect(loadedBranch?.forkedFromId).toBe('root-1');
+    expect(loadedBranch?.branchNote).toHaveLength(160);
+    expect(loadedBranch?.branchNote).toBe('A'.repeat(160));
+
+    const backup = createLibraryBackup([loadedRoot!, loadedBranch!], {
+      exportedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const parsed = parseLibraryBackup(JSON.stringify(backup));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const restoredBranch = parsed.backup.scripts.find((s) => s.id === 'branch-1');
+    expect(restoredBranch?.forkedFromId).toBe('root-1');
+    expect(restoredBranch?.branchNote).toBe('A'.repeat(160));
+  });
+
+  it('resolves multi-level custom trees, isolates bundled example forks as separate roots, and breaks cycles deterministically', () => {
+    const example = BUNDLED_EXAMPLES[0];
+    const scripts: ScriptRecord[] = [
+      makeScript('root', 'Interrogation', 100, 100),
+      makeScript('branch-a', 'Interrogation — Tight CU', 200, 250, {
+        forkedFromId: 'root',
+        branchNote: 'Push tighter on detective eyes',
+      }),
+      makeScript('branch-a1', 'Interrogation — Silent Cut', 300, 400, {
+        forkedFromId: 'branch-a',
+        branchNote: 'Strip dialogue for pure foley tension',
+      }),
+      makeScript('branch-b', 'Interrogation — Oner', 250, 350, {
+        forkedFromId: 'root',
+        branchNote: 'Single continuous orbit around table',
+      }),
+      makeScript('ex-fork-1', 'My Subway Remix 1', 500, 500, {
+        forkedFromId: example.id,
+      }),
+      makeScript('ex-fork-2', 'My Subway Remix 2', 600, 600, {
+        forkedFromId: example.id,
+      }),
+      // Artificial cycle A <-> B to verify cycle protection
+      makeScript('cyc-a', 'Cycle A', 700, 700, {forkedFromId: 'cyc-b'}),
+      makeScript('cyc-b', 'Cycle B', 800, 800, {forkedFromId: 'cyc-a'}),
+    ];
+
+    const index = resolveScriptLineage(scripts, BUNDLED_EXAMPLES);
+
+    // Custom root family has 4 members in pre-order (root -> branch-a -> branch-a1 -> branch-b)
+    const rootFamily = index.familyByRootId.get('root');
+    expect(rootFamily).toBeDefined();
+    expect(rootFamily?.nodes.map((n) => `${n.id}@${n.depth}`)).toEqual([
+      'root@0',
+      'branch-a@1',
+      'branch-a1@2',
+      'branch-b@1',
+    ]);
+    expect(rootFamily?.branchCount).toBe(3);
+    expect(rootFamily?.familyMaxUpdatedAt).toBe(400);
+    expect(index.nodeById.get('branch-a1')?.parentTitle).toBe('Interrogation — Tight CU');
+
+    // Bundled example forks are two independent custom roots, each preserving originExample
+    expect(index.familyByRootId.has('ex-fork-1')).toBe(true);
+    expect(index.familyByRootId.has('ex-fork-2')).toBe(true);
+    expect(index.familyByRootId.get('ex-fork-1')?.originExample).toEqual({
+      id: example.id,
+      title: example.title,
+    });
+    expect(index.customForksByExampleId.get(example.id)?.map((s) => s.id)).toEqual([
+      'ex-fork-1',
+      'ex-fork-2',
+    ]);
+
+    // Example family tree lookup surfaces direct custom forks
+    const exampleTree = getScriptFamilyTree(example.id, scripts, BUNDLED_EXAMPLES);
+    expect(exampleTree?.kind).toBe('example');
+    expect(exampleTree?.exampleForks.map((s) => s.id)).toEqual(['ex-fork-1', 'ex-fork-2']);
+
+    // Cycle broken cleanly at earliest-created member ('cyc-a' createdAt 700 < 'cyc-b' createdAt 800)
+    const cycleFamily = index.familyByRootId.get('cyc-a');
+    expect(cycleFamily?.nodes.map((n) => `${n.id}@${n.depth}`)).toEqual(['cyc-a@0', 'cyc-b@1']);
+  });
+
+  it('repairs lineage cleanly when deleting an intermediate branch or a family root', () => {
+    const exampleId = BUNDLED_EXAMPLES[0].id;
+    const before: ScriptRecord[] = [
+      makeScript('A', 'Root Scene', 100, 100, {forkedFromId: exampleId}),
+      makeScript('B', 'Middle Branch', 200, 200, {forkedFromId: 'A'}),
+      makeScript('C', 'Leaf Branch', 300, 300, {forkedFromId: 'B'}),
+      makeScript('D', 'Sibling Branch', 250, 250, {forkedFromId: 'A'}),
+    ];
+
+    // 1. Delete intermediate branch B -> C re-parents directly to surviving ancestor A
+    const afterDeleteB = before.filter((s) => s.id !== 'B');
+    const repairedAfterB = repairLineageOnDelete(afterDeleteB, new Set(['B']), before);
+    expect(repairedAfterB).toHaveLength(1);
+    expect(repairedAfterB[0].id).toBe('C');
+    expect(repairedAfterB[0].forkedFromId).toBe('A');
+
+    // 2. Delete root A -> earliest-created child B (createdAt 200 < D 250) becomes new root
+    // inheriting bundled example origin, and sibling D re-parents to B (C already points to B)
+    const afterDeleteA = before.filter((s) => s.id !== 'A');
+    const repairedAfterA = repairLineageOnDelete(afterDeleteA, new Set(['A']), before);
+    const byId = new Map(repairedAfterA.map((s) => [s.id, s]));
+    expect(repairedAfterA).toHaveLength(2);
+    expect(byId.get('B')?.forkedFromId).toBe(exampleId);
+    expect(byId.get('D')?.forkedFromId).toBe('B');
+
+    // 3. Delete root without external origin -> promoted child clears forkedFromId to undefined
+    const plainBefore: ScriptRecord[] = [
+      makeScript('R', 'Plain Root', 100, 100),
+      makeScript('C1', 'Child 1', 200, 200, {forkedFromId: 'R'}),
+      makeScript('C2', 'Child 2', 300, 300, {forkedFromId: 'R'}),
+    ];
+    const repairedPlain = repairLineageOnDelete(
+      plainBefore.filter((s) => s.id !== 'R'),
+      ['R'],
+      plainBefore
+    );
+    const plainById = new Map(repairedPlain.map((s) => [s.id, s]));
+    expect(plainById.get('C1')?.forkedFromId).toBeUndefined();
+    expect(plainById.get('C2')?.forkedFromId).toBe('C1');
+  });
+
+  it('groups child branches under roots, bubbles active families by familyMaxUpdatedAt, and surfaces matches on search', () => {
+    const scripts: ScriptRecord[] = [
+      makeScript('old-root', 'Alley Chase', 100, 100),
+      makeScript('fresh-child', 'Alley Chase (Rain Cut)', 200, 900, {
+        forkedFromId: 'old-root',
+        branchNote: 'Handheld neon rainstorm chase',
+      }),
+      makeScript('mid-root', 'Coffee Shop Talk', 300, 500),
+    ];
+
+    // Collapsed by default: only roots shown, but 'old-root' bubbles above 'mid-root' because
+    // its child 'fresh-child' was updated at 900 > 500
+    const collapsed = buildLibraryRows(scripts, [], 'custom', '', {sortBy: 'recent'}).filter(
+      (r) => r.kind === 'custom'
+    );
+    expect(collapsed.map((r) => r.id)).toEqual(['old-root', 'mid-root']);
+    expect(collapsed[0].branchCount).toBe(1);
+    expect(collapsed[0].isFamilyExpanded).toBe(false);
+    expect(collapsed[0].depth).toBe(0);
+
+    // Expanded root inserts child directly beneath root at depth 1
+    const expanded = buildLibraryRows(scripts, [], 'custom', '', {
+      sortBy: 'recent',
+      expandedRootIds: new Set(['old-root']),
+    }).filter((r) => r.kind === 'custom');
+    expect(expanded.map((r) => `${r.id}@${r.depth}`)).toEqual([
+      'old-root@0',
+      'fresh-child@1',
+      'mid-root@0',
+    ]);
+    expect(expanded[0].isFamilyExpanded).toBe(true);
+    expect(expanded[1].parentTitle).toBe('Alley Chase');
+    expect(expanded[1].branchNote).toBe('Handheld neon rainstorm chase');
+
+    // Searching by branchNote auto-surfaces the matching child even when root is collapsed
+    const searched = buildLibraryRows(scripts, [], 'custom', 'neon rainstorm', {
+      sortBy: 'recent',
+    }).filter((r) => r.kind === 'custom');
+    expect(searched.map((r) => r.id)).toEqual(['fresh-child']);
+    expect(searched[0].parentTitle).toBe('Alley Chase');
+    expect(searched[0].branchNote).toBe('Handheld neon rainstorm chase');
+  });
+});
+
 
