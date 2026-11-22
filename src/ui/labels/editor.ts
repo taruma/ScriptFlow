@@ -118,6 +118,8 @@ export const EDITOR_LABELS = {
     infoButton: 'About',
     infoAria: 'About ScriptFlow, Shortcuts & Documentation',
     infoTitle: 'About ScriptFlow, Shortcuts & Documentation',
+    brandLogoAlt: 'ScriptFlow — Draft the World. Direct Every Beat.',
+    brandLogoTitle: 'ScriptFlow by Taruma Sakti | Auteur Script Editor & Scene Blueprint',
     historyGroupAria: 'Document history',
     undoAria: 'Undo',
     redoAria: 'Redo',
@@ -483,7 +485,7 @@ export const EDITOR_LABELS = {
     byPrefix: 'by',
     closeAria: 'Close About modal',
     closeButton: 'Close',
-    heroTitle: 'Auteur Script Editor & Spatial Scene Blueprint',
+    heroTitle: 'Auteur Script Editor & Scene Blueprint',
     licenseBadge: 'MIT License',
     heroBody:
       'A local-first, Plain-Text-as-Truth workspace for authoring, linting, visualizing, and exporting Pure Auteur Script (v0.4.0). Live Mode, Source Mode, Graph View, and programmatic JSON IR all derive synchronously from a single canonical plain-text script.',

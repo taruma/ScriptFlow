@@ -1,6 +1,11 @@
-# ScriptFlow — Auteur Script Editor
+<div align="center">
+  <img src="public/SCRIPTFLOW - WHITE.png#gh-dark-mode-only" alt="ScriptFlow — Draft the World. Direct Every Beat." width="460" />
+  <img src="public/SCRIPTFLOW - BLACK.png#gh-light-mode-only" alt="ScriptFlow — Draft the World. Direct Every Beat." width="460" />
+</div>
 
-**ScriptFlow** is a local-first, Plain-Text-as-Truth editor for authoring, auditing, and exporting **Pure Auteur Script (`v0.4.0`)**—a 100% platform- and model-agnostic canonical inline screenplay grammar designed for spatial, optical, temporal, and acoustic precision.
+# ScriptFlow — Auteur Script Editor & Scene Blueprint
+
+**ScriptFlow** (*Draft the World. Direct Every Beat.*) is a local-first, Plain-Text-as-Truth editor and Scene Blueprint studio for authoring, visualizing, auditing, and exporting **Pure Auteur Script (`v0.4.0`)**—a 100% platform- and model-agnostic canonical inline screenplay grammar designed for spatial, optical, temporal, and acoustic precision.
 
 > **Version Separation Note**
 > - **ScriptFlow Application (`1.0.0` — Unreleased / UI & UX Polish):** Tracks the editor UI, multi-script library, version history, and optional browser-local AI Assistant in [`CHANGELOG.md`](CHANGELOG.md). While pre-release UI/UX polish continues, `package.json` intentionally stays at `"0.4.0"` until the final `1.0.0` release tag.
@@ -26,7 +31,7 @@ Live Mode, Source Mode, deterministic linting, exports, and programmatic JSON IR
   - Asymmetric `40/60` desktop Live workspace (**Phase 1 — Staging** on the left, **Phase 2 — Execution** on the right) with independently scrollable panes, collapsible Staging cards and Execution Macro-States, and a structured 2-column `[AESTHETIC]` Lookbook editor.
   - Always-formatted `↳` Waterfall Sub-State editing with live `->` / `Enter` splitting, `Backspace` merging, `ArrowUp`/`ArrowDown` boundary navigation, `Alt+↑`/`Alt+↓` keyboard Sub-State reordering, hover-revealed drag-and-drop reordering for Macro-Blocks and Macro-States, global Paste-and-Hydrate, non-destructive **Format Script**, and active-draft document Undo/Redo (`Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z` / `Ctrl+Y`).
   - Centered single-document **Source Mode** (`~820px` measure in `JetBrains Mono`) plus one-click Canonical Plain Text (`.txt`), Tagless (`.txt`), and JSON Envelope (`.json`) copy and download exports.
-- **Read-Only Spatial Graph View (`[ Live | Graph | Source ]`)**
+- **Read-Only Scene Blueprint Graph View (`[ Live | Graph | Source ]`)**
   - Lazy-loaded `@xyflow/react` blueprint canvas visualizing **Phase 1 — Staging Macro-Blocks (`MB#`)**, an intermediate **Inferred Objects** rail (Characters via `@ref as Label`, `[AESTHETIC]` Lookbook tokens with optional `(reference: @ref)`, Staging-only visual refs, and Camera Setups), and **Phase 2 — Execution (`S1 → SN`)** grouped into **Shot Chambers** with curved **`RECALL`** arcs.
   - Supports dual-axis **`L → R` / `T ↓ B`** auto-layout, compact default posture with on-demand perpendicular Sub-State splitting (`Split Sub-States`), opposite-side **`Show Source`** plain-text provenance branches, **`Show Threads`** continuity wiring, bespoke sculpted Sub-States (screenplay Dialogue micro-blocks, Foley waveforms, Score cues, framed serif Title Cards), a scene-aware **Sub-State Isolator Dock** (showing only detected dimensions plus `Other` for plain Sub-States in `Ghost` vs. `Compact` mode), a read-only **Object Inspector** with Call Site `fitView` focus, free dragging with full **`Reset`**, and 4-theme parity. See [`docs/GRAPH_VIEW.md`](docs/GRAPH_VIEW.md).
 - **Deterministic Script Supervisor Linter & Worked Examples**

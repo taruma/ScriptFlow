@@ -134,11 +134,16 @@ export function TopSlateBar({
         {isNarrow ? (
           <>
             <span
-              aria-label={APP_META.name}
-              title={APP_META.name}
-              className="inline-flex h-7 w-7 items-center justify-center font-sans text-sm font-bold tracking-tight text-text-main shrink-0"
+              title={UI_LABELS.topBar.brandLogoTitle}
+              className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-xl border border-border-main bg-surface-subtle p-1 shadow-2xs shrink-0"
             >
-              {APP_META.shortMark}
+              <img
+                src="/android-chrome-192x192.png"
+                alt={APP_META.name}
+                width={192}
+                height={192}
+                className="h-full w-full object-contain invert dark:invert-0 select-none pointer-events-none"
+              />
             </span>
 
             <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
@@ -180,9 +185,25 @@ export function TopSlateBar({
           </>
         ) : (
           <>
-            <span className="font-sans text-sm font-semibold tracking-tight text-text-main whitespace-nowrap shrink-0 pl-0.5 pr-1">
-              {APP_META.name}
-            </span>
+            <div
+              title={UI_LABELS.topBar.brandLogoTitle}
+              className="-ml-0.5 mr-0.5 flex items-center shrink-0"
+            >
+              <img
+                src="/SCRIPTFLOW - BLACK.png"
+                alt={UI_LABELS.topBar.brandLogoAlt}
+                width={5371}
+                height={1200}
+                className="block dark:hidden h-7 md:h-8 lg:h-9 w-auto aspect-[5371/1200] object-contain select-none pointer-events-none shrink-0"
+              />
+              <img
+                src="/SCRIPTFLOW - WHITE.png"
+                alt={UI_LABELS.topBar.brandLogoAlt}
+                width={5371}
+                height={1200}
+                className="hidden dark:block h-7 md:h-8 lg:h-9 w-auto aspect-[5371/1200] object-contain select-none pointer-events-none shrink-0"
+              />
+            </div>
 
             <FileMenuDropdown
               isOpen={openMenu === 'file'}

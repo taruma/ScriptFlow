@@ -7,6 +7,8 @@ import type {MacroBlockKind} from '../../core/types.ts';
 
 export const APP_META = {
   name: 'ScriptFlow',
+  descriptor: 'Auteur Script Editor & Scene Blueprint',
+  tagline: 'Draft the World. Direct Every Beat.',
   version: '0.4.0',
   shortMark: 'S',
   untitledScene: 'Untitled Scene',

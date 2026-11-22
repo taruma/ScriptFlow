@@ -145,15 +145,31 @@ export function AppInfoModal({isOpen, onClose}: AppInfoModalProps) {
         {/* Scrollable Body */}
         <div className="p-5 lg:p-7 space-y-4 overflow-y-auto auteur-pane-scroll text-text-main">
           {/* Hero Card */}
-          <div className="p-4 bg-surface-subtle border border-border-main rounded-2xl space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-text-main">
-                {UI_LABELS.infoModal.heroTitle}
-              </span>
+          <div className="p-4 bg-surface-subtle border border-border-main rounded-2xl space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center min-w-0">
+                <img
+                  src="/SCRIPTFLOW - BLACK.png"
+                  alt={UI_LABELS.topBar.brandLogoAlt}
+                  width={5371}
+                  height={1200}
+                  className="block dark:hidden h-7 w-auto aspect-[5371/1200] object-contain select-none pointer-events-none"
+                />
+                <img
+                  src="/SCRIPTFLOW - WHITE.png"
+                  alt={UI_LABELS.topBar.brandLogoAlt}
+                  width={5371}
+                  height={1200}
+                  className="hidden dark:block h-7 w-auto aspect-[5371/1200] object-contain select-none pointer-events-none"
+                />
+              </div>
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-text-faint uppercase tracking-wider shrink-0">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
                 <span>{UI_LABELS.infoModal.licenseBadge}</span>
               </div>
+            </div>
+            <div className="text-xs font-bold text-text-main">
+              {UI_LABELS.infoModal.heroTitle}
             </div>
             <p className="text-xs text-text-body leading-relaxed">
               {UI_LABELS.infoModal.heroBody}

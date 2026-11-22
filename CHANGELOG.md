@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [1.0.0] - Unreleased
 
+### Changed
+- **Brand Identity, Header Logo Swap & Metadata (`TopSlateBar`, `AppInfoModal`, `index.html`, `public/`)**: Replaced the plain-text `"ScriptFlow"` / `"S"` header title with theme-adaptive, pixel-aligned `SCRIPTFLOW - BLACK.png` / `SCRIPTFLOW - WHITE.png` brand lockups (`h-7 md:h-8 lg:h-9`) on desktop/tablet and a compact `30×30px` theme-adaptive clapboard mark (`/android-chrome-192x192.png`) on `< 640px` viewports; added the brand lockup inside `AppInfoModal`; wired `/favicon.ico`, PNG favicons, `/apple-touch-icon.png`, and `/site.webmanifest`; and updated page titles, meta descriptions, and docs to **`Auteur Script Editor & Scene Blueprint`** (*Draft the World. Direct Every Beat.*).
+
 ### Added
 
 #### Live & Source Auteur Script Editor
