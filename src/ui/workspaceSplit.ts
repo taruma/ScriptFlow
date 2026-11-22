@@ -3,8 +3,18 @@ export const MIN_LIVE_SPLIT_PERCENT = 25;
 export const MAX_LIVE_SPLIT_PERCENT = 60;
 export const LIVE_SPLIT_KEYBOARD_STEP = 2;
 export const LIVE_SPLIT_KEYBOARD_LARGE_STEP = 5;
+export const TOUCH_SPLIT_DOUBLE_TAP_MS = 320;
+export const TOUCH_SPLIT_DRAG_THRESHOLD_PX = 3;
 
 const LIVE_SPLIT_STORAGE_KEY = 'auteur-live-split-percent-v1';
+
+export function isQuickDoubleTap(previousTapMs: number, currentTapMs: number): boolean {
+  return (
+    previousTapMs > 0 &&
+    currentTapMs >= previousTapMs &&
+    currentTapMs - previousTapMs <= TOUCH_SPLIT_DOUBLE_TAP_MS
+  );
+}
 
 export function clampLiveSplitPercent(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_LIVE_SPLIT_PERCENT;

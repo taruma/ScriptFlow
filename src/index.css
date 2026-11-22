@@ -592,11 +592,30 @@
   color: #fca5a5;
 }
 
+.auteur-split-dragging {
+  cursor: col-resize !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
 @media (min-width: 1024px) {
   .auteur-live-split-grid {
     grid-template-columns: minmax(0, var(--live-staging-split, 40%)) minmax(0, 1fr);
   }
   .auteur-live-split-handle {
     left: var(--live-staging-split, 40%);
+  }
+}
+
+@media (min-width: 1024px) and (pointer: coarse) {
+  .auteur-live-split-handle {
+    width: 24px;
+  }
+  .auteur-live-split-grip {
+    opacity: 0.45;
+  }
+  .auteur-live-split-handle[data-resizing="true"] .auteur-live-split-grip {
+    opacity: 1;
   }
 }

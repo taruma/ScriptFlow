@@ -58,10 +58,12 @@ import {
   computeLiveSplitFromPointer,
   DEFAULT_LIVE_SPLIT_PERCENT,
   isDefaultLiveSplit,
+  isQuickDoubleTap,
   loadStoredLiveSplit,
   MAX_LIVE_SPLIT_PERCENT,
   MIN_LIVE_SPLIT_PERCENT,
   saveStoredLiveSplit,
+  TOUCH_SPLIT_DOUBLE_TAP_MS,
 } from '../../src/ui/workspaceSplit.ts';
 
 describe('stagingCollapse helpers', () => {
@@ -612,6 +614,13 @@ describe('Live Mode column split helpers', () => {
     expect(computeLiveSplitFromPointer(150, 100, 1000)).toBe(MIN_LIVE_SPLIT_PERCENT);
     expect(computeLiveSplitFromPointer(900, 100, 1000)).toBe(MAX_LIVE_SPLIT_PERCENT);
     expect(computeLiveSplitFromPointer(500, 100, 0)).toBe(DEFAULT_LIVE_SPLIT_PERCENT);
+  });
+
+  it('detects quick touch double-taps within the reset window', () => {
+    expect(isQuickDoubleTap(0, 1000)).toBe(false);
+    expect(isQuickDoubleTap(1000, 1000 + TOUCH_SPLIT_DOUBLE_TAP_MS)).toBe(true);
+    expect(isQuickDoubleTap(1000, 1000 + TOUCH_SPLIT_DOUBLE_TAP_MS + 1)).toBe(false);
+    expect(isQuickDoubleTap(1000, 900)).toBe(false);
   });
 
   it('persists custom splits, clears storage on default reset, and syncs --live-staging-split', () => {

@@ -27,10 +27,12 @@ import {
   clampLiveSplitPercent,
   computeLiveSplitFromPointer,
   DEFAULT_LIVE_SPLIT_PERCENT,
+  isQuickDoubleTap,
   LIVE_SPLIT_KEYBOARD_LARGE_STEP,
   LIVE_SPLIT_KEYBOARD_STEP,
   MAX_LIVE_SPLIT_PERCENT,
   MIN_LIVE_SPLIT_PERCENT,
+  TOUCH_SPLIT_DRAG_THRESHOLD_PX,
 } from '../ui/workspaceSplit.ts';
 import {
   EMPTY_BEATS,
@@ -222,6 +224,7 @@ export const LiveDocument = memo(function LiveDocument({
 
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
   const activeSplitCleanupRef = useRef<(() => void) | null>(null);
+  const lastTouchTapMsRef = useRef<number>(0);
   const [isResizingSplit, setIsResizingSplit] = useState<boolean>(false);
 
   useEffect(() => {
@@ -242,7 +245,8 @@ export const LiveDocument = memo(function LiveDocument({
 
   const handleSplitPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
+      if (!event.isPrimary) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
       const container = splitContainerRef.current;
       if (!container) return;
 
@@ -252,45 +256,85 @@ export const LiveDocument = memo(function LiveDocument({
       const rect = container.getBoundingClientRect();
       if (rect.width <= 0) return;
 
+      const handleEl = event.currentTarget;
+      const activePointerId = event.pointerId;
+      const pointerType = event.pointerType;
+      const startX = event.clientX;
+      const moveThresholdPx = pointerType === 'mouse' ? 1 : TOUCH_SPLIT_DRAG_THRESHOLD_PX;
+
+      try {
+        handleEl.setPointerCapture?.(activePointerId);
+      } catch {
+        // Ignore capture errors on synthetic or unsupported pointer sources
+      }
+
       let latestPercent = liveSplitPercent;
       let didMove = false;
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+      document.body.classList.add('auteur-split-dragging');
       setIsResizingSplit(true);
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== activePointerId) return;
+        if (!didMove && Math.abs(moveEvent.clientX - startX) < moveThresholdPx) {
+          return;
+        }
         didMove = true;
         latestPercent = computeLiveSplitFromPointer(moveEvent.clientX, rect.left, rect.width);
         applyLiveSplit(latestPercent);
       };
 
-      const cleanup = (commit: boolean) => {
+      const cleanup = (commit: boolean, isNormalRelease: boolean) => {
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
         window.removeEventListener('pointercancel', handlePointerCancel);
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
+        handleEl.removeEventListener('lostpointercapture', handleLostPointerCapture);
+        try {
+          if (handleEl.hasPointerCapture?.(activePointerId)) {
+            handleEl.releasePointerCapture(activePointerId);
+          }
+        } catch {
+          // Ignore release errors if pointer capture already ended
+        }
+        document.body.classList.remove('auteur-split-dragging');
         setIsResizingSplit(false);
         if (activeSplitCleanupRef.current === forceCleanup) {
           activeSplitCleanupRef.current = null;
         }
         if (commit && didMove) {
+          lastTouchTapMsRef.current = 0;
           onChangeLiveSplit?.(latestPercent);
+        } else if (commit && !didMove && isNormalRelease && pointerType !== 'mouse') {
+          const now = Date.now();
+          if (isQuickDoubleTap(lastTouchTapMsRef.current, now)) {
+            lastTouchTapMsRef.current = 0;
+            commitLiveSplit(DEFAULT_LIVE_SPLIT_PERCENT);
+          } else {
+            lastTouchTapMsRef.current = now;
+          }
         }
       };
 
-      const handlePointerUp = () => cleanup(true);
-      const handlePointerCancel = () => cleanup(true);
-      const forceCleanup = () => cleanup(false);
+      const handlePointerUp = (upEvent: PointerEvent) => {
+        if (upEvent.pointerId !== activePointerId) return;
+        cleanup(true, true);
+      };
+      const handlePointerCancel = (cancelEvent: PointerEvent) => {
+        if (cancelEvent.pointerId !== activePointerId) return;
+        cleanup(true, false);
+      };
+      const handleLostPointerCapture = (lostEvent: PointerEvent) => {
+        if (lostEvent.pointerId !== activePointerId) return;
+        cleanup(true, false);
+      };
+      const forceCleanup = () => cleanup(false, false);
 
       activeSplitCleanupRef.current = forceCleanup;
       window.addEventListener('pointermove', handlePointerMove);
       window.addEventListener('pointerup', handlePointerUp);
       window.addEventListener('pointercancel', handlePointerCancel);
+      handleEl.addEventListener('lostpointercapture', handleLostPointerCapture);
     },
-    [liveSplitPercent, onChangeLiveSplit]
+    [liveSplitPercent, onChangeLiveSplit, commitLiveSplit]
   );
 
   const handleSplitDoubleClick = useCallback(() => {
@@ -381,6 +425,7 @@ export const LiveDocument = memo(function LiveDocument({
               aria-valuemax={MAX_LIVE_SPLIT_PERCENT}
               aria-valuenow={Math.round(liveSplitPercent)}
               title={UI_LABELS.document.resizeColumnsTitle}
+              data-resizing={isResizingSplit ? 'true' : undefined}
               tabIndex={0}
               onPointerDown={handleSplitPointerDown}
               onDoubleClick={handleSplitDoubleClick}
@@ -397,7 +442,7 @@ export const LiveDocument = memo(function LiveDocument({
               />
               <span
                 aria-hidden="true"
-                className={`pointer-events-none absolute h-8 w-1 rounded-full transition-opacity ${
+                className={`auteur-live-split-grip pointer-events-none absolute h-8 w-1 rounded-full transition-opacity ${
                   isResizingSplit
                     ? 'opacity-100 bg-text-muted/80'
                     : 'opacity-0 group-hover/splitter:opacity-100 group-focus-visible/splitter:opacity-100 bg-text-faint/80'
