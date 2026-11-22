@@ -1,5 +1,6 @@
 import {memo} from 'react';
 import {Handle, Position, type NodeProps} from '@xyflow/react';
+import {Code2, Layers, Minimize2} from 'lucide-react';
 import type {
   GraphDimension,
   GraphDirection,
@@ -123,6 +124,7 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
               onToggleRaw(macroState.id);
             }}
             title={UI_LABELS.graph.rawToggleTitle(macroState.id)}
+            aria-label={UI_LABELS.graph.rawToggleTitle(macroState.id)}
             aria-pressed={isRawOpen}
             style={
               isRawOpen
@@ -133,13 +135,13 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
                   }
                 : undefined
             }
-            className={`nodrag nopan rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`nodrag nopan inline-flex items-center justify-center rounded-md border px-1.5 py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               isRawOpen
                 ? ''
                 : 'border-border-main bg-surface text-text-muted hover:text-text-main hover:bg-surface-hover'
             }`}
           >
-            {UI_LABELS.graph.rawToggle}
+            <Code2 className="h-3 w-3" aria-hidden="true" />
           </button>
 
           <button
@@ -154,9 +156,14 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
                 : UI_LABELS.graph.decoupleCardTitle(macroState.id)
             }
             aria-expanded={isExpanded}
-            className="nodrag nopan rounded-md border border-border-main bg-surface px-1.5 py-0.5 text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className="nodrag nopan inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-1.5 py-0.5 text-[11px] font-medium text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
-            {isExpanded ? UI_LABELS.graph.coupleCard : UI_LABELS.graph.decoupleCard}
+            {isExpanded ? (
+              <Minimize2 className="h-3 w-3" aria-hidden="true" />
+            ) : (
+              <Layers className="h-3 w-3" aria-hidden="true" />
+            )}
+            <span>{isExpanded ? UI_LABELS.graph.coupleCard : UI_LABELS.graph.decoupleCard}</span>
           </button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import {memo} from 'react';
-import {RotateCcw} from 'lucide-react';
+import {Code2, Layers, Minimize2, RotateCcw, Spline} from 'lucide-react';
 import type {SceneTopology} from '../../core/index.ts';
 import type {GraphDirection, GraphSceneStats} from '../../ui/canvas/index.ts';
 import {UI_LABELS} from '../../ui/labels.ts';
@@ -102,9 +102,28 @@ export const GraphHud = memo(function GraphHud({
                 allExpanded ? UI_LABELS.graph.coupleAllTitle : UI_LABELS.graph.decoupleAllTitle
               }
               aria-pressed={allExpanded}
-              className="rounded-lg border border-border-main bg-surface px-2.5 py-1 text-xs font-medium text-text-body hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              style={
+                allExpanded
+                  ? {
+                      borderColor: 'var(--tok-continuity)',
+                      color: 'var(--tok-continuity)',
+                      backgroundColor:
+                        'color-mix(in srgb, var(--tok-continuity) 12%, transparent)',
+                    }
+                  : undefined
+              }
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                allExpanded
+                  ? ''
+                  : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
+              }`}
             >
-              {allExpanded ? UI_LABELS.graph.coupleAll : UI_LABELS.graph.decoupleAll}
+              {allExpanded ? (
+                <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>{allExpanded ? UI_LABELS.graph.coupleAll : UI_LABELS.graph.decoupleAll}</span>
             </button>
 
             <button
@@ -122,13 +141,14 @@ export const GraphHud = memo(function GraphHud({
                     }
                   : undefined
               }
-              className={`rounded-lg border px-2.5 py-1 font-mono text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 allRawOpen
                   ? ''
                   : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
               }`}
             >
-              {allRawOpen ? UI_LABELS.graph.hideRawAll : UI_LABELS.graph.rawAll}
+              <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{allRawOpen ? UI_LABELS.graph.hideRawAll : UI_LABELS.graph.rawAll}</span>
             </button>
           </>
         )}
@@ -147,26 +167,27 @@ export const GraphHud = memo(function GraphHud({
                 }
               : undefined
           }
-          className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             showAllLinks
               ? ''
               : 'border-border-main bg-surface text-text-body hover:bg-surface-hover hover:text-text-main'
           }`}
         >
-          {UI_LABELS.graph.allLinks}
+          <Spline className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{UI_LABELS.graph.allLinks}</span>
         </button>
 
         <button
           type="button"
           onClick={onResetLayout}
           title={UI_LABELS.graph.resetLayoutTitle}
-          className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             hasCustomOffsets
               ? 'border-border-main bg-surface-muted text-text-main hover:bg-surface-hover'
               : 'border-border-main bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main'
           }`}
         >
-          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
           <span>{UI_LABELS.graph.resetLayout}</span>
         </button>
       </div>

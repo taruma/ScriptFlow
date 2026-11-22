@@ -1,5 +1,6 @@
 import {memo} from 'react';
 import {Handle, Position, type NodeProps} from '@xyflow/react';
+import {Code2} from 'lucide-react';
 import type {GraphDirection, GraphSubStateItem} from '../../ui/canvas/index.ts';
 import {UI_LABELS} from '../../ui/labels.ts';
 import {getDimensionColorVar, useGraphInteraction} from './graphContext.tsx';
@@ -66,6 +67,7 @@ export const SubStateNode = memo(function SubStateNode({data}: NodeProps) {
                   onToggleRaw(subState.id);
                 }}
                 title={UI_LABELS.graph.rawToggleTitle(subState.id)}
+                aria-label={UI_LABELS.graph.rawToggleTitle(subState.id)}
                 aria-pressed={isRawOpen}
                 style={
                   isRawOpen
@@ -77,13 +79,13 @@ export const SubStateNode = memo(function SubStateNode({data}: NodeProps) {
                       }
                     : undefined
                 }
-                className={`nodrag nopan rounded border px-1 py-0 font-mono text-[10px] font-semibold transition-colors cursor-pointer ${
+                className={`nodrag nopan inline-flex items-center justify-center rounded border px-1 py-0.5 transition-colors cursor-pointer ${
                   isRawOpen
                     ? ''
                     : 'border-transparent text-text-faint hover:border-border-main hover:text-text-main'
                 }`}
               >
-                {UI_LABELS.graph.rawToggle}
+                <Code2 className="h-3 w-3" aria-hidden="true" />
               </button>
             </div>
           </div>

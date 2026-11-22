@@ -7,7 +7,7 @@ This document is the transparent technical specification for **Graph View** (`[ 
 ## 1. Design Philosophy & Invariants
 
 1. **Plain-Text-as-Truth (Strictly Read-Only):** Graph View holds zero parallel mutable document state. Every card, extracted object, wire, Shot Chamber, and `RECALL` arc is derived synchronously from `rawText` (`parseAuteurScript` → `extractMetadata` → `buildGraphSceneModel` → `buildCanvasLayout`). Free-dragging nodes only stores ephemeral local `(dx, dy)` offsets in React state (`nodeOffsets`), reversible in one click via **Reset Layout**.
-2. **Decoupled Extraction Proof (`</>` Raw Branch):** Every formatted Execution Macro-State and Sub-State strips redundant syntax delimiters (`[CAM]`, `[ACT]`, `<...>`, `{...}`, `【...】`) for typographic clarity, while providing a one-click **`</>`** toggle that branches the exact unedited plain-text line off the opposite side of the node—proving the entire structured graph comes directly from plain text.
+2. **Decoupled Extraction Proof (`Show Source`):** Every formatted Execution Macro-State and Sub-State strips redundant syntax delimiters (`[CAM]`, `[ACT]`, `<...>`, `{...}`, `【...】`) for typographic clarity, while providing a one-click **`Source` (`Code2`)** toggle that branches the exact unedited plain-text line off the opposite side of the node—proving the entire structured graph comes directly from plain text.
 3. **Zero-React Pure Graph Layer (`src/ui/canvas/`):** All graph modeling, entity tokenization, deterministic auto-layout, edge derivation, and React Flow state reconciliation live in pure TypeScript modules under `src/ui/canvas/` (exported via `src/ui/canvas/index.ts`) and are unit-tested directly in Vitest (`tests/ui/canvasGraph.test.ts`).
 4. **Zero Initial Bundle Cost:** `AuteurGraphView` (`src/components/canvas/AuteurGraphView.tsx`) is code-split via `React.lazy` in `src/App.tsx`, so `@xyflow/react` (~100 kB gzipped) is never downloaded until the user switches to **Graph** mode.
 5. **Presentation-First Hygiene:** Script Supervisor linter diagnostics are intentionally hidden in Graph View, and global Paste-and-Hydrate / document Undo/Redo shortcuts are guarded (`viewMode === 'graph'`) in `src/ui/useGlobalEditorShortcuts.ts`. On narrow viewports (`< 640px`), `resolveNarrowWorkspaceState` keeps the workspace in read-only Live Mode.
@@ -108,7 +108,7 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 | **Perpendicular Decoupled Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
 | **Opposite-Side `</>` Raw Branch** | Branches **above** the Macro-State | Branches **left** of the Macro-State |
 
-- **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset Layout`**, all Macro-States start **coupled (compact)** with **`</>` Raw Input** branches collapsed and all ephemeral drag offsets cleared—keeping the initial view calm until the presenter explicitly decouples a Macro-State or reveals Raw Input.
+- **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset`**, all Macro-States start **folded (compact)** with **Source** branches collapsed and all ephemeral drag offsets cleared—keeping the initial view calm until the presenter explicitly splits a Macro-State's Sub-States or toggles source text.
 
 ### 3.2 Sub-State Isolation (`Ghost` vs. `Compact`)
 
@@ -122,7 +122,7 @@ When one or more dimensions are toggled in `SubStateIsolatorDock`:
 - **Extraction (`extraction`):** Declaring Staging block → Inferred Object (`staging-out` → `obj-in`).
 - **Continuity Spine (`spineHold`, `spineCut`, `spineMontage`):** Sequential `S1 → S2 → … → SN` links.
 - **Curved Recall Arc (`recall`):** Establishing `S#` → recalled `S#` (`recall-out` → `recall-in`), rendered with a custom cubic bezier lift in `AuteurGraphEdge.tsx`.
-- **Downstream Label Match (`labelMatch`):** Drawn on hover/click of an object (or when **`All Links`** is toggled). For Execution call sites, if `subnode-S#.#` is currently visible (parent Macro-State decoupled), the wire routes directly to `subnode-S#.#`; otherwise it falls back cleanly to `node-S#` (deduplicated per target).
+- **Downstream Label Match (`labelMatch`):** Drawn on hover/click of an object (or when **`Show Threads`** is toggled). For Execution call sites, if `subnode-S#.#` is currently visible (parent Macro-State split into Sub-States), the wire routes directly to `subnode-S#.#`; otherwise it falls back cleanly to `node-S#` (deduplicated per target).
 
 ### 3.4 Explicit Z-Index Stacking Hierarchy
 

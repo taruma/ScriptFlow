@@ -1,5 +1,6 @@
 import {memo} from 'react';
 import {Handle, Position, type NodeProps} from '@xyflow/react';
+import {Code2} from 'lucide-react';
 import type {GraphDirection} from '../../ui/canvas/index.ts';
 import {UI_LABELS} from '../../ui/labels.ts';
 import {useGraphInteraction} from './graphContext.tsx';
@@ -25,8 +26,9 @@ export const RawTextBranchNode = memo(function RawTextBranchNode({data}: NodePro
       <Handle type="source" id="raw-out" position={isLR ? Position.Bottom : Position.Right} />
 
       <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          {UI_LABELS.graph.rawBranchHeading(macroStateId)}
+        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          <Code2 className="h-3 w-3" aria-hidden="true" />
+          <span>{UI_LABELS.graph.rawBranchHeading(macroStateId)}</span>
         </span>
         <button
           type="button"
