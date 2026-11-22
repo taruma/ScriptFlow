@@ -16,6 +16,7 @@ import type {
   PatchSuggestion,
   QuestionSuggestion,
   StagedSuggestion,
+  TitleSuggestion,
 } from '../../../services/scriptTools.ts';
 import {
   buildAuditQuickPrompt,
@@ -74,6 +75,7 @@ export interface UseAiChatOrchestratorOptions {
   isOpen: boolean;
   scriptSessionKey: string;
   rawText: string;
+  sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
   focus: AssistantFocus;
   isEmpty: boolean;
@@ -97,10 +99,12 @@ export interface UseAiChatOrchestratorOptions {
     options?: {batchCount?: number}
   ) => Promise<boolean> | boolean;
   onApplyDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean> | boolean;
+  onApplyTitleSuggestion: (suggestion: TitleSuggestion) => Promise<boolean> | boolean;
   onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
   onActiveQuickScanChange?: (quickScan: QuickScanResult | null) => void;
   onRegisterLivePatchActions?: (actions: AiLivePatchActionHandlers | null) => void;
   onLastTurnSnapshotHashChange: (hash: string | undefined) => void;
+  onLastTurnRawTextChange: (rawText: string | undefined) => void;
   onOpenSettings: () => void;
   onStreamStart: () => void;
   onResetChatUi: () => void;
@@ -134,6 +138,7 @@ export interface AiChatOrchestrator {
     includedFixIds: string[]
   ) => Promise<void>;
   handleApplyDraft: (messageId: string, suggestion: DraftSuggestion) => Promise<void>;
+  handleApplyTitle: (messageId: string, suggestion: TitleSuggestion) => Promise<void>;
   handleSubmitQuestionAnswers: (
     messageId: string,
     suggestion: QuestionSuggestion,
@@ -147,6 +152,7 @@ export function useAiChatOrchestrator({
   isOpen,
   scriptSessionKey,
   rawText,
+  sceneTitle,
   ruleOverrides,
   focus,
   isEmpty,
@@ -166,10 +172,12 @@ export function useAiChatOrchestrator({
   quickScanRulesState,
   onApplyPatchSuggestion,
   onApplyDraftSuggestion,
+  onApplyTitleSuggestion,
   onActivePatchesChange,
   onActiveQuickScanChange,
   onRegisterLivePatchActions,
   onLastTurnSnapshotHashChange,
+  onLastTurnRawTextChange,
   onOpenSettings,
   onStreamStart,
   onResetChatUi,
@@ -182,6 +190,7 @@ export function useAiChatOrchestrator({
 
   const lastInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
+  const lastTurnRawTextRef = useRef<string | undefined>(undefined);
   const sentAttachmentFingerprintsRef = useRef<Set<string>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
@@ -230,11 +239,13 @@ export function useAiChatOrchestrator({
     setIsStreaming(false);
     lastInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
+    lastTurnRawTextRef.current = undefined;
     sentAttachmentFingerprintsRef.current.clear();
     onLastTurnSnapshotHashChange(undefined);
+    onLastTurnRawTextChange(undefined);
     onResetChatUi();
     setMessages([]);
-  }, [onLastTurnSnapshotHashChange, onResetChatUi]);
+  }, [onLastTurnSnapshotHashChange, onLastTurnRawTextChange, onResetChatUi]);
 
   // Reset in-memory chat, interaction chain, and brief tray automatically when switching scripts
   useEffect(() => {
@@ -299,6 +310,7 @@ export function useAiChatOrchestrator({
       };
 
       const turnSnapshotHash = currentSnapshotHash;
+      const turnRawText = rawText;
 
       const initialAssistantMessage: AiChatMessage = {
         id: assistantMessageId,
@@ -332,9 +344,11 @@ export function useAiChatOrchestrator({
           focus: activeFocus,
           prompt: effectivePrompt,
           rawText,
+          sceneTitle,
           ruleOverrides,
           previousInteractionId: lastInteractionIdRef.current,
           previousSnapshotHash: lastTurnSnapshotHashRef.current,
+          previousRawText: lastTurnRawTextRef.current,
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
@@ -392,7 +406,9 @@ export function useAiChatOrchestrator({
           }
         }
         lastTurnSnapshotHashRef.current = turnSnapshotHash;
+        lastTurnRawTextRef.current = turnRawText;
         onLastTurnSnapshotHashChange(turnSnapshotHash);
+        onLastTurnRawTextChange(turnRawText);
 
         setMessages((prev) =>
           completeAssistantTurnInMessages(prev, assistantMessageId, {
@@ -442,6 +458,7 @@ export function useAiChatOrchestrator({
       model,
       reasoningLevel,
       rawText,
+      sceneTitle,
       ruleOverrides,
       skillsState.foundationalCraftOverride,
       skillsState.skillOverrides,
@@ -449,6 +466,7 @@ export function useAiChatOrchestrator({
       onOpenSettings,
       onStreamStart,
       onLastTurnSnapshotHashChange,
+      onLastTurnRawTextChange,
     ]
   );
 
@@ -713,6 +731,16 @@ export function useAiChatOrchestrator({
     [onApplyDraftSuggestion, markSuggestionApplied, onDraftApplied]
   );
 
+  const handleApplyTitle = useCallback(
+    async (messageId: string, suggestion: TitleSuggestion) => {
+      const ok = await onApplyTitleSuggestion(suggestion);
+      if (ok) {
+        markSuggestionApplied(messageId, suggestion.id);
+      }
+    },
+    [onApplyTitleSuggestion, markSuggestionApplied]
+  );
+
   return {
     messages,
     isStreaming,
@@ -726,6 +754,7 @@ export function useAiChatOrchestrator({
     handleApplyPatch,
     handleApplyAuditFixesBatch,
     handleApplyDraft,
+    handleApplyTitle,
     handleSubmitQuestionAnswers,
     markSuggestionApplied,
     markSuggestionDismissed,

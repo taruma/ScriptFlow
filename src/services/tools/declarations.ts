@@ -13,9 +13,22 @@ import type {
 type StaticScriptToolName = Exclude<ScriptToolName, 'load_auteur_skill'>;
 
 export const MODE_TOOL_NAMES: Record<AssistantMode, readonly StaticScriptToolName[]> = {
-  refine: ['get_script_overview', 'inspect_lens_slice', 'propose_script_patch'],
-  check: ['get_script_overview', 'inspect_lens_slice', 'report_audit_review'],
-  draft: ['get_script_overview', 'propose_script_draft'],
+  refine: [
+    'get_script_overview',
+    'get_script_source',
+    'inspect_lens_slice',
+    'propose_script_patch',
+    'propose_text_replace',
+    'propose_script_title',
+  ],
+  check: ['get_script_overview', 'get_script_source', 'inspect_lens_slice', 'report_audit_review'],
+  draft: [
+    'get_script_overview',
+    'get_script_source',
+    'inspect_lens_slice',
+    'propose_script_draft',
+    'propose_script_title',
+  ],
 };
 
 export interface GeminiFunctionToolDeclaration {
@@ -126,17 +139,39 @@ function buildStaticToolDeclarationsMap(): Record<
       type: 'function',
       name: 'get_script_overview',
       description:
-        'Returns a compact read-only overview of the current Auteur Script: snapshotHash, sceneTopology, staging Macro-Blocks (MB#), Macro-State count, camera slots, reference/token counts, and active Script Supervisor diagnostics.',
+        'Returns a compact read-only overview of the current Auteur Script: sceneTitle, snapshotHash, sceneTopology, staging Macro-Blocks (MB#), Macro-State count, camera slots, reference/token counts, and active Script Supervisor diagnostics.',
       parameters: {
         type: 'object',
         properties: {},
+      },
+    },
+    get_script_source: {
+      type: 'function',
+      name: 'get_script_source',
+      description:
+        'Reads the current Auteur Script—or a targeted subset via targetIds (MB#, header names like AESTHETIC/EXECUTION, or S#)—as compact canonical v0.4.0 plain text with optional ID annotations.',
+      parameters: {
+        type: 'object',
+        properties: {
+          targetIds: {
+            type: 'array',
+            items: {type: 'string'},
+            description:
+              'Optional list of Macro-Block IDs ("MB0", "MB2"), header names ("AESTHETIC", "EXECUTION"), or Macro-State IDs ("S1", "S3") to read. Omit to read the entire script.',
+          },
+          annotateIds: {
+            type: 'boolean',
+            description:
+              'Defaults to true. Prefixes each returned Staging Macro-Block and Execution Macro-State with its exact MB# / S# ID alongside the canonical plain text.',
+          },
+        },
       },
     },
     inspect_lens_slice: {
       type: 'function',
       name: 'inspect_lens_slice',
       description:
-        'Extracts a focused read-only JSON slice of the current script using one of the 5 built-in Script Supervisor audit presets or a custom composable LensSliceSpec with resolved camera framing.',
+        'Extracts a focused read-only JSON slice of the current script using one of the 5 built-in Script Supervisor audit presets or a custom composable LensSliceSpec (including surgical macroStateIds and includeStaging) with resolved camera framing.',
       parameters: {
         type: 'object',
         properties: {
@@ -146,14 +181,27 @@ function buildStaticToolDeclarationsMap(): Record<
             description:
               'Built-in audit lens preset (lens1_spatial_optics, lens2_temporal_pacing_wear, lens3_props_inventory, lens4_acoustics_voice, lens5_blocks_grammar).',
           },
+          includeStaging: {
+            type: 'boolean',
+            description:
+              'Optional shorthand override. Set to false to omit Phase 1 Staging Macro-Blocks and return only Execution Macro-States.',
+          },
+          macroStateIds: {
+            type: 'array',
+            items: {type: 'string'},
+            description:
+              'Optional shorthand list of Execution Macro-State IDs (e.g. ["S3", "S4"]) to include while preserving inherited resolvedCamera framing from earlier states.',
+          },
           spec: {
             type: 'object',
             description:
-              'Optional custom LensSliceSpec (macroBlocks, aestheticKeys, dimensions, subStateTags, includeAllSubStates, includeResolvedCamera, includeTokenMappings, includeReferenceBindings, includeSceneTopology, includeTrailingResolution, diagnosticLenses, includeAllDiagnostics).',
+              'Optional custom LensSliceSpec (includeStaging, macroBlocks, aestheticKeys, macroStateIds, dimensions, subStateTags, includeAllSubStates, includeResolvedCamera, includeTokenMappings, includeReferenceBindings, includeSceneTopology, includeTrailingResolution, diagnosticLenses, includeAllDiagnostics).',
             properties: {
               preset: {type: 'string', enum: lensPresetIds},
+              includeStaging: {type: 'boolean'},
               macroBlocks: {type: 'array', items: {type: 'string'}},
               aestheticKeys: {type: 'array', items: {type: 'string'}},
+              macroStateIds: {type: 'array', items: {type: 'string'}},
               dimensions: {
                 type: 'array',
                 items: {
@@ -195,6 +243,63 @@ function buildStaticToolDeclarationsMap(): Record<
         'Dry-runs a transactional, ID-addressed AuteurPatch against the current script with rejectOnNewErrors=true. If valid and lint-clean, stages a reviewable PatchSuggestion without mutating the editor; if invalid or lint-rejected, returns structured errors and repairHint for self-repair.',
       parameters: patchSchema,
     },
+    propose_text_replace: {
+      type: 'function',
+      name: 'propose_text_replace',
+      description:
+        'Performs 1 to 20 atomic literal or regex find-and-replace rules across the script body or scoped targetIds (MB# / S#), preserving [HEADER] lines and dry-running the deterministic Script Supervisor linter (rejectOnNewErrors=true) before staging a reviewable PatchSuggestion.',
+      parameters: sanitizeJsonSchemaForTool({
+        type: 'object',
+        properties: {
+          expectedSnapshotHash: {
+            type: 'string',
+            description: 'Current script snapshotHash from Live Editor State or get_script_overview.',
+          },
+          summary: {
+            type: 'string',
+            description: 'Concise one-line summary of the staged text/regex replacement.',
+          },
+          replacements: {
+            type: 'array',
+            description: '1 to 20 ordered find-and-replace rules applied in one atomic pass.',
+            items: {
+              type: 'object',
+              properties: {
+                find: {
+                  type: 'string',
+                  description: 'Literal substring or regular expression pattern to find.',
+                },
+                replace: {
+                  type: 'string',
+                  description:
+                    'Replacement text (supports $1/$& capture references when isRegex=true; treated literally when isRegex=false).',
+                },
+                isRegex: {
+                  type: 'boolean',
+                  description: 'Treat find as a JavaScript regular expression (defaults to false).',
+                },
+                caseSensitive: {
+                  type: 'boolean',
+                  description: 'Match case sensitively (defaults to true). Set false for case-insensitive matching.',
+                },
+                wholeWord: {
+                  type: 'boolean',
+                  description: 'Wrap pattern in word boundaries (\\b) to avoid partial-word matches.',
+                },
+                targetIds: {
+                  type: 'array',
+                  items: {type: 'string'},
+                  description:
+                    'Optional list of target IDs ("MB0", "AESTHETIC", "S3", "S4") to scope this replacement rule.',
+                },
+              },
+              required: ['find', 'replace'],
+            },
+          },
+        },
+        required: ['expectedSnapshotHash', 'summary', 'replacements'],
+      }) as Record<string, unknown>,
+    },
     propose_script_draft: {
       type: 'function',
       name: 'propose_script_draft',
@@ -214,6 +319,26 @@ function buildStaticToolDeclarationsMap(): Record<
           draft: schemas.draft,
         },
         required: ['draft'],
+      }) as Record<string, unknown>,
+    },
+    propose_script_title: {
+      type: 'function',
+      name: 'propose_script_title',
+      description:
+        'Stages a dedicated TitleSuggestion card to rename the active scene independently of script body edits.',
+      parameters: sanitizeJsonSchemaForTool({
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Proposed scene title (non-empty, trimmed, 120 characters or fewer).',
+          },
+          rationale: {
+            type: 'string',
+            description: 'Optional concise one-sentence reason why this title fits the scene.',
+          },
+        },
+        required: ['title'],
       }) as Record<string, unknown>,
     },
     report_audit_review: {

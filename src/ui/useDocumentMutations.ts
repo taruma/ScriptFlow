@@ -23,7 +23,7 @@ import {
 import type {ConfirmDialogRequest} from '../components/ConfirmDialog.tsx';
 import type {StagingBlockCommitOptions} from '../components/stagingBlockRegistry.ts';
 import type {CopyFormatKind} from '../components/TopSlateBar.tsx';
-import type {DraftSuggestion, PatchSuggestion} from '../services/scriptTools.ts';
+import type {DraftSuggestion, PatchSuggestion, TitleSuggestion} from '../services/scriptTools.ts';
 import {copyTextToClipboard} from './clipboard.ts';
 import {APP_META, UI_LABELS} from './labels.ts';
 import {buildAiSnapshotLabel} from './scriptSnapshots.ts';
@@ -88,6 +88,7 @@ export interface UseDocumentMutationsResult {
     options?: {batchCount?: number}
   ) => Promise<boolean>;
   handleApplyAiDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean>;
+  handleApplyAiTitleSuggestion: (suggestion: TitleSuggestion) => Promise<boolean>;
 }
 
 /**
@@ -415,6 +416,21 @@ export function useDocumentMutations({
     ]
   );
 
+  const handleApplyAiTitleSuggestion = useCallback(
+    async (suggestion: TitleSuggestion): Promise<boolean> => {
+      if (isReadOnly) {
+        onSkipNextAiReset();
+        return onForkCurrentExampleWithContent(rawText, {
+          title: suggestion.title,
+        });
+      }
+      onTitleChange(suggestion.title);
+      onToast(UI_LABELS.toasts.aiTitleApplied);
+      return true;
+    },
+    [isReadOnly, rawText, onTitleChange, onForkCurrentExampleWithContent, onSkipNextAiReset, onToast]
+  );
+
   return {
     copiedKind,
     handleUpdateStaging,
@@ -437,5 +453,6 @@ export function useDocumentMutations({
     handleCommitFromDebug,
     handleApplyAiPatchSuggestion,
     handleApplyAiDraftSuggestion,
+    handleApplyAiTitleSuggestion,
   };
 }

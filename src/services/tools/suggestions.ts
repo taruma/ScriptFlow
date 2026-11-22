@@ -2,6 +2,7 @@ import {
   applyAuteurPatch,
   toAuteurEnvelope,
   type AuditLens,
+  type AuteurEnvelope,
   type AuteurPatch,
   type AuteurPatchOp,
   type AuteurReviewIssue,
@@ -100,16 +101,26 @@ export interface QuestionSuggestion {
   questions: ClarifyingQuestionItem[];
 }
 
+export interface TitleSuggestion {
+  id: string;
+  kind: 'title';
+  title: string;
+  previousTitle?: string;
+  rationale?: string;
+  baseSnapshotHash: string;
+}
+
 export type StagedSuggestion =
   | PatchSuggestion
   | DraftSuggestion
   | AuditReviewSuggestion
-  | QuestionSuggestion;
+  | QuestionSuggestion
+  | TitleSuggestion;
 
 /**
  * Merges a newly staged suggestion into the active turn's staged list, replacing
- * superseded earlier drafts, audit reviews, question cards, or same-target patches produced
- * during multi-round self-repair in the same turn.
+ * superseded earlier drafts, audit reviews, question cards, title proposals, or
+ * same-target patches produced during multi-round self-repair in the same turn.
  */
 export function upsertStagedSuggestion(
   existing: readonly StagedSuggestion[],
@@ -118,7 +129,8 @@ export function upsertStagedSuggestion(
   if (
     incoming.kind === 'draft' ||
     incoming.kind === 'audit_review' ||
-    incoming.kind === 'question'
+    incoming.kind === 'question' ||
+    incoming.kind === 'title'
   ) {
     const idx = existing.findIndex((item) => item.kind === incoming.kind);
     if (idx !== -1) {
@@ -147,6 +159,7 @@ export function upsertStagedSuggestion(
 export interface ScriptToolContext {
   mode: AssistantMode;
   rawText: string;
+  sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
   composedContext?: ComposedAgentContext;
   allowedTools?: readonly ScriptToolName[];
@@ -262,19 +275,178 @@ export function buildPatchRepairHint(
     : 'Review the returned errors and submit a corrected AuteurPatch.';
 }
 
-export function buildPatchSuggestion(
-  rawText: string,
-  patch: AuteurPatch,
-  ruleOverrides: LintRuleOverrides | undefined,
-  nextId: () => string
-):
+function diffCandidateDiagnostics(
+  diagnosticsBefore: readonly DerivedDiagnosticIR[],
+  diagnosticsAfter: readonly DerivedDiagnosticIR[]
+): {
+  introduced: DerivedDiagnosticIR[];
+  resolved: DerivedDiagnosticIR[];
+} {
+  const sigOf = (d: DerivedDiagnosticIR) => `${d.targetId}::${d.ruleId}::${d.severity}::${d.message}`;
+
+  const beforeCounts = new Map<string, number>();
+  for (const d of diagnosticsBefore) {
+    const sig = sigOf(d);
+    beforeCounts.set(sig, (beforeCounts.get(sig) ?? 0) + 1);
+  }
+
+  const remainingBefore = new Map(beforeCounts);
+  const introduced: DerivedDiagnosticIR[] = [];
+  const afterCounts = new Map<string, number>();
+
+  for (const d of diagnosticsAfter) {
+    const sig = sigOf(d);
+    afterCounts.set(sig, (afterCounts.get(sig) ?? 0) + 1);
+    const prevCount = remainingBefore.get(sig) ?? 0;
+    if (prevCount > 0) {
+      remainingBefore.set(sig, prevCount - 1);
+    } else {
+      introduced.push(d);
+    }
+  }
+
+  const remainingAfter = new Map(afterCounts);
+  const resolved: DerivedDiagnosticIR[] = [];
+  for (const d of diagnosticsBefore) {
+    const sig = sigOf(d);
+    const nextCount = remainingAfter.get(sig) ?? 0;
+    if (nextCount > 0) {
+      remainingAfter.set(sig, nextCount - 1);
+    } else {
+      resolved.push(d);
+    }
+  }
+
+  return {introduced, resolved};
+}
+
+export type BuildPatchSuggestionResult =
   | {ok: true; suggestion: PatchSuggestion}
   | {
       ok: false;
       errors: PatchError[];
       introducedErrors: DerivedDiagnosticIR[];
       repairHint: string;
-    } {
+    };
+
+function assemblePatchSuggestion(params: {
+  rawText: string;
+  candidateRawText: string;
+  summary: string;
+  affectedIds: string[];
+  opsCount: number;
+  patch: AuteurPatch;
+  beforeEnvelope: AuteurEnvelope;
+  nextEnvelope: AuteurEnvelope;
+  diagnosticsBefore: DerivedDiagnosticIR[];
+  diagnosticsAfter: DerivedDiagnosticIR[];
+  introducedErrors: DerivedDiagnosticIR[];
+  introducedWarnings: DerivedDiagnosticIR[];
+  resolvedDiagnostics: DerivedDiagnosticIR[];
+  nextId: () => string;
+}): PatchSuggestion {
+  const beforeCounts = countBySeverity(params.diagnosticsBefore);
+  const afterCounts = countBySeverity(params.diagnosticsAfter);
+  const diff = buildLineDiff(params.rawText, params.candidateRawText);
+
+  return {
+    id: params.nextId(),
+    kind: 'patch',
+    summary: params.summary,
+    baseSnapshotHash: params.beforeEnvelope.snapshotHash,
+    nextSnapshotHash: params.nextEnvelope.snapshotHash,
+    affectedIds: params.affectedIds,
+    opsCount: params.opsCount,
+    patch: params.patch,
+    beforeRawText: params.rawText,
+    candidateRawText: params.candidateRawText,
+    diff,
+    lintDelta: {
+      beforeErrors: beforeCounts.errors,
+      beforeWarnings: beforeCounts.warnings,
+      afterErrors: afterCounts.errors,
+      afterWarnings: afterCounts.warnings,
+      introducedErrors: params.introducedErrors,
+      introducedWarnings: params.introducedWarnings,
+      resolvedDiagnostics: params.resolvedDiagnostics,
+    },
+  };
+}
+
+/**
+ * Shared linter-gated PatchSuggestion builder (`rejectOnNewErrors: true`) from
+ * a pre-computed `candidateRawText` (used by `propose_text_replace`).
+ */
+export function buildPatchSuggestionFromCandidateText(
+  rawText: string,
+  candidateRawText: string,
+  summary: string,
+  affectedIds: string[],
+  opsCount: number,
+  ruleOverrides: LintRuleOverrides | undefined,
+  nextId: () => string,
+  syntheticPatch?: AuteurPatch
+): BuildPatchSuggestionResult {
+  const beforeEnvelope = toAuteurEnvelope(rawText, ruleOverrides);
+  const nextEnvelope = toAuteurEnvelope(candidateRawText, ruleOverrides);
+
+  const diagnosticsBefore = beforeEnvelope.derived.diagnostics;
+  const diagnosticsAfter = nextEnvelope.derived.diagnostics;
+  const {introduced, resolved: resolvedDiagnostics} = diffCandidateDiagnostics(
+    diagnosticsBefore,
+    diagnosticsAfter
+  );
+  const introducedErrors = introduced.filter((d) => d.severity === 'error');
+  const introducedWarnings = introduced.filter((d) => d.severity === 'warning');
+
+  if (introducedErrors.length > 0) {
+    const errors: PatchError[] = introducedErrors.map((d) => ({
+      code: 'LINT_ERROR_INTRODUCED',
+      path: d.targetId,
+      message: `[${d.ruleId}] ${d.message} ${d.repairHint}`,
+    }));
+    return {
+      ok: false,
+      errors,
+      introducedErrors,
+      repairHint: buildPatchRepairHint(errors, introducedErrors, beforeEnvelope.snapshotHash),
+    };
+  }
+
+  const fallbackPatch: AuteurPatch = syntheticPatch ?? {
+    expectedSnapshotHash: beforeEnvelope.snapshotHash,
+    summary,
+    ops: [],
+  };
+
+  const suggestion = assemblePatchSuggestion({
+    rawText,
+    candidateRawText,
+    summary:
+      summary.trim() ||
+      `Update ${affectedIds.length > 0 ? affectedIds.join(', ') : `${opsCount} replacement(s)`}`,
+    affectedIds,
+    opsCount,
+    patch: fallbackPatch,
+    beforeEnvelope,
+    nextEnvelope,
+    diagnosticsBefore,
+    diagnosticsAfter,
+    introducedErrors,
+    introducedWarnings,
+    resolvedDiagnostics,
+    nextId,
+  });
+
+  return {ok: true, suggestion};
+}
+
+export function buildPatchSuggestion(
+  rawText: string,
+  patch: AuteurPatch,
+  ruleOverrides: LintRuleOverrides | undefined,
+  nextId: () => string
+): BuildPatchSuggestionResult {
   const beforeEnvelope = toAuteurEnvelope(rawText, ruleOverrides);
   const applied = applyAuteurPatch(rawText, patch, {
     rejectOnNewErrors: true,
@@ -294,36 +466,27 @@ export function buildPatchSuggestion(
     };
   }
 
-  const beforeCounts = countBySeverity(applied.diagnosticsBefore);
-  const afterCounts = countBySeverity(applied.diagnosticsAfter);
-  const diff = buildLineDiff(rawText, applied.nextRawText);
   const affectedIds = collectAffectedIds(patch.ops);
   const summary =
     patch.summary?.trim() ||
     `Update ${affectedIds.length > 0 ? affectedIds.join(', ') : `${patch.ops.length} operation(s)`}`;
 
-  const suggestion: PatchSuggestion = {
-    id: nextId(),
-    kind: 'patch',
+  const suggestion = assemblePatchSuggestion({
+    rawText,
+    candidateRawText: applied.nextRawText,
     summary,
-    baseSnapshotHash: beforeEnvelope.snapshotHash,
-    nextSnapshotHash: applied.nextEnvelope.snapshotHash,
     affectedIds,
     opsCount: applied.appliedOpsCount,
     patch,
-    beforeRawText: rawText,
-    candidateRawText: applied.nextRawText,
-    diff,
-    lintDelta: {
-      beforeErrors: beforeCounts.errors,
-      beforeWarnings: beforeCounts.warnings,
-      afterErrors: afterCounts.errors,
-      afterWarnings: afterCounts.warnings,
-      introducedErrors: applied.introducedErrors,
-      introducedWarnings: applied.introducedWarnings,
-      resolvedDiagnostics: applied.resolvedDiagnostics,
-    },
-  };
+    beforeEnvelope,
+    nextEnvelope: applied.nextEnvelope,
+    diagnosticsBefore: applied.diagnosticsBefore,
+    diagnosticsAfter: applied.diagnosticsAfter,
+    introducedErrors: applied.introducedErrors,
+    introducedWarnings: applied.introducedWarnings,
+    resolvedDiagnostics: applied.resolvedDiagnostics,
+    nextId,
+  });
 
   return {ok: true, suggestion};
 }

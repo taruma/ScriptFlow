@@ -307,6 +307,7 @@ export const EDITOR_LABELS = {
     fileReadError: 'Unable to read the selected file',
     aiPatchApplied: 'AI patch applied — press Undo to revert',
     aiDraftApplied: 'AI draft applied — press Undo to revert',
+    aiTitleApplied: 'Scene title updated',
     aiFixApplied: 'AI fix applied — press Undo to revert',
     aiFixesBatchApplied: (count: number) => `Applied ${count} AI fixes — press Undo to revert`,
     aiForkedAndApplied: (title: string) => `Forked "${title}" and applied AI suggestion`,

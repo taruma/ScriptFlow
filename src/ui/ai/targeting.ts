@@ -243,10 +243,16 @@ export function formatToolDisplayName(toolName: string): string {
   switch (toolName) {
     case 'get_script_overview':
       return 'Inspect overview';
+    case 'get_script_source':
+      return 'Read script source';
     case 'inspect_lens_slice':
       return 'Inspect lens slice';
     case 'propose_script_patch':
       return 'Stage patch';
+    case 'propose_text_replace':
+      return 'Stage text replace';
+    case 'propose_script_title':
+      return 'Suggest scene title';
     case 'propose_script_draft':
       return 'Compile draft';
     case 'report_audit_review':
@@ -301,16 +307,48 @@ export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo
       detail = 'Reads Macro-Block & Macro-State structure, topology, snapshot hash, and lint counts.';
       break;
     }
+    case 'get_script_source': {
+      const targetIds = Array.isArray(args.targetIds)
+        ? (args.targetIds as unknown[]).map(String).filter((id) => id.trim().length > 0)
+        : [];
+      if (targetIds.length > 0) {
+        const shown = targetIds.slice(0, 6).join(', ');
+        const suffix = targetIds.length > 6 ? ` (+${targetIds.length - 6})` : '';
+        detail = `Targets: ${shown}${suffix}`;
+      } else {
+        detail = 'Reads full canonical v0.4.0 plain-text script source.';
+      }
+      break;
+    }
     case 'inspect_lens_slice': {
       const preset = typeof args.preset === 'string' ? args.preset : undefined;
       const spec =
         args.spec && typeof args.spec === 'object' && !Array.isArray(args.spec)
           ? (args.spec as Record<string, unknown>)
           : undefined;
-      if (preset) {
-        detail = `Preset: ${preset}`;
-      } else if (spec && Array.isArray(spec.dimensions) && spec.dimensions.length > 0) {
-        detail = `Custom slice: ${(spec.dimensions as unknown[]).map(String).join(', ')}`;
+      const rawMacroStateIds = Array.isArray(args.macroStateIds)
+        ? args.macroStateIds
+        : spec && Array.isArray(spec.macroStateIds)
+          ? spec.macroStateIds
+          : [];
+      const macroStateIds = (rawMacroStateIds as unknown[])
+        .map(String)
+        .filter((id) => id.trim().length > 0);
+      const statesSuffix =
+        macroStateIds.length > 0
+          ? `States: ${macroStateIds.slice(0, 6).join(', ')}${macroStateIds.length > 6 ? ` (+${macroStateIds.length - 6})` : ''}`
+          : '';
+      const baseDetail = preset
+        ? `Preset: ${preset}`
+        : spec && Array.isArray(spec.dimensions) && spec.dimensions.length > 0
+          ? `Custom slice: ${(spec.dimensions as unknown[]).map(String).join(', ')}`
+          : '';
+      if (baseDetail && statesSuffix) {
+        detail = `${baseDetail} · ${statesSuffix}`;
+      } else if (baseDetail) {
+        detail = baseDetail;
+      } else if (statesSuffix) {
+        detail = `Custom slice · ${statesSuffix}`;
       } else {
         detail = 'Inspects targeted Script Supervisor lens slice.';
       }
@@ -323,6 +361,25 @@ export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo
       if (opsCount > 0) parts.push(`${opsCount} ${opsCount === 1 ? 'op' : 'ops'}`);
       if (summary) parts.push(truncatePreview(summary, 90));
       detail = parts.length > 0 ? parts.join(' · ') : 'Dry-runs and stages targeted script patch.';
+      break;
+    }
+    case 'propose_text_replace': {
+      const rulesCount = Array.isArray(args.replacements) ? args.replacements.length : 0;
+      const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
+      const parts: string[] = [];
+      if (rulesCount > 0) parts.push(`${rulesCount} ${rulesCount === 1 ? 'rule' : 'rules'}`);
+      if (summary) parts.push(truncatePreview(summary, 90));
+      detail =
+        parts.length > 0
+          ? parts.join(' · ')
+          : 'Applies literal or regex replacements and stages a lint-checked patch.';
+      break;
+    }
+    case 'propose_script_title': {
+      const titleArg = typeof args.title === 'string' ? args.title.trim() : '';
+      detail = titleArg
+        ? `"${truncatePreview(titleArg, 70)}"`
+        : 'Stages a proposed scene title update.';
       break;
     }
     case 'propose_script_draft': {

@@ -5,7 +5,9 @@ import {
   BUILTIN_AUTEUR_SKILLS,
   DEFAULT_FOUNDATIONAL_CRAFT,
   assistantModeToFocus,
+  buildRecentEditSummary,
   composeAgentContext,
+  computeAllowedToolNames,
   getLensAuditChecklist,
   type LensAuditChecklist,
 } from '../../src/services/auteurKnowledge.ts';
@@ -34,30 +36,46 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(assistantModeToFocus('refine')).toBe('refine');
     expect(assistantModeToFocus('draft')).toBe('draft');
 
-    // auto + empty script -> propose_script_draft (+ load_auteur_skill), no get_script_overview
+    // auto + empty script -> propose_script_draft, propose_script_title (+ load_auteur_skill), no get_script_overview
     const autoEmpty = composeAgentContext({focus: 'auto', rawText: '   '});
     expect(autoEmpty.editorState.isEmpty).toBe(true);
-    expect(autoEmpty.allowedToolNames).toEqual(['propose_script_draft', 'load_auteur_skill']);
+    expect(autoEmpty.allowedToolNames).toEqual([
+      'propose_script_draft',
+      'propose_script_title',
+      'load_auteur_skill',
+    ]);
+    expect(autoEmpty.allowedToolNames).not.toContain('ask_question');
 
-    // auto + existing script -> overview, slice, patch, audit (+ load_auteur_skill), NO propose_script_draft
+    // auto + existing script -> overview, source, slice, patch, text replace, title, audit (+ load_auteur_skill), NO propose_script_draft
     const autoExisting = composeAgentContext({focus: 'auto', rawText: INTERROGATION_SCRIPT});
     expect(autoExisting.editorState.isEmpty).toBe(false);
     expect(autoExisting.allowedToolNames).toEqual([
       'get_script_overview',
+      'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
+      'propose_text_replace',
+      'propose_script_title',
       'report_audit_review',
       'load_auteur_skill',
     ]);
     expect(autoExisting.allowedToolNames).not.toContain('propose_script_draft');
+    expect(autoExisting.allowedToolNames).not.toContain('ask_question');
 
-    // draft + empty vs non-empty
+    // draft + empty vs non-empty (non-empty Draft gains get_script_source & inspect_lens_slice)
     const draftEmpty = composeAgentContext({focus: 'draft', rawText: ''});
-    expect(draftEmpty.allowedToolNames).toEqual(['propose_script_draft', 'load_auteur_skill']);
+    expect(draftEmpty.allowedToolNames).toEqual([
+      'propose_script_draft',
+      'propose_script_title',
+      'load_auteur_skill',
+    ]);
     const draftExisting = composeAgentContext({focus: 'draft', rawText: INTERROGATION_SCRIPT});
     expect(draftExisting.allowedToolNames).toEqual([
       'get_script_overview',
+      'get_script_source',
+      'inspect_lens_slice',
       'propose_script_draft',
+      'propose_script_title',
       'load_auteur_skill',
     ]);
 
@@ -65,17 +83,25 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     const refineCtx = composeAgentContext({focus: 'refine', rawText: INTERROGATION_SCRIPT});
     expect(refineCtx.allowedToolNames).toEqual([
       'get_script_overview',
+      'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
+      'propose_text_replace',
+      'propose_script_title',
       'load_auteur_skill',
     ]);
     const auditCtx = composeAgentContext({focus: 'audit', rawText: INTERROGATION_SCRIPT});
     expect(auditCtx.allowedToolNames).toEqual([
       'get_script_overview',
+      'get_script_source',
       'inspect_lens_slice',
       'report_audit_review',
       'load_auteur_skill',
     ]);
+    // Audit never exposes ask_question even if explicitly requested
+    expect(computeAllowedToolNames('audit', false, true, 'ask_first')).not.toContain(
+      'ask_question'
+    );
 
     // When zero skills are available (all muted), load_auteur_skill is omitted entirely
     const allMutedOverrides = Object.fromEntries(
@@ -89,8 +115,11 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(noSkillsCtx.availableSkills).toHaveLength(0);
     expect(noSkillsCtx.allowedToolNames).toEqual([
       'get_script_overview',
+      'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
+      'propose_text_replace',
+      'propose_script_title',
     ]);
   });
 
@@ -256,8 +285,35 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       focus: 'refine',
       rawText: scriptWithLint,
       previousSnapshotHash: ctx.editorState.snapshotHash,
+      previousRawText: scriptWithLint,
+      sceneTitle: 'Corridor Standoff',
     });
     expect(sameHashCtx.editorState.changedSinceLastTurn).toBe(false);
+    expect(sameHashCtx.editorState.sceneTitle).toBe('Corridor Standoff');
+    expect(sameHashCtx.editorState.recentEditSummary).toBeUndefined();
+    expect(sameHashCtx.sections.liveEditorState.text).toContain('Scene title: "Corridor Standoff"');
+    expect(sameHashCtx.sections.liveEditorState.text).not.toContain('Recent user edits');
+
+    // Manual edit between turns injects automatic recent-edit diff summary into Live Editor State
+    const editedScript = scriptWithLint.replace('Elena steps stage-left', 'Elena pauses');
+    const editedCtx = composeAgentContext({
+      focus: 'refine',
+      rawText: editedScript,
+      sceneTitle: 'Corridor Standoff',
+      previousSnapshotHash: ctx.editorState.snapshotHash,
+      previousRawText: scriptWithLint,
+    });
+    expect(editedCtx.editorState.changedSinceLastTurn).toBe(true);
+    expect(editedCtx.editorState.recentEditSummary).toContain('Modified: S1');
+    expect(editedCtx.editorState.recentEditSummary).toContain('- [CAM 01]');
+    expect(editedCtx.editorState.recentEditSummary).toContain('+ [CAM 01]');
+    expect(editedCtx.sections.liveEditorState.text).toContain('Recent user edits since last turn:');
+    expect(editedCtx.sections.liveEditorState.text).toContain('Modified: S1');
+
+    // Direct buildRecentEditSummary test for unchanged input
+    expect(buildRecentEditSummary(scriptWithLint, scriptWithLint)).toBeUndefined();
+    // Beginner & Power-User adaptation guidance is present in default foundational craft
+    expect(DEFAULT_FOUNDATIONAL_CRAFT).toContain('Beginner & Power-User Adaptation');
   });
 
   it('executes load_auteur_skill cleanly across available, active, muted, unknown, and custom skill paths', () => {
@@ -534,11 +590,14 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       },
     ]);
 
-    // Verify auto mode on existing script sent 5 tools (excluding propose_script_draft)
+    // Verify auto mode on existing script sent 8 tools (excluding propose_script_draft & ask_question)
     expect(result.trace.rounds[0].request.toolNames).toEqual([
       'get_script_overview',
+      'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
+      'propose_text_replace',
+      'propose_script_title',
       'report_audit_review',
       'load_auteur_skill',
     ]);

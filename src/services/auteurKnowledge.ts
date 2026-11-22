@@ -1,4 +1,10 @@
-import {toAuteurEnvelope} from '../core/index.ts';
+import {
+  renderStagingBlockBody,
+  renderSubState,
+  toAuteurEnvelope,
+  type AuteurEnvelope,
+} from '../core/index.ts';
+import {buildLineDiff} from './scriptTools.ts';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
   assistantModeToFocus,
@@ -36,7 +42,9 @@ export {
   BUILTIN_AUTEUR_SKILLS,
   DEFAULT_FOUNDATIONAL_CRAFT,
   assistantModeToFocus,
+  buildRecentEditSummary,
   buildToolProtocolBlock,
+  computeAllowedToolNames,
   getLensAuditChecklist,
 };
 
@@ -66,11 +74,114 @@ export type {
 // Live Editor State Summary & Single-State Skill Composer
 // ---------------------------------------------------------------------------
 
+const MAX_RECENT_DIFF_LINES = 12;
+const MAX_DIFF_LINE_CHARS = 180;
+
+function truncateDiffLine(text: string): string {
+  if (text.length <= MAX_DIFF_LINE_CHARS) return text;
+  return `${text.slice(0, MAX_DIFF_LINE_CHARS - 1)}…`;
+}
+
+/**
+ * Computes a compact, bounded summary of manual user edits between the previous turn's
+ * script and the current script (affected MB# / S# IDs plus up to 12 changed lines).
+ */
+function buildRecentEditSummary(
+  previousRawText: string,
+  currentRawText: string,
+  currentEnvelope?: AuteurEnvelope
+): string | undefined {
+  if (previousRawText === currentRawText) return undefined;
+
+  const prevEnv = toAuteurEnvelope(previousRawText);
+  const currEnv = currentEnvelope ?? toAuteurEnvelope(currentRawText);
+
+  const modifiedIds: string[] = [];
+  const addedIds: string[] = [];
+  const removedIds: string[] = [];
+
+  const prevBlocks = prevEnv.document.stagingMacroBlocks;
+  const currBlocks = currEnv.document.stagingMacroBlocks;
+  const maxBlocks = Math.max(prevBlocks.length, currBlocks.length);
+  for (let i = 0; i < maxBlocks; i++) {
+    const prevBlock = prevBlocks[i];
+    const currBlock = currBlocks[i];
+    if (prevBlock && currBlock) {
+      const prevSig = `${prevBlock.header}\n${renderStagingBlockBody(prevBlock)}`;
+      const currSig = `${currBlock.header}\n${renderStagingBlockBody(currBlock)}`;
+      if (prevSig !== currSig) {
+        modifiedIds.push(currBlock.id);
+      }
+    } else if (currBlock) {
+      addedIds.push(currBlock.id);
+    } else if (prevBlock) {
+      removedIds.push(prevBlock.id);
+    }
+  }
+
+  const prevStates = prevEnv.document.executionMacroBlock?.macroStates ?? [];
+  const currStates = currEnv.document.executionMacroBlock?.macroStates ?? [];
+  const maxStates = Math.max(prevStates.length, currStates.length);
+  for (let i = 0; i < maxStates; i++) {
+    const prevState = prevStates[i];
+    const currState = currStates[i];
+    if (prevState && currState) {
+      const prevLine = prevState.subStates.map(renderSubState).join(' -> ');
+      const currLine = currState.subStates.map(renderSubState).join(' -> ');
+      if (prevLine !== currLine) {
+        modifiedIds.push(currState.id);
+      }
+    } else if (currState) {
+      addedIds.push(currState.id);
+    } else if (prevState) {
+      removedIds.push(prevState.id);
+    }
+  }
+
+  const diff = buildLineDiff(previousRawText, currentRawText);
+  const changedLines = diff.lines.filter((line) => line.type !== 'context');
+
+  if (
+    modifiedIds.length === 0 &&
+    addedIds.length === 0 &&
+    removedIds.length === 0 &&
+    changedLines.length === 0
+  ) {
+    return undefined;
+  }
+
+  const summaryParts: string[] = [];
+  if (modifiedIds.length > 0) summaryParts.push(`Modified: ${modifiedIds.join(', ')}`);
+  if (addedIds.length > 0) summaryParts.push(`Added: ${addedIds.join(', ')}`);
+  if (removedIds.length > 0) summaryParts.push(`Removed: ${removedIds.join(', ')}`);
+
+  const lines: string[] = [];
+  if (summaryParts.length > 0) {
+    lines.push(`  - Targets: ${summaryParts.join(' | ')}`);
+  }
+
+  const shownLines = changedLines.slice(0, MAX_RECENT_DIFF_LINES);
+  for (const line of shownLines) {
+    const prefix = line.type === 'added' ? '+' : '-';
+    lines.push(`  - \`${prefix} ${truncateDiffLine(line.text)}\``);
+  }
+  const omittedCount = changedLines.length - shownLines.length;
+  if (omittedCount > 0) {
+    lines.push(`  - (+${omittedCount} more changed ${omittedCount === 1 ? 'line' : 'lines'})`);
+  }
+
+  return lines.join('\n');
+}
+
 function buildLiveEditorStateText(state: LiveEditorStateSummary): string {
   const lines: string[] = [
     '## Live Editor State (Authoritative Current Snapshot)',
+    ...(state.sceneTitle ? [`- Scene title: "${state.sceneTitle}"`] : []),
     `- Empty document: ${state.isEmpty ? 'yes' : 'no'}`,
     `- Snapshot hash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — do not rely on prior turn memory for IDs or lines' : 'current'})`,
+    ...(state.recentEditSummary
+      ? [`- Recent user edits since last turn:\n${state.recentEditSummary}`]
+      : []),
     `- Scene topology: \`${state.sceneTopology}\` | Continuation context: ${state.hasContinuationContext ? 'yes' : 'no'}`,
     `- Structure: ${state.stagingBlockCount} Staging Macro-Block(s), ${state.beatCount} Execution Macro-State(s), ${state.referenceBindingCount} Reference Binding(s), ${state.tokenMappingCount} Token Mapping(s)`,
     `- Deterministic Script Supervisor lint: ${state.diagnosticsSummary.errors} error(s), ${state.diagnosticsSummary.warnings} warning(s)`,
@@ -132,21 +243,31 @@ function computeAllowedToolNames(
 
   if (focus === 'draft' || (focus === 'auto' && isEmpty)) {
     if (!isEmpty) {
-      tools.push('get_script_overview');
+      tools.push('get_script_overview', 'get_script_source', 'inspect_lens_slice');
     }
-    tools.push('propose_script_draft');
+    tools.push('propose_script_draft', 'propose_script_title');
   } else if (focus === 'auto') {
     tools.push(
       'get_script_overview',
+      'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
+      'propose_text_replace',
+      'propose_script_title',
       'report_audit_review'
     );
   } else if (focus === 'refine') {
-    tools.push('get_script_overview', 'inspect_lens_slice', 'propose_script_patch');
+    tools.push(
+      'get_script_overview',
+      'get_script_source',
+      'inspect_lens_slice',
+      'propose_script_patch',
+      'propose_text_replace',
+      'propose_script_title'
+    );
   } else {
     // focus === 'audit'
-    tools.push('get_script_overview', 'inspect_lens_slice', 'report_audit_review');
+    tools.push('get_script_overview', 'get_script_source', 'inspect_lens_slice', 'report_audit_review');
   }
 
   if (askQuestionMode !== 'off' && focus !== 'audit') {
@@ -192,12 +313,22 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   });
 
   const prevHash = options.previousSnapshotHash?.trim();
-  const changedSinceLastTurn = Boolean(prevHash && prevHash !== envelope.snapshotHash);
+  const changedSinceLastTurn = Boolean(
+    (prevHash && prevHash !== envelope.snapshotHash) ||
+      (options.previousRawText !== undefined && options.previousRawText !== options.rawText)
+  );
+  const trimmedTitle = options.sceneTitle?.trim();
+  const recentEditSummary =
+    changedSinceLastTurn && options.previousRawText !== undefined
+      ? buildRecentEditSummary(options.previousRawText, options.rawText, envelope)
+      : undefined;
 
   const editorState: LiveEditorStateSummary = {
     isEmpty,
+    ...(trimmedTitle ? {sceneTitle: trimmedTitle} : {}),
     snapshotHash: envelope.snapshotHash,
     changedSinceLastTurn,
+    ...(recentEditSummary ? {recentEditSummary} : {}),
     sceneTopology: derived.sceneTopology,
     hasContinuationContext: derived.hasContinuationContext,
     stagingBlockCount,

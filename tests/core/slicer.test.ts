@@ -170,5 +170,34 @@ MS on Miller frame-left facing screen-right.
     });
     expect(mutedLens5.diagnostics).toEqual([]);
   });
+
+  it('supports surgical macroStateIds filtering while preserving inherited resolvedCamera state and includeStaging: false', () => {
+    // S3 in INTERROGATION is a bare [CAM 01] recall that inherits framing from S1
+    const surgical = sliceAuteurScript(INTERROGATION, {
+      preset: 'lens1_spatial_optics',
+      macroStateIds: ['s2', 'S3'],
+    });
+
+    expect(surgical.macroStates.map((ms) => ms.id)).toEqual(['S2', 'S3']);
+    expect(surgical.stagingMacroBlocks.map((b) => b.header)).toEqual(['LOGIC', 'OPENING']);
+    expect(surgical.macroStates[1].resolvedCamera).toEqual({
+      subStateTag: 'CAM',
+      identifier: '01',
+      transition: 'RECALL',
+      currentDescriptor: '',
+      effectiveFraming: 'MS, OTS Miller',
+    });
+
+    // includeStaging: false omits stagingMacroBlocks while keeping requested macroStates intact
+    const executionOnly = sliceAuteurScript(INTERROGATION, {
+      includeStaging: false,
+      macroStateIds: ['S3'],
+      includeAllSubStates: true,
+      includeResolvedCamera: true,
+    });
+    expect(executionOnly.stagingMacroBlocks).toEqual([]);
+    expect(executionOnly.macroStates.map((ms) => ms.id)).toEqual(['S3']);
+    expect(executionOnly.macroStates[0].resolvedCamera?.effectiveFraming).toBe('MS, OTS Miller');
+  });
 });
 

@@ -584,8 +584,10 @@ export const AuteurLensPresetIdSchema = z.enum([
 
 export const LensSliceSpecSchema = z.object({
   preset: AuteurLensPresetIdSchema.optional(),
+  includeStaging: z.boolean().optional(),
   macroBlocks: z.array(z.string().min(1)).optional(),
   aestheticKeys: z.array(z.string().min(1)).optional(),
+  macroStateIds: z.array(z.string().min(1)).optional(),
   dimensions: z.array(SubStateDimensionSchema).optional(),
   subStateTags: z.array(z.string().min(1)).optional(),
   includeAllSubStates: z.boolean().optional(),

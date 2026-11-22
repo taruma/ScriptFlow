@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {toAuteurEnvelope} from '../../src/core/index.ts';
+import {projectAuteurPatchPreview, toAuteurEnvelope} from '../../src/core/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 import {composeAgentContext} from '../../src/services/auteurKnowledge.ts';
 import {
@@ -16,6 +16,7 @@ import {
   type PatchSuggestion,
   type QuestionSuggestion,
   type StagedSuggestion,
+  type TitleSuggestion,
 } from '../../src/services/scriptTools.ts';
 import {
   formatQuestionAnswersPrompt,
@@ -57,12 +58,13 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
     expect(typeof blocked.result.repairHint).toBe('string');
   });
 
-  it('returns compact overview and focused lens slices without mutating rawText', () => {
+  it('returns compact overview (including sceneTitle) and focused lens slices without mutating rawText', () => {
     const overview = executeScriptToolCall(
       {name: 'get_script_overview', arguments: {}},
-      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, sceneTitle: 'Interrogation Room Coverage'}
     );
     expect(overview.ok).toBe(true);
+    expect(overview.result.sceneTitle).toBe('Interrogation Room Coverage');
     expect(typeof overview.result.snapshotHash).toBe('string');
     expect(overview.result.sceneTopology).toBe('multi_camera_coverage');
     expect(Number(overview.result.macroStateCount)).toBeGreaterThan(0);
@@ -71,13 +73,25 @@ describe('scriptTools mode-scoped catalogs and local execution runtime', () => {
     expect(overview.result).not.toHaveProperty('beats');
 
     const sliceResult = executeScriptToolCall(
-      {name: 'inspect_lens_slice', arguments: {preset: 'lens1_spatial_optics'}},
+      {
+        name: 'inspect_lens_slice',
+        arguments: {
+          preset: 'lens1_spatial_optics',
+          macroStateIds: ['S2', 'S3'],
+          includeStaging: false,
+        },
+      },
       {mode: 'check', rawText: SAMPLE_SCRIPT}
     );
     expect(sliceResult.ok).toBe(true);
-    const slice = sliceResult.result.slice as {preset: string; macroStates: unknown[]};
+    const slice = sliceResult.result.slice as {
+      preset: string;
+      stagingMacroBlocks: unknown[];
+      macroStates: Array<{id: string}>;
+    };
     expect(slice.preset).toBe('lens1_spatial_optics');
-    expect(slice.macroStates.length).toBeGreaterThan(0);
+    expect(slice.stagingMacroBlocks).toEqual([]);
+    expect(slice.macroStates.map((ms) => ms.id)).toEqual(['S2', 'S3']);
 
     const invalidPreset = executeScriptToolCall(
       {name: 'inspect_lens_slice', arguments: {preset: 'lens99_invalid'}},
@@ -712,5 +726,270 @@ describe('ask_question opt-in clarifying workflow', () => {
     expect(tooltip.title).toBe('Clarifying questions');
     expect(tooltip.detail).toContain('1 question');
     expect(tooltip.detail).toContain('Camera topology?');
+  });
+});
+
+describe('get_script_source, propose_text_replace, and propose_script_title tools', () => {
+  it('reads full canonical v0.4.0 source or filtered targetIds with optional ID annotations and reports unknown IDs', () => {
+    const full = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, sceneTitle: 'Interrogation'}
+    );
+    expect(full.ok).toBe(true);
+    expect(full.result.sceneTitle).toBe('Interrogation');
+    expect(String(full.result.sourceText)).toContain('# MB0');
+    expect(String(full.result.sourceText)).toContain('S1: [CAM 01]');
+    expect(Array.isArray(full.result.annotatedSections)).toBe(true);
+    expect(
+      (full.result.annotatedSections as Array<{id: string}>).some((s) => s.id === 'MB0')
+    ).toBe(true);
+
+    const fullRaw = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {annotateIds: false}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, sceneTitle: 'Interrogation'}
+    );
+    expect(fullRaw.ok).toBe(true);
+    expect(fullRaw.result.sourceText).toBe(SAMPLE_SCRIPT);
+
+    const filtered = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {targetIds: ['MB0', 'S2']}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(filtered.ok).toBe(true);
+    expect(String(filtered.result.sourceText)).toContain('MB0');
+    expect(String(filtered.result.sourceText)).toContain('[INTENT]');
+    expect(String(filtered.result.sourceText)).toContain('S2:');
+    expect(String(filtered.result.sourceText)).not.toContain('S1:');
+
+    const unannotated = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {targetIds: ['MB0', 'S2'], annotateIds: false}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(unannotated.ok).toBe(true);
+    expect(String(unannotated.result.sourceText)).not.toContain('# MB0');
+    expect(String(unannotated.result.sourceText)).not.toContain('S2:');
+
+    const missingOnly = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {targetIds: ['MB99', 'S99']}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(missingOnly.ok).toBe(false);
+    expect(missingOnly.result.notFoundIds).toEqual(['MB99', 'S99']);
+    expect(typeof missingOnly.result.repairHint).toBe('string');
+
+    const partial = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {targetIds: ['MB0', 'S99']}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(partial.ok).toBe(true);
+    expect(partial.result.notFoundIds).toEqual(['S99']);
+    expect(typeof partial.result.repairHint).toBe('string');
+  });
+
+  it('executes propose_text_replace with literal/regex/word-boundary/scoped replacements, header guard, snapshot guard, and lint gate', () => {
+    const baseEnvelope = toAuteurEnvelope(SAMPLE_SCRIPT);
+    const staged: StagedSuggestion[] = [];
+
+    // 1. Stale snapshotHash rejected
+    const stale = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: 'deadbeef',
+          summary: 'Rename Miller to Mercer',
+          replacements: [{find: 'Miller', replace: 'Mercer'}],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(stale.ok).toBe(false);
+    expect((stale.result.errors as Array<{code: string}>)[0]?.code).toBe('SNAPSHOT_MISMATCH');
+    expect(String(stale.result.repairHint)).toContain(baseEnvelope.snapshotHash);
+
+    // 2. Zero matches rejected cleanly
+    const noMatch = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: baseEnvelope.snapshotHash,
+          summary: 'Replace missing word',
+          replacements: [{find: 'NonExistentCharacter', replace: 'Someone'}],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(noMatch.ok).toBe(false);
+    expect(typeof noMatch.result.repairHint).toBe('string');
+
+    // 3. Invalid regex rejected cleanly
+    const badRegex = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: baseEnvelope.snapshotHash,
+          summary: 'Broken regex',
+          replacements: [{find: '(unclosed', replace: 'x', isRegex: true}],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(badRegex.ok).toBe(false);
+    expect(String(badRegex.result.error)).toContain('Invalid regular expression');
+
+    // 4. Header guard: replacing 'INTENT' globally must not corrupt the [INTENT] header bracket
+    const headerGuard = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: baseEnvelope.snapshotHash,
+          summary: 'Attempt to replace INTENT header',
+          replacements: [{find: 'INTENT', replace: 'BROKEN', caseSensitive: true}],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(headerGuard.ok).toBe(false);
+
+    // 5. Lint-error rejection when replacement introduces banned viewport syntax
+    const lintBroken = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: baseEnvelope.snapshotHash,
+          summary: 'Break viewport coordinate rule',
+          replacements: [
+            {
+              find: 'frame-left',
+              replace: 'stage-left',
+              caseSensitive: false,
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, onStageSuggestion: (s) => staged.push(s)}
+    );
+    expect(lintBroken.ok).toBe(false);
+    expect(staged).toHaveLength(0);
+    expect(Array.isArray(lintBroken.result.introducedErrors)).toBe(true);
+
+    // 6. Scoped targetIds replacement only touches requested Macro-State
+    const scoped = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: baseEnvelope.snapshotHash,
+          summary: 'Rename Miller to Mercer in S1 only',
+          replacements: [{find: 'Miller', replace: 'Mercer', targetIds: ['S1']}],
+        },
+      },
+      {
+        mode: 'refine',
+        rawText: SAMPLE_SCRIPT,
+        createSuggestionId: () => 'replace-scoped',
+        onStageSuggestion: (s) => staged.push(s),
+      }
+    );
+    expect(scoped.ok).toBe(true);
+    const scopedPatch = staged[0] as PatchSuggestion;
+    expect(scopedPatch.affectedIds).toEqual(['S1']);
+    expect(scopedPatch.candidateRawText).toContain('Mercer');
+    // Still contains Miller in other blocks/states
+    expect(scopedPatch.candidateRawText).toContain('Miller');
+
+    // 7. Full-script regex + wholeWord rename stages PatchSuggestion compatible with Live Mode margin indicators
+    const fullRename = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: baseEnvelope.snapshotHash,
+          summary: 'Rename Miller to Mercer everywhere',
+          replacements: [
+            {
+              find: 'Miller',
+              replace: 'Mercer',
+              wholeWord: true,
+              caseSensitive: true,
+            },
+          ],
+        },
+      },
+      {
+        mode: 'refine',
+        rawText: SAMPLE_SCRIPT,
+        createSuggestionId: () => 'replace-full',
+        onStageSuggestion: (s) => staged.push(s),
+      }
+    );
+    expect(fullRename.ok).toBe(true);
+    expect(Number(fullRename.result.matchCount)).toBeGreaterThan(2);
+    const fullPatch = staged[1] as PatchSuggestion;
+    expect(fullPatch.kind).toBe('patch');
+    expect(fullPatch.candidateRawText).not.toContain('Miller');
+    expect(fullPatch.candidateRawText).toContain('Mercer');
+    expect(fullPatch.patch.ops.length).toBeGreaterThan(0);
+
+    // Verify synthesized patch projects cleanly for Live Mode hover-to-diff margin indicators
+    const preview = projectAuteurPatchPreview(SAMPLE_SCRIPT, fullPatch.patch);
+    expect(preview).not.toBeNull();
+    expect(preview!.stagingChanges.length).toBeGreaterThan(0);
+    expect(preview!.executionChanges.length).toBeGreaterThan(0);
+  });
+
+  it('validates, normalizes, stages, and supersedes TitleSuggestion via propose_script_title', () => {
+    const staged: StagedSuggestion[] = [];
+
+    // Empty title rejected
+    const emptyRes = executeScriptToolCall(
+      {name: 'propose_script_title', arguments: {title: '   '}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, sceneTitle: 'Interrogation'}
+    );
+    expect(emptyRes.ok).toBe(false);
+
+    // Duplicate title rejected (case-insensitive)
+    const dupRes = executeScriptToolCall(
+      {name: 'propose_script_title', arguments: {title: '"interrogation"'}},
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, sceneTitle: 'Interrogation'}
+    );
+    expect(dupRes.ok).toBe(false);
+
+    // Valid title strips wrapping quotes and stages TitleSuggestion
+    const validRes = executeScriptToolCall(
+      {
+        name: 'propose_script_title',
+        arguments: {
+          title: '"The Manila Folder"',
+          rationale: 'Anchors the scene around its central physical prop.',
+        },
+      },
+      {
+        mode: 'refine',
+        rawText: SAMPLE_SCRIPT,
+        sceneTitle: 'Interrogation',
+        createSuggestionId: () => 'title-1',
+        onStageSuggestion: (s) => staged.push(s),
+      }
+    );
+    expect(validRes.ok).toBe(true);
+    expect(staged).toHaveLength(1);
+    const titleSuggestion = staged[0] as TitleSuggestion;
+    expect(titleSuggestion).toMatchObject({
+      id: 'title-1',
+      kind: 'title',
+      title: 'The Manila Folder',
+      previousTitle: 'Interrogation',
+      rationale: 'Anchors the scene around its central physical prop.',
+    });
+
+    // Newer TitleSuggestion supersedes earlier TitleSuggestion in the same turn
+    const replacement: TitleSuggestion = {
+      id: 'title-2',
+      kind: 'title',
+      title: 'Cold Fluorescent Truth',
+      previousTitle: 'Interrogation',
+      baseSnapshotHash: titleSuggestion.baseSnapshotHash,
+    };
+    const merged = upsertStagedSuggestion(staged, replacement);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe('title-2');
   });
 });

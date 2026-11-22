@@ -81,19 +81,35 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
     '- Self-repair on tool errors: whenever a tool returns `is_error: true` (`ok: false`), inspect `errors`, `introducedErrors`, `diagnostics`, and `repairHint`, fix the issue, and retry before giving your final reply.',
   ];
 
-  if (hasTool('propose_script_patch') || hasTool('report_audit_review')) {
+  if (
+    hasTool('propose_script_patch') ||
+    hasTool('propose_text_replace') ||
+    hasTool('report_audit_review')
+  ) {
     lines.push(
-      `- Optimistic concurrency: always pass \`expectedSnapshotHash: "${snapshotHash}"\` on \`propose_script_patch\` and any embedded \`suggestedPatch\` inside \`report_audit_review\`.`
+      `- Optimistic concurrency: always pass \`expectedSnapshotHash: "${snapshotHash}"\` on \`propose_script_patch\`, \`propose_text_replace\`, and any embedded \`suggestedPatch\` inside \`report_audit_review\`.`
     );
   }
 
-  if (hasTool('get_script_overview') && hasTool('inspect_lens_slice')) {
+  if (hasTool('get_script_overview') && (hasTool('get_script_source') || hasTool('inspect_lens_slice'))) {
     lines.push(
-      '- Inspect before judging or patching: use `get_script_overview` for exact IDs (`MB#`, `MB#.#`, `S#`, `S#.#`) and `inspect_lens_slice` for focused slices with resolved camera framing and topology-filtered checklists. When auditing multiple lenses, invoke independent `inspect_lens_slice` calls in parallel in the same round.'
+      '- Surgical reading first: for localized edits—especially when `Recent user edits` or `[Target Scope: ...]` already identifies the target—prefer `get_script_source` with `targetIds` (e.g., `["MB0", "S3", "S4"]`) or `inspect_lens_slice` with `macroStateIds` / `includeStaging: false` instead of reading the whole script. Use `get_script_overview` for exact IDs (`MB#`, `MB#.#`, `S#`, `S#.#`), `get_script_source` (without `targetIds`) when you need the complete compact `v0.4.0` plain text, and parallel `inspect_lens_slice` calls when auditing multiple lenses.'
     );
   } else if (hasTool('get_script_overview') && !isEmpty) {
     lines.push(
       '- Call `get_script_overview` first if you need to inspect existing Macro-Blocks before staging a new draft.'
+    );
+  }
+
+  if (hasTool('propose_text_replace') && hasTool('propose_script_patch')) {
+    lines.push(
+      '- Choosing the right edit tool: use `propose_text_replace` for fast literal or regex find-and-replace (renaming characters/props/tokens or pattern substitutions across the whole script or scoped `targetIds`); use `propose_script_patch` for structural AST edits (inserting, deleting, reordering, or rewriting Macro-Blocks, Macro-States, Sub-States, or `[AESTHETIC]` entries). Both run the deterministic Script Supervisor linter (`rejectOnNewErrors: true`).'
+    );
+  }
+
+  if (hasTool('propose_script_title')) {
+    lines.push(
+      '- Scene title updates: use `propose_script_title` to propose or update the scene title independently of script body edits.'
     );
   }
 
@@ -105,7 +121,7 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
 
   if (focus === 'auto' && !isEmpty) {
     lines.push(
-      '- Auto routing on an existing script: use `propose_script_patch` for targeted refinements/rewrites, `report_audit_review` for Script Supervisor audits, or answer directly if the user only asks a question.'
+      '- Auto routing on an existing script: use `propose_text_replace` for find/regex replacements, `propose_script_patch` for structural refinements/rewrites, `propose_script_title` for renaming the scene, `report_audit_review` for Script Supervisor audits, or answer directly if the user only asks a question.'
     );
   }
 

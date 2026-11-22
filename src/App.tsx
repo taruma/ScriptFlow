@@ -394,12 +394,14 @@ export default function App() {
               isOpen={isAiOpen}
               scriptSessionKey={aiScriptSessionKey}
               rawText={rawText}
+              sceneTitle={sceneTitle}
               doc={doc}
               readOnly={isReadOnly}
               ruleOverrides={settings.lintRuleOverrides}
               onClose={() => setIsAiOpen(false)}
               onApplyPatchSuggestion={mutations.handleApplyAiPatchSuggestion}
               onApplyDraftSuggestion={mutations.handleApplyAiDraftSuggestion}
+              onApplyTitleSuggestion={mutations.handleApplyAiTitleSuggestion}
               onJumpToTarget={handleJumpToAiTarget}
               onActivePatchesChange={handleActiveAiPatchesChange}
               onActiveQuickScanChange={handleActiveQuickScanChange}

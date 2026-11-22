@@ -37,7 +37,7 @@ Live Mode, Source Mode, deterministic linting, exports, and programmatic JSON IR
   - Per-script **Version History** saving automatic pre-AI (`AI Draft`, `AI Patch`, `Audit Fix`) and `Pre-Restore` checkpoints alongside permanent manual **Milestones** with side-by-side diff, single-step undoable restore, and fork.
 - **Optional Browser-Local BYOK AI Assistant**
   - Lazy-loaded right-side AI Canvas Sidebar (zero bundle or runtime overhead until opened) supporting streaming `@google/genai` Interactions API turns across Gemini 4 (`gemini-4-hydrogen`, `gemini-4-neon`, `gemini-4-carbon`) and `gemini-3.5-flash-lite` with `Low` / `Medium` / `High` reasoning levels.
-  - Unified `Auto` / `Draft` / `Refine` / `Audit` focus bar with editor-state-aware tool pruning, 7 strictly read-only/staging local tools (`get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `propose_script_draft`, `report_audit_review`, dynamic `load_auteur_skill`, and opt-in `ask_question` via `Ask First`), and suggestions-first review cards with smart sibling Audit Fix rebasing and transactional **Apply All** batching.
+  - Unified `Auto` / `Draft` / `Refine` / `Audit` focus bar with editor-state-aware tool pruning, automatic recent-edit diff context, 10 strictly read-only/staging local tools (`get_script_overview`, `get_script_source`, surgical `inspect_lens_slice`, `propose_script_patch`, `propose_text_replace`, `propose_script_title`, `propose_script_draft`, `report_audit_review`, dynamic `load_auteur_skill`, and opt-in `ask_question` via `Ask First`), and suggestions-first review cards (including `TitleSuggestionCard`, smart sibling Audit Fix rebasing, and transactional **Apply All** batching).
   - Layer 2.5 **Quick Scan** semantic triage via the stateless `v1beta` Decisions API (`gemini-decision-1`) with `Strict` / `Balanced` / `Lenient` sensitivity, AST-filtered document / per-`S#` / per-`S#.#` rules, expandable rule criteria, and 1-click **Deep Audit** escalation.
   - Multimodal **Scene Brief & References** modal (local image/text dropzone, drag-and-drop multi-file Gemini Files API uploads & 48-hour cloud file browser, public YouTube URLs with `Static`/`Agentic` video mode), 4-tab **Context Inspector** (`Foundational Craft`, 6 built-in Extension Skills + custom skills, `Quick Scan Rules` + custom rules, and unified JSON Export / selective Merge or Replace Import packs), Live Mode hover-to-diff patch & quick-scan margin indicators, per-turn & cumulative USD cost estimates, and an opt-in sanitized **Trace Inspector**.
 - **Programmatic JSON IR & Debug Inspector**
@@ -58,7 +58,7 @@ npm install
 # Start the Vite dev server (http://localhost:3000)
 npm run dev
 
-# Run the Vitest unit test suite (29 test files / 295 tests)
+# Run the Vitest unit test suite (29 test files / 308 tests)
 npm test
 
 # Run Vitest in watch mode
@@ -95,4 +95,4 @@ ScriptFlow runs **100% client-side in your browser**—no backend server or prox
 | [`docs/UI_PHILOSOPHY.md`](docs/UI_PHILOSOPHY.md) | Asymmetric `40/60` Live, Source & Graph View layout principles, Waterfall editing, Library/History UX, AI Canvas UX, and 4-mode theme palette. |
 | [`docs/GRAPH_VIEW.md`](docs/GRAPH_VIEW.md) | Technical architecture & plain-text extraction reference for the read-only Graph View (`src/ui/canvas/` + `src/components/canvas/`). |
 | [`docs/UI_LABELING.md`](docs/UI_LABELING.md) | Single Source of Truth UI copy contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS`), Pure Auteur UI vocabulary, and theme labels. |
-| [`docs/AI_ASSISTANT_WALKTHROUGH.md`](docs/AI_ASSISTANT_WALKTHROUGH.md) | End-to-end guide to BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus, all 7 local AI tools, Quick Scan, Brief modal, Context Inspector, and Trace Inspector. |
+| [`docs/AI_ASSISTANT_WALKTHROUGH.md`](docs/AI_ASSISTANT_WALKTHROUGH.md) | End-to-end guide to BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus, all 10 local AI tools, Quick Scan, Brief modal, Context Inspector, and Trace Inspector. |

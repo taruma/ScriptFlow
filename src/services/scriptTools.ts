@@ -8,11 +8,14 @@ import {
 } from './tools/suggestions.ts';
 import {
   runGetScriptOverview,
+  runGetScriptSource,
   runInspectLensSlice,
 } from './tools/handlers/inspectHandlers.ts';
 import {
   runProposeScriptDraft,
   runProposeScriptPatch,
+  runProposeScriptTitle,
+  runProposeTextReplace,
   runReportAuditReview,
 } from './tools/handlers/mutationHandlers.ts';
 import {runAskQuestion, runLoadAuteurSkill} from './tools/handlers/workflowHandlers.ts';
@@ -35,6 +38,7 @@ export {
 } from './tools/lineDiff.ts';
 
 export {
+  buildPatchSuggestionFromCandidateText,
   upsertStagedSuggestion,
   type AuditReviewIssueItem,
   type AuditReviewSuggestion,
@@ -46,6 +50,7 @@ export {
   type ScriptToolContext,
   type ScriptToolExecutionResult,
   type StagedSuggestion,
+  type TitleSuggestion,
   type ToolCallInput,
 } from './tools/suggestions.ts';
 
@@ -95,13 +100,19 @@ export function executeScriptToolCall(
 
   switch (call.name as ScriptToolName) {
     case 'get_script_overview':
-      return runGetScriptOverview(context.rawText, context.ruleOverrides);
+      return runGetScriptOverview(context.rawText, context.ruleOverrides, context.sceneTitle);
+    case 'get_script_source':
+      return runGetScriptSource(args, context.rawText, context.ruleOverrides, context.sceneTitle);
     case 'inspect_lens_slice':
       return runInspectLensSlice(args, context.rawText, context.ruleOverrides);
     case 'propose_script_patch':
       return runProposeScriptPatch(args, context, nextId);
+    case 'propose_text_replace':
+      return runProposeTextReplace(args, context, nextId);
     case 'propose_script_draft':
       return runProposeScriptDraft(args, context, nextId);
+    case 'propose_script_title':
+      return runProposeScriptTitle(args, context, nextId);
     case 'report_audit_review':
       return runReportAuditReview(args, context, nextId);
     case 'load_auteur_skill':

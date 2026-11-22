@@ -269,19 +269,25 @@ const res = applyAuteurPatch(rawText, patchFromModel, {
 
 `sliceAuteurEnvelope(envelope, spec)` and `sliceAuteurScript(rawText, specOrPreset, ruleOverrides?)` extract minimal, low-noise JSON projections tailored to any craft dimension while preserving original `S#` and `S#.#` IDs so evaluator findings can target exact nodes.
 
+#### Surgical Slicing Options (`LensSliceSpec`)
+- **`macroStateIds?: string[]`**: Restricts `macroStates[]` strictly to the requested Macro-State IDs (case-insensitive, normalized uppercase e.g. `["S3", "S4"]`) while still computing `resolvedCamera` from the full-envelope `derived.macroStateContinuity` so camera inheritance from earlier unsliced states (`S1..S(k-1)`) stays 100% accurate.
+- **`includeStaging?: boolean`**: When set to `false`, omits `stagingMacroBlocks` (`[]`) for compact execution-only inspection.
+
 #### Example: Isolate `[ACT]` Only Against Resolved `[CAM]` Framing
 
 ```ts
 import { sliceAuteurScript } from '../src/core/index.ts';
 
 const slice = sliceAuteurScript(rawText, {
+  includeStaging: true,
   macroBlocks: ['LOGIC', 'OPENING'],
+  macroStateIds: ['S2', 'S3'],
   dimensions: ['action'],
   includeResolvedCamera: true,
 });
 ```
 
-Every `macroStates[]` item in `slice` contains strictly `action` Sub-States paired with `resolvedCamera: { subStateTag: "CAM", identifier, transition, currentDescriptor, effectiveFraming }`—so even on bare `[CAM 01]` holds or recalls, the evaluator immediately knows what the camera frames.
+Every `macroStates[]` item in `slice` contains strictly `action` Sub-States paired with `resolvedCamera: { subStateTag: "CAM", identifier, transition, currentDescriptor, effectiveFraming }`—so even on bare `[CAM 01]` holds or recalls (or when slicing only `S3`), the evaluator immediately knows what the camera frames.
 
 #### Built-In Script Supervisor Audit Lens Presets (`AUDIT_LENS_PRESETS`)
 

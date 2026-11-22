@@ -28,7 +28,7 @@ import {
   type AssistantFocus,
 } from '../services/auteurKnowledge.ts';
 import type {QuickScanResult} from '../services/geminiDecisions.ts';
-import type {DraftSuggestion, PatchSuggestion} from '../services/scriptTools.ts';
+import type {DraftSuggestion, PatchSuggestion, TitleSuggestion} from '../services/scriptTools.ts';
 import {
   buildAiTargetOptions,
   isNearScrollBottom,
@@ -83,6 +83,7 @@ export interface AiAssistantSidebarProps {
   isOpen?: boolean;
   scriptSessionKey: string;
   rawText: string;
+  sceneTitle: string;
   doc: AuteurDocument;
   readOnly: boolean;
   ruleOverrides?: LintRuleOverrides;
@@ -93,6 +94,7 @@ export interface AiAssistantSidebarProps {
     options?: {batchCount?: number}
   ) => Promise<boolean> | boolean;
   onApplyDraftSuggestion: (suggestion: DraftSuggestion) => Promise<boolean> | boolean;
+  onApplyTitleSuggestion: (suggestion: TitleSuggestion) => Promise<boolean> | boolean;
   onJumpToTarget: (targetId: string) => void;
   onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
   onActiveQuickScanChange?: (quickScan: QuickScanResult | null) => void;
@@ -103,12 +105,14 @@ export function AiAssistantSidebar({
   isOpen = true,
   scriptSessionKey,
   rawText,
+  sceneTitle,
   doc,
   readOnly,
   ruleOverrides,
   onClose,
   onApplyPatchSuggestion,
   onApplyDraftSuggestion,
+  onApplyTitleSuggestion,
   onJumpToTarget,
   onActivePatchesChange,
   onActiveQuickScanChange,
@@ -131,6 +135,7 @@ export function AiAssistantSidebar({
   const [contextInitialTab, setContextInitialTab] = useState<ContextInspectorTabId>('preview');
   const [inspectedTrace, setInspectedTrace] = useState<AiInspectableTrace | null>(null);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
+  const [lastTurnRawText, setLastTurnRawText] = useState<string | undefined>(undefined);
   const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
   const [sessionCostTooltip, setSessionCostTooltip] = useState<ActivityHoverTooltip | null>(null);
 
@@ -153,8 +158,10 @@ export function AiAssistantSidebar({
         ? composeAgentContext({
             focus,
             rawText,
+            sceneTitle,
             ruleOverrides,
             previousSnapshotHash: lastTurnSnapshotHash,
+            previousRawText: lastTurnRawText,
             foundationalCraftOverride: aiSkills.skillsState.foundationalCraftOverride ?? undefined,
             skillOverrides: aiSkills.skillsState.skillOverrides,
             customSkills: aiSkills.skillsState.customSkills,
@@ -167,8 +174,10 @@ export function AiAssistantSidebar({
       isOpen,
       focus,
       rawText,
+      sceneTitle,
       ruleOverrides,
       lastTurnSnapshotHash,
+      lastTurnRawText,
       aiSkills.skillsState.foundationalCraftOverride,
       aiSkills.skillsState.skillOverrides,
       aiSkills.skillsState.customSkills,
@@ -232,6 +241,7 @@ export function AiAssistantSidebar({
     isOpen,
     scriptSessionKey,
     rawText,
+    sceneTitle,
     ruleOverrides,
     focus,
     isEmpty,
@@ -251,10 +261,12 @@ export function AiAssistantSidebar({
     quickScanRulesState: quickScanRules.rulesState,
     onApplyPatchSuggestion,
     onApplyDraftSuggestion,
+    onApplyTitleSuggestion,
     onActivePatchesChange,
     onActiveQuickScanChange,
     onRegisterLivePatchActions,
     onLastTurnSnapshotHashChange: setLastTurnSnapshotHash,
+    onLastTurnRawTextChange: setLastTurnRawText,
     onOpenSettings: handleOpenSettings,
     onStreamStart: handleStreamStart,
     onResetChatUi: handleResetChatUi,
@@ -510,6 +522,7 @@ export function AiAssistantSidebar({
                     onApplyPatch={chat.handleApplyPatch}
                     onApplyAuditFixesBatch={chat.handleApplyAuditFixesBatch}
                     onApplyDraft={chat.handleApplyDraft}
+                    onApplyTitle={chat.handleApplyTitle}
                     onSubmitQuestionAnswers={chat.handleSubmitQuestionAnswers}
                     onDismissSuggestion={chat.markSuggestionDismissed}
                     onQuickAudit={chat.handleQuickAudit}

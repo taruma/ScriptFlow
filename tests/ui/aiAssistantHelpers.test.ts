@@ -5,6 +5,8 @@ import {
   buildAiTargetOptions,
   buildAuditQuickPrompt,
   buildScopedRefinePrompt,
+  formatToolCallTooltip,
+  formatToolDisplayName,
   isSuggestionStale,
   reconcileTargetScope,
   resolveEditorJumpTarget,
@@ -91,6 +93,61 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
     expect(shouldShowSettingsLinkForError('model_not_found')).toBe(true);
     expect(shouldShowSettingsLinkForError('network_error')).toBe(false);
     expect(shouldShowSettingsLinkForError('aborted')).toBe(false);
+  });
+
+  it('formats display names and hover tooltips for get_script_source, propose_text_replace, propose_script_title, and surgical inspect_lens_slice', () => {
+    expect(formatToolDisplayName('get_script_source')).toBe('Read script source');
+    expect(formatToolDisplayName('propose_text_replace')).toBe('Stage text replace');
+    expect(formatToolDisplayName('propose_script_title')).toBe('Suggest scene title');
+
+    const sourceAll = formatToolCallTooltip({
+      callId: 'c-src-all',
+      name: 'get_script_source',
+      arguments: {},
+      status: 'ok',
+    });
+    expect(sourceAll.title).toBe('Read script source');
+    expect(sourceAll.detail).toContain('plain-text');
+
+    const sourceScoped = formatToolCallTooltip({
+      callId: 'c-src-scoped',
+      name: 'get_script_source',
+      arguments: {targetIds: ['MB0', 'S3', 'S4']},
+      status: 'ok',
+    });
+    expect(sourceScoped.detail).toBe('Targets: MB0, S3, S4');
+
+    const replaceTip = formatToolCallTooltip({
+      callId: 'c-rep',
+      name: 'propose_text_replace',
+      arguments: {
+        summary: 'Rename Mark to Marcus everywhere',
+        replacements: [{find: 'Mark', replace: 'Marcus'}],
+      },
+      status: 'ok',
+    });
+    expect(replaceTip.title).toBe('Stage text replace');
+    expect(replaceTip.detail).toBe('1 rule · Rename Mark to Marcus everywhere');
+
+    const titleTip = formatToolCallTooltip({
+      callId: 'c-title',
+      name: 'propose_script_title',
+      arguments: {title: 'Midnight Platform'},
+      status: 'ok',
+    });
+    expect(titleTip.title).toBe('Suggest scene title');
+    expect(titleTip.detail).toBe('"Midnight Platform"');
+
+    const surgicalSliceTip = formatToolCallTooltip({
+      callId: 'c-slice',
+      name: 'inspect_lens_slice',
+      arguments: {
+        preset: 'lens1_spatial_optics',
+        macroStateIds: ['S3', 'S4'],
+      },
+      status: 'ok',
+    });
+    expect(surgicalSliceTip.detail).toBe('Preset: lens1_spatial_optics · States: S3, S4');
   });
 });
 

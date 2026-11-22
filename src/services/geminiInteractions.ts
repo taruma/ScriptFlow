@@ -303,8 +303,10 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const composedContext = composeAgentContext({
     focus,
     rawText: options.rawText,
+    sceneTitle: options.sceneTitle,
     ruleOverrides: options.ruleOverrides,
     previousSnapshotHash: options.previousSnapshotHash,
+    previousRawText: options.previousRawText,
     foundationalCraftOverride: options.foundationalCraftOverride,
     skillOverrides: options.skillOverrides,
     customSkills: options.customSkills,
@@ -481,6 +483,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
           {
             mode: options.mode,
             rawText: options.rawText,
+            sceneTitle: options.sceneTitle,
             ruleOverrides: options.ruleOverrides,
             composedContext,
             createSuggestionId: options.createSuggestionId,

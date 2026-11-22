@@ -125,100 +125,115 @@ export function sliceAuteurEnvelope(
   envelope: AuteurEnvelope,
   spec: LensSliceSpec
 ): AuteurLensSlice {
-  const macroBlockFilter = spec.macroBlocks
-    ? new Set(spec.macroBlocks.map((m) => m.trim().toUpperCase()))
+  const effectiveSpec: LensSliceSpec = spec.preset
+    ? {...AUDIT_LENS_PRESETS[spec.preset], ...spec}
+    : spec;
+
+  const macroBlockFilter = effectiveSpec.macroBlocks
+    ? new Set(effectiveSpec.macroBlocks.map((m) => m.trim().toUpperCase()))
     : null;
-  const aestheticKeyFilter = spec.aestheticKeys
-    ? new Set(spec.aestheticKeys.map((k) => k.trim().toLowerCase()))
+  const aestheticKeyFilter = effectiveSpec.aestheticKeys
+    ? new Set(effectiveSpec.aestheticKeys.map((k) => k.trim().toLowerCase()))
     : null;
 
   const stagingMacroBlocks: StagingMacroBlockIR[] = [];
 
-  for (const block of envelope.document.stagingMacroBlocks) {
-    const includedByBlock =
-      macroBlockFilter === null ||
-      macroBlockFilter.has(block.header.toUpperCase()) ||
-      macroBlockFilter.has(block.kind.toUpperCase());
+  if (effectiveSpec.includeStaging !== false) {
+    for (const block of envelope.document.stagingMacroBlocks) {
+      const includedByBlock =
+        macroBlockFilter === null ||
+        macroBlockFilter.has(block.header.toUpperCase()) ||
+        macroBlockFilter.has(block.kind.toUpperCase());
 
-    const includedByAestheticKeys =
-      block.format === 'key_value' && aestheticKeyFilter !== null && macroBlockFilter === null;
+      const includedByAestheticKeys =
+        block.format === 'key_value' && aestheticKeyFilter !== null && macroBlockFilter === null;
 
-    if (!includedByBlock && !includedByAestheticKeys) continue;
+      if (!includedByBlock && !includedByAestheticKeys) continue;
 
-    if (block.format === 'key_value' && aestheticKeyFilter !== null) {
-      const filteredEntries = block.entries.filter(
-        (entry) => entry.key !== null && aestheticKeyFilter.has(entry.key.trim().toLowerCase())
-      );
-      if (filteredEntries.length > 0) {
-        stagingMacroBlocks.push({
-          ...block,
-          entries: filteredEntries,
-        });
+      if (block.format === 'key_value' && aestheticKeyFilter !== null) {
+        const filteredEntries = block.entries.filter(
+          (entry) => entry.key !== null && aestheticKeyFilter.has(entry.key.trim().toLowerCase())
+        );
+        if (filteredEntries.length > 0) {
+          stagingMacroBlocks.push({
+            ...block,
+            entries: filteredEntries,
+          });
+        }
+      } else {
+        stagingMacroBlocks.push(block);
       }
-    } else {
-      stagingMacroBlocks.push(block);
     }
   }
 
   const continuityById = new Map(
     envelope.derived.macroStateContinuity.map((c) => [c.macroStateId, c])
   );
+  const macroStateIdFilter =
+    effectiveSpec.macroStateIds && effectiveSpec.macroStateIds.length > 0
+      ? new Set(effectiveSpec.macroStateIds.map((id) => id.trim().toUpperCase()))
+      : null;
   const referencedTokenSet = new Set<string>();
 
-  const macroStates: SlicedMacroState[] = (envelope.document.executionMacroBlock?.macroStates ?? []).map(
-    (ms) => {
-      const cont = continuityById.get(ms.id);
-      if (cont) {
-        for (const token of cont.referencedTokens) {
-          referencedTokenSet.add(token);
-        }
+  const sourceMacroStates = envelope.document.executionMacroBlock?.macroStates ?? [];
+  const filteredMacroStates = macroStateIdFilter
+    ? sourceMacroStates.filter((ms) => macroStateIdFilter.has(ms.id.toUpperCase()))
+    : sourceMacroStates;
+
+  const macroStates: SlicedMacroState[] = filteredMacroStates.map((ms) => {
+    const cont = continuityById.get(ms.id);
+    if (cont) {
+      for (const token of cont.referencedTokens) {
+        referencedTokenSet.add(token);
       }
-
-      const filteredSubStates = ms.subStates.filter((sub) => matchesSubStateFilter(sub, spec));
-      const lastSub = ms.subStates[ms.subStates.length - 1];
-
-      const sliced: SlicedMacroState = {
-        id: ms.id,
-        subStates: filteredSubStates,
-      };
-
-      if (spec.includeResolvedCamera && cont) {
-        sliced.resolvedCamera = {
-          subStateTag: 'CAM',
-          identifier: cont.activeCameraIdentifier,
-          transition: cont.cameraTransition,
-          currentDescriptor: cont.currentDescriptor,
-          effectiveFraming: cont.effectiveFraming,
-        };
-      }
-
-      if (spec.includeTrailingResolution) {
-        sliced.endsOnDialogue = lastSub?.dimension === 'dialogue';
-      }
-
-      return sliced;
     }
-  );
+
+    const filteredSubStates = ms.subStates.filter((sub) =>
+      matchesSubStateFilter(sub, effectiveSpec)
+    );
+    const lastSub = ms.subStates[ms.subStates.length - 1];
+
+    const sliced: SlicedMacroState = {
+      id: ms.id,
+      subStates: filteredSubStates,
+    };
+
+    if (effectiveSpec.includeResolvedCamera && cont) {
+      sliced.resolvedCamera = {
+        subStateTag: 'CAM',
+        identifier: cont.activeCameraIdentifier,
+        transition: cont.cameraTransition,
+        currentDescriptor: cont.currentDescriptor,
+        effectiveFraming: cont.effectiveFraming,
+      };
+    }
+
+    if (effectiveSpec.includeTrailingResolution) {
+      sliced.endsOnDialogue = lastSub?.dimension === 'dialogue';
+    }
+
+    return sliced;
+  });
 
   const result: AuteurLensSlice = {
     snapshotHash: envelope.snapshotHash,
     schemaVersion: envelope.document.schemaVersion,
-    ...(spec.preset ? {preset: spec.preset} : {}),
+    ...(effectiveSpec.preset ? {preset: effectiveSpec.preset} : {}),
     stagingMacroBlocks,
     macroStates,
   };
 
-  if (spec.includeSceneTopology) {
+  if (effectiveSpec.includeSceneTopology) {
     result.sceneTopology = envelope.derived.sceneTopology;
     result.hasContinuationContext = envelope.derived.hasContinuationContext;
   }
 
-  if (spec.includeReferenceBindings) {
+  if (effectiveSpec.includeReferenceBindings) {
     result.referenceBindings = envelope.derived.referenceBindings;
   }
 
-  if (spec.includeTokenMappings) {
-    if (spec.includeTokenMappings === 'referenced') {
+  if (effectiveSpec.includeTokenMappings) {
+    if (effectiveSpec.includeTokenMappings === 'referenced') {
       result.tokenMappings = envelope.derived.tokenMappings.filter((tm) =>
         referencedTokenSet.has(tm.token)
       );
@@ -227,10 +242,10 @@ export function sliceAuteurEnvelope(
     }
   }
 
-  if (spec.includeAllDiagnostics) {
+  if (effectiveSpec.includeAllDiagnostics) {
     result.diagnostics = envelope.derived.diagnostics;
-  } else if (spec.diagnosticLenses && spec.diagnosticLenses.length > 0) {
-    const lensSet = new Set(spec.diagnosticLenses);
+  } else if (effectiveSpec.diagnosticLenses && effectiveSpec.diagnosticLenses.length > 0) {
+    const lensSet = new Set(effectiveSpec.diagnosticLenses);
     result.diagnostics = envelope.derived.diagnostics.filter((d) => lensSet.has(d.lens));
   }
 

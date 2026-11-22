@@ -10,7 +10,7 @@ import type {
  * Monotonic version tag for built-in Auteur craft defaults and skill bodies.
  * Future UI override persistence uses this to detect upstream knowledge updates.
  */
-export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k2';
+export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k3';
 
 export type AssistantMode = 'refine' | 'check' | 'draft';
 export type AssistantFocus = 'auto' | 'draft' | 'refine' | 'audit';
@@ -18,9 +18,12 @@ export type AskQuestionMode = 'off' | 'ask_first' | 'followup';
 
 export type ScriptToolName =
   | 'get_script_overview'
+  | 'get_script_source'
   | 'inspect_lens_slice'
   | 'propose_script_patch'
+  | 'propose_text_replace'
   | 'propose_script_draft'
+  | 'propose_script_title'
   | 'report_audit_review'
   | 'load_auteur_skill'
   | 'ask_question';
@@ -93,8 +96,10 @@ export interface LiveEditorDiagnosticItem {
 
 export interface LiveEditorStateSummary {
   isEmpty: boolean;
+  sceneTitle?: string;
   snapshotHash: string;
   changedSinceLastTurn: boolean;
+  recentEditSummary?: string;
   sceneTopology: SceneTopology;
   hasContinuationContext: boolean;
   stagingBlockCount: number;
@@ -143,8 +148,10 @@ export interface ComposedSystemSections {
 export interface ComposeAgentContextOptions {
   focus: AssistantFocus;
   rawText: string;
+  sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
   previousSnapshotHash?: string;
+  previousRawText?: string;
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];

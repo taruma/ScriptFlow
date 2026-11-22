@@ -326,6 +326,11 @@ export const AI_LABELS = {
     suggestions: {
       patchLabel: 'Proposed Patch',
       draftLabel: 'Proposed Draft',
+      titleBadge: 'Proposed Title',
+      currentTitleLabel: 'Current',
+      proposedTitleLabel: 'Proposed',
+      applyTitleButton: 'Apply Title',
+      forkAndApplyTitleButton: 'Fork & Apply Title',
       auditLabel: 'Script Supervisor Audit',
       questionLabel: 'Clarifying Questions',
       questionMultiSelectHint: 'Multi-select',

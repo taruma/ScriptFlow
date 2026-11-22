@@ -138,9 +138,11 @@ export interface RunAgentTurnOptions {
   focus?: AssistantFocus;
   prompt: string;
   rawText: string;
+  sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
   previousInteractionId?: string;
   previousSnapshotHash?: string;
+  previousRawText?: string;
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];

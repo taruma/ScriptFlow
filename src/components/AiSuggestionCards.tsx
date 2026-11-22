@@ -14,3 +14,7 @@ export {
   QuestionSuggestionCard,
   type QuestionSuggestionCardProps,
 } from './ai/suggestions/QuestionSuggestionCard.tsx';
+export {
+  TitleSuggestionCard,
+  type TitleSuggestionCardProps,
+} from './ai/suggestions/TitleSuggestionCard.tsx';

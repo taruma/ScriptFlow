@@ -15,9 +15,9 @@ This guide explains how the **Auteur Script Editor AI Assistant** works end-to-e
 The AI Assistant is **multi-turn, agentic, and strictly suggestions-first**—not a one-shot text generator and never an unchecked auto-editor.
 
 ### Core Principles
-1. **Plain-Text-as-Truth & Zero Direct Mutation**: None of the AI tools can directly overwrite your editor text. Every draft, targeted edit, or audit fix is validated against Zod schemas and the deterministic Script Supervisor linter, then staged as a reviewable card (`Apply`, `Apply Fix`, `Apply All`, `Fork & Apply`, or `Dismiss`). Clicking **Apply** saves a persistent pre-apply Version History snapshot in IndexedDB and commits a single undoable history checkpoint (`Cmd/Ctrl+Z`).
-2. **Multi-Turn Memory (`previous_interaction_id`)**: Conversation continuity is maintained across user messages via the Gemini Interactions API (`client.interactions.create` with `stream: true`), while a fresh **Live Editor State** summary (`snapshotHash`, `changedSinceLastTurn`, `sceneTopology`, active lint counts) is injected on every turn so manual edits or clicked Apply actions never leave the model working on stale memory.
-3. **Agentic Tool Loop (Up to 8 Rounds per Turn)**: Round 1 never dumps your entire script into the chat prompt. Instead, the model receives your craft rules, live editor summary, active Scene Brief, skill directory, and pruned tool schemas, then pulls only the overview, lens slices, or craft skills it needs locally in your browser before staging its result.
+1. **Plain-Text-as-Truth & Zero Direct Mutation**: None of the AI tools can directly overwrite your editor text. Every draft, targeted patch, find/replace edit, title change, or audit fix is validated against Zod schemas and the deterministic Script Supervisor linter, then staged as a reviewable card (`Apply`, `Apply Title`, `Apply Fix`, `Apply All`, `Fork & Apply`, or `Dismiss`). Clicking **Apply** on script edits saves a persistent pre-apply Version History snapshot in IndexedDB and commits a single undoable history checkpoint (`Cmd/Ctrl+Z`).
+2. **Multi-Turn Memory (`previous_interaction_id`)**: Conversation continuity is maintained across user messages via the Gemini Interactions API (`client.interactions.create` with `stream: true`), while a fresh **Live Editor State** summary (`sceneTitle`, `snapshotHash`, `changedSinceLastTurn`, automatic **Recent user edits since last turn** diff summary, `sceneTopology`, active lint counts) is injected on every turn so manual edits or clicked Apply actions never leave the model working on stale memory.
+3. **Agentic Tool Loop (Up to 8 Rounds per Turn)**: Round 1 never dumps your entire script into the chat prompt. Instead, the model receives your craft rules, live editor summary (including any manual edits since the prior turn), active Scene Brief, skill directory, and pruned tool schemas, then pulls only the overview, targeted `v0.4.0` source sections, lens slices, or craft skills it needs locally in your browser before staging its result.
 4. **3.5-Layer Verification Stack**:
    - **Layer 1 — Grammar & Schema Integrity** (`src/core/parser.ts`, `src/core/irSchemas.ts`, `src/core/patch.ts`): Structural validity, snapshot concurrency (`expectedSnapshotHash`), and valid target IDs (`MB#`, `MB#.#`, `S#`, `S#.#`).
    - **Layer 2 — Deterministic Code Linter** (`src/core/linter.ts`): 5 instant, zero-token rules enforced on every keystroke and every AI dry-run (`rejectOnNewErrors: true`).
@@ -39,10 +39,10 @@ You send a prompt (in Auto / Draft / Refine / Audit focus)
    ▼
 [Round 1] Streamed request to Gemini Interactions API (previous_interaction_id chained)
    │
-   ├─► Model emits function_call step(s) (e.g. get_script_overview, parallel inspect_lens_slice, load_auteur_skill, ask_question)
+   ├─► Model emits function_call step(s) (e.g. get_script_overview, get_script_source, parallel inspect_lens_slice, propose_text_replace, propose_script_title, load_auteur_skill, ask_question)
    │     └─► Browser executes executeScriptToolCall() locally against rawText (zero mutation)
    │         • If validation or lint fails -> returns ok: false + errors + repairHint (is_error: true)
-   │         • If clean -> stages reviewable card (Patch / Draft / Audit / Question) or returns slice/skill data
+   │         • If clean -> stages reviewable card (Patch / Draft / Title / Audit / Question) or returns source/slice/skill data
    │
    ├─► [Round 2..N, max 8] Browser sends function_result payloads back -> Model self-repairs or synthesizes
    │
@@ -83,11 +83,12 @@ To prevent unnecessary token cost and accidental whole-script overwrites, the co
 
 | Focus | Editor State | Exposed Tools | Passive `draft_craft`? | Primary Use Case |
 |---|---|---|---|---|
-| **`Auto`** *(default)* | **Empty** | `propose_script_draft`, `ask_question`†, `load_auteur_skill`* | **Yes** | Describe a scene idea (with optional Scene Brief) → compiles and stages a full `v0.4.0` draft immediately. |
-| **`Auto`** *(default)* | **Has Script** | `get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `report_audit_review`, `ask_question`†, `load_auteur_skill`* | No *(available on demand)* | Seamless post-draft workflow: ask for targeted edits, run audits, or ask directorial questions in the same thread—`propose_script_draft` is omitted so the model cannot accidentally replace the entire script. |
-| **`Draft`** | Empty or Has Script | `propose_script_draft`, `get_script_overview` *(if non-empty)*, `ask_question`†, `load_auteur_skill`* | **Yes** | Force full-scene generation or re-draft a replacement scene from scratch on a non-empty editor. |
-| **`Refine`** | Has Script | `get_script_overview`, `inspect_lens_slice`, `propose_script_patch`, `ask_question`†, `load_auteur_skill`* | No | Constrain the assistant strictly to targeted, ID-addressed script edits. |
-| **`Audit`** | Has Script | `get_script_overview`, `inspect_lens_slice`, `report_audit_review`, `load_auteur_skill`* | No | Constrain the assistant strictly to Script Supervisor continuity evaluation and clickable fix suggestions. |
+| **`Auto`** *(default)* | **Empty** | `propose_script_draft`, `propose_script_title`, `ask_question`†, `load_auteur_skill`* | **Yes** | Describe a scene idea (with optional Scene Brief) → compiles and stages a full `v0.4.0` draft or scene title immediately. |
+| **`Auto`** *(default)* | **Has Script** | `get_script_overview`, `get_script_source`, `inspect_lens_slice`, `propose_script_patch`, `propose_text_replace`, `propose_script_title`, `report_audit_review`, `ask_question`†, `load_auteur_skill`* | No *(available on demand)* | Seamless post-draft workflow: ask for targeted AST edits, fast regex/text replacements, scene renames, audits, or directorial questions in the same thread—`propose_script_draft` is omitted so the model cannot accidentally replace the entire script. |
+| **`Draft`** | **Empty** | `propose_script_draft`, `propose_script_title`, `ask_question`†, `load_auteur_skill`* | **Yes** | Generate a fresh scene from scratch. |
+| **`Draft`** | **Has Script** | `get_script_overview`, `get_script_source`, `inspect_lens_slice`, `propose_script_draft`, `propose_script_title`, `ask_question`†, `load_auteur_skill`* | **Yes** | Read existing source or lens slices as reference and re-draft a replacement scene from scratch on a non-empty editor. |
+| **`Refine`** | **Has Script** | `get_script_overview`, `get_script_source`, `inspect_lens_slice`, `propose_script_patch`, `propose_text_replace`, `propose_script_title`, `ask_question`†, `load_auteur_skill`* | No | Constrain the assistant strictly to targeted AST patches, literal/regex text replacements, and scene title updates. |
+| **`Audit`** | **Has Script** | `get_script_overview`, `get_script_source`, `inspect_lens_slice`, `report_audit_review`, `load_auteur_skill`* | No | Constrain the assistant strictly to Script Supervisor continuity evaluation and clickable fix suggestions. |
 
 *\*`load_auteur_skill` is automatically omitted if zero skills are in the `available` state (for example, if all remaining skills are pinned or muted).*  
 *†`ask_question` is physically omitted by default and exposed in `Auto`, `Draft`, and `Refine` only when you toggle **`Ask First`** ON (auto-resets after sending) or on the follow-up turn after submitting answers from a Question Card. Always omitted in `Audit`.*
@@ -138,23 +139,31 @@ Your message in the composer box is **always sent verbatim** (except for an expl
 
 ## 5. Complete Local AI Tools Reference
 
-All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/services/scriptTools.ts) (backed by modular declarations and handlers under `src/services/tools/`) and execute **locally in the browser** against your current `rawText` and active `Settings → Supervisor rules` (`ruleOverrides`).
+All 10 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/services/scriptTools.ts) (backed by modular declarations and handlers under `src/services/tools/`) and execute **locally in the browser** against your current `rawText`, `sceneTitle`, and active `Settings → Supervisor rules` (`ruleOverrides`).
 
 ### 1. `get_script_overview` *(Read-Only)*
 - **UI Badge:** `Inspect overview`
 - **Available In:** `Auto` (non-empty), `Draft` (non-empty), `Refine`, `Audit`
 - **Arguments:** `{}` (none)
 - **What It Returns:**
-  - `snapshotHash` (optimistic concurrency token required for patches)
+  - `sceneTitle` and `snapshotHash` (optimistic concurrency token required for patches and text replacements)
   - `schemaVersion`, `sceneTopology` (`continuous_oner` | `multi_camera_coverage` | `discontinuous_montage` | `mixed` | `empty`), `hasContinuationContext`
   - `stagingMacroBlocks`: every `MB#` ID, header, kind, format (`prose` vs. `key_value`), and `[AESTHETIC]` key list
   - `macroStateCount` and `macroStates`: every `S#` ID, Sub-State count, `activeCameraIdentifier`, and `cameraTransition`
   - `cameraSlots`, `referenceBindingCount`, `tokenMappingCount`
   - `diagnosticsSummary` and full `diagnostics[]` from the 5 deterministic linter rules
 
-### 2. `inspect_lens_slice` *(Read-Only + Co-Located Supervisor Checklist)*
+### 2. `get_script_source` *(Read-Only Plain-Text Source Reader)*
+- **UI Badge:** `Read script source`
+- **Available In:** `Auto` (non-empty), `Draft` (non-empty), `Refine`, `Audit`
+- **Arguments:**
+  - `targetIds` *(optional)*: Specific Staging Macro-Block or Execution Macro-State IDs (e.g., `["MB0", "MB2", "S3", "S4"]` or header names like `"AESTHETIC"`, `"EXECUTION"`). Omit to read the full canonical `v0.4.0` plain-text script.
+  - `annotateIds` *(optional, default `true`)*: Annotates returned Macro-Block headers (`# MB0`) and Macro-State lines (`S3: ...`) so the model sees exact IDs alongside verbatim prose. Pass `false` for raw unannotated canonical text.
+- **What It Returns:** `snapshotHash`, `sceneTitle`, `filtered`, `totalChars`, `sourceText`, `annotatedSections`, `matchedIds` (when filtered), and `notFoundIds` + `repairHint` if any requested IDs were not found. Ideal for fast whole-script reading, checking tone/phrasing, or verifying exact strings before `propose_text_replace` or `propose_script_patch`.
+
+### 3. `inspect_lens_slice` *(Read-Only + Surgical Filtering & Co-Located Supervisor Checklist)*
 - **UI Badge:** `Inspect lens slice`
-- **Available In:** `Auto` (non-empty), `Refine`, `Audit`
+- **Available In:** `Auto` (non-empty), `Draft` (non-empty), `Refine`, `Audit`
 - **Arguments:**
   - `preset`: One of the 5 built-in Script Supervisor presets:
     - `lens1_spatial_optics` — `[LOGIC]`, `[OPENING]`, `[CONTINUITY PROTOCOL]`, `[CAM]`/`[BLOCK]`/`[ACT]`, `resolvedCamera`, referenced tokens, Lens 1 diagnostics
@@ -162,13 +171,15 @@ All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/service
     - `lens3_props_inventory` — `[LOGIC]`, `[OPENING]`, `[AESTHETIC]` (`Wardrobe`, `Location`), `[ACT]`/`[PROP]`, `resolvedCamera`, Lens 3 diagnostics
     - `lens4_acoustics_voice` — `[AESTHETIC]` (`Audio`), `{dialogue}`, `<foley>`, `(score)`, reference bindings, `endsOnDialogue`, Lens 4 diagnostics
     - `lens5_blocks_grammar` — Full document Sub-States, `resolvedCamera`, all tokens/refs, and all diagnostics
-  - `spec` *(optional)*: Custom composable `LensSliceSpec` (`macroBlocks`, `aestheticKeys`, `dimensions`, `subStateTags`, `includeAllSubStates`, `includeResolvedCamera`, `includeTokenMappings`, `includeReferenceBindings`, `includeSceneTopology`, `includeTrailingResolution`, `includeAllDiagnostics`), or combined with `preset` as overrides.
+  - `macroStateIds` *(optional)*: Restricts Execution output to specific Macro-State IDs (e.g., `["S3", "S4"]`) while preserving inherited `resolvedCamera` continuity computed from the full document.
+  - `includeStaging` *(optional)*: Set to `false` to omit Staging Macro-Blocks (`MB#`) when inspecting only Execution Macro-States.
+  - `spec` *(optional)*: Custom composable `LensSliceSpec` (`macroBlocks`, `aestheticKeys`, `dimensions`, `subStateTags`, `macroStateIds`, `includeStaging`, `includeAllSubStates`, `includeResolvedCamera`, `includeTokenMappings`, `includeReferenceBindings`, `includeSceneTopology`, `includeTrailingResolution`, `includeAllDiagnostics`), or combined with `preset` as overrides.
 - **Co-Located Topology-Filtered Checklist:** Whenever called with a built-in `preset`, the tool attaches a `checklist` object (`getLensAuditChecklist(preset, topology)`) directly alongside `slice`:
   - On **continuous oners / coverage**, enforces 180° eyeline parity, $S_0 \to S_1$ handoff, camera holds/operator verbs, prop lifecycles, and wear repetition.
   - On **`discontinuous_montage`**, explicitly suppresses cross-cut 180° eyelines, $S_0 \to S_1$ carryover, and cross-state prop/wear persistence, switching to montage self-contained anchoring, plain `[CAM]` tags, and the cut-latency floor (`Duration / 2.0`).
 - **Parallel Execution:** The model can call multiple `inspect_lens_slice` presets in parallel within a single round for fast multi-lens audits.
 
-### 3. `propose_script_patch` *(Transactional Dry-Run & Staging)*
+### 4. `propose_script_patch` *(Transactional Dry-Run & Staging)*
 - **UI Badge:** `Stage patch`
 - **Available In:** `Auto` (non-empty), `Refine`
 - **Arguments:** Validated against `AuteurPatchSchema` (`expectedSnapshotHash`, `summary`, and `ops[]` targeting `MB#`, `MB#.#`, `S#`, or `S#.#` via `set_macro_block`, `insert_macro_block`, `delete_macro_block`, `set_aesthetic_entry`, `delete_aesthetic_entry`, `upsert_token_mapping`, `delete_token_mapping`, `replace_macro_state`, `insert_macro_state`, `delete_macro_state`, `reorder_macro_states`, `replace_sub_state`, `insert_sub_state`, `delete_sub_state`).
@@ -177,7 +188,24 @@ All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/service
   - **If rejected** (`SNAPSHOT_MISMATCH`, `TARGET_NOT_FOUND`, `VALIDATION_ERROR`, or `LINT_ERROR_INTRODUCED`): stages **nothing** and returns `ok: false` (`is_error: true`) with structured `errors`, `introducedErrors`, and a concrete `repairHint` (including the current `snapshotHash` if stale) so the model repairs and retries automatically.
   - **If clean:** computes a deterministic line diff (`buildLineDiff`) and `LintDelta` (before/after error & warning counts, resolved diagnostics), and stages a **`PatchSuggestionCard`**.
 
-### 4. `propose_script_draft` *(Compiler Dry-Run & Staging)*
+### 5. `propose_text_replace` *(Scoped Find-and-Replace & Linter-Gated Staging)*
+- **UI Badge:** `Stage text replace`
+- **Available In:** `Auto` (non-empty), `Refine`
+- **Arguments:** `{ expectedSnapshotHash, summary, replacements: [{ find, replace, isRegex?, caseSensitive?, wholeWord?, flags?, targetIds? }] }` (1–20 replacement rules in a single atomic pass; optional per-rule `targetIds` like `["MB1", "S3"]` scopes replacements to those Macro-Blocks / Macro-States).
+- **Safeguards & Staging:**
+  - Verifies `expectedSnapshotHash` against the current script snapshot, rejects invalid/unsafe regex patterns, and preserves canonical `[HEADER]` lines so replacements cannot corrupt Macro-Block headers.
+  - Dry-runs deterministic linting (`rejectOnNewErrors: true`, respecting active `ruleOverrides`) and withholds staging with a concrete `repairHint` if any rule matches zero times or introduces new lint errors.
+  - Synthesizes an equivalent `AuteurPatch` for changed targets so Live Mode renders hover-to-diff margin indicators (`AiPatchIndicator`) and stages a standard **`PatchSuggestionCard`** (with `Apply Patch`, `Fork & Apply`, or `Dismiss`). Ideal for global character/prop/location renames, token-ID swaps, and cross-script terminology updates.
+
+### 6. `propose_script_title` *(Scene Title Proposal & Staging)*
+- **UI Badge:** `Suggest scene title`
+- **Available In:** `Auto`, `Draft`, `Refine`
+- **Arguments:** `{ title: string, rationale?: string }`
+- **Staging & Apply:**
+  - Validates that the normalized title is non-empty (max 120 chars) and distinct from the current `sceneTitle`.
+  - Stages a dedicated **`TitleSuggestionCard`** displaying the current title → proposed title transition and optional rationale, with 1-click **`Apply Title`** (or **`Fork & Apply Title`** when viewing a read-only bundled example) and **`Dismiss`**.
+
+### 7. `propose_script_draft` *(Compiler Dry-Run & Staging)*
 - **UI Badge:** `Compile draft`
 - **Available In:** `Auto` (empty), `Draft`
 - **Arguments:** `{ title?, summary?, draft: AuteurScriptDraft }` (staging Macro-Blocks with `format: 'prose' | 'key_value'` + `[EXECUTION]` Macro-States and typed Sub-States).
@@ -186,7 +214,7 @@ All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/service
   - **If schema validation fails or any deterministic lint `error` is present** (respecting active `ruleOverrides`): withholds staging and returns `ok: false`, `staged: false`, `diagnostics[]`, and `repairHint` so the model fixes the draft before showing it to you.
   - **If lint-error-free:** stages a **`DraftSuggestionCard`** with topology, Macro-Block/Macro-State counts, diagnostics summary, and full preview/diff.
 
-### 5. `report_audit_review` *(Structured Multi-Lens Audit & Fix Dry-Run)*
+### 8. `report_audit_review` *(Structured Multi-Lens Audit & Fix Dry-Run)*
 - **UI Badge:** `Stage audit review`
 - **Available In:** `Auto` (non-empty), `Audit`
 - **Arguments:** Validated against `AuteurReviewSchema` (`overallSummary` and `issues[]`, each carrying `lens`, `severity`, `targetLevel`, `targetId`, `message`, `rationale`, `repairHint`, and optional `suggestedPatch`).
@@ -196,7 +224,7 @@ All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/service
   - Any broken or lint-violating `suggestedPatch` is withheld from staging and reported back in `invalidSuggestedPatches` with a `repairHint` so the model can repair it.
   - Stages an **`AuditReviewSuggestionCard`** with clickable `targetId` jump links.
 
-### 6. `load_auteur_skill` *(Dynamic On-Demand Craft & Module Loader)*
+### 9. `load_auteur_skill` *(Dynamic On-Demand Craft & Module Loader)*
 - **UI Badge:** `Load skill`
 - **Available In:** Any Focus whenever `availableSkills.length > 0`
 - **Arguments:** `{ skillId: string }` — its JSON Schema `enum` is built **dynamically per turn** from `context.availableSkills` (including user-created custom skills), never cached statically.
@@ -206,7 +234,7 @@ All 7 AI tools are dispatched via [`src/services/scriptTools.ts`](../src/service
   - `muted` → returns `{ ok: false, error: 'Skill is muted by the user.', availableSkills }` (strictly honors user Mute).
   - Unknown ID → returns `{ ok: false, error, availableSkills, repairHint }`.
 
-### 7. `ask_question` *(Opt-In Multi-Select Clarifying Interview)*
+### 10. `ask_question` *(Opt-In Multi-Select Clarifying Interview)*
 - **UI Badge:** `Clarifying questions`
 - **Available In:** Physically **omitted by default** across all focuses so the assistant never quizzes you unprompted. Exposed strictly when you toggle **`Ask First`** ON beside `Brief` (in `Auto`, `Draft`, or `Refine`; auto-resets after sending) and remains available on the follow-up turn after submitting answers from a Question Card so multi-round clarification works when needed. Always omitted in `Audit`.
 - **Arguments:** `{ intro?: string, questions: [{ question, options[] }] }` (1–4 concise questions, 2–5 short distinct options each; redundant `"Other"` options are stripped automatically).
@@ -224,12 +252,12 @@ Every turn's `system_instruction` is assembled deterministically by `composeAgen
 
 | Section | Editable? | What It Contains |
 |---|---|---|
-| **1. Foundational Craft** | **Editable** | Core Pure Auteur Script `v0.4.0` directorial craft (*boundaries not handcuffs*, *static once / volatile always*, *state inheritance*, *literal over literary*, *acting is reacting*, *anti-twitch*, *repetition mandate*, and canonical inline syntax invariants). |
-| **2. Live Editor State** | Read-Only (Code-Owned) | Authoritative current snapshot: `isEmpty`, `snapshotHash`, `changedSinceLastTurn` warning, `sceneTopology`, `hasContinuationContext`, Macro-Block/Macro-State/ref/token counts, and active deterministic linter diagnostics so the AI focuses on semantic continuity. |
+| **1. Foundational Craft** | **Editable** | Core Pure Auteur Script `v0.4.0` directorial craft (*boundaries not handcuffs*, *static once / volatile always*, *state inheritance*, *literal over literary*, *acting is reacting*, *anti-twitch*, *repetition mandate*, canonical inline syntax invariants, and **Beginner & Power-User Adaptation** translating plain filmmaking intent cleanly for beginners while matching exact `MB#`/`S#`/`S#.#` technical shorthand for power users). |
+| **2. Live Editor State** | Read-Only (Code-Owned) | Authoritative current snapshot: `sceneTitle`, `isEmpty`, `snapshotHash`, `changedSinceLastTurn` warning, automatic **Recent user edits since last turn** summary (`Modified`/`Added`/`Removed` `MB#`/`S#` IDs + bounded line delta when edited manually between turns), `sceneTopology`, `hasContinuationContext`, Macro-Block/Macro-State/ref/token counts, and active deterministic linter diagnostics so the AI focuses on semantic continuity. |
 | **3. Scene Brief & References** *(when active)* | Controlled via `Brief` modal | Mode-agnostic active reference context (`Cast & References`, `Format & Specs`, `Subtext & Additional Instructions`) carried across `Auto`, `Draft`, `Refine`, and `Audit` whenever populated and toggled on. Omitted completely when empty or paused. |
 | **4. Active Skills** | Read-Only (Computed) | Full bodies of every skill currently in the **`active`** state (pinned by you or passively matched from your script/brief). |
 | **5. Available Skill Directory** | Read-Only (Computed) | Compact 1-line `id: triggerHint` menu for **`available`** skills that the model may load on demand via `load_auteur_skill`. |
-| **6. Tool & Safety Protocol** | Read-Only (Code-Owned) | Allowed tool list for this turn, optimistic concurrency (`expectedSnapshotHash`), staging-first rule, self-repair rule, and parallel lens slicing instructions. Kept read-only so craft edits can never break tool execution. |
+| **6. Tool & Safety Protocol** | Read-Only (Code-Owned) | Allowed tool list for this turn, optimistic concurrency (`expectedSnapshotHash`), surgical reading guidance (`get_script_source` with `targetIds` / `inspect_lens_slice` with `macroStateIds` & `includeStaging`), tool selection (`propose_text_replace` vs. `propose_script_patch` vs. `propose_script_title`), staging-first rule, self-repair rule, and parallel lens slicing instructions. Kept read-only so craft edits can never break tool execution. |
 
 ### The 3-State Skill Machine (`active | available | muted`)
 
@@ -251,7 +279,7 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 | `spatial_fences` | Module | On demand *(or Pin)* | Inline `[BLOCK]` for 3+ subjects/mark swaps, `[STATE IN]`/`[STATE OUT]` boundary clamps, dynamic `[LIGHT]`, and Tier-2 single-dimension tags (`[FOCUS]`, `[SPEED]`, `[PROP]`, `[ENV]`, `[CROWD]`, `[VFX]`, `[TRANS]`). |
 
 ### Inside the 4 Tabs of `AiContextInspectorModal`
-1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`, currently `0.4.0-k2`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
+1. **Live Prompt Preview**: Inspect the exact pre-send prompt sections (`Editable`, `Active · From Brief`, vs. `Code-Owned`), active `Focus`, `sceneTopology`, `snapshotHash`, pruned tool badges, total character count, and one-click **`Copy Prompt`**. If built-in defaults ever evolve (`AUTEUR_KNOWLEDGE_VERSION`, currently `0.4.0-k3`) while you have saved overrides, a quiet notice lets you **Acknowledge** or **Reset All**.
 2. **Foundational Craft**: Edit **Foundational Auteur Craft** directly (persisted in `localStorage` under `auteur-editor-ai-skills-v1`), with a **`Modified`** indicator and **`Reset to default`**.
 3. **Skills & Extensions**:
    - Toggle any built-in or custom skill between **`Auto`**, **`Pin`**, and **`Mute`** (or use **`Auto all`** / **`Mute all`** to update every skill in one click without losing custom skills or body overrides) and immediately see its resolved status (`Active · Passive`, `Active · Pinned`, `Available`, `Muted`).
@@ -284,7 +312,8 @@ Each assistant turn separates **Thinking** from **Tools & Skills** so long reaso
 ### Reviewing & Applying Staged Cards & Live Mode Indicators
 Suggestion cards are inspectable immediately while streaming, while **Apply** buttons unlock once the assistant finishes its turn:
 
-- **`PatchSuggestionCard`**: Shows summary, affected IDs (`S2`, `MB1`), lint delta (`Lint clean`, `-1 resolved`, warning count), and toggleable **Diff** / **Preview** views. If you manually edited the script after the patch was staged, a stale-snapshot warning disables **Apply** so manual edits are never clobbered. Once applied or dismissed, it auto-collapses into a compact single-line receipt (clickable to re-expand anytime).
+- **`PatchSuggestionCard`**: Staged by both `propose_script_patch` and `propose_text_replace`. Shows summary, affected IDs (`S2`, `MB1`), lint delta (`Lint clean`, `-1 resolved`, warning count), and toggleable **Diff** / **Preview** views. If you manually edited the script after the patch was staged, a stale-snapshot warning disables **Apply** so manual edits are never clobbered. Once applied or dismissed, it auto-collapses into a compact single-line receipt (clickable to re-expand anytime).
+- **`TitleSuggestionCard`**: Staged by `propose_script_title`. Displays the current → proposed scene title transition and optional rationale, with 1-click **`Apply Title`** (or **`Fork & Apply Title`** on read-only bundled examples) and **`Dismiss`**, collapsing into a compact single-line receipt once resolved.
 - **`DraftSuggestionCard`**: Shows title, scene topology, Macro-Block/Macro-State counts, lint status, and **Preview** / **Diff** toggle. Clicking **Apply** commits a checkpoint, automatically sets the Scene Title if currently untitled, and auto-collapses the card to a compact receipt.
 - **`AuditReviewSuggestionCard`**: Shows overall summary, error/warning counts, and **`Apply All (N)`** (or **`Fork & Apply All (N)`**) right in the header whenever 2+ unapplied, non-conflicting fixes can be committed together in a single transactional Undo checkpoint. Multi-issue audits (`2+` issues) start **collapsed** (`Show N issues ▸`) so the assistant's text reply stays visible without scrolling; expanding shows full rationales, clickable **`targetId`** jump links (`MB0`, `S2`, `S2.1`), diff previews, and 1-click **`Apply Fix`** buttons (auto-collapsing once all fixes are applied). Applying an individual fix (from either the sidebar or Live Mode) automatically rebases any provably non-conflicting sibling fixes (`rebaseAuditReviewAfterFix`) onto the updated script so you can apply independent fixes one by one without re-running the audit (while genuinely overlapping or index-shifted siblings stay safely marked stale).
 - **Actionable Hover-to-Diff Popovers in Live Mode (`AiPatchIndicator`, `AiPatchInsertionSeam`)**: While any patch or Audit Review fix is pending and non-stale, affected Staging Macro-Blocks (`MB#`) and Execution Macro-States (`S#`) show a subtle inset accent border and a quiet margin dot right next to `DiagnosticDot` (and proposed insertions show a thin dashed `+ AI Insert` pill between rows). Hover any indicator to peek a word-level diff right in Live Mode—or click to pin it open—and click **`Apply`** / **`Apply Fix`** (or **`Fork & Apply`** on examples, plus **`Dismiss`** for Refine patches) directly inside the popover. Actions sync 2-way with the AI sidebar (updating `Applied`/`Dismissed` receipts and rebasing sibling audit fixes) and commit as a single `Cmd/Ctrl+Z` Undo checkpoint. Indicators automatically clear once applied, dismissed, stale, or when the sidebar closes.

@@ -13,6 +13,7 @@ import type {
   DraftSuggestion,
   PatchSuggestion,
   QuestionSuggestion,
+  TitleSuggestion,
 } from '../../../services/scriptTools.ts';
 import {
   shouldShowSettingsLinkForError,
@@ -29,6 +30,7 @@ import {
   DraftSuggestionCard,
   PatchSuggestionCard,
   QuestionSuggestionCard,
+  TitleSuggestionCard,
 } from '../../AiSuggestionCards.tsx';
 import type {AiInspectableTrace} from '../../AiTraceModal.tsx';
 import {MarkdownContent} from '../../MarkdownContent.tsx';
@@ -71,6 +73,7 @@ export interface AiThreadMessageProps {
     includedFixIds: string[]
   ) => void | Promise<void>;
   onApplyDraft: (messageId: string, suggestion: DraftSuggestion) => void | Promise<void>;
+  onApplyTitle: (messageId: string, suggestion: TitleSuggestion) => void | Promise<void>;
   onSubmitQuestionAnswers: (
     messageId: string,
     suggestion: QuestionSuggestion,
@@ -101,6 +104,7 @@ export const AiThreadMessage = memo(function AiThreadMessage({
   onApplyPatch,
   onApplyAuditFixesBatch,
   onApplyDraft,
+  onApplyTitle,
   onSubmitQuestionAnswers,
   onDismissSuggestion,
   onQuickAudit,
@@ -255,6 +259,20 @@ export const AiThreadMessage = memo(function AiThreadMessage({
                   isApplied={applied.includes(suggestion.id)}
                   isDismissed={dismissed.includes(suggestion.id)}
                   onApply={(s) => onApplyDraft(msg.id, s)}
+                  onDismiss={(id) => onDismissSuggestion(msg.id, id)}
+                />
+              );
+            }
+            if (suggestion.kind === 'title') {
+              return (
+                <TitleSuggestionCard
+                  key={suggestion.id}
+                  suggestion={suggestion}
+                  readOnly={readOnly}
+                  isStreaming={msgStreaming}
+                  isApplied={applied.includes(suggestion.id)}
+                  isDismissed={dismissed.includes(suggestion.id)}
+                  onApply={(s) => onApplyTitle(msg.id, s)}
                   onDismiss={(id) => onDismissSuggestion(msg.id, id)}
                 />
               );
