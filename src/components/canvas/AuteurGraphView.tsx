@@ -7,6 +7,7 @@ import {
   ReactFlowProvider,
   SelectionMode,
   useReactFlow,
+  useUpdateNodeInternals,
   useViewport,
   type Edge,
   type Node,
@@ -127,6 +128,7 @@ function ZoomControlsBar({showMiniMap, onToggleMiniMap, onFitView}: ZoomControls
 
 function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProps) {
   const reactFlow = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const model = useMemo(() => buildGraphSceneModel(doc, metadata), [doc, metadata]);
 
   const [direction, setDirection] = useState<GraphDirection>('LR');
@@ -148,6 +150,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const basePosRef = useRef<Map<string, {x: number; y: number}>>(new Map());
   const pendingFitRef = useRef<boolean>(true);
   const prevScriptKeyRef = useRef<string>(scriptSessionKey);
+  const prevDirectionRef = useRef<GraphDirection>(direction);
 
   // Reset canvas posture cleanly when switching scripts
   useEffect(() => {
@@ -225,6 +228,19 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       return merged.nodes;
     });
   }, [layout.nodes, nodeOffsets]);
+
+  // Refresh React Flow's internal handle-bounds cache whenever layout orientation flips (LR <-> TB)
+  // so edges immediately re-anchor to rotated Top/Bottom vs Left/Right ports.
+  useEffect(() => {
+    if (prevDirectionRef.current === direction) return;
+    prevDirectionRef.current = direction;
+    const nodeIds = layout.nodes.map((spec) => spec.id);
+    if (nodeIds.length === 0) return;
+    const raf = requestAnimationFrame(() => {
+      updateNodeInternals(nodeIds);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [direction, layout.nodes, updateNodeInternals]);
 
   const flowEdges = useMemo<Edge[]>(
     () =>

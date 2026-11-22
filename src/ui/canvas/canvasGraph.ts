@@ -264,10 +264,14 @@ export function buildGraphSceneModel(
     return hits;
   };
 
-  // Match downstream references inside [OPENING] (and any non-definition Staging blocks that call tokens)
+  // Match downstream references inside [OPENING], [LOGIC], and other non-definition Staging blocks
+  // (excluding each object's own declaring block so we never emit self-loop call sites).
   for (const sb of stagingBlocks) {
-    if (sb.kind === 'OPENING') {
-      const hits = findMatchedObjectIds(sb.rawBody);
+    const hits = findMatchedObjectIds(sb.rawBody).filter((objId) => {
+      const obj = objectById[objId];
+      return Boolean(obj && obj.sourceBlockId !== sb.mbId);
+    });
+    if (hits.length > 0) {
       sb.matchedObjectIds = hits;
       for (const objId of hits) {
         objectById[objId]?.callSites.push({
@@ -276,6 +280,15 @@ export function buildGraphSceneModel(
           kind: 'staging',
         });
       }
+    }
+  }
+
+  // Case-insensitive character lookup so uppercase dialogue cues (e.g. "ROSA says {…}")
+  // still link back to `@image1 as Rosa` cleanly.
+  const characterIdByLowerName = new Map<string, string>();
+  for (const obj of railObjects) {
+    if (obj.kind === 'character') {
+      characterIdByLowerName.set(obj.matchToken.toLowerCase(), obj.id);
     }
   }
 
@@ -307,6 +320,12 @@ export function buildGraphSceneModel(
       dimensionCounts[dimension] += 1;
 
       const matched = findMatchedObjectIds(sub.raw);
+      if (sub.kind === 'dialogue' && sub.dialogue?.speaker) {
+        const speakerObjId = characterIdByLowerName.get(sub.dialogue.speaker.trim().toLowerCase());
+        if (speakerObjId && !matched.includes(speakerObjId)) {
+          matched.push(speakerObjId);
+        }
+      }
       for (const oid of matched) {
         msHits.add(oid);
         objectById[oid]?.callSites.push({

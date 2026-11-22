@@ -148,7 +148,7 @@ export const ObjectInspectorPanel = memo(function ObjectInspectorPanel({
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-text-faint">0 matches</p>
+            <p className="text-[11px] text-text-faint">{UI_LABELS.graph.inspectorMatchCount(0)}</p>
           )}
         </div>
       </div>

@@ -382,4 +382,29 @@ Minimal scene.
     // Style object reference stays stable when width/height are unchanged
     expect(mergedS1.style).toBe(prevS1Style);
   });
+
+  it('matches downstream references in [LOGIC] without self-linking declaring blocks and links uppercase dialogue speakers case-insensitively', () => {
+    const raw = `[INTENT]
+Featuring @image1 as Rosa.
+
+[LOGIC]
+Keep Rosa facing screen-right while holding EV01.
+
+[AESTHETIC]
+Prop: Stamped dossier -> EV01
+
+[OPENING]
+Rosa holds EV01.
+
+[EXECUTION]
+[CAM 01] MS -> ROSA says (V.O., dry) {Check the dates.} -> <paper rustle>`;
+
+    const model = buildModelFromRaw(raw);
+    const rosa = model.railObjects.find((o) => o.matchToken === 'Rosa')!;
+    const ev01 = model.railObjects.find((o) => o.matchToken === 'EV01')!;
+
+    // [LOGIC] and [OPENING] are matched downstream; declaring blocks [INTENT] and [AESTHETIC] do not self-link
+    expect(rosa.callSites.map((cs) => cs.display)).toEqual(['[LOGIC]', '[OPENING]', 'S1.2']);
+    expect(ev01.callSites.map((cs) => cs.display)).toEqual(['[LOGIC]', '[OPENING]']);
+  });
 });

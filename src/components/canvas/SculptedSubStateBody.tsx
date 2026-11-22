@@ -18,10 +18,16 @@ export const SculptedSubStateBody = memo(function SculptedSubStateBody({
   // 1. DIALOGUE — Screenplay Centered Micro-Block
   if (subState.dimension === 'dialogue' && subState.dialogue) {
     const {speaker, language, extensions, delivery, line} = subState.dialogue;
-    const speakerObjId = `obj-char-${speaker}`;
-    const speakerObj = objectById[speakerObjId];
+    const directSpeakerObj = objectById[`obj-char-${speaker}`];
+    const speakerLower = speaker.trim().toLowerCase();
+    const speakerObj =
+      directSpeakerObj ??
+      Object.values(objectById).find(
+        (obj) => obj.kind === 'character' && obj.matchToken.toLowerCase() === speakerLower
+      );
+    const speakerObjId = speakerObj?.id ?? `obj-char-${speaker}`;
     const speakerColor = getObjectColorVar('character');
-    const isSpeakerActive = activeObjectId === speakerObjId;
+    const isSpeakerActive = Boolean(speakerObj && activeObjectId === speakerObjId);
 
     return (
       <div className="w-full text-center py-0.5 px-1">
