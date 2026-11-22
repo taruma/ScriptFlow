@@ -209,6 +209,14 @@ export interface CanvasEdgeSpec {
   objectKind?: InferredObjectKind;
   isHot?: boolean;
   isDimmed?: boolean;
+  /** True when the edge renders subtle directional flow animation (source -> target) */
+  isAnimated?: boolean;
+  /** True when a labelMatch edge cascades chronologically between consecutive Execution appearances */
+  isCascade?: boolean;
+  /** True when a cascading labelMatch connects two split Sub-States inside the same Macro-State */
+  isIntraState?: boolean;
+  /** Per-object lane index used to separate parallel cascading threads cleanly */
+  laneIndex?: number;
   label?: string;
   direction: GraphDirection;
 }

@@ -57,10 +57,37 @@ export function mapSubStateKindToGraphDimension(
 
 function classifyAestheticTokenKind(category?: string): InferredObjectKind {
   const lower = (category ?? '').toLowerCase();
-  if (lower.includes('location') || lower.includes('set') || lower.includes('place') || lower.includes('env')) {
+  if (
+    lower.includes('location') ||
+    lower.includes('setting') ||
+    lower.includes('set') ||
+    lower.includes('place') ||
+    lower.includes('env') ||
+    lower.includes('backdrop') ||
+    lower.includes('venue') ||
+    lower.includes('interior') ||
+    lower.includes('exterior') ||
+    lower.includes('room') ||
+    lower.includes('architecture')
+  ) {
     return 'location';
   }
-  if (lower.includes('prop') || lower.includes('item') || lower.includes('object') || lower.includes('vehicle')) {
+  if (
+    lower.includes('prop') ||
+    lower.includes('item') ||
+    lower.includes('object') ||
+    lower.includes('vehicle') ||
+    lower.includes('weapon') ||
+    lower.includes('tool') ||
+    lower.includes('device') ||
+    lower.includes('artifact') ||
+    lower.includes('gear') ||
+    lower.includes('accessory') ||
+    lower.includes('furniture') ||
+    lower.includes('document') ||
+    lower.includes('dossier') ||
+    lower.includes('evidence')
+  ) {
     return 'prop';
   }
   return 'wardrobe';

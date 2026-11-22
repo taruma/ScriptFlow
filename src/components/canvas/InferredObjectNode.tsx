@@ -20,19 +20,35 @@ export const InferredObjectNode = memo(function InferredObjectNode({data}: NodeP
   const isLR = direction === 'LR';
   const colorVar = getObjectColorVar(object.kind);
   const groupTitle = UI_LABELS.graph.objectGroups[object.kind];
+  const inHandleStyle = isLR ? {left: '44%'} : {top: '44%'};
+  const backHandleStyle = isLR ? {left: '56%'} : {top: '56%'};
 
   return (
     <div className="relative">
       {showGroupLabel && (
-        <div className="pointer-events-none select-none pb-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-text-faint truncate">
+        <div
+          className={`pointer-events-none select-none font-mono text-[10px] font-semibold uppercase tracking-wider text-text-faint whitespace-nowrap ${
+            isLR ? 'absolute -top-5 left-0' : 'pb-1.5 truncate'
+          }`}
+        >
           {groupTitle}
         </div>
       )}
 
       <div className="relative">
-        <Handle type="target" id="obj-in" position={isLR ? Position.Left : Position.Top} />
-        <Handle type="source" id="obj-back" position={isLR ? Position.Left : Position.Top} />
-        <Handle type="source" id="obj-out" position={isLR ? Position.Right : Position.Bottom} />
+        <Handle
+          type="target"
+          id="obj-in"
+          position={isLR ? Position.Top : Position.Left}
+          style={inHandleStyle}
+        />
+        <Handle
+          type="source"
+          id="obj-back"
+          position={isLR ? Position.Top : Position.Left}
+          style={backHandleStyle}
+        />
+        <Handle type="source" id="obj-out" position={isLR ? Position.Bottom : Position.Right} />
 
         <button
           type="button"

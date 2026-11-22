@@ -24,10 +24,11 @@ import {
   MS_W_LR,
   MS_W_TB,
   OBJ_CHIP_H,
-  OBJ_CHIP_W_TB,
+  OBJ_CHIP_W_LR,
   OBJ_GAP,
   OBJ_GROUP_GAP,
-  OBJ_RAIL_W_LR,
+  OBJ_GROUP_LABEL_H,
+  OBJ_RAIL_W_TB,
   RAW_GAP,
   RAW_W_LR,
   RAW_W_TB,
@@ -85,7 +86,7 @@ export function buildCanvasLayout(
     model.railObjects.length > 0 ? model.railObjects : model.cameraSlotObjects;
   const hasRail = displayRailObjects.length > 0;
 
-  // Reserve perpendicular headroom for opposite-side </> Raw Input branches
+  // Reserve perpendicular headroom for opposite-side </> Source branches
   let maxRawHeightAboveLR = 0;
   if (isLR) {
     for (const ms of model.macroStates) {
@@ -99,8 +100,6 @@ export function buildCanvasLayout(
       }
     }
   }
-  const execBaseY_LR =
-    ZONE_HEADER_H + 18 + (maxRawHeightAboveLR > 0 ? maxRawHeightAboveLR + RAW_GAP + 18 : 38);
 
   let maxRawWidthLeftTB = 0;
   if (!isLR) {
@@ -113,7 +112,9 @@ export function buildCanvasLayout(
   }
 
   // ---------------------------------------------------------------------------
-  // LAYER 1: PHASE 1 STAGING MACRO-BLOCKS
+  // TIER 1: PHASE 1 STAGING MACRO-BLOCKS
+  // LR: horizontal row (L -> R) above Tier 2
+  // TB: vertical column (T -> B) left of Tier 2
   // ---------------------------------------------------------------------------
   let stagingRightEdge = 0;
   let stagingBottomEdge = 0;
@@ -134,13 +135,18 @@ export function buildCanvasLayout(
     });
 
     if (isLR) {
-      let curY = ZONE_HEADER_H + 16;
+      let curX = 0;
+      const rowY = ZONE_HEADER_H + 16;
+      let maxStagingH = 0;
+
       for (const sb of model.stagingBlocks) {
         const h = resolveMeasuredHeight(
           sb.id,
           estimateStagingHeight(sb, STAGING_W_LR),
           measuredHeights
         );
+        if (h > maxStagingH) maxStagingH = h;
+
         const isHit = activeObj
           ? activeObj.sourceBlockId === sb.mbId || sb.matchedObjectIds.includes(activeObj.id)
           : false;
@@ -148,7 +154,7 @@ export function buildCanvasLayout(
         nodes.push({
           id: sb.id,
           type: 'stagingBlock',
-          position: applyOffset(sb.id, {x: 0, y: curY}, nodeOffsets),
+          position: applyOffset(sb.id, {x: curX, y: rowY}, nodeOffsets),
           width: STAGING_W_LR,
           zIndex: GRAPH_Z_CARD,
           data: {
@@ -158,17 +164,13 @@ export function buildCanvasLayout(
             isDimmed: Boolean(activeObj && !isHit),
           },
         });
-        curY += h + STAGING_GAP;
+        curX += STAGING_W_LR + STAGING_GAP;
       }
-      stagingRightEdge = STAGING_W_LR;
-      stagingBottomEdge = curY;
+      stagingRightEdge = Math.max(0, curX - STAGING_GAP);
+      stagingBottomEdge = rowY + maxStagingH;
     } else {
-      // 2-column grid in TB mode
-      const colHeights = [ZONE_HEADER_H + 16, ZONE_HEADER_H + 16];
-      model.stagingBlocks.forEach((sb, idx) => {
-        const col = idx % 2;
-        const x = col * (STAGING_W_TB + STAGING_GAP);
-        const y = colHeights[col];
+      let curY = ZONE_HEADER_H + 16;
+      for (const sb of model.stagingBlocks) {
         const h = resolveMeasuredHeight(
           sb.id,
           estimateStagingHeight(sb, STAGING_W_TB),
@@ -181,7 +183,7 @@ export function buildCanvasLayout(
         nodes.push({
           id: sb.id,
           type: 'stagingBlock',
-          position: applyOffset(sb.id, {x, y}, nodeOffsets),
+          position: applyOffset(sb.id, {x: 0, y: curY}, nodeOffsets),
           width: STAGING_W_TB,
           zIndex: GRAPH_Z_CARD,
           data: {
@@ -191,30 +193,32 @@ export function buildCanvasLayout(
             isDimmed: Boolean(activeObj && !isHit),
           },
         });
-        colHeights[col] += h + STAGING_GAP;
-      });
-      stagingRightEdge = STAGING_W_TB * 2 + STAGING_GAP;
-      stagingBottomEdge = Math.max(colHeights[0], colHeights[1]);
+        curY += h + STAGING_GAP;
+      }
+      stagingRightEdge = STAGING_W_TB;
+      stagingBottomEdge = Math.max(0, curY - STAGING_GAP);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // LAYER 2: INFERRED OBJECTS RAIL
+  // TIER 2: INFERRED OBJECTS BAND / RAIL (Strict intermediate layer)
+  // LR: horizontal band (L -> R) between Staging & Execution
+  // TB: vertical column (T -> B) between Staging & Execution
   // ---------------------------------------------------------------------------
   let railRightEdge = stagingRightEdge;
   let railBottomEdge = stagingBottomEdge;
 
   if (hasRail) {
     const railStartX = isLR
-      ? model.stagingBlocks.length > 0
-        ? stagingRightEdge + LAYER_GAP_LR
-        : 0
-      : 0;
-    const railStartY = isLR
       ? 0
       : model.stagingBlocks.length > 0
-        ? stagingBottomEdge + LAYER_GAP_TB
+        ? stagingRightEdge + LAYER_GAP_TB
         : 0;
+    const railStartY = isLR
+      ? model.stagingBlocks.length > 0
+        ? stagingBottomEdge + LAYER_GAP_LR
+        : 0
+      : 0;
 
     const railLabel =
       model.railObjects.length > 0
@@ -255,6 +259,33 @@ export function buildCanvasLayout(
       .filter((g) => g.items.length > 0);
 
     if (isLR) {
+      let curX = railStartX;
+      const chipY = railStartY + ZONE_HEADER_H + 16 + OBJ_GROUP_LABEL_H;
+
+      for (const grp of groups) {
+        grp.items.forEach((obj, idx) => {
+          const isSelected = activeObjectId === obj.id;
+          nodes.push({
+            id: obj.id,
+            type: 'inferredObject',
+            position: applyOffset(obj.id, {x: curX, y: chipY}, nodeOffsets),
+            width: OBJ_CHIP_W_LR,
+            zIndex: GRAPH_Z_CARD,
+            data: {
+              object: obj,
+              direction,
+              showGroupLabel: idx === 0,
+              isTraced: isSelected,
+              isDimmed: Boolean(activeObj && !isSelected),
+            },
+          });
+          curX += OBJ_CHIP_W_LR + OBJ_GAP;
+        });
+        curX += OBJ_GROUP_GAP - OBJ_GAP;
+      }
+      railRightEdge = Math.max(stagingRightEdge, curX - OBJ_GROUP_GAP);
+      railBottomEdge = chipY + OBJ_CHIP_H;
+    } else {
       let curY = railStartY + ZONE_HEADER_H + 16;
       for (const grp of groups) {
         grp.items.forEach((obj, idx) => {
@@ -263,7 +294,7 @@ export function buildCanvasLayout(
             id: obj.id,
             type: 'inferredObject',
             position: applyOffset(obj.id, {x: railStartX, y: curY}, nodeOffsets),
-            width: OBJ_RAIL_W_LR,
+            width: OBJ_RAIL_W_TB,
             zIndex: GRAPH_Z_CARD,
             data: {
               object: obj,
@@ -273,69 +304,48 @@ export function buildCanvasLayout(
               isDimmed: Boolean(activeObj && !isSelected),
             },
           });
-          curY += OBJ_CHIP_H + (idx === 0 ? 18 : 0) + OBJ_GAP;
+          curY += OBJ_CHIP_H + (idx === 0 ? OBJ_GROUP_LABEL_H : 0) + OBJ_GAP;
         });
         curY += OBJ_GROUP_GAP - OBJ_GAP;
       }
-      railRightEdge = railStartX + OBJ_RAIL_W_LR;
-      railBottomEdge = curY;
-    } else {
-      const maxRowWidth = Math.max(820, stagingRightEdge);
-      let curX = railStartX;
-      let curY = railStartY + ZONE_HEADER_H + 16;
-
-      for (const grp of groups) {
-        grp.items.forEach((obj, idx) => {
-          if (curX + OBJ_CHIP_W_TB > railStartX + maxRowWidth && curX > railStartX) {
-            curX = railStartX;
-            curY += OBJ_CHIP_H + 22;
-          }
-          const isSelected = activeObjectId === obj.id;
-          nodes.push({
-            id: obj.id,
-            type: 'inferredObject',
-            position: applyOffset(obj.id, {x: curX, y: curY}, nodeOffsets),
-            width: OBJ_CHIP_W_TB,
-            zIndex: GRAPH_Z_CARD,
-            data: {
-              object: obj,
-              direction,
-              showGroupLabel: idx === 0,
-              isTraced: isSelected,
-              isDimmed: Boolean(activeObj && !isSelected),
-            },
-          });
-          curX += OBJ_CHIP_W_TB + 14;
-        });
-        curX = railStartX;
-        curY += OBJ_CHIP_H + 28;
-      }
-      railRightEdge = railStartX + maxRowWidth;
-      railBottomEdge = curY;
+      railRightEdge = railStartX + OBJ_RAIL_W_TB;
+      railBottomEdge = Math.max(stagingBottomEdge, curY);
     }
 
     edges.push(...buildExtractionEdges(displayRailObjects, activeObj, activeObjectId, direction));
   }
 
   // ---------------------------------------------------------------------------
-  // LAYER 3: PHASE 2 EXECUTION (MACRO-STATES, SHOT CHAMBERS, SUB-STATES, RAW)
+  // TIER 3: PHASE 2 EXECUTION (MACRO-STATES, SHOT CHAMBERS, SUB-STATES, SOURCE)
+  // LR: horizontal spine (L -> R) below Tier 2
+  // TB: vertical spine (T -> B) right of Tier 2
   // ---------------------------------------------------------------------------
+  const visibleSubNodeIds = new Set<string>();
+
   if (model.macroStates.length > 0) {
-    const execStartX = isLR
-      ? hasRail || model.stagingBlocks.length > 0
-        ? railRightEdge + LAYER_GAP_LR
-        : 0
-      : maxRawWidthLeftTB;
-    const execStartY = isLR
+    const execZoneX = isLR
       ? 0
       : hasRail || model.stagingBlocks.length > 0
-        ? railBottomEdge + LAYER_GAP_TB
+        ? railRightEdge + LAYER_GAP_TB
         : 0;
+    const execStartX = isLR
+      ? 0
+      : execZoneX + (maxRawWidthLeftTB > 0 ? maxRawWidthLeftTB : 32);
+    const execStartY = isLR
+      ? hasRail || model.stagingBlocks.length > 0
+        ? railBottomEdge + LAYER_GAP_LR
+        : 0
+      : 0;
+    const execBaseY_LR =
+      execStartY +
+      ZONE_HEADER_H +
+      18 +
+      (maxRawHeightAboveLR > 0 ? maxRawHeightAboveLR + RAW_GAP + 24 : 44);
 
     nodes.push({
       id: 'zone-execution',
       type: 'zoneHeader',
-      position: {x: isLR ? execStartX : 0, y: execStartY},
+      position: {x: execZoneX, y: execStartY},
       draggable: false,
       selectable: false,
       zIndex: GRAPH_Z_CARD,
@@ -477,9 +487,7 @@ export function buildCanvasLayout(
       });
     }
 
-    // Pass 3: Emit Macro-States, opposite-side Raw Input branches, and perpendicular Sub-States
-    const visibleSubNodeIds = new Set<string>();
-
+    // Pass 3: Emit Macro-States, opposite-side Source branches, and perpendicular Sub-States
     for (const p of placements) {
       const chamberOrigin = p.ms.shotChamberId ? chamberOriginById.get(p.ms.shotChamberId) : null;
       const parentChamber = p.ms.shotChamberId ? chamberById.get(p.ms.shotChamberId) : null;
@@ -623,7 +631,7 @@ export function buildCanvasLayout(
       }
     }
 
-    // Pass 4: Execution continuity spine, RECALL arcs, isolation threads & downstream label matches
+    // Pass 4a: Execution continuity spine, RECALL arcs & animated isolation threads
     edges.push(
       ...buildExecutionContinuityEdges(
         placements,
@@ -633,13 +641,19 @@ export function buildCanvasLayout(
         direction
       )
     );
+  }
+
+  // Pass 4b: Cascading state-flow threads (Tier 2 -> Tier 1 Staging refs & Tier 2 -> Tier 3 cascade)
+  if (hasRail) {
     edges.push(
       ...buildDownstreamLabelMatchEdges(
         displayRailObjects,
         activeObj,
         activeObjectId,
         showAllLinks,
+        expandedIds,
         visibleSubNodeIds,
+        hasIsolation,
         direction
       )
     );

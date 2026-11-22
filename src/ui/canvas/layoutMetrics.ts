@@ -5,20 +5,23 @@ import type {
   GraphSubStateItem,
 } from './types.ts';
 
-// Deterministic geometry constants (px) tuned to match the approved blueprint density
+// Deterministic geometry constants (px) tuned for the 3-Tier Stratified Layout
+// LR: Tier 1 Staging (L->R) / Tier 2 Inferred Objects (L->R) / Tier 3 Execution (L->R)
+// TB: 90° transpose into 3 parallel vertical columns (Staging | Objects | Execution)
 export const ZONE_HEADER_H = 34;
-export const LAYER_GAP_LR = 96;
-export const LAYER_GAP_TB = 88;
+export const LAYER_GAP_LR = 92;
+export const LAYER_GAP_TB = 96;
 
-export const STAGING_W_LR = 368;
-export const STAGING_W_TB = 400;
-export const STAGING_GAP = 18;
+export const STAGING_W_LR = 344;
+export const STAGING_W_TB = 368;
+export const STAGING_GAP = 20;
 
-export const OBJ_RAIL_W_LR = 252;
-export const OBJ_CHIP_W_TB = 228;
+export const OBJ_CHIP_W_LR = 224;
+export const OBJ_RAIL_W_TB = 248;
 export const OBJ_CHIP_H = 44;
-export const OBJ_GAP = 10;
-export const OBJ_GROUP_GAP = 22;
+export const OBJ_GROUP_LABEL_H = 22;
+export const OBJ_GAP = 12;
+export const OBJ_GROUP_GAP = 28;
 
 export const MS_W_LR = 312;
 export const MS_W_TB = 368;

@@ -49,6 +49,7 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
 
   const isLR = direction === 'LR';
   const isolatedSet = new Set<GraphDimension>(isolatedDims);
+  const threadSideStyle = isLR ? {top: '82%'} : {left: '82%'};
 
   // Collapsed Milestone Pill when active Sub-State isolation matches 0 Sub-States in this Macro-State
   if (isPill) {
@@ -62,6 +63,19 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
         <Handle type="source" id="spine-out" position={isLR ? Position.Right : Position.Bottom} />
         <Handle type="source" id="recall-out" position={isLR ? Position.Top : Position.Left} />
         <Handle type="target" id="recall-in" position={isLR ? Position.Top : Position.Left} />
+        <Handle type="target" id="thread-entry" position={isLR ? Position.Top : Position.Left} />
+        <Handle
+          type="target"
+          id="thread-in"
+          position={isLR ? Position.Left : Position.Top}
+          style={threadSideStyle}
+        />
+        <Handle
+          type="source"
+          id="thread-out"
+          position={isLR ? Position.Right : Position.Bottom}
+          style={threadSideStyle}
+        />
         <span>{macroState.id}</span>
       </div>
     );
@@ -87,6 +101,19 @@ export const MacroStateNode = memo(function MacroStateNode({data}: NodeProps) {
       <Handle type="target" id="raw-in" position={isLR ? Position.Top : Position.Left} />
       <Handle type="source" id="recall-out" position={isLR ? Position.Top : Position.Left} />
       <Handle type="target" id="recall-in" position={isLR ? Position.Top : Position.Left} />
+      <Handle type="target" id="thread-entry" position={isLR ? Position.Top : Position.Left} />
+      <Handle
+        type="target"
+        id="thread-in"
+        position={isLR ? Position.Left : Position.Top}
+        style={threadSideStyle}
+      />
+      <Handle
+        type="source"
+        id="thread-out"
+        position={isLR ? Position.Right : Position.Bottom}
+        style={threadSideStyle}
+      />
 
       {/* Scene DNA Bar along top edge */}
       <div className="flex w-full h-1.5 gap-0.5 bg-app" aria-hidden="true">

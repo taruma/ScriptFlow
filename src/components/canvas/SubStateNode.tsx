@@ -40,6 +40,13 @@ export const SubStateNode = memo(function SubStateNode({data}: NodeProps) {
       <Handle type="target" id="chain-in" position={isLR ? Position.Top : Position.Left} />
       <Handle type="source" id="chain-out" position={isLR ? Position.Bottom : Position.Right} />
       <Handle type="target" id="match-in" position={isLR ? Position.Left : Position.Top} />
+      <Handle type="source" id="match-out" position={isLR ? Position.Right : Position.Bottom} />
+      <Handle
+        type="target"
+        id="match-same-in"
+        position={isLR ? Position.Right : Position.Bottom}
+        style={isLR ? {top: '68%'} : {left: '68%'}}
+      />
 
       <div className="flex items-stretch gap-2.5">
         <div

@@ -803,3 +803,22 @@
   border: 0;
 }
 
+/* Directional flow animation reserved for active isolated Dimension Threads
+   and single-object cascading traces (seamless 2x12px dash cycle, source -> target) */
+@keyframes auteur-graph-thread-flow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.auteur-graph-edge-flow {
+  animation: auteur-graph-thread-flow 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auteur-graph-edge-flow {
+    animation: none;
+  }
+}
+

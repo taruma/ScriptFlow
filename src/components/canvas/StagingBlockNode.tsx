@@ -31,7 +31,9 @@ function getHeaderAccentColor(kind: MacroBlockKind): string {
 export const StagingBlockNode = memo(function StagingBlockNode({data}: NodeProps) {
   const {block, direction, isTraced, isDimmed} = data as StagingBlockNodeData;
   const isLR = direction === 'LR';
-  const portPosition = isLR ? Position.Right : Position.Bottom;
+  const portPosition = isLR ? Position.Bottom : Position.Right;
+  const outHandleStyle = isLR ? {left: '42%'} : {top: '42%'};
+  const matchHandleStyle = isLR ? {left: '58%'} : {top: '58%'};
   const headerColor = getHeaderAccentColor(block.kind);
 
   return (
@@ -42,8 +44,8 @@ export const StagingBlockNode = memo(function StagingBlockNode({data}: NodeProps
           : 'border-border-main'
       } ${isDimmed ? 'auteur-graph-dimmed' : ''}`}
     >
-      <Handle type="source" id="staging-out" position={portPosition} />
-      <Handle type="target" id="staging-match-in" position={portPosition} />
+      <Handle type="source" id="staging-out" position={portPosition} style={outHandleStyle} />
+      <Handle type="target" id="staging-match-in" position={portPosition} style={matchHandleStyle} />
 
       <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-border-subtle">
         <span

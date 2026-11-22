@@ -50,7 +50,7 @@ rawText (Single Source of Truth)
 | Inferred Object Kind | Canonical Plain-Text Pattern | Core Extractor & Regex | Notes |
 |---|---|---|---|
 | **Character (`character`)** | `@ref as Label` or `@ref as Label (voice: @audio)` inside any Phase 1 Staging block | `extractCharacterBindings` (`src/core/extractor.ts`, `CHARACTER_BINDING_REGEX`) | Supports multi-word capitalized labels (e.g., `@image2 as Evan Montgomery`) with stopword guards (`and`, `with`, `in`, `facing`, …) and optional `(voice: @audio)` binding. Deduplicated case-insensitively per `ref::name`. |
-| **Aesthetic Token (`location` / `wardrobe` / `prop`)** | `Description -> TOKEN` or `Description -> TOKEN (reference: @ref)` inside `[AESTHETIC]` (`;` separates multiple mappings on one line) | `extractAestheticTokenSegments` (`src/core/aesthetic.ts`, `AESTHETIC_TOKEN_SEGMENT_REGEX`) | Accepts both ASCII `->` and Unicode `→`, plus optional trailing `(reference: @ref)` or `(ref: @ref)`. Category classifies `location` (`location`/`set`/`place`/`env`), `prop` (`prop`/`item`/`object`/`vehicle`), or `wardrobe` (default). |
+| **Aesthetic Token (`location` / `wardrobe` / `prop`)** | `Description -> TOKEN` or `Description -> TOKEN (reference: @ref)` inside `[AESTHETIC]` (`;` separates multiple mappings on one line) | `extractAestheticTokenSegments` (`src/core/aesthetic.ts`, `AESTHETIC_TOKEN_SEGMENT_REGEX`) | Accepts both ASCII `->` and Unicode `→`, plus optional trailing `(reference: @ref)` or `(ref: @ref)`. Category classifies `location` (`location`/`setting`/`set`/`place`/`env`/`backdrop`/`venue`/`interior`/`exterior`/`room`/`architecture`), `prop` (`prop`/`item`/`object`/`vehicle`/`weapon`/`tool`/`device`/`artifact`/`gear`/`accessory`/`furniture`/`document`/`dossier`/`evidence`), or `wardrobe` (default). |
 | **Staging-Only Visual Ref (`staging_ref`)** | `Description (reference: @ref)` or `(ref: @ref)` inside `[AESTHETIC]` with **no** `-> TOKEN` | `extractAestheticStandaloneReferences` (`src/core/aesthetic.ts`, `AESTHETIC_STANDALONE_REF_REGEX`) | Skips segments already parsed as `-> TOKEN` mappings and skips `@ref`s already bound to Characters or Tokens. Rendered with a dashed `Staging` badge as a self-contained Phase 1 visual anchor. |
 | **Camera Setup (`camera_slot`)** | Numbered `[CAM 01]`, `[CAM 02A]` inside `[EXECUTION]` | `extractCameraContinuity` (`src/core/extractor.ts`) | Tracks `firstBeatIndex`, `firstDescriptor`, and per-Macro-State transition (`ESTABLISH`, `HOLD`, `CUT`, `RECALL`, `MONTAGE`, `NONE`). Shown in Layer 2 automatically as a fallback rail when no Staging objects exist, and always clickable on Macro-State camera slates & Shot Chambers. |
 
@@ -100,29 +100,43 @@ Every `SubStateKind` from `src/core/types.ts` maps deterministically into one of
 
 ## 3. Dual-Axis Layout, Isolation & Stacking Contract
 
-### 3.1 Two-Axis Geometry (`src/ui/canvas/canvasLayout.ts` + `layoutMetrics.ts`)
+### 3.1 Three-Tier Stratified Dual-Axis Geometry (`src/ui/canvas/canvasLayout.ts` + `layoutMetrics.ts`)
 
-| Axis / Side | `L → R` (`direction: 'LR'`) | `T ↓ B` (`direction: 'TB'`) |
+| Axis / Tier | `L → R` (`direction: 'LR'`, Default) | `T ↓ B` (`direction: 'TB'`, 90° Transpose) |
 |---|---|---|
-| **Primary Flow** | Layer 1 Staging → Layer 2 Objects → Layer 3 Execution (`S1 → SN`) left-to-right | Layer 1 Staging (2-col grid) ↓ Layer 2 Objects (wrapped rows) ↓ Layer 3 Execution top-to-bottom |
-| **Perpendicular Decoupled Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
-| **Opposite-Side `</>` Raw Branch** | Branches **above** the Macro-State | Branches **left** of the Macro-State |
+| **Tier 1 — Phase 1 Staging** | Horizontal row (`L → R`) across the top band (`[INTENT]` → `[LOGIC]` → `[AESTHETIC]` → `[OPENING]`) | Single vertical column (`T ↓ B`) on the left |
+| **Tier 2 — Inferred Objects** | Horizontal band (`L → R`) directly beneath Tier 1, grouped by kind on one unified baseline | Vertical column (`T ↓ B`) directly right of Tier 1, grouped by kind |
+| **Tier 3 — Phase 2 Execution** | Horizontal spine (`S1 → SN`, `L → R`) directly beneath Tier 2 | Vertical spine (`S1 ↓ SN`, `T ↓ B`) directly right of Tier 2 |
+| **Split Sub-States** | Fan **downward** beneath their Macro-State (`S#.1 ↓ S#.2 ↓ …`) | Fan **rightward** beside their Macro-State (`S#.1 → S#.2 → …`) |
+| **Opposite-Side `Source` Branch** | Branches **above** the Macro-State | Branches **left** of the Macro-State |
 
 - **Default Posture & Reset (`createDefaultGraphExpansionState`):** On load, script switch, or **`Reset`**, all Macro-States start **folded (compact)** with **Source** branches collapsed and all ephemeral drag offsets cleared—keeping the initial view calm until the presenter explicitly splits a Macro-State's Sub-States or toggles source text.
 
 ### 3.2 Sub-State Isolation (`Ghost` vs. `Compact`)
 
 When one or more dimensions are toggled in `SubStateIsolatorDock`:
-- **Non-matching Sub-States:** Dimmed (`opacity: 0.14`) in **`Ghost`** mode, or omitted from cards and decoupled branches in **`Compact`** mode.
+- **Non-matching Sub-States:** Dimmed (`opacity: 0.14`) in **`Ghost`** mode, or omitted from cards and split branches in **`Compact`** mode.
 - **Zero-Match Macro-States:** Collapse into compact dashed **Milestone Pills** (`S3`) on the spine so temporal ordering remains intact.
-- **Dimension Thread (`isolationThread`):** Connects surviving matching Macro-States directly across Milestone Pill gaps in the active dimension's color.
+- **Animated Dimension Thread (`isolationThread`):** Connects surviving matching Macro-States directly across Milestone Pill gaps in the active dimension's color with a smooth forward directional flow animation (`L → R` in `LR`, `T ↓ B` in `TB`). While a tag is isolated, any background **`Show Threads`** entity wires stay static and dimmed so they never compete visually with the isolated craft thread.
 
-### 3.3 Dynamic Wire Routing (`src/ui/canvas/layoutEdges.ts`)
+### 3.3 Strict Tier Boundaries, Cascading State-Flow Threads & Selective Animation (`src/ui/canvas/layoutEdges.ts`)
 
-- **Extraction (`extraction`):** Declaring Staging block → Inferred Object (`staging-out` → `obj-in`).
-- **Continuity Spine (`spineHold`, `spineCut`, `spineMontage`):** Sequential `S1 → S2 → … → SN` links.
-- **Curved Recall Arc (`recall`):** Establishing `S#` → recalled `S#` (`recall-out` → `recall-in`), rendered with a custom cubic bezier lift in `AuteurGraphEdge.tsx`.
-- **Downstream Label Match (`labelMatch`):** Drawn on hover/click of an object (or when **`Show Threads`** is toggled). For Execution call sites, if `subnode-S#.#` is currently visible (parent Macro-State split into Sub-States), the wire routes directly to `subnode-S#.#`; otherwise it falls back cleanly to `node-S#` (deduplicated per target).
+1. **Zero Tier 1 → Tier 3 Bypasses:** Staging Macro-Blocks (`MB#`) never wire directly into Execution Macro-States (`S#`) or Sub-States (`S#.#`). Every cross-phase relationship flows strictly through its intermediate Tier 2 Inferred Object.
+2. **Tier 1 ↔ Tier 2 (`extraction` & Staging references):**
+   - **Extraction (`extraction`):** Declaring Staging block → Inferred Object (`staging-out` → `obj-in`).
+   - **Downstream Staging References (`labelMatch`, `obj-back` → `staging-match-in`):** Connects an extracted Tier 2 Object to subsequent Staging blocks (`[LOGIC]`, `[OPENING]`, etc.) that reference its label without self-linking the declaring block.
+3. **Tier 2 → Tier 3 → Tier 3 Cascading State-Flow (`labelMatch` + `isCascade`):**
+   - **Single Entry Drop-In:** Emits exactly **one** wire from the Tier 2 Object (`obj-out`) to its **first** visible Execution appearance (`node-S#` via `thread-entry` when folded, or `subnode-S#.#` via `match-in` when split).
+   - **Chronological Execution Cascade (`prev → next`):** Subsequent appearances chain sequentially in timeline order rather than fanning out from Tier 2:
+     - **Folded Macro-States:** `node-S1` (`thread-out`) → `node-S2` (`thread-in`) → `node-S4` (`thread-in`), using dedicated lower-side ports (`82%`) and gentle lane-separated curves (`laneIndex`) so parallel entity threads stay clear of the Camera Spine and `CUT` pills.
+     - **Split Sub-States (Intra-State & Cross-State):** Consecutive mentions inside the same split Macro-State (e.g., `S1.2 → S1.3`) connect via an outward side-bracket (`match-out` → `match-same-in`, `isIntraState: true`); mentions crossing into the next Macro-State (`S1.3 → S2.2` or `S1.3 → S2`) sweep across cleanly (`match-out` → `match-in` / `thread-in`).
+4. **Continuity Spine & Curved Recall Arcs:**
+   - **Continuity Spine (`spineHold`, `spineCut`, `spineMontage`):** Sequential `S1 → S2 → … → SN` links.
+   - **Curved Recall Arc (`recall`):** Establishing `S#` → recalled `S#` (`recall-out` → `recall-in`), rendered with a custom cubic bezier lift in `AuteurGraphEdge.tsx`.
+5. **Selective Flow Animation (Performance & Clarity Guardrail):**
+   - `.auteur-graph-edge-flow` (`src/index.css`) animates SVG `stroke-dashoffset` (`24 → 0` over a seamless `8 4` dash cycle, disabled automatically under `@media (prefers-reduced-motion: reduce)`).
+   - **Animated (`isAnimated: true`):** Active **isolated Dimension Threads** (`isolationThread`) and **single-object focused traces** (hover/click an Inferred Object or Camera Setup)—keeping animated SVG paths small and focused.
+   - **Static (`isAnimated: false`):** Unfiltered **`Show Threads`** (all entities visible at once) renders static lane-separated curves to avoid heavy repaints and visual noise.
 
 ### 3.4 Explicit Z-Index Stacking Hierarchy
 

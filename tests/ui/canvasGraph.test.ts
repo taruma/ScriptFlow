@@ -487,4 +487,202 @@ Rosa holds EV01.
     expect(rawBottomWorld).toBeLessThanOrEqual(nodeS1TopWorld - RAW_GAP);
     expect(chamber.height).toBeGreaterThan(simulatedMsHeight);
   });
+
+  it('arranges LR into 3 horizontal stratified tiers (Staging -> Objects -> Execution) and transposes cleanly to 3 vertical columns in TB', () => {
+    const raw = `[INTENT]
+Featuring @img1 as Robbie and @img2 as Arthur.
+
+[AESTHETIC]
+Setting: Dim concrete pier -> LOC01
+Gear: Brass compass -> PR01
+Costume: Rain-soaked trenchcoat -> WR01
+
+[OPENING]
+Robbie checks PR01 in LOC01 wearing WR01.
+
+[EXECUTION]
+[CAM 01] MS in LOC01 -> [ACT] Robbie steps forward -> Arthur says {Stay put.}
+[CAM 02] CU -> [ACT] Robbie lifts PR01`;
+
+    const model = buildModelFromRaw(raw);
+
+    // Verify enhanced [AESTHETIC] key inference for location / prop / wardrobe
+    expect(model.railObjects.find((o) => o.matchToken === 'LOC01')?.kind).toBe('location');
+    expect(model.railObjects.find((o) => o.matchToken === 'PR01')?.kind).toBe('prop');
+    expect(model.railObjects.find((o) => o.matchToken === 'WR01')?.kind).toBe('wardrobe');
+
+    // LR: 3 horizontal bands stacked top-to-bottom (Tier 1 Staging -> Tier 2 Objects -> Tier 3 Execution)
+    const lr = buildCanvasLayout(model, makeLayoutOptions({direction: 'LR'}));
+    const lrStaging = lr.nodes.filter((n) => n.type === 'stagingBlock');
+    const lrObjects = lr.nodes.filter((n) => n.type === 'inferredObject');
+    const lrExec = lr.nodes.filter((n) => n.type === 'macroState');
+
+    // Tier 1 blocks flow L -> R on the same Y row
+    expect(lrStaging[1].position.x).toBeGreaterThan(lrStaging[0].position.x);
+    expect(lrStaging[1].position.y).toBe(lrStaging[0].position.y);
+    // Tier 2 objects sit strictly below Tier 1 and flow L -> R on one shared Y baseline
+    expect(lrObjects[0].position.y).toBeGreaterThan(lrStaging[0].position.y);
+    expect(lrObjects.every((o) => o.position.y === lrObjects[0].position.y)).toBe(true);
+    expect(lrObjects[1].position.x).toBeGreaterThan(lrObjects[0].position.x);
+    // Tier 3 Execution sits strictly below Tier 2 and flows L -> R
+    expect(lrExec[0].position.y).toBeGreaterThan(lrObjects[0].position.y);
+    expect(lrExec[1].position.x).toBeGreaterThan(lrExec[0].position.x);
+
+    // TB: 90-degree transpose into 3 parallel vertical columns (Staging | Objects | Execution)
+    const tb = buildCanvasLayout(model, makeLayoutOptions({direction: 'TB'}));
+    const tbStaging = tb.nodes.filter((n) => n.type === 'stagingBlock');
+    const tbObjects = tb.nodes.filter((n) => n.type === 'inferredObject');
+    const tbExec = tb.nodes.filter((n) => n.type === 'macroState');
+
+    expect(tbStaging[1].position.x).toBe(tbStaging[0].position.x);
+    expect(tbStaging[1].position.y).toBeGreaterThan(tbStaging[0].position.y);
+    expect(tbObjects[0].position.x).toBeGreaterThan(tbStaging[0].position.x);
+    expect(tbObjects[1].position.y).toBeGreaterThan(tbObjects[0].position.y);
+    expect(tbExec[0].position.x).toBeGreaterThan(tbObjects[0].position.x);
+    expect(tbExec[1].position.y).toBeGreaterThan(tbExec[0].position.y);
+  });
+
+  it('cascades entity threads chronologically (declaring block -> object -> 1st call -> prev -> next) with zero Tier 1 -> Tier 3 bypasses', () => {
+    const raw = `[INTENT]
+Featuring @img1 as Robbie and @img2 as Arthur.
+
+[LOGIC]
+Keep Robbie screen-left facing Arthur.
+
+[OPENING]
+Robbie waits beside the door.
+
+[EXECUTION]
+[CAM 01] MS -> [BLOCK] Robbie stands left -> [ACT] Robbie exhales -> Robbie says {Ready.}
+[CAM 02] CU -> [ACT] Arthur nods silently
+[CAM 01] -> [ACT] Robbie steps through -> [ACT] Arthur follows`;
+
+    const model = buildModelFromRaw(raw);
+    const robbie = model.railObjects.find((o) => o.matchToken === 'Robbie')!;
+
+    // 1. Folded Macro-States: single drop-in from Robbie -> node-S1, then cascade node-S1 -> node-S3
+    const folded = buildCanvasLayout(
+      model,
+      makeLayoutOptions({activeObjectId: robbie.id})
+    );
+
+    // Zero direct Tier 1 (node-MB*) -> Tier 3 (node-S* / subnode-S*) edges
+    expect(
+      folded.edges.some(
+        (e) =>
+          e.source.startsWith('node-MB') &&
+          (e.target.startsWith('node-S') || e.target.startsWith('subnode-S'))
+      )
+    ).toBe(false);
+
+    // Tier 1 -> Tier 2 extraction & Tier 2 -> Tier 1 downstream Staging refs
+    expect(
+      folded.edges.some(
+        (e) => e.kind === 'extraction' && e.source === 'node-MB0' && e.target === robbie.id
+      )
+    ).toBe(true);
+    const stagingRefs = folded.edges.filter(
+      (e) => e.kind === 'labelMatch' && e.source === robbie.id && e.target.startsWith('node-MB')
+    );
+    expect(stagingRefs.map((e) => e.target)).toEqual(['node-MB1', 'node-MB2']);
+
+    // Exactly ONE Tier 2 -> Tier 3 drop-in (Robbie -> node-S1), plus chronological cascade (node-S1 -> node-S3)
+    const execDropIns = folded.edges.filter(
+      (e) => e.kind === 'labelMatch' && e.source === robbie.id && !e.target.startsWith('node-MB')
+    );
+    expect(execDropIns).toHaveLength(1);
+    expect(execDropIns[0]).toMatchObject({
+      source: robbie.id,
+      target: 'node-S1',
+      targetHandle: 'thread-entry',
+      isCascade: false,
+      isHot: true,
+      isAnimated: true,
+    });
+
+    const foldedCascades = folded.edges.filter((e) => e.kind === 'labelMatch' && e.isCascade);
+    expect(foldedCascades).toHaveLength(1);
+    expect(foldedCascades[0]).toMatchObject({
+      source: 'node-S1',
+      target: 'node-S3',
+      sourceHandle: 'thread-out',
+      targetHandle: 'thread-in',
+      isIntraState: false,
+      isHot: true,
+      isAnimated: true,
+    });
+
+    // 2. Split S1 + folded S3: weaves intra-state subnode-S1.2 -> subnode-S1.3 -> subnode-S1.4 -> node-S3
+    const splitS1 = buildCanvasLayout(
+      model,
+      makeLayoutOptions({
+        expandedIds: new Set(['S1']),
+        activeObjectId: robbie.id,
+      })
+    );
+    const splitDropIns = splitS1.edges.filter(
+      (e) => e.kind === 'labelMatch' && e.source === robbie.id && !e.target.startsWith('node-MB')
+    );
+    expect(splitDropIns).toHaveLength(1);
+    expect(splitDropIns[0]).toMatchObject({
+      target: 'subnode-S1.2',
+      targetHandle: 'match-in',
+    });
+
+    const splitCascades = splitS1.edges.filter((e) => e.kind === 'labelMatch' && e.isCascade);
+    expect(
+      splitCascades.map((e) => ({
+        source: e.source,
+        target: e.target,
+        isIntraState: e.isIntraState,
+      }))
+    ).toEqual([
+      {source: 'subnode-S1.2', target: 'subnode-S1.3', isIntraState: true},
+      {source: 'subnode-S1.3', target: 'subnode-S1.4', isIntraState: true},
+      {source: 'subnode-S1.4', target: 'node-S3', isIntraState: false},
+    ]);
+  });
+
+  it('animates isolated Dimension Threads and single-object traces while keeping unfiltered Show Threads static', () => {
+    const raw = `[INTENT]
+Featuring @img1 as Robbie and @img2 as Arthur.
+
+[EXECUTION]
+[CAM 01] MS -> [ACT] Robbie steps in -> Robbie says {Hello.}
+[CAM 02] CU -> [ACT] Arthur watches
+[CAM 01] -> [ACT] Robbie turns -> Robbie says {Bye.}`;
+
+    const model = buildModelFromRaw(raw);
+
+    // 1. Unfiltered Show Threads: all entity cascades are static (zero animation load) with distinct lanes
+    const allThreads = buildCanvasLayout(
+      model,
+      makeLayoutOptions({showAllLinks: true})
+    );
+    const allMatchEdges = allThreads.edges.filter((e) => e.kind === 'labelMatch');
+    expect(allMatchEdges.length).toBeGreaterThan(0);
+    expect(allMatchEdges.every((e) => !e.isAnimated && !e.isDimmed)).toBe(true);
+    const lanes = new Set(allMatchEdges.map((e) => e.laneIndex));
+    expect(lanes.size).toBe(2);
+
+    // 2. Tag isolated + Show Threads ON: isolationThread animates L -> R, while background entity threads stay static & dimmed
+    const isolated = buildCanvasLayout(
+      model,
+      makeLayoutOptions({
+        showAllLinks: true,
+        isolatedDims: new Set<GraphDimension>(['dialogue']),
+      })
+    );
+    const isoEdges = isolated.edges.filter((e) => e.kind === 'isolationThread');
+    expect(isoEdges).toHaveLength(1);
+    expect(isoEdges[0]).toMatchObject({
+      source: 'node-S1',
+      target: 'node-S3',
+      isHot: true,
+      isAnimated: true,
+    });
+    const bgMatchEdges = isolated.edges.filter((e) => e.kind === 'labelMatch');
+    expect(bgMatchEdges.length).toBeGreaterThan(0);
+    expect(bgMatchEdges.every((e) => !e.isAnimated && e.isDimmed === true)).toBe(true);
+  });
 });
