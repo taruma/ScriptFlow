@@ -31,6 +31,7 @@ import {
   RAW_GAP,
   RAW_W_LR,
   RAW_W_TB,
+  resolveMeasuredHeight,
   STAGING_GAP,
   STAGING_W_LR,
   STAGING_W_TB,
@@ -69,6 +70,7 @@ export function buildCanvasLayout(
     activeObjectId,
     showAllLinks,
     nodeOffsets,
+    measuredHeights,
   } = options;
 
   const isLR = direction === 'LR';
@@ -88,19 +90,23 @@ export function buildCanvasLayout(
   if (isLR) {
     for (const ms of model.macroStates) {
       if (rawOpenIds.has(ms.id)) {
-        const h = estimateRawBranchHeight(ms.raw, RAW_W_LR);
+        const h = resolveMeasuredHeight(
+          `raw-${ms.id}`,
+          estimateRawBranchHeight(ms.raw, RAW_W_LR),
+          measuredHeights
+        );
         if (h > maxRawHeightAboveLR) maxRawHeightAboveLR = h;
       }
     }
   }
   const execBaseY_LR =
-    ZONE_HEADER_H + 18 + (maxRawHeightAboveLR > 0 ? maxRawHeightAboveLR + RAW_GAP + 14 : 38);
+    ZONE_HEADER_H + 18 + (maxRawHeightAboveLR > 0 ? maxRawHeightAboveLR + RAW_GAP + 18 : 38);
 
   let maxRawWidthLeftTB = 0;
   if (!isLR) {
     for (const ms of model.macroStates) {
       if (rawOpenIds.has(ms.id)) {
-        maxRawWidthLeftTB = RAW_W_TB + RAW_GAP;
+        maxRawWidthLeftTB = RAW_W_TB + RAW_GAP + (ms.shotChamberId ? CHAMBER_PAD_X : 0);
         break;
       }
     }
@@ -130,7 +136,11 @@ export function buildCanvasLayout(
     if (isLR) {
       let curY = ZONE_HEADER_H + 16;
       for (const sb of model.stagingBlocks) {
-        const h = estimateStagingHeight(sb, STAGING_W_LR);
+        const h = resolveMeasuredHeight(
+          sb.id,
+          estimateStagingHeight(sb, STAGING_W_LR),
+          measuredHeights
+        );
         const isHit = activeObj
           ? activeObj.sourceBlockId === sb.mbId || sb.matchedObjectIds.includes(activeObj.id)
           : false;
@@ -159,7 +169,11 @@ export function buildCanvasLayout(
         const col = idx % 2;
         const x = col * (STAGING_W_TB + STAGING_GAP);
         const y = colHeights[col];
-        const h = estimateStagingHeight(sb, STAGING_W_TB);
+        const h = resolveMeasuredHeight(
+          sb.id,
+          estimateStagingHeight(sb, STAGING_W_TB),
+          measuredHeights
+        );
         const isHit = activeObj
           ? activeObj.sourceBlockId === sb.mbId || sb.matchedObjectIds.includes(activeObj.id)
           : false;
@@ -349,8 +363,9 @@ export function buildCanvasLayout(
       const isExpanded = !isPill && expandedIds.has(ms.id);
       const isRawOpen = !isPill && rawOpenIds.has(ms.id);
 
+      const nodeId = `node-${ms.id}`;
       const width = isPill ? MS_PILL_W : isLR ? MS_W_LR : MS_W_TB;
-      const height = isPill
+      const estimatedMsHeight = isPill
         ? MS_PILL_H
         : estimateMacroStateHeight(
             ms,
@@ -360,6 +375,9 @@ export function buildCanvasLayout(
             isolatedDims,
             isolationMode
           );
+      const height = isPill
+        ? MS_PILL_H
+        : resolveMeasuredHeight(nodeId, estimatedMsHeight, measuredHeights);
 
       if (i > 0) {
         const enteringChamber = ms.shotChamberId && ms.shotChamberId !== prevMs?.shotChamberId;
@@ -394,11 +412,21 @@ export function buildCanvasLayout(
       if (isLR) {
         cursorPrimary += width + MS_GAP_LR;
       } else {
-        const rawH = isRawOpen ? estimateRawBranchHeight(ms.raw, RAW_W_TB) : 0;
+        const rawH = isRawOpen
+          ? resolveMeasuredHeight(
+              `raw-${ms.id}`,
+              estimateRawBranchHeight(ms.raw, RAW_W_TB),
+              measuredHeights
+            )
+          : 0;
         const subHeightTB = isExpanded
           ? Math.max(
               ...ms.subStates.map((ss) =>
-                estimateDecoupledSubNodeHeight(ss, SUB_W_TB, rawOpenIds.has(ss.id))
+                resolveMeasuredHeight(
+                  `subnode-${ss.id}`,
+                  estimateDecoupledSubNodeHeight(ss, SUB_W_TB, rawOpenIds.has(ss.id)),
+                  measuredHeights
+                )
               ),
               height
             )
@@ -493,7 +521,11 @@ export function buildCanvasLayout(
       if (p.isRawOpen) {
         const rawId = `raw-${p.ms.id}`;
         const rawW = isLR ? RAW_W_LR : RAW_W_TB;
-        const rawH = estimateRawBranchHeight(p.ms.raw, rawW);
+        const rawH = resolveMeasuredHeight(
+          rawId,
+          estimateRawBranchHeight(p.ms.raw, rawW),
+          measuredHeights
+        );
         const rawBasePos = isLR
           ? {x: worldX + (p.width - rawW) / 2, y: worldY - rawH - RAW_GAP - (chamberOrigin ? 18 : 0)}
           : {x: worldX - rawW - RAW_GAP - (chamberOrigin ? 16 : 0), y: worldY};
@@ -544,7 +576,11 @@ export function buildCanvasLayout(
 
           const subW = isLR ? SUB_W_LR : SUB_W_TB;
           const isSubRawOpen = rawOpenIds.has(ss.id);
-          const subH = estimateDecoupledSubNodeHeight(ss, subW, isSubRawOpen);
+          const subH = resolveMeasuredHeight(
+            subNodeId,
+            estimateDecoupledSubNodeHeight(ss, subW, isSubRawOpen),
+            measuredHeights
+          );
           const subBasePos = isLR
             ? {x: worldX + (p.width - subW) / 2, y: subCursor}
             : {x: subCursor, y: worldY};

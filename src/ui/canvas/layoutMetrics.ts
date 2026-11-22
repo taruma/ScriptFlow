@@ -61,10 +61,48 @@ export interface MacroStatePlacement {
 
 export function estimateWrappedLines(text: string, charsPerLine: number): number {
   if (!text) return 1;
-  return text.split('\n').reduce((sum, line) => {
-    const trimmed = line.trim();
+  const maxCols = Math.max(8, charsPerLine);
+
+  return text.split('\n').reduce((sum, rawLine) => {
+    const trimmed = rawLine.trim();
     if (!trimmed) return sum + 1;
-    return sum + Math.max(1, Math.ceil(trimmed.length / charsPerLine));
+
+    // Simulate word-boundary wrapping (whitespace-pre-wrap + break-words) so long
+    // unbreakable tokens or space-wrapped prose don't underestimate line counts.
+    let lines = 1;
+    let col = 0;
+    const tokens = trimmed.split(/(\s+)/);
+
+    for (const token of tokens) {
+      if (!token) continue;
+      const isSpace = /^\s+$/.test(token);
+      if (isSpace) {
+        if (col > 0 && col + token.length <= maxCols) {
+          col += token.length;
+        }
+        continue;
+      }
+
+      if (token.length > maxCols) {
+        if (col > 0) {
+          lines += 1;
+          col = 0;
+        }
+        const extraLines = Math.floor((token.length - 1) / maxCols);
+        lines += extraLines;
+        col = token.length - extraLines * maxCols;
+        continue;
+      }
+
+      if (col > 0 && col + token.length > maxCols) {
+        lines += 1;
+        col = token.length;
+      } else {
+        col += token.length;
+      }
+    }
+
+    return sum + lines;
   }, 0);
 }
 
@@ -102,14 +140,26 @@ export function estimateDecoupledSubNodeHeight(
 ): number {
   const base = 36 + estimateSubStateRowHeight(ss, width);
   if (!isRawOpen) return base;
-  const rawLines = estimateWrappedLines(ss.raw, Math.max(22, Math.floor((width - 38) / 6.4)));
-  return base + 24 + rawLines * 16;
+  const rawLines = estimateWrappedLines(ss.raw, Math.max(20, Math.floor((width - 42) / 6.5)));
+  return base + 24 + rawLines * 17.5;
 }
 
 export function estimateRawBranchHeight(raw: string, width: number): number {
-  const charsPerLine = Math.max(24, Math.floor((width - 28) / 6.6));
+  const charsPerLine = Math.max(22, Math.floor((width - 28) / 6.7));
   const lines = estimateWrappedLines(raw, charsPerLine);
-  return Math.max(76, 42 + lines * 16.5);
+  // 26px vertical padding+border + ~22px header + 11px*1.625 (~18px) per wrapped monospace line
+  return Math.max(78, 50 + lines * 18);
+}
+
+export function resolveMeasuredHeight(
+  nodeId: string,
+  estimatedHeight: number,
+  measuredHeights?: Readonly<Record<string, number>>
+): number {
+  const measured = measuredHeights?.[nodeId];
+  return typeof measured === 'number' && Number.isFinite(measured) && measured > 0
+    ? measured
+    : estimatedHeight;
 }
 
 export function estimateMacroStateHeight(

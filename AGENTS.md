@@ -124,7 +124,7 @@ Before concluding any task, update every affected doc and test suite mapped belo
 ### Verification Commands (All Must Exit `0`)
 
 ```bash
-npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (29 files, 293 tests)
+npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (29 files, 294 tests)
 npm run lint      # Runs strict TypeScript type-checking (tsc --noEmit)
 npm run build     # Runs tsc --noEmit && vite build
 ```

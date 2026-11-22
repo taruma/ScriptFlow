@@ -161,6 +161,8 @@ export interface GraphLayoutOptions {
   activeObjectId: string | null;
   showAllLinks: boolean;
   nodeOffsets: Readonly<Record<string, NodeOffset>>;
+  /** Optional React Flow DOM-measured node heights (px) keyed by node ID */
+  measuredHeights?: Readonly<Record<string, number>>;
 }
 
 export type CanvasNodeType =

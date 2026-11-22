@@ -141,8 +141,9 @@ When one or more dimensions are toggled in `SubStateIsolatorDock`:
 
 ## 4. React Flow v13 Integration & Stability Contracts
 
-1. **Controlled Node Reconciliation (`src/ui/canvas/flowSync.ts`):**
+1. **Controlled Node Reconciliation & Live DOM Height Feedback (`src/ui/canvas/flowSync.ts`, `AuteurGraphView.tsx`):**
    - `AuteurGraphView` stores controlled `flowNodes` in React state and applies React Flow v13 `NodeChangeset` batches via `changes.applyTo(prev)` (preserving `dimensions`, `select`, and live `position` during dragging and `Shift+Drag` marquee multi-select).
+   - `estimateWrappedLines()` in `layoutMetrics.ts` simulates real word-boundary wrapping (`whitespace-pre-wrap` + `break-words`) for frame-0 placement, and `AuteurGraphView` captures React Flow's actual DOM `dimensions` changes (`measuredHeights` with a `>= 2px` hysteresis threshold) into `buildCanvasLayout`, guaranteeing zero vertical overlap on tall `</>` Raw Input branches, Staging cards, decoupled Sub-States, and Shot Chamber containers.
    - When layout or hover/selection recomputes, `mergeLayoutIntoFlowNodes` preserves each existing node's `measured`, `selected`, `dragging`, active drag `position`, and `style` object reference whenever dimensions are unchanged—preventing React Flow's internal `ResizeObserver` from re-measuring nodes in a loop.
    - Ephemeral drag deltas `(dx, dy)` are committed to `nodeOffsets` only once a drag settles (`!change.dragging`), avoiding per-pixel layout recomputation during drags.
 2. **Handle-Bounds Refresh on Orientation Flip (`AuteurGraphView.tsx`):**
@@ -178,7 +179,5 @@ When one or more dimensions are toggled in `SubStateIsolatorDock`:
 - **Adding a new custom node type (e.g., visual reference thumbnail card or director note):**
   1. Add the node type to `CanvasNodeType` in `src/ui/canvas/types.ts` and emit it in `src/ui/canvas/canvasLayout.ts` with `zIndex: GRAPH_Z_CARD`.
   2. Create a `memo()`'d renderer under `src/components/canvas/`, register it in `NODE_TYPES` inside `AuteurGraphView.tsx`, and add any copy to `UI_LABELS.graph` in `src/ui/labels/editor.ts`.
-- **Upgrading height heuristics to measured DOM heights:**
-  - `flowNodes` already preserves `node.measured?.height` across merges (`flowSync.ts`). To eliminate vertical overlap on arbitrarily tall custom cards or Shot Chambers, collect a `Record<string, number>` of measured heights from `onNodesChange` (`change.type === 'dimensions'`) and pass it as an optional `measuredHeights` map in `GraphLayoutOptions`, letting `layoutMetrics.ts` return `measuredHeights[id] ?? estimate...()`.
 - **Adding a new Isolation Dimension:**
   - Add the key to `GRAPH_DIMENSIONS` in `src/ui/canvas/types.ts`, map it in `mapSubStateKindToGraphDimension` (`canvasGraph.ts`), add its 4-theme CSS variable `--graph-dim-<key>` in `src/index.css`, map it in `getDimensionColorVar` (`graphContext.tsx`), and add its label to `UI_LABELS.graph.isolatorDimensions` (`src/ui/labels/editor.ts`).

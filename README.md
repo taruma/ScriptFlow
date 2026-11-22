@@ -58,7 +58,7 @@ npm install
 # Start the Vite dev server (http://localhost:3000)
 npm run dev
 
-# Run the Vitest unit test suite (29 test files / 293 tests)
+# Run the Vitest unit test suite (29 test files / 294 tests)
 npm test
 
 # Run Vitest in watch mode

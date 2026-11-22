@@ -5,9 +5,13 @@ import {
   buildCanvasLayout,
   buildGraphSceneModel,
   createDefaultGraphExpansionState,
+  estimateRawBranchHeight,
+  estimateWrappedLines,
   GRAPH_Z_CARD,
   GRAPH_Z_CHAMBER,
   mergeLayoutIntoFlowNodes,
+  RAW_GAP,
+  RAW_W_LR,
   tokenizeAnnotatedText,
   type FlowNodeLike,
   type GraphDimension,
@@ -444,5 +448,38 @@ Rosa holds EV01.
     expect(chambers.every((n) => n.zIndex === GRAPH_Z_CHAMBER)).toBe(true);
     expect(cards.every((n) => n.zIndex === GRAPH_Z_CARD)).toBe(true);
     expect(GRAPH_Z_CARD).toBeGreaterThan(GRAPH_Z_CHAMBER);
+  });
+
+  it('accounts for word-wrap and DOM measuredHeights so tall Raw Input branches never overlap Macro-States', () => {
+    // Word-boundary wrapping produces at least as many lines as naive char division
+    const sample =
+      '[CAM 01] MS, two-shot, eye-level -> [BLOCK] Robbie frame-left MG facing screen-right; Arthur frame-right MG facing screen-left -> [ACT] Robbie stands hunched with tears streaking his flushed face, his right hand pressed hard against his sternum';
+    expect(estimateWrappedLines(sample, 36)).toBeGreaterThanOrEqual(Math.ceil(sample.length / 36));
+    expect(estimateRawBranchHeight(sample, RAW_W_LR)).toBeGreaterThan(150);
+
+    const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
+    const simulatedRawHeight = 460;
+    const simulatedMsHeight = 420;
+    const layout = buildCanvasLayout(
+      oner,
+      makeLayoutOptions({
+        direction: 'LR',
+        rawOpenIds: new Set(['S1']),
+        measuredHeights: {
+          'raw-S1': simulatedRawHeight,
+          'node-S1': simulatedMsHeight,
+        },
+      })
+    );
+
+    const rawS1 = layout.nodes.find((n) => n.id === 'raw-S1')!;
+    const nodeS1 = layout.nodes.find((n) => n.id === 'node-S1')!;
+    const chamber = layout.nodes.find((n) => n.type === 'shotChamber')!;
+
+    // Raw card bottom edge must clear the Shot Chamber top margin & Macro-State top edge cleanly
+    const rawBottomWorld = rawS1.position.y + simulatedRawHeight;
+    const nodeS1TopWorld = chamber.position.y + nodeS1.position.y;
+    expect(rawBottomWorld).toBeLessThanOrEqual(nodeS1TopWorld - RAW_GAP);
+    expect(chamber.height).toBeGreaterThan(simulatedMsHeight);
   });
 });

@@ -145,6 +145,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const [showAllLinks, setShowAllLinks] = useState<boolean>(false);
   const [showMiniMap, setShowMiniMap] = useState<boolean>(true);
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, NodeOffset>>({});
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
 
   // Track base auto-layout positions so drag deltas stay purely additive & reversible
   const basePosRef = useRef<Map<string, {x: number; y: number}>>(new Map());
@@ -163,6 +164,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     setSelectedObjectId(null);
     setHoveredObjectId(null);
     setNodeOffsets({});
+    setMeasuredHeights({});
     pendingFitRef.current = true;
   }, [scriptSessionKey, model]);
 
@@ -215,6 +217,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
         activeObjectId,
         showAllLinks,
         nodeOffsets,
+        measuredHeights,
       }),
     [
       model,
@@ -226,6 +229,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
       activeObjectId,
       showAllLinks,
       nodeOffsets,
+      measuredHeights,
     ]
   );
 
@@ -308,16 +312,45 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   }, [flowNodes.length, reactFlow, direction, scriptSessionKey]);
 
   // Apply all React Flow v13 changes (dimensions, selection, position) to controlled node state,
-  // and record ephemeral (dx, dy) deltas once a drag settles so dragging never thrashes layout.
+  // capture real DOM heights (for Raw/Staging/MacroState/SubState overlap immunity), and record
+  // ephemeral (dx, dy) deltas once a drag settles so dragging never thrashes layout.
   const handleNodesChange: OnNodesChange = useCallback((changes) => {
     setFlowNodes((prev) => changes.applyTo(prev));
 
+    const heightUpdates: Array<{id: string; height: number}> = [];
     const settledPositions: Array<{id: string; x: number; y: number}> = [];
+
     for (const change of changes) {
-      if (change.type === 'position' && change.position && !change.dragging) {
+      if (
+        change.type === 'dimensions' &&
+        change.dimensions &&
+        Number.isFinite(change.dimensions.height) &&
+        change.dimensions.height > 0 &&
+        !change.id.startsWith('chamber-') &&
+        !change.id.startsWith('zone-')
+      ) {
+        heightUpdates.push({id: change.id, height: Math.ceil(change.dimensions.height)});
+      } else if (change.type === 'position' && change.position && !change.dragging) {
         settledPositions.push({id: change.id, x: change.position.x, y: change.position.y});
       }
     }
+
+    if (heightUpdates.length > 0) {
+      setMeasuredHeights((prev) => {
+        let changed = false;
+        let next: Record<string, number> | null = null;
+        for (const {id, height} of heightUpdates) {
+          const existing = prev[id];
+          if (existing === undefined || Math.abs(existing - height) >= 2) {
+            if (!next) next = {...prev};
+            next[id] = height;
+            changed = true;
+          }
+        }
+        return changed && next ? next : prev;
+      });
+    }
+
     if (settledPositions.length === 0) return;
 
     setNodeOffsets((prev) => {
@@ -342,6 +375,13 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   }, []);
 
   const handleToggleExpand = useCallback((macroStateId: string) => {
+    setMeasuredHeights((prev) => {
+      const nodeKey = `node-${macroStateId}`;
+      if (!(nodeKey in prev)) return prev;
+      const next = {...prev};
+      delete next[nodeKey];
+      return next;
+    });
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(macroStateId)) next.delete(macroStateId);
@@ -351,6 +391,15 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   }, []);
 
   const handleToggleRaw = useCallback((id: string) => {
+    if (id.includes('.')) {
+      setMeasuredHeights((prev) => {
+        const subKey = `subnode-${id}`;
+        if (!(subKey in prev)) return prev;
+        const next = {...prev};
+        delete next[subKey];
+        return next;
+      });
+    }
     setRawOpenIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -362,6 +411,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const handleDirectionChange = useCallback((nextDir: GraphDirection) => {
     setDirection(nextDir);
     setNodeOffsets({});
+    setMeasuredHeights({});
     pendingFitRef.current = true;
   }, []);
 
@@ -370,6 +420,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
     model.macroStates.every((ms) => expandedIds.has(ms.id));
 
   const handleToggleExpandAll = useCallback(() => {
+    setMeasuredHeights({});
     setExpandedIds((prev) => {
       const currentlyAll =
         model.macroStates.length > 0 && model.macroStates.every((ms) => prev.has(ms.id));
@@ -403,6 +454,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   const handleResetLayout = useCallback(() => {
     const defaults = createDefaultGraphExpansionState(model);
     setNodeOffsets({});
+    setMeasuredHeights({});
     setExpandedIds(defaults.expandedIds);
     setRawOpenIds(defaults.rawOpenIds);
     pendingFitRef.current = true;
@@ -410,16 +462,23 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
   }, [model, triggerFitView]);
 
   const handleClearIsolation = useCallback(() => {
+    setMeasuredHeights({});
     setIsolatedDims(new Set());
   }, []);
 
   const handleToggleDimension = useCallback((dim: GraphDimension) => {
+    setMeasuredHeights({});
     setIsolatedDims((prev) => {
       const next = new Set(prev);
       if (next.has(dim)) next.delete(dim);
       else next.add(dim);
       return next;
     });
+  }, []);
+
+  const handleIsolationModeChange = useCallback((mode: GraphIsolationMode) => {
+    setMeasuredHeights({});
+    setIsolationMode(mode);
   }, []);
 
   const handleFocusCallSite = useCallback(
@@ -562,7 +621,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
               dimensionCounts={model.stats.dimensionCounts}
               onClearIsolation={handleClearIsolation}
               onToggleDimension={handleToggleDimension}
-              onIsolationModeChange={setIsolationMode}
+              onIsolationModeChange={handleIsolationModeChange}
             />
           )}
 
