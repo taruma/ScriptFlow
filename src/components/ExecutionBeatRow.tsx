@@ -192,7 +192,7 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
   return (
     <div
       id={`execution-beat-${beat.index}`}
-      className={`group/beat relative grid grid-cols-[46px_minmax(0,1fr)_24px] items-stretch gap-1.5 transition-opacity ${
+      className={`group/beat relative grid grid-cols-[28px_minmax(0,1fr)] sm:grid-cols-[46px_minmax(0,1fr)_24px] items-stretch gap-1.5 transition-opacity ${
         isDragging ? 'opacity-30' : 'opacity-100'
       }`}
     >
@@ -468,8 +468,8 @@ export const ExecutionBeatRow = memo(function ExecutionBeatRow({
         </div>
       )}
 
-      {/* Right Margin Diagnostics, Quick Scan Indicator & Quiet AI Patch Indicator (zero layout shift) */}
-      <div className="flex w-6 flex-col items-center gap-1 pt-1.5">
+      {/* Right Margin Diagnostics, Quick Scan Indicator & Quiet AI Patch Indicator (zero layout shift; hidden on narrow < 640px) */}
+      <div className="hidden sm:flex w-6 flex-col items-center gap-1 pt-1.5">
         <AiPatchIndicator phase="execution" indicators={patchIndicators} />
         {patchIndicators.length === 0 && (
           <AiQuickScanIndicator beatIndex={beat.index} indicators={quickScanIndicators} />

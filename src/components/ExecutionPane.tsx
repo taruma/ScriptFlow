@@ -69,7 +69,8 @@ interface ExecutionPaneProps {
   onReorderBeats: (fromBeatIndex: number, toBeatIndex: number) => void;
 }
 
-const EXECUTION_GRID = 'grid-cols-[46px_minmax(0,1fr)_24px]';
+const EXECUTION_GRID =
+  'grid-cols-[28px_minmax(0,1fr)] sm:grid-cols-[46px_minmax(0,1fr)_24px]';
 
 function getStarterBeatLine(beats: ExecutionBeat[]): string {
   if (beats.length === 0) {
@@ -214,7 +215,7 @@ export const ExecutionPane = memo(function ExecutionPane({
             </span>
           )}
         </div>
-        <div />
+        <div className="hidden sm:block" />
       </div>
     );
   }, []);
@@ -328,36 +329,36 @@ export const ExecutionPane = memo(function ExecutionPane({
       }}
       className="auteur-pane-scroll flex flex-col lg:h-full lg:overflow-y-auto"
     >
-      {/* Sticky Editorial Folio Header — Execution */}
+      {/* Sticky Editorial Folio Header — Execution (Compact on < 640px) */}
       <div
-        className={`relative transition-colors duration-200 lg:sticky lg:top-0 lg:z-20 ${
+        className={`relative pt-1 sm:pt-0 transition-colors duration-200 lg:sticky lg:top-0 lg:z-20 ${
           executionScrolled
             ? 'bg-app/88 backdrop-blur-md border-b border-border-main'
             : 'bg-app border-b border-transparent'
         }`}
       >
-        <div className="mx-auto w-full max-w-[920px] px-2.5 sm:px-5 lg:ml-0 lg:mr-auto lg:pl-3 lg:pr-5">
+        <div className="mx-auto w-full max-w-[920px] px-3 sm:px-5 lg:ml-0 lg:mr-auto lg:pl-3 lg:pr-5">
           <div className={`grid ${EXECUTION_GRID} items-center gap-1.5`}>
-            <div />
+            <div className="hidden sm:block" />
             <div
-              className={`flex h-10 min-w-0 items-center justify-between gap-2.5 px-0.5 transition-colors duration-200 ${
+              className={`col-span-2 sm:col-span-1 flex h-8 sm:h-10 min-w-0 items-center justify-between gap-2.5 px-0.5 transition-colors duration-200 ${
                 executionScrolled
                   ? 'border-b border-transparent'
                   : 'border-b border-border-main/70'
               }`}
             >
               <div className="flex min-w-0 items-baseline gap-2">
-                <span className="whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium tracking-wide text-text-faint">
+                <span className="hidden sm:inline whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium tracking-wide text-text-faint">
                   {UI_LABELS.document.phase2Kicker}
                 </span>
                 <span
                   aria-hidden="true"
-                  className="h-2.5 w-px self-center bg-border-main shrink-0"
+                  className="hidden sm:block h-2.5 w-px self-center bg-border-main shrink-0"
                 />
-                <h2 className="truncate font-serif text-[13.5px] font-bold tracking-tight text-text-main">
+                <h2 className="truncate font-serif text-[12.5px] sm:text-[13.5px] font-bold tracking-tight text-text-main">
                   {UI_LABELS.document.phase2Name}
                 </h2>
-                <span className="auteur-phase-execution inline-flex shrink-0 self-center items-center rounded border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold tracking-tight whitespace-nowrap">
+                <span className="auteur-phase-execution hidden sm:inline-flex shrink-0 self-center items-center rounded border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold tracking-tight whitespace-nowrap">
                   [{executionLabel}]
                 </span>
                 <span
@@ -375,7 +376,7 @@ export const ExecutionPane = memo(function ExecutionPane({
                 <button
                   type="button"
                   onClick={toggleAllBeats}
-                  className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md px-1.5 py-0.5 text-[11px] sm:text-[11.5px] font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
                 >
                   {allBeatsCollapsed ? (
                     <ChevronsUpDown className="h-3 w-3 text-text-faint" />
@@ -390,7 +391,7 @@ export const ExecutionPane = memo(function ExecutionPane({
                 </button>
               )}
             </div>
-            <div />
+            <div className="hidden sm:block" />
           </div>
         </div>
 
@@ -404,8 +405,8 @@ export const ExecutionPane = memo(function ExecutionPane({
       </div>
 
       <div
-        className={`mx-auto w-full max-w-[920px] px-2.5 pb-20 sm:px-5 lg:ml-0 lg:mr-auto lg:pl-3 lg:pr-5 lg:pb-24 ${
-          beats.length > 0 ? 'pt-1' : 'pt-2.5'
+        className={`mx-auto w-full max-w-[920px] px-3 pb-16 sm:px-5 sm:pb-20 lg:ml-0 lg:mr-auto lg:pl-3 lg:pr-5 lg:pb-24 ${
+          beats.length > 0 ? 'pt-2 sm:pt-1' : 'pt-2.5'
         }`}
       >
         <AiPatchInsertionSeam
@@ -462,21 +463,21 @@ export const ExecutionPane = memo(function ExecutionPane({
               <Plus className="h-3.5 w-3.5" />
               <span>{UI_LABELS.document.addBeat}</span>
             </button>
-            <div />
+            <div className="hidden sm:block" />
           </div>
         )}
 
         {/* Subtle Paste-and-Hydrate / Read-Only hint */}
         <footer className={`mt-8 grid ${EXECUTION_GRID} items-center gap-1.5`}>
-          <div />
-          <p className="text-center text-[11px] text-text-faint">
+          <div className="hidden sm:block" />
+          <p className="col-span-2 sm:col-span-1 text-center text-[11px] text-text-faint">
             {narrowReadOnly
               ? UI_LABELS.document.footerHintNarrowReadOnly
               : readOnly
                 ? UI_LABELS.document.footerHintReadOnly
                 : UI_LABELS.document.footerHint}
           </p>
-          <div />
+          <div className="hidden sm:block" />
         </footer>
       </div>
     </section>

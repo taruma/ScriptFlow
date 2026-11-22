@@ -56,7 +56,7 @@ interface StagingPaneProps {
   onReorderStaging: (fromBlockIndex: number, toBlockIndex: number) => void;
 }
 
-const STAGING_GRID = 'grid-cols-[minmax(0,1fr)_24px]';
+const STAGING_GRID = 'grid-cols-1 sm:grid-cols-[minmax(0,1fr)_24px]';
 
 /**
  * Left column of the Live Mode workspace (Phase 1: Staging / S0).
@@ -186,7 +186,7 @@ export const StagingPane = memo(function StagingPane({
               </span>
             )}
           </div>
-          <div />
+          <div className="hidden sm:block" />
         </div>
       );
     },
@@ -227,7 +227,7 @@ export const StagingPane = memo(function StagingPane({
                     onSelectBlock={(name) => handleInsertStagingBlock(name, seamSlot)}
                     onClose={() => setActiveStagingPicker(null)}
                   />
-                  <div />
+                  <div className="hidden sm:block" />
                 </div>
               )}
             </>
@@ -284,9 +284,9 @@ export const StagingPane = memo(function StagingPane({
       }}
       className="auteur-pane-scroll flex flex-col border-b border-border-main lg:h-full lg:overflow-y-auto lg:border-b-0 lg:border-r"
     >
-      {/* Sticky Editorial Folio Header — Staging */}
+      {/* Sticky Editorial Folio Header — Staging (Compact on < 640px) */}
       <div
-        className={`relative transition-colors duration-200 lg:sticky lg:top-0 lg:z-20 ${
+        className={`relative pt-1 sm:pt-0 transition-colors duration-200 lg:sticky lg:top-0 lg:z-20 ${
           stagingScrolled
             ? 'bg-app/88 backdrop-blur-md border-b border-border-main'
             : 'bg-app border-b border-transparent'
@@ -295,19 +295,19 @@ export const StagingPane = memo(function StagingPane({
         <div className="mx-auto w-full max-w-[660px] px-3 sm:px-5 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3">
           <div className={`grid ${STAGING_GRID} items-center gap-1.5`}>
             <div
-              className={`flex h-10 min-w-0 items-center justify-between gap-2.5 px-0.5 transition-colors duration-200 ${
+              className={`flex h-8 sm:h-10 min-w-0 items-center justify-between gap-2.5 px-0.5 transition-colors duration-200 ${
                 stagingScrolled ? 'border-b border-transparent' : 'border-b border-border-main/70'
               }`}
             >
               <div className="flex min-w-0 items-baseline gap-2">
-                <span className="whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium tracking-wide text-text-faint">
+                <span className="hidden sm:inline whitespace-nowrap shrink-0 font-mono text-[10.5px] font-medium tracking-wide text-text-faint">
                   {UI_LABELS.document.phase1Kicker}
                 </span>
                 <span
                   aria-hidden="true"
-                  className="h-2.5 w-px self-center bg-border-main shrink-0"
+                  className="hidden sm:block h-2.5 w-px self-center bg-border-main shrink-0"
                 />
-                <h2 className="truncate font-serif text-[13.5px] font-bold tracking-tight text-text-main">
+                <h2 className="truncate font-serif text-[12.5px] sm:text-[13.5px] font-bold tracking-tight text-text-main">
                   {UI_LABELS.document.phase1Name}
                 </h2>
                 <span
@@ -325,7 +325,7 @@ export const StagingPane = memo(function StagingPane({
                 <button
                   type="button"
                   onClick={toggleAllStaging}
-                  className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md px-1.5 py-0.5 text-[11px] sm:text-[11.5px] font-medium text-text-muted hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
                 >
                   {allStagingCollapsed ? (
                     <ChevronsUpDown className="h-3 w-3 text-text-faint" />
@@ -340,7 +340,7 @@ export const StagingPane = memo(function StagingPane({
                 </button>
               )}
             </div>
-            <div />
+            <div className="hidden sm:block" />
           </div>
         </div>
 
@@ -354,8 +354,8 @@ export const StagingPane = memo(function StagingPane({
       </div>
 
       <div
-        className={`mx-auto w-full max-w-[660px] px-3 pb-8 sm:px-5 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3 lg:pb-24 ${
-          stagingBlocks.length > 0 ? 'pt-1' : 'pt-2.5'
+        className={`mx-auto w-full max-w-[660px] px-3 pb-4 sm:px-5 sm:pb-8 lg:ml-auto lg:mr-0 lg:pl-5 lg:pr-3 lg:pb-24 ${
+          stagingBlocks.length > 0 ? 'pt-2 sm:pt-1' : 'pt-2.5'
         }`}
       >
         {stagingBlocks.length > 0 ? (
@@ -385,7 +385,7 @@ export const StagingPane = memo(function StagingPane({
                       onSelectBlock={(name) => handleInsertStagingBlock(name, -1)}
                       onClose={() => setActiveStagingPicker(null)}
                     />
-                    <div />
+                    <div className="hidden sm:block" />
                   </div>
                 )}
               </>
@@ -422,7 +422,7 @@ export const StagingPane = memo(function StagingPane({
               <div className="rounded-lg border border-dashed border-border-main bg-surface/50 px-3 py-5 text-center text-xs leading-relaxed text-text-faint">
                 {UI_LABELS.document.noStagingBlocks}
               </div>
-              <div />
+              <div className="hidden sm:block" />
             </div>
           </div>
         )}

@@ -554,7 +554,7 @@ export const AiPatchInsertionSeam = memo(function AiPatchInsertionSeam({
         </div>
       </div>
 
-      <div />
+      <div className="hidden sm:block" />
     </div>
   );
 });

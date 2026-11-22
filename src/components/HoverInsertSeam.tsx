@@ -89,7 +89,7 @@ export function HoverInsertSeam({
         )}
       </div>
 
-      <div />
+      <div className="hidden sm:block" />
     </div>
   );
 }

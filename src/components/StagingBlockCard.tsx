@@ -144,7 +144,7 @@ export const StagingBlockCard = memo(function StagingBlockCard({
   return (
     <section
       id={`staging-block-${blockIndex}`}
-      className={`group/staging relative grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5 transition-opacity ${
+      className={`group/staging relative grid min-w-0 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_24px] items-start gap-1.5 transition-opacity ${
         isDragging ? 'opacity-30' : 'opacity-100'
       }`}
     >
@@ -293,8 +293,8 @@ export const StagingBlockCard = memo(function StagingBlockCard({
         )}
       </div>
 
-      {/* Right Margin Diagnostics & Quiet AI Patch Indicator (zero layout shift) */}
-      <div className="flex w-6 flex-col items-center gap-1 pt-1">
+      {/* Right Margin Diagnostics & Quiet AI Patch Indicator (zero layout shift; hidden on narrow < 640px) */}
+      <div className="hidden sm:flex w-6 flex-col items-center gap-1 pt-1">
         <AiPatchIndicator phase="staging" indicators={patchIndicators} />
         <DiagnosticDot diagnostics={diagnostics} />
       </div>
