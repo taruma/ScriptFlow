@@ -76,3 +76,16 @@ export function persistFallbackSnapshotsMap(
     // Ignore storage quota or restricted environment errors
   }
 }
+
+export function clearFallbackStorage(storageKey: string | null): void {
+  if (!storageKey) return;
+  try {
+    window.localStorage.removeItem(storageKey);
+    const snapKey = getSnapshotsFallbackKey(storageKey);
+    if (snapKey) {
+      window.localStorage.removeItem(snapKey);
+    }
+  } catch {
+    // Ignore storage removal failures
+  }
+}

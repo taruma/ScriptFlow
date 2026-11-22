@@ -221,6 +221,26 @@ export function idbListSnapshots(db: IDBDatabase, scriptId: string): Promise<Scr
   });
 }
 
+export function idbBulkPutSnapshots(
+  db: IDBDatabase,
+  snapshots: readonly ScriptSnapshot[]
+): Promise<ScriptSnapshot[]> {
+  const sanitized = snapshots.map(sanitizeSnapshot);
+  if (sanitized.length === 0) return Promise.resolve([]);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SCRIPT_SNAPSHOTS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(SCRIPT_SNAPSHOTS_STORE_NAME);
+    for (const snapshot of sanitized) {
+      store.put(snapshot);
+    }
+
+    tx.oncomplete = () => resolve(sanitized);
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to persist script snapshots.'));
+    tx.onabort = () => reject(tx.error ?? new Error('Snapshot bulk save transaction aborted.'));
+  });
+}
+
 export function idbPutSnapshotAndPrune(
   db: IDBDatabase,
   snapshot: ScriptSnapshot,

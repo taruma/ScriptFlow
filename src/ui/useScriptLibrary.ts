@@ -32,12 +32,25 @@ import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
 import {mirrorActiveScriptToLocalStorage} from './scriptStorage.ts';
 import {useLibraryFileIO} from './library/useLibraryFileIO.ts';
 import {
+  reconcileHydratedScript,
   resolveInitialEditorState,
   upsertSortedScript,
   useLibraryPersistence,
+  type HydratedScriptResolution,
+  type HydrationMirrorState,
   type InitialEditorState,
+  type PersistCurrentCustomOverride,
+  type ReconcileHydratedScriptOptions,
 } from './library/useLibraryPersistence.ts';
 import {useLibrarySnapshots} from './library/useLibrarySnapshots.ts';
+
+export {reconcileHydratedScript};
+export type {
+  HydratedScriptResolution,
+  HydrationMirrorState,
+  PersistCurrentCustomOverride,
+  ReconcileHydratedScriptOptions,
+};
 
 export interface UseScriptLibraryOptions {
   ruleOverrides?: LintRuleOverrides;
@@ -122,7 +135,7 @@ export interface UseScriptLibraryResult {
   handleTriggerRestoreBackup: () => void;
   handleImportFileChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleRestoreBackupChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
-  flushPendingSave: () => Promise<ScriptRecord | null>;
+  flushPendingSave: (override?: PersistCurrentCustomOverride) => Promise<ScriptRecord | null>;
 }
 
 /**
@@ -305,6 +318,7 @@ export function useScriptLibrary({
         forkedFromId: example.id,
       };
       const saved = await scriptLibraryDb.put(forked);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
       activateCustomScript(saved);
       onToast(UI_LABELS.toasts.forkedExample(saved.title));
@@ -355,6 +369,7 @@ export function useScriptLibrary({
         forkedFromId: example.id,
       };
       const saved = await scriptLibraryDb.put(forked);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
 
       if (options?.snapshotMeta) {
@@ -396,7 +411,7 @@ export function useScriptLibrary({
           timestamp: null,
         })
       );
-      mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title);
+      mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title, saved.updatedAt);
       onToast(options?.toastMessage ?? UI_LABELS.toasts.aiForkedAndApplied(saved.title));
       return true;
     },
@@ -416,6 +431,7 @@ export function useScriptLibrary({
       updatedAt: now,
     };
     const saved = await scriptLibraryDb.put(fresh);
+    customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
     setCustomScripts((prev) => upsertSortedScript(prev, saved));
     activateCustomScript(saved, {switchToLive: true});
     onToast(UI_LABELS.toasts.createdBlankScript);
@@ -443,6 +459,7 @@ export function useScriptLibrary({
         suffix: options?.suffix ?? 'Branch',
       });
       const saved = await scriptLibraryDb.put(duplicated);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
       if (options?.activate) {
         activateCustomScript(saved);
@@ -488,6 +505,7 @@ export function useScriptLibrary({
         suffix: options?.suffix ?? 'Branch',
       });
       const saved = await scriptLibraryDb.put(duplicated);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
       activateCustomScript(saved);
       onToast(UI_LABELS.toasts.branchedScript(saved.title));
@@ -519,6 +537,7 @@ export function useScriptLibrary({
         updatedAt: Date.now(),
       };
       const saved = await scriptLibraryDb.put(updated);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
 
       if (isRenamingActive) {
@@ -529,7 +548,7 @@ export function useScriptLibrary({
           title: saved.title,
         });
         setSceneTitle(saved.title);
-        mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title);
+        mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title, saved.updatedAt);
       }
 
       onToast(UI_LABELS.toasts.renamedScript(saved.title));
@@ -593,7 +612,7 @@ export function useScriptLibrary({
           rawText: saved.rawText,
           title: saved.title,
         });
-        mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title);
+        mirrorActiveScriptToLocalStorage(saved.id, saved.rawText, saved.title, saved.updatedAt);
       }
     },
     [cancelPendingSave, markSavedSnapshot]

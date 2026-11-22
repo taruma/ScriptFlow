@@ -4,7 +4,7 @@ import {APP_META, UI_LABELS} from '../labels.ts';
 import {createScriptId, scriptLibraryDb, type ScriptRecord} from '../scriptLibraryDb.ts';
 import {createCopyTitle, type ActiveScriptRef} from '../scriptLibraryView.ts';
 import type {ScriptSnapshot, SnapshotTrigger} from '../scriptSnapshots.ts';
-import {upsertSortedScript} from './useLibraryPersistence.ts';
+import {upsertSortedScript, type PersistCurrentCustomOverride} from './useLibraryPersistence.ts';
 
 export interface UseLibrarySnapshotsOptions {
   activeScriptRef: RefObject<ActiveScriptRef>;
@@ -16,7 +16,9 @@ export interface UseLibrarySnapshotsOptions {
     updater: string | ((prev: string) => string),
     options?: Omit<HistoryCommitOptions, 'timestamp'>
   ) => void;
-  persistCurrentCustomIfDirty: () => Promise<ScriptRecord | null>;
+  persistCurrentCustomIfDirty: (
+    override?: PersistCurrentCustomOverride
+  ) => Promise<ScriptRecord | null>;
   activateCustomScript: (record: ScriptRecord, options?: {switchToLive?: boolean}) => void;
   onToast: (message: string) => void;
 }
@@ -120,10 +122,11 @@ export function useLibrarySnapshots({
       });
 
       commitRawText(snapshot.rawText, {mode: 'checkpoint'});
+      await persistCurrentCustomIfDirty({rawText: snapshot.rawText});
       onToast(UI_LABELS.toasts.snapshotRestored);
       return true;
     },
-    [activeScriptRef, rawTextRef, commitRawText, onToast]
+    [activeScriptRef, rawTextRef, commitRawText, persistCurrentCustomIfDirty, onToast]
   );
 
   const handleForkSnapshotAsNewScript = useCallback(
@@ -143,6 +146,7 @@ export function useLibrarySnapshots({
         branchNote: UI_LABELS.versionHistory.branchedFromSnapshotNote(snapshot.label),
       };
       const saved = await scriptLibraryDb.put(forked);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
       activateCustomScript(saved);
       onToast(UI_LABELS.toasts.snapshotForked(saved.title));

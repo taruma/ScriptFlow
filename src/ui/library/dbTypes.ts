@@ -68,6 +68,11 @@ export interface LegacyMigrationResult {
   activeScriptId: string | null;
 }
 
+export interface FallbackReconcileResult {
+  mergedScripts: number;
+  mergedSnapshots: number;
+}
+
 export interface ScriptLibraryStore {
   readonly backend: 'indexeddb' | 'fallback';
   get(id: string): Promise<ScriptRecord | null>;
@@ -85,6 +90,7 @@ export interface ScriptLibraryStore {
   ): Promise<ScriptSnapshot | null>;
   deleteSnapshot(id: string): Promise<void>;
   clearSnapshotsForScript(scriptId: string): Promise<void>;
+  reconcileFallbackStorage(): Promise<FallbackReconcileResult>;
   migrateFromLegacyLocalStorage(options?: LegacyMigrationOptions): Promise<LegacyMigrationResult>;
 }
 

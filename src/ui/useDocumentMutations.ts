@@ -37,6 +37,7 @@ export interface UseDocumentMutationsOptions {
   docRef: RefObject<AuteurDocument>;
   commitRawText: UseScriptLibraryResult['commitRawText'];
   onTitleChange: UseScriptLibraryResult['handleTitleChange'];
+  onFlushPendingSave: UseScriptLibraryResult['flushPendingSave'];
   onCreateSnapshot: UseScriptLibraryResult['handleCreateSnapshot'];
   onForkCurrentExampleWithContent: UseScriptLibraryResult['handleForkCurrentExampleWithContent'];
   onSkipNextAiReset: () => void;
@@ -106,6 +107,7 @@ export function useDocumentMutations({
   docRef,
   commitRawText,
   onTitleChange,
+  onFlushPendingSave,
   onCreateSnapshot,
   onForkCurrentExampleWithContent,
   onSkipNextAiReset,
@@ -366,6 +368,7 @@ export function useDocumentMutations({
             : UI_LABELS.toasts.aiFixApplied
           : UI_LABELS.toasts.aiPatchApplied
       );
+      await onFlushPendingSave({rawText: nextRawText});
       if (previousRawText !== nextRawText) {
         await onCreateSnapshot({
           trigger,
@@ -384,6 +387,7 @@ export function useDocumentMutations({
       isReadOnly,
       rawText,
       commitRawText,
+      onFlushPendingSave,
       onCreateSnapshot,
       onForkCurrentExampleWithContent,
       onSkipNextAiReset,
@@ -405,14 +409,16 @@ export function useDocumentMutations({
       }
       const previousRawText = rawText;
       const nextRawText = suggestion.candidateRawText;
+      const shouldUpdateTitle =
+        Boolean(suggestion.title) &&
+        (sceneTitle.trim() === '' || sceneTitle.startsWith(APP_META.untitledScene));
+      const nextTitle = shouldUpdateTitle ? suggestion.title! : sceneTitle;
       commitRawText(nextRawText, {mode: 'checkpoint'});
-      if (
-        suggestion.title &&
-        (sceneTitle.trim() === '' || sceneTitle.startsWith(APP_META.untitledScene))
-      ) {
-        onTitleChange(suggestion.title);
+      if (shouldUpdateTitle) {
+        onTitleChange(nextTitle);
       }
       onToast(UI_LABELS.toasts.aiDraftApplied);
+      await onFlushPendingSave({rawText: nextRawText, title: nextTitle});
       if (previousRawText !== nextRawText) {
         await onCreateSnapshot({
           trigger: 'ai_draft',
@@ -433,6 +439,7 @@ export function useDocumentMutations({
       sceneTitle,
       commitRawText,
       onTitleChange,
+      onFlushPendingSave,
       onCreateSnapshot,
       onForkCurrentExampleWithContent,
       onSkipNextAiReset,
@@ -450,9 +457,18 @@ export function useDocumentMutations({
       }
       onTitleChange(suggestion.title);
       onToast(UI_LABELS.toasts.aiTitleApplied);
+      await onFlushPendingSave({title: suggestion.title});
       return true;
     },
-    [isReadOnly, rawText, onTitleChange, onForkCurrentExampleWithContent, onSkipNextAiReset, onToast]
+    [
+      isReadOnly,
+      rawText,
+      onTitleChange,
+      onFlushPendingSave,
+      onForkCurrentExampleWithContent,
+      onSkipNextAiReset,
+      onToast,
+    ]
   );
 
   return {

@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {
   AuteurEnvelopeSchema,
   exportPlainText,
@@ -36,9 +36,20 @@ import {
 } from '../../src/ui/scriptFileIO.ts';
 import {
   createScriptLibraryStore,
+  SCRIPT_LIBRARY_STORE_NAME,
+  SCRIPT_SNAPSHOTS_STORE_NAME,
   type LegacyLocalStorageAdapter,
   type ScriptRecord,
 } from '../../src/ui/scriptLibraryDb.ts';
+import {
+  mirrorActiveScriptToLocalStorage,
+  readActiveScriptId,
+  readMirrorUpdatedAt,
+  readSavedScriptRaw,
+  readSavedTitle,
+  writeMirrorUpdatedAt,
+} from '../../src/ui/scriptStorage.ts';
+import {reconcileHydratedScript} from '../../src/ui/useScriptLibrary.ts';
 import {
   buildDuplicatedScriptRecord,
   buildLibraryRows,
@@ -54,6 +65,7 @@ import {
   resolveScriptLineage,
   stepLibrarySelectionIndex,
 } from '../../src/ui/scriptLibraryView.ts';
+import {createMemoryStorage} from './aiTestFixtures.ts';
 
 function createMemoryLegacyStorage(initial?: {
   script?: string | null;
@@ -215,23 +227,29 @@ describe('IndexedDB Script Library Store (with graceful fallback & legacy migrat
   });
 
   it('falls back gracefully when IndexedDB open throws synchronously', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const brokenFactory = {
       open: () => {
         throw new Error('SecurityError: IndexedDB disabled in sandbox');
       },
     } as unknown as IDBFactory;
 
-    const store = createScriptLibraryStore({indexedDB: brokenFactory, fallbackStorageKey: null});
-    await store.put({
-      id: 'safe-1',
-      title: 'Resilient Script',
-      rawText: '[INTENT]\nStill saved.',
-      createdAt: 100,
-      updatedAt: 200,
-    });
+    try {
+      const store = createScriptLibraryStore({indexedDB: brokenFactory, fallbackStorageKey: null});
+      await store.put({
+        id: 'safe-1',
+        title: 'Resilient Script',
+        rawText: '[INTENT]\nStill saved.',
+        createdAt: 100,
+        updatedAt: 200,
+      });
 
-    expect(store.backend).toBe('fallback');
-    expect((await store.get('safe-1'))?.title).toBe('Resilient Script');
+      expect(store.backend).toBe('fallback');
+      expect((await store.get('safe-1'))?.title).toBe('Resilient Script');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('migrates custom legacy localStorage script once and preserves mirrored rawText for ErrorBoundary recovery', async () => {
@@ -1068,6 +1086,481 @@ describe('Script lineage, branching, and anti-clutter library grouping', () => {
     expect(searched.map((r) => r.id)).toEqual(['fresh-child']);
     expect(searched[0].parentTitle).toBe('Alley Chase');
     expect(searched[0].branchNote).toBe('Handheld neon rainstorm chase');
+  });
+});
+
+interface MockIdbControls {
+  factory: IDBFactory;
+  scriptsTable: Map<string, Record<string, unknown>>;
+  snapshotsTable: Map<string, Record<string, unknown>>;
+  openCount: () => number;
+  failNextTransactions: (count: number) => void;
+  setOpenError: (error: Error | null) => void;
+}
+
+function createMockIndexedDbFactory(): MockIdbControls {
+  const scriptsTable = new Map<string, Record<string, unknown>>();
+  const snapshotsTable = new Map<string, Record<string, unknown>>();
+  let opens = 0;
+  let remainingTxFailures = 0;
+  let openError: Error | null = null;
+
+  const getTable = (storeName: string) =>
+    storeName === SCRIPT_SNAPSHOTS_STORE_NAME ? snapshotsTable : scriptsTable;
+
+  const createDb = (): IDBDatabase => {
+    const objectStoreNames = {
+      contains: (name: string) =>
+        name === SCRIPT_LIBRARY_STORE_NAME || name === SCRIPT_SNAPSHOTS_STORE_NAME,
+    };
+
+    const db = {
+      objectStoreNames,
+      onversionchange: null as ((event: Event) => void) | null,
+      onclose: null as ((event: Event) => void) | null,
+      close: () => undefined,
+      transaction: (_storeNames: string | string[]) => {
+        if (remainingTxFailures > 0) {
+          remainingTxFailures -= 1;
+          throw new Error('InvalidStateError: The database connection is closing.');
+        }
+
+        const tx: {
+          oncomplete: (() => void) | null;
+          onerror: (() => void) | null;
+          onabort: (() => void) | null;
+          error: Error | null;
+          objectStore: (storeName: string) => unknown;
+        } = {
+          oncomplete: null,
+          onerror: null,
+          onabort: null,
+          error: null,
+          objectStore: (storeName: string) => {
+            const table = getTable(storeName);
+            const scheduleComplete = () => {
+              queueMicrotask(() => {
+                tx.oncomplete?.();
+              });
+            };
+            return {
+              get: (id: string) => {
+                const req: {result?: unknown; onsuccess: (() => void) | null; onerror: (() => void) | null} = {
+                  onsuccess: null,
+                  onerror: null,
+                };
+                queueMicrotask(() => {
+                  const found = table.get(id);
+                  req.result = found ? {...found} : undefined;
+                  req.onsuccess?.();
+                  tx.oncomplete?.();
+                });
+                return req;
+              },
+              put: (value: Record<string, unknown>) => {
+                table.set(String(value.id), {...value});
+                scheduleComplete();
+              },
+              delete: (id: string) => {
+                table.delete(id);
+                scheduleComplete();
+              },
+              clear: () => {
+                table.clear();
+                scheduleComplete();
+              },
+              index: (indexName: string) => ({
+                openCursor: (range?: {only?: string} | null) => {
+                  const req: {
+                    result?: {value: Record<string, unknown>; continue: () => void; delete: () => void} | null;
+                    onsuccess: (() => void) | null;
+                    onerror: (() => void) | null;
+                  } = {onsuccess: null, onerror: null};
+                  const rows = Array.from(table.values()).filter((row) =>
+                    range && range.only !== undefined ? row[indexName] === range.only : true
+                  );
+                  let cursorIdx = 0;
+                  const emit = () => {
+                    queueMicrotask(() => {
+                      if (cursorIdx < rows.length) {
+                        const row = rows[cursorIdx];
+                        cursorIdx += 1;
+                        req.result = {
+                          value: {...row},
+                          continue: emit,
+                          delete: () => {
+                            table.delete(String(row.id));
+                          },
+                        };
+                        req.onsuccess?.();
+                      } else {
+                        req.result = null;
+                        req.onsuccess?.();
+                      }
+                    });
+                  };
+                  emit();
+                  return req;
+                },
+                getAll: (range?: {only?: string}) => {
+                  const req: {result?: unknown[]; onsuccess: (() => void) | null; onerror: (() => void) | null} = {
+                    onsuccess: null,
+                    onerror: null,
+                  };
+                  queueMicrotask(() => {
+                    req.result = Array.from(table.values())
+                      .filter((row) =>
+                        range && range.only !== undefined ? row[indexName] === range.only : true
+                      )
+                      .map((row) => ({...row}));
+                    req.onsuccess?.();
+                  });
+                  return req;
+                },
+              }),
+            };
+          },
+        };
+        return tx;
+      },
+    };
+    return db as unknown as IDBDatabase;
+  };
+
+  const factory = {
+    open: () => {
+      opens += 1;
+      const req: {
+        result?: IDBDatabase;
+        error?: Error;
+        onupgradeneeded: (() => void) | null;
+        onsuccess: (() => void) | null;
+        onerror: (() => void) | null;
+        onblocked: (() => void) | null;
+      } = {
+        onupgradeneeded: null,
+        onsuccess: null,
+        onerror: null,
+        onblocked: null,
+      };
+      queueMicrotask(() => {
+        if (openError) {
+          req.error = openError;
+          req.onerror?.();
+          return;
+        }
+        req.result = createDb();
+        req.onsuccess?.();
+      });
+      return req;
+    },
+  } as unknown as IDBFactory;
+
+  return {
+    factory,
+    scriptsTable,
+    snapshotsTable,
+    openCount: () => opens,
+    failNextTransactions: (count: number) => {
+      remainingTxFailures = count;
+    },
+    setOpenError: (error: Error | null) => {
+      openError = error;
+    },
+  };
+}
+
+describe('Persistence hardening: IndexedDB retry, fallback reconciliation & hydration rescue', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('retries once on a stale/closed IndexedDB connection without falling back to localStorage', async () => {
+    const mockIdb = createMockIndexedDbFactory();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: null,
+    });
+
+    // Establish initial connection cleanly
+    await store.put({
+      id: 'script-initial',
+      title: 'Existing Scene',
+      rawText: '[INTENT]\nInitial.',
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    expect(mockIdb.openCount()).toBe(1);
+
+    // Inject a single transient closed-connection failure on the next transaction
+    mockIdb.failNextTransactions(1);
+
+    await store.put({
+      id: 'script-new-blank',
+      title: 'Untitled Scene',
+      rawText: '[INTENT]\nAI drafted scene.',
+      createdAt: 2000,
+      updatedAt: 2500,
+    });
+
+    // Reopened IndexedDB, retried transparently, stayed on indexeddb, and persisted both scripts
+    expect(store.backend).toBe('indexeddb');
+    expect(mockIdb.openCount()).toBe(2);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect((await store.list()).map((r) => r.id)).toEqual(['script-new-blank', 'script-initial']);
+  });
+
+  it('merges stranded fallback scripts & snapshots back into IndexedDB on startup and clears fallback keys', async () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+    vi.stubGlobal('IDBKeyRange', {only: (value: string) => ({only: value})});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const fallbackKey = 'test-fallback-library-v1';
+    const mockIdb = createMockIndexedDbFactory();
+
+    // Seed IndexedDB with an older script + a newer script that should NOT be overwritten by older fallback data
+    const initialStore = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: fallbackKey,
+    });
+    await initialStore.put({
+      id: 'script-older-in-idb',
+      title: 'Older In IDB',
+      rawText: '[INTENT]\nStale IDB version.',
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    await initialStore.put({
+      id: 'script-newer-in-idb',
+      title: 'Newer In IDB',
+      rawText: '[INTENT]\nAlready fresh in IDB.',
+      createdAt: 1000,
+      updatedAt: 9000,
+    });
+
+    // Simulate a double failure (initial + retry) so a new blank + AI draft + snapshot land in localStorage fallback
+    mockIdb.failNextTransactions(4);
+    await initialStore.put({
+      id: 'script-stranded',
+      title: 'AI Drafted Scene',
+      rawText: '[INTENT]\nDrafted while IDB hiccuped.',
+      createdAt: 3000,
+      updatedAt: 3500,
+    });
+    await initialStore.put({
+      id: 'script-older-in-idb',
+      title: 'Updated In Fallback',
+      rawText: '[INTENT]\nNewer fallback edit.',
+      createdAt: 1000,
+      updatedAt: 4000,
+    });
+    // Also inject a stale fallback entry for script-newer-in-idb to verify newer IDB wins
+    mockIdb.failNextTransactions(4);
+    await initialStore.put({
+      id: 'script-newer-in-idb',
+      title: 'Stale Fallback Copy',
+      rawText: '[INTENT]\nShould not overwrite newer IDB.',
+      createdAt: 1000,
+      updatedAt: 2000,
+    });
+    mockIdb.failNextTransactions(4);
+    await initialStore.saveSnapshot({
+      id: 'snap-stranded-1',
+      scriptId: 'script-stranded',
+      trigger: 'ai_draft',
+      label: 'AI Draft: AI Drafted Scene',
+      rawText: '[INTENT]\nDrafted while IDB hiccuped.',
+      createdAt: 3501,
+    });
+
+    expect(initialStore.backend).toBe('fallback');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(memoryStorage.getItem(fallbackKey)).not.toBeNull();
+    expect(memoryStorage.getItem(`${fallbackKey}-snapshots`)).not.toBeNull();
+
+    // Simulate a fresh page reload where IndexedDB is healthy again
+    mockIdb.failNextTransactions(0);
+    const reloadedStore = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: fallbackKey,
+    });
+    const reconciled = await reloadedStore.reconcileFallbackStorage();
+
+    expect(reconciled).toEqual({mergedScripts: 2, mergedSnapshots: 1});
+    expect(reloadedStore.backend).toBe('indexeddb');
+    expect(memoryStorage.getItem(fallbackKey)).toBeNull();
+    expect(memoryStorage.getItem(`${fallbackKey}-snapshots`)).toBeNull();
+
+    const loaded = await reloadedStore.list();
+    expect(loaded.map((r) => r.id)).toEqual([
+      'script-newer-in-idb',
+      'script-older-in-idb',
+      'script-stranded',
+    ]);
+    expect(loaded.find((r) => r.id === 'script-stranded')?.rawText).toBe(
+      '[INTENT]\nDrafted while IDB hiccuped.'
+    );
+    expect(loaded.find((r) => r.id === 'script-older-in-idb')?.rawText).toBe(
+      '[INTENT]\nNewer fallback edit.'
+    );
+    expect(loaded.find((r) => r.id === 'script-newer-in-idb')?.rawText).toBe(
+      '[INTENT]\nAlready fresh in IDB.'
+    );
+
+    const snaps = await reloadedStore.listSnapshots('script-stranded');
+    expect(snaps.map((s) => s.id)).toEqual(['snap-stranded-1']);
+  });
+
+  it('recovers mid-session from transient IndexedDB failure and reconciles pending fallback data automatically', async () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const fallbackKey = 'test-mid-session-fallback-v1';
+    const mockIdb = createMockIndexedDbFactory();
+    const store = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: fallbackKey,
+    });
+
+    // Fail both attempts on put() -> falls back to localStorage
+    mockIdb.failNextTransactions(2);
+    await store.put({
+      id: 'script-transient',
+      title: 'Transient Draft',
+      rawText: '[INTENT]\nSaved during outage.',
+      createdAt: 5000,
+      updatedAt: 5000,
+    });
+    expect(store.backend).toBe('fallback');
+    expect(mockIdb.scriptsTable.has('script-transient')).toBe(false);
+
+    // Next operation when IndexedDB is healthy again auto-merges pending fallback writes into IndexedDB
+    const listed = await store.list();
+    expect(store.backend).toBe('indexeddb');
+    expect(listed.map((r) => r.id)).toEqual(['script-transient']);
+    expect(mockIdb.scriptsTable.has('script-transient')).toBe(true);
+    expect(memoryStorage.getItem(fallbackKey)).toBeNull();
+  });
+
+  it('reconciles hydrated scripts without clobbering newer mirror edits or dropping missing custom scripts', () => {
+    const idbRecord: ScriptRecord = {
+      id: 'script-1',
+      title: 'Untitled Scene',
+      rawText: '',
+      createdAt: 1000,
+      updatedAt: 1000,
+      folder: 'Drafts',
+      tags: ['noir'],
+    };
+
+    // 1. Mirror is newer than IndexedDB (e.g. tab discarded within 350ms of AI Draft apply) -> keep mirror & persist
+    const newerMirror = reconcileHydratedScript({
+      loadedRecords: [idbRecord],
+      targetId: 'script-1',
+      mirror: {
+        activeScriptId: 'script-1',
+        rawText: '[INTENT]\nFresh AI draft.',
+        title: 'Midnight Alley',
+        updatedAt: 2500,
+      },
+      now: 3000,
+    });
+    expect(newerMirror).toEqual({
+      kind: 'custom',
+      needsPersist: true,
+      record: {
+        ...idbRecord,
+        title: 'Midnight Alley',
+        rawText: '[INTENT]\nFresh AI draft.',
+        updatedAt: 2500,
+      },
+    });
+
+    // 2. IndexedDB is newer than or equal to mirror -> trust IndexedDB (no redundant persist)
+    const idbWins = reconcileHydratedScript({
+      loadedRecords: [{...idbRecord, rawText: '[INTENT]\nNewer in IDB.', updatedAt: 5000}],
+      targetId: 'script-1',
+      mirror: {
+        activeScriptId: 'script-1',
+        rawText: '[INTENT]\nOlder mirror.',
+        title: 'Old Title',
+        updatedAt: 2000,
+      },
+      now: 6000,
+    });
+    expect(idbWins.kind).toBe('custom');
+    if (idbWins.kind === 'custom') {
+      expect(idbWins.needsPersist).toBe(false);
+      expect(idbWins.record.rawText).toBe('[INTENT]\nNewer in IDB.');
+    }
+
+    // 3. Custom targetId missing from IndexedDB while mirror still holds its text -> rescue instead of resetting to example
+    const rescued = reconcileHydratedScript({
+      loadedRecords: [],
+      targetId: 'script-missing',
+      mirror: {
+        activeScriptId: 'script-missing',
+        rawText: '[INTENT]\nRescued after reload.',
+        title: 'Rescued Scene',
+        updatedAt: 4200,
+      },
+      now: 5000,
+    });
+    expect(rescued).toEqual({
+      kind: 'custom',
+      needsPersist: true,
+      record: {
+        id: 'script-missing',
+        title: 'Rescued Scene',
+        rawText: '[INTENT]\nRescued after reload.',
+        createdAt: 4200,
+        updatedAt: 4200,
+      },
+    });
+
+    // 4. Bundled example targetId always resolves to the bundled example
+    const exampleRes = reconcileHydratedScript({
+      loadedRecords: [idbRecord],
+      targetId: DEFAULT_PRESET.id,
+      mirror: {
+        activeScriptId: DEFAULT_PRESET.id,
+        rawText: DEFAULT_PRESET.content,
+        title: DEFAULT_PRESET.title,
+        updatedAt: 4200,
+      },
+    });
+    expect(exampleRes).toEqual({kind: 'example', example: DEFAULT_PRESET});
+
+    // 5. Missing targetId without a matching mirror falls back cleanly to DEFAULT_PRESET
+    const fallbackExample = reconcileHydratedScript({
+      loadedRecords: [idbRecord],
+      targetId: 'script-deleted',
+      mirror: {
+        activeScriptId: 'script-other',
+        rawText: '[INTENT]\nDifferent script.',
+        title: 'Other',
+        updatedAt: 4200,
+      },
+    });
+    expect(fallbackExample).toEqual({kind: 'example', example: DEFAULT_PRESET});
+  });
+
+  it('persists and clears mirrorActiveScriptToLocalStorage timestamps cleanly', () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+
+    mirrorActiveScriptToLocalStorage('script-42', '[INTENT]\nMirror test.', 'Mirror Scene', 12345.9);
+    expect(readActiveScriptId()).toBe('script-42');
+    expect(readSavedScriptRaw()).toBe('[INTENT]\nMirror test.');
+    expect(readSavedTitle()).toBe('Mirror Scene');
+    expect(readMirrorUpdatedAt()).toBe(12345);
+
+    writeMirrorUpdatedAt(null);
+    expect(readMirrorUpdatedAt()).toBeNull();
   });
 });
 

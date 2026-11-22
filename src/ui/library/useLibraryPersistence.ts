@@ -23,6 +23,7 @@ import type {ActiveScriptRef} from '../scriptLibraryView.ts';
 import {
   mirrorActiveScriptToLocalStorage,
   readActiveScriptId,
+  readMirrorUpdatedAt,
   readSavedScript,
   readSavedScriptRaw,
   readSavedTitle,
@@ -40,6 +41,114 @@ export interface SavedScriptSnapshot {
   id: string;
   rawText: string;
   title: string;
+}
+
+export interface PersistCurrentCustomOverride {
+  rawText?: string;
+  title?: string;
+}
+
+export interface HydrationMirrorState {
+  activeScriptId: string | null;
+  rawText: string | null;
+  title: string | null;
+  updatedAt: number | null;
+}
+
+export type HydratedScriptResolution =
+  | {
+      kind: 'custom';
+      record: ScriptRecord;
+      /** True when the localStorage mirror is newer than or missing from IndexedDB and must be saved back. */
+      needsPersist: boolean;
+    }
+  | {
+      kind: 'example';
+      example: BundledExample;
+    };
+
+export interface ReconcileHydratedScriptOptions {
+  loadedRecords: readonly ScriptRecord[];
+  targetId: string | null;
+  mirror: HydrationMirrorState;
+  bundledExamples?: readonly BundledExample[];
+  defaultExample?: BundledExample;
+  defaultTitle?: string;
+  now?: number;
+}
+
+/**
+ * Pure hydration reconciliation between IndexedDB records and the synchronous
+ * localStorage mirror. Prevents stale or missing IndexedDB writes (e.g. tab discard
+ * within the 350ms autosave window or an interrupted transaction) from clobbering
+ * newer user/AI edits or silently resetting a custom script back to a bundled example.
+ */
+export function reconcileHydratedScript({
+  loadedRecords,
+  targetId,
+  mirror,
+  bundledExamples = BUNDLED_EXAMPLES,
+  defaultExample = DEFAULT_PRESET,
+  defaultTitle = APP_META.untitledScene,
+  now = Date.now(),
+}: ReconcileHydratedScriptOptions): HydratedScriptResolution {
+  const cleanTargetId = targetId?.trim() || null;
+
+  if (cleanTargetId) {
+    const matchedExample = bundledExamples.find((example) => example.id === cleanTargetId);
+    if (matchedExample) {
+      return {kind: 'example', example: matchedExample};
+    }
+
+    const matchedCustom = loadedRecords.find((record) => record.id === cleanTargetId);
+    if (matchedCustom) {
+      if (mirror.activeScriptId === matchedCustom.id && mirror.rawText !== null) {
+        const mirrorTitle = mirror.title?.trim() || matchedCustom.title;
+        const hasDiff =
+          mirror.rawText !== matchedCustom.rawText || mirrorTitle !== matchedCustom.title;
+        const mirrorUpdatedAt = mirror.updatedAt;
+
+        if (hasDiff && mirrorUpdatedAt !== null && mirrorUpdatedAt > matchedCustom.updatedAt) {
+          return {
+            kind: 'custom',
+            record: {
+              ...matchedCustom,
+              title: mirrorTitle,
+              rawText: mirror.rawText,
+              updatedAt: mirrorUpdatedAt,
+            },
+            needsPersist: true,
+          };
+        }
+      }
+
+      return {kind: 'custom', record: matchedCustom, needsPersist: false};
+    }
+
+    // Target is a custom ID missing from IndexedDB: rescue from the localStorage mirror
+    // instead of silently discarding user work and falling back to a bundled example.
+    const canRescueFromMirror =
+      mirror.activeScriptId === cleanTargetId &&
+      mirror.rawText !== null &&
+      (mirror.rawText.trim().length > 0 || mirror.updatedAt !== null);
+
+    if (canRescueFromMirror) {
+      const timestamp = mirror.updatedAt ?? now;
+      return {
+        kind: 'custom',
+        record: {
+          id: cleanTargetId,
+          title: mirror.title?.trim() || defaultTitle,
+          rawText: mirror.rawText!,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        needsPersist: true,
+      };
+    }
+  }
+
+  return {kind: 'example', example: defaultExample};
 }
 
 export function resolveInitialEditorState(): InitialEditorState {
@@ -121,7 +230,9 @@ export interface UseLibraryPersistenceOptions {
 export interface UseLibraryPersistenceResult {
   activateCustomScript: (record: ScriptRecord, options?: {switchToLive?: boolean}) => void;
   activateExample: (example: BundledExample, options?: {switchToLive?: boolean}) => void;
-  persistCurrentCustomIfDirty: () => Promise<ScriptRecord | null>;
+  persistCurrentCustomIfDirty: (
+    override?: PersistCurrentCustomOverride
+  ) => Promise<ScriptRecord | null>;
   cancelPendingSave: () => void;
   markSavedSnapshot: (snapshot: SavedScriptSnapshot) => void;
 }
@@ -183,7 +294,7 @@ export function useLibraryPersistence({
       if (options?.switchToLive) {
         onSwitchToLive();
       }
-      mirrorActiveScriptToLocalStorage(record.id, record.rawText, record.title);
+      mirrorActiveScriptToLocalStorage(record.id, record.rawText, record.title, record.updatedAt);
     },
     [
       cancelPendingSave,
@@ -229,80 +340,125 @@ export function useLibraryPersistence({
     ]
   );
 
-  const persistCurrentCustomIfDirty = useCallback(async (): Promise<ScriptRecord | null> => {
-    cancelPendingSave();
+  const persistCurrentCustomIfDirty = useCallback(
+    async (override?: PersistCurrentCustomOverride): Promise<ScriptRecord | null> => {
+      cancelPendingSave();
 
-    if (!isLibraryHydratedRef.current) return null;
-    const currentRef = activeScriptRef.current;
-    if (currentRef.kind !== 'custom') return null;
+      if (!isLibraryHydratedRef.current) return null;
+      const currentRef = activeScriptRef.current;
+      if (currentRef.kind !== 'custom') return null;
 
-    const currentRaw = rawTextRef.current;
-    const currentTitle = sceneTitleRef.current;
-    const last = lastSavedSnapshotRef.current;
-    if (
-      last &&
-      last.id === currentRef.id &&
-      last.rawText === currentRaw &&
-      last.title === currentTitle
-    ) {
-      return null;
-    }
+      const startingRawRef = rawTextRef.current;
+      const startingTitleRef = sceneTitleRef.current;
+      const currentRaw = override?.rawText ?? startingRawRef;
+      const currentTitle = override?.title ?? startingTitleRef;
+      const last = lastSavedSnapshotRef.current;
+      if (
+        last &&
+        last.id === currentRef.id &&
+        last.rawText === currentRaw &&
+        last.title === currentTitle
+      ) {
+        return null;
+      }
 
-    const existing = customScriptsRef.current.find((item) => item.id === currentRef.id);
-    const now = Date.now();
-    const recordToSave: ScriptRecord = {
-      id: currentRef.id,
-      title: currentTitle.trim() || APP_META.untitledScene,
-      rawText: currentRaw,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      ...(existing?.forkedFromId ? {forkedFromId: existing.forkedFromId} : {}),
-      ...(existing?.branchNote ? {branchNote: existing.branchNote} : {}),
-      ...(existing?.pinned ? {pinned: true} : {}),
-      ...(existing?.folder ? {folder: existing.folder} : {}),
-      ...(existing?.tags && existing.tags.length > 0 ? {tags: existing.tags} : {}),
-    };
+      const existing = customScriptsRef.current.find((item) => item.id === currentRef.id);
+      const now = Date.now();
+      const recordToSave: ScriptRecord = {
+        id: currentRef.id,
+        title: currentTitle.trim() || APP_META.untitledScene,
+        rawText: currentRaw,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        ...(existing?.forkedFromId ? {forkedFromId: existing.forkedFromId} : {}),
+        ...(existing?.branchNote ? {branchNote: existing.branchNote} : {}),
+        ...(existing?.pinned ? {pinned: true} : {}),
+        ...(existing?.folder ? {folder: existing.folder} : {}),
+        ...(existing?.tags && existing.tags.length > 0 ? {tags: existing.tags} : {}),
+      };
 
-    lastSavedSnapshotRef.current = {
-      id: currentRef.id,
-      rawText: currentRaw,
-      title: currentTitle,
-    };
+      try {
+        const saved = await scriptLibraryDb.put(recordToSave);
+        // Mark clean only after persistence succeeds so failed/aborted writes are retried.
+        if (activeScriptRef.current.kind === 'custom' && activeScriptRef.current.id === saved.id) {
+          lastSavedSnapshotRef.current = {
+            id: saved.id,
+            rawText: currentRaw,
+            title: currentTitle,
+          };
+          const rawUnchangedSinceStart =
+            rawTextRef.current === currentRaw ||
+            (override?.rawText !== undefined && rawTextRef.current === startingRawRef);
+          const titleUnchangedSinceStart =
+            sceneTitleRef.current === currentTitle ||
+            (override?.title !== undefined && sceneTitleRef.current === startingTitleRef);
+          if (rawUnchangedSinceStart && titleUnchangedSinceStart) {
+            mirrorActiveScriptToLocalStorage(
+              saved.id,
+              saved.rawText,
+              saved.title,
+              saved.updatedAt
+            );
+          }
+        }
+        customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
+        setCustomScripts((prev) => upsertSortedScript(prev, saved));
+        return saved;
+      } catch {
+        return null;
+      }
+    },
+    [cancelPendingSave, activeScriptRef, rawTextRef, sceneTitleRef, customScriptsRef, setCustomScripts]
+  );
 
-    try {
-      const saved = await scriptLibraryDb.put(recordToSave);
-      setCustomScripts((prev) => upsertSortedScript(prev, saved));
-      return saved;
-    } catch {
-      return null;
-    }
-  }, [cancelPendingSave, activeScriptRef, rawTextRef, sceneTitleRef, customScriptsRef, setCustomScripts]);
-
-  // Mount lifecycle: migrate legacy localStorage once, hydrate IndexedDB library, open active script
+  // Mount lifecycle: reconcile fallback storage, migrate legacy localStorage once, hydrate IndexedDB library, open active script
   useEffect(() => {
     let cancelled = false;
 
     const hydrate = async () => {
+      // Snapshot the synchronous localStorage mirror before any migration or list call runs
+      const initialMirror: HydrationMirrorState = {
+        activeScriptId: readActiveScriptId(),
+        rawText: readSavedScriptRaw(),
+        title: readSavedTitle(),
+        updatedAt: readMirrorUpdatedAt(),
+      };
+
+      await scriptLibraryDb.reconcileFallbackStorage();
       const migration = await scriptLibraryDb.migrateFromLegacyLocalStorage({
         defaultTitle: APP_META.untitledScene,
       });
-      const loadedRecords = await scriptLibraryDb.list();
+      let loadedRecords = await scriptLibraryDb.list();
       if (cancelled) return;
 
-      setCustomScripts(loadedRecords);
-      customScriptsRef.current = loadedRecords;
+      const targetId = migration.activeScriptId ?? initialMirror.activeScriptId;
+      const resolution = reconcileHydratedScript({
+        loadedRecords,
+        targetId,
+        mirror: initialMirror,
+        bundledExamples: BUNDLED_EXAMPLES,
+        defaultExample: DEFAULT_PRESET,
+        defaultTitle: APP_META.untitledScene,
+      });
 
-      const targetId = migration.activeScriptId ?? readActiveScriptId();
-      const matchedCustom = targetId
-        ? loadedRecords.find((record) => record.id === targetId)
-        : undefined;
-
-      if (matchedCustom) {
-        activateCustomScript(matchedCustom);
+      if (resolution.kind === 'custom') {
+        let recordToActivate = resolution.record;
+        if (resolution.needsPersist) {
+          try {
+            recordToActivate = await scriptLibraryDb.put(resolution.record);
+            if (cancelled) return;
+            loadedRecords = upsertSortedScript(loadedRecords, recordToActivate);
+          } catch {
+            // Keep the reconciled custom script active in memory even if put() fails
+          }
+        }
+        setCustomScripts(loadedRecords);
+        customScriptsRef.current = loadedRecords;
+        activateCustomScript(recordToActivate);
       } else {
-        const matchedExample =
-          (targetId ? getBundledExampleById(targetId) : undefined) ?? DEFAULT_PRESET;
-        activateExample(matchedExample);
+        setCustomScripts(loadedRecords);
+        customScriptsRef.current = loadedRecords;
+        activateExample(resolution.example);
       }
 
       isLibraryHydratedRef.current = true;
@@ -345,9 +501,10 @@ export function useLibraryPersistence({
   useEffect(() => {
     if (!isLibraryHydratedRef.current) return;
 
-    mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle);
-
-    if (activeScript.kind !== 'custom') return;
+    if (activeScript.kind !== 'custom') {
+      mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle);
+      return;
+    }
 
     const last = lastSavedSnapshotRef.current;
     if (
@@ -358,6 +515,8 @@ export function useLibraryPersistence({
     ) {
       return;
     }
+
+    mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle, Date.now());
 
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);

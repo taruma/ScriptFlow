@@ -188,6 +188,7 @@ export function useLibraryFileIO({
           updatedAt: now,
         };
         const saved = await scriptLibraryDb.put(importedRecord);
+        customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
         setCustomScripts((prev) => upsertSortedScript(prev, saved));
         activateCustomScript(saved, {switchToLive: true});
         onToast(UI_LABELS.toasts.importedScript(saved.title));

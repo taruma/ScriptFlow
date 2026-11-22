@@ -26,6 +26,7 @@ import {
   SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX,
   SCRIPT_SNAPSHOTS_STORE_NAME,
   type CreateScriptLibraryStoreOptions,
+  type FallbackReconcileResult,
   type LegacyLocalStorageAdapter,
   type LegacyMigrationOptions,
   type LegacyMigrationResult,
@@ -35,6 +36,7 @@ import {
   type ScriptRecord,
 } from './library/dbTypes.ts';
 import {
+  clearFallbackStorage,
   persistFallbackMap,
   persistFallbackSnapshotsMap,
   readFallbackMap,
@@ -44,6 +46,7 @@ import {
   getDefaultIndexedDB,
   idbBulkDelete,
   idbBulkPut,
+  idbBulkPutSnapshots,
   idbClearAll,
   idbClearSnapshotsForScript,
   idbDelete,
@@ -77,6 +80,7 @@ export {
 };
 
 export type {
+  FallbackReconcileResult,
   SaveSnapshotInput,
   ScriptRecord,
   LegacyLocalStorageAdapter,
@@ -86,6 +90,17 @@ export type {
   ScriptLibraryStore,
   CreateScriptLibraryStoreOptions,
 };
+
+function isPermanentIndexedDbOpenError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return error.name === 'SecurityError' || error.name === 'NotSupportedError';
+  }
+  if (error instanceof Error) {
+    return /SecurityError|NotSupportedError/i.test(`${error.name} ${error.message}`);
+  }
+  return false;
+}
 
 const DEFAULT_LEGACY_ADAPTER: LegacyLocalStorageAdapter = {
   readSavedScript,
@@ -113,9 +128,24 @@ export function createScriptLibraryStore(
       : LIBRARY_FALLBACK_STORAGE_KEY;
 
   let activeBackend: 'indexeddb' | 'fallback' = idbFactory ? 'indexeddb' : 'fallback';
+  let isIndexedDbPermanentlyUnavailable = !idbFactory;
   let dbPromise: Promise<IDBDatabase> | null = null;
   let fallbackMap: Map<string, ScriptRecord> | null = null;
   let fallbackSnapshotsMap: Map<string, ScriptSnapshot> | null = null;
+  let hasPendingFallbackData = false;
+  let hasWarnedFallback = false;
+  let reconcilePromise: Promise<FallbackReconcileResult> | null = null;
+
+  const warnFallbackOnce = (reason: unknown): void => {
+    if (hasWarnedFallback) return;
+    hasWarnedFallback = true;
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      console.warn(
+        '[ScriptLibraryDb] IndexedDB operation failed; using localStorage fallback until IndexedDB recovers.',
+        reason
+      );
+    }
+  };
 
   const ensureFallbackMap = (): Map<string, ScriptRecord> => {
     if (!fallbackMap) {
@@ -145,8 +175,92 @@ export function createScriptLibraryStore(
     }
   };
 
-  const tryOpenDb = async (): Promise<IDBDatabase | null> => {
-    if (!idbFactory || activeBackend === 'fallback') {
+  const mergeFallbackIntoDb = async (db: IDBDatabase): Promise<FallbackReconcileResult> => {
+    const scriptsToInspect = new Map<string, ScriptRecord>();
+    for (const [id, record] of readFallbackMap(fallbackStorageKey).entries()) {
+      scriptsToInspect.set(id, record);
+    }
+    if (fallbackMap) {
+      for (const [id, record] of fallbackMap.entries()) {
+        const prev = scriptsToInspect.get(id);
+        if (!prev || record.updatedAt >= prev.updatedAt) {
+          scriptsToInspect.set(id, record);
+        }
+      }
+    }
+
+    const snapshotsToInspect = new Map<string, ScriptSnapshot>();
+    for (const [id, snap] of readFallbackSnapshotsMap(fallbackStorageKey).entries()) {
+      snapshotsToInspect.set(id, snap);
+    }
+    if (fallbackSnapshotsMap) {
+      for (const [id, snap] of fallbackSnapshotsMap.entries()) {
+        snapshotsToInspect.set(id, snap);
+      }
+    }
+
+    if (scriptsToInspect.size === 0 && snapshotsToInspect.size === 0) {
+      hasPendingFallbackData = false;
+      return {mergedScripts: 0, mergedSnapshots: 0};
+    }
+
+    let mergedScripts = 0;
+    if (scriptsToInspect.size > 0) {
+      const existingRecords = await idbList(db);
+      const existingById = new Map(existingRecords.map((record) => [record.id, record]));
+      const recordsToPut: ScriptRecord[] = [];
+      for (const candidate of scriptsToInspect.values()) {
+        const existing = existingById.get(candidate.id);
+        if (!existing || candidate.updatedAt > existing.updatedAt) {
+          recordsToPut.push(candidate);
+        }
+      }
+      if (recordsToPut.length > 0) {
+        await idbBulkPut(db, recordsToPut);
+        mergedScripts = recordsToPut.length;
+      }
+    }
+
+    let mergedSnapshots = 0;
+    if (snapshotsToInspect.size > 0) {
+      const scriptIds = new Set(Array.from(snapshotsToInspect.values()).map((s) => s.scriptId));
+      const existingSnapshotIds = new Set<string>();
+      for (const scriptId of scriptIds) {
+        const existingSnaps = await idbListSnapshots(db, scriptId);
+        for (const snap of existingSnaps) {
+          existingSnapshotIds.add(snap.id);
+        }
+      }
+      const snapshotsToPut = Array.from(snapshotsToInspect.values()).filter(
+        (snap) => !existingSnapshotIds.has(snap.id)
+      );
+      if (snapshotsToPut.length > 0) {
+        await idbBulkPutSnapshots(db, snapshotsToPut);
+        mergedSnapshots = snapshotsToPut.length;
+      }
+    }
+
+    fallbackMap?.clear();
+    fallbackSnapshotsMap?.clear();
+    clearFallbackStorage(fallbackStorageKey);
+    hasPendingFallbackData = false;
+
+    return {mergedScripts, mergedSnapshots};
+  };
+
+  const runMergeFallbackIntoDb = (db: IDBDatabase): Promise<FallbackReconcileResult> => {
+    if (!reconcilePromise) {
+      reconcilePromise = mergeFallbackIntoDb(db).finally(() => {
+        reconcilePromise = null;
+      });
+    }
+    return reconcilePromise;
+  };
+
+  const tryOpenDb = async (openOptions?: {
+    skipPendingMerge?: boolean;
+  }): Promise<IDBDatabase | null> => {
+    if (!idbFactory || isIndexedDbPermanentlyUnavailable) {
       activeBackend = 'fallback';
       return null;
     }
@@ -165,10 +279,19 @@ export function createScriptLibraryStore(
     }
 
     try {
-      return await dbPromise;
-    } catch {
+      const db = await dbPromise;
+      if (hasPendingFallbackData && !openOptions?.skipPendingMerge) {
+        await runMergeFallbackIntoDb(db);
+      }
+      activeBackend = 'indexeddb';
+      return db;
+    } catch (error) {
       dbPromise = null;
       activeBackend = 'fallback';
+      if (isPermanentIndexedDbOpenError(error)) {
+        isIndexedDbPermanentlyUnavailable = true;
+      }
+      warnFallbackOnce(error);
       return null;
     }
   };
@@ -177,13 +300,26 @@ export function createScriptLibraryStore(
     idbOp: (db: IDBDatabase) => Promise<T>,
     fallbackOp: (map: Map<string, ScriptRecord>) => T
   ): Promise<T> => {
-    const db = await tryOpenDb();
+    let db = await tryOpenDb();
     if (db) {
       try {
         return await idbOp(db);
-      } catch {
+      } catch (firstError) {
+        // Stale or closed IndexedDB connection (e.g. background tab discard/sleep or dev HMR):
+        // drop the cached handle, reopen once, and retry before falling back.
         dbPromise = null;
-        activeBackend = 'fallback';
+        db = await tryOpenDb();
+        if (db) {
+          try {
+            return await idbOp(db);
+          } catch (retryError) {
+            dbPromise = null;
+            activeBackend = 'fallback';
+            warnFallbackOnce(retryError);
+          }
+        } else {
+          warnFallbackOnce(firstError);
+        }
       }
     }
     return fallbackOp(ensureFallbackMap());
@@ -226,6 +362,7 @@ export function createScriptLibraryStore(
         (map) => {
           map.set(clean.id, clean);
           persistFallbackMap(fallbackStorageKey, map);
+          hasPendingFallbackData = true;
           return {...clean};
         }
       );
@@ -246,6 +383,7 @@ export function createScriptLibraryStore(
             map.set(record.id, record);
           }
           persistFallbackMap(fallbackStorageKey, map);
+          hasPendingFallbackData = true;
           return sanitized.map((record) => ({...record}));
         }
       );
@@ -288,6 +426,7 @@ export function createScriptLibraryStore(
           const snapMap = ensureFallbackSnapshotsMap();
           snapMap.clear();
           persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+          hasPendingFallbackData = false;
         }
       );
     },
@@ -349,6 +488,7 @@ export function createScriptLibraryStore(
             snapMap.delete(pruneId);
           }
           persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+          hasPendingFallbackData = true;
           return {...candidate};
         }
       );
@@ -376,6 +516,7 @@ export function createScriptLibraryStore(
           }
           snapMap.set(cleanId, next);
           persistFallbackSnapshotsMap(fallbackStorageKey, snapMap);
+          hasPendingFallbackData = true;
           return {...next};
         }
       );
@@ -404,6 +545,19 @@ export function createScriptLibraryStore(
           deleteFallbackSnapshotsForScripts(new Set([cleanScriptId]));
         }
       );
+    },
+
+    async reconcileFallbackStorage(): Promise<FallbackReconcileResult> {
+      const db = await tryOpenDb({skipPendingMerge: true});
+      if (!db) {
+        return {mergedScripts: 0, mergedSnapshots: 0};
+      }
+      try {
+        return await runMergeFallbackIntoDb(db);
+      } catch (error) {
+        warnFallbackOnce(error);
+        return {mergedScripts: 0, mergedSnapshots: 0};
+      }
     },
 
     async migrateFromLegacyLocalStorage(

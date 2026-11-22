@@ -1,6 +1,7 @@
 export const SCRIPT_STORAGE_KEY = 'auteur-editor-raw-script-v1';
 export const TITLE_STORAGE_KEY = 'auteur-editor-scene-title-v1';
 export const ACTIVE_SCRIPT_ID_STORAGE_KEY = 'auteur-editor-active-script-id-v1';
+export const MIRROR_UPDATED_AT_STORAGE_KEY = 'auteur-editor-mirror-updated-at-v1';
 export const LIBRARY_MIGRATED_STORAGE_KEY = 'auteur-editor-library-migrated-v1';
 export const LIBRARY_FALLBACK_STORAGE_KEY = 'auteur-editor-library-fallback-v1';
 
@@ -87,18 +88,46 @@ export function writeLibraryMigratedFlag(migrated: boolean): void {
   }
 }
 
+export function readMirrorUpdatedAt(): number | null {
+  try {
+    const saved = window.localStorage.getItem(MIRROR_UPDATED_AT_STORAGE_KEY);
+    if (!saved) return null;
+    const parsed = Number(saved);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeMirrorUpdatedAt(timestamp: number | null): void {
+  try {
+    if (typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0) {
+      window.localStorage.setItem(MIRROR_UPDATED_AT_STORAGE_KEY, String(Math.floor(timestamp)));
+    } else {
+      window.localStorage.removeItem(MIRROR_UPDATED_AT_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage quota or restricted environment errors
+  }
+}
+
 /**
- * Mirrors the active script pointer and raw text to localStorage so
- * top-level ErrorBoundary crash recovery ("Copy Saved Script") always stays intact.
+ * Mirrors the active script pointer, raw text, title, and timestamp to localStorage so
+ * top-level ErrorBoundary crash recovery ("Copy Saved Script") and reload reconciliation
+ * stay intact even if an async IndexedDB write is interrupted.
  */
 export function mirrorActiveScriptToLocalStorage(
   activeScriptId: string | null,
   rawText: string,
-  title?: string
+  title?: string,
+  updatedAt?: number | null
 ): void {
   writeActiveScriptId(activeScriptId);
   writeSavedScript(rawText);
   if (typeof title === 'string') {
     writeSavedTitle(title);
   }
+  const effectiveUpdatedAt =
+    updatedAt === undefined ? (activeScriptId ? Date.now() : null) : updatedAt;
+  writeMirrorUpdatedAt(effectiveUpdatedAt);
 }

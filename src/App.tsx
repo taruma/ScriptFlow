@@ -233,6 +233,7 @@ export default function App() {
     docRef,
     commitRawText,
     onTitleChange: handleTitleChange,
+    onFlushPendingSave: library.flushPendingSave,
     onCreateSnapshot: library.handleCreateSnapshot,
     onForkCurrentExampleWithContent: library.handleForkCurrentExampleWithContent,
     onSkipNextAiReset: handleSkipNextAiReset,
