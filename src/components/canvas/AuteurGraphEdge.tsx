@@ -69,6 +69,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
                 position: 'absolute',
                 transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
                 pointerEvents: 'none',
+                zIndex: 4,
                 color: stroke,
                 opacity: isDimmed ? 0.2 : 1,
               }}
@@ -167,6 +168,7 @@ export const AuteurGraphEdge = memo(function AuteurGraphEdge({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'none',
+              zIndex: 4,
             }}
             className="rounded bg-surface/95 px-1.5 py-0.5 font-mono text-[9px] font-semibold tracking-wider text-text-faint border border-border-subtle whitespace-nowrap"
           >

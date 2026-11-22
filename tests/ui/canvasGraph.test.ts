@@ -5,6 +5,8 @@ import {
   buildCanvasLayout,
   buildGraphSceneModel,
   createDefaultGraphExpansionState,
+  GRAPH_Z_CARD,
+  GRAPH_Z_CHAMBER,
   mergeLayoutIntoFlowNodes,
   tokenizeAnnotatedText,
   type FlowNodeLike,
@@ -406,5 +408,26 @@ Rosa holds EV01.
     // [LOGIC] and [OPENING] are matched downstream; declaring blocks [INTENT] and [AESTHETIC] do not self-link
     expect(rosa.callSites.map((cs) => cs.display)).toEqual(['[LOGIC]', '[OPENING]', 'S1.2']);
     expect(ev01.callSites.map((cs) => cs.display)).toEqual(['[LOGIC]', '[OPENING]']);
+  });
+
+  it('layers all content cards above edges and above ShotChamber backdrops', () => {
+    const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
+    const defaults = createDefaultGraphExpansionState(oner);
+    const layout = buildCanvasLayout(
+      oner,
+      makeLayoutOptions({
+        expandedIds: defaults.expandedIds,
+        rawOpenIds: defaults.rawOpenIds,
+      })
+    );
+
+    const chambers = layout.nodes.filter((n) => n.type === 'shotChamber');
+    const cards = layout.nodes.filter((n) => n.type !== 'shotChamber');
+
+    expect(chambers.length).toBeGreaterThan(0);
+    expect(cards.length).toBeGreaterThan(0);
+    expect(chambers.every((n) => n.zIndex === GRAPH_Z_CHAMBER)).toBe(true);
+    expect(cards.every((n) => n.zIndex === GRAPH_Z_CARD)).toBe(true);
+    expect(GRAPH_Z_CARD).toBeGreaterThan(GRAPH_Z_CHAMBER);
   });
 });

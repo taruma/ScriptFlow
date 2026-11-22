@@ -755,6 +755,26 @@
   background: color-mix(in srgb, var(--app-bg) 78%, var(--surface));
 }
 
+/* Bind React Flow v13 CSS tokens strictly to ScriptFlow's 4-theme design token system
+   so OS dark-mode (`light-dark(...)`) never overrides Light or Warm themes with #141414. */
+.auteur-graph-canvas .react-flow {
+  --xy-background-color: var(--app-bg);
+  --xy-background-pattern-color: var(--graph-dot);
+  --xy-minimap-background-color: var(--surface);
+  --xy-edge-label-background-color: var(--surface);
+  --xy-edge-label-color: var(--text-main);
+  --xy-selection-background-color: color-mix(in srgb, var(--tok-continuity) 12%, transparent);
+  --xy-selection-border: 1px dashed var(--tok-continuity);
+  background-color: var(--app-bg);
+  color-scheme: light;
+}
+[data-theme-category="dark"] .auteur-graph-canvas .react-flow,
+[data-pure-black-shell="true"] .auteur-graph-canvas .react-flow {
+  color-scheme: dark;
+}
+.auteur-graph-canvas .react-flow__background {
+  background-color: var(--app-bg);
+}
 .auteur-graph-canvas .react-flow__pane {
   cursor: grab;
 }

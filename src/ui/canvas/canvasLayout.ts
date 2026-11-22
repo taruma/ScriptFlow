@@ -44,6 +44,11 @@ const CHAMBER_PAD_X = 20;
 const CHAMBER_PAD_TOP = 38;
 const CHAMBER_PAD_BOTTOM = 20;
 
+// Explicit stacking hierarchy (paired with React Flow `zIndexMode="manual"`):
+// ShotChamber backdrop (0) < Graph Edges (1..3) < Edge Labels (4) < All Cards & Headers (10)
+export const GRAPH_Z_CHAMBER = 0;
+export const GRAPH_Z_CARD = 10;
+
 function estimateWrappedLines(text: string, charsPerLine: number): number {
   if (!text) return 1;
   return text.split('\n').reduce((sum, line) => {
@@ -198,6 +203,7 @@ export function buildCanvasLayout(
       position: {x: 0, y: 0},
       draggable: false,
       selectable: false,
+      zIndex: GRAPH_Z_CARD,
       data: {
         zone: 'staging',
         badge: 'PHASE 1 · STAGING',
@@ -218,6 +224,7 @@ export function buildCanvasLayout(
           type: 'stagingBlock',
           position: applyOffset(sb.id, {x: 0, y: curY}, nodeOffsets),
           width: STAGING_W_LR,
+          zIndex: GRAPH_Z_CARD,
           data: {
             block: sb,
             direction,
@@ -246,6 +253,7 @@ export function buildCanvasLayout(
           type: 'stagingBlock',
           position: applyOffset(sb.id, {x, y}, nodeOffsets),
           width: STAGING_W_TB,
+          zIndex: GRAPH_Z_CARD,
           data: {
             block: sb,
             direction,
@@ -281,6 +289,7 @@ export function buildCanvasLayout(
       position: {x: railStartX, y: railStartY},
       draggable: false,
       selectable: false,
+      zIndex: GRAPH_Z_CARD,
       data: {
         zone: 'objects',
         badge: railLabel,
@@ -314,6 +323,7 @@ export function buildCanvasLayout(
             type: 'inferredObject',
             position: applyOffset(obj.id, {x: railStartX, y: curY}, nodeOffsets),
             width: OBJ_RAIL_W_LR,
+            zIndex: GRAPH_Z_CARD,
             data: {
               object: obj,
               direction,
@@ -347,6 +357,7 @@ export function buildCanvasLayout(
             type: 'inferredObject',
             position: applyOffset(obj.id, {x: curX, y: curY}, nodeOffsets),
             width: chipW,
+            zIndex: GRAPH_Z_CARD,
             data: {
               object: obj,
               direction,
@@ -402,6 +413,7 @@ export function buildCanvasLayout(
       position: {x: isLR ? execStartX : 0, y: execStartY},
       draggable: false,
       selectable: false,
+      zIndex: GRAPH_Z_CARD,
       data: {
         zone: 'execution',
         badge: `PHASE 2 · EXECUTION (S1 → S${model.macroStates.length})`,
@@ -533,7 +545,7 @@ export function buildCanvasLayout(
         position: chamberPos,
         width: cw,
         height: ch,
-        zIndex: -1,
+        zIndex: GRAPH_Z_CHAMBER,
         data: {
           chamberId: chamber.id,
           slot: chamber.slot,
@@ -572,7 +584,7 @@ export function buildCanvasLayout(
         position: nodePos,
         width: p.width,
         ...(chamberOrigin && parentChamber ? {parentId: parentChamber.id} : {}),
-        zIndex: 2,
+        zIndex: GRAPH_Z_CARD,
         data: {
           macroState: p.ms,
           direction,
@@ -601,7 +613,7 @@ export function buildCanvasLayout(
           type: 'rawBranch',
           position: applyOffset(rawId, rawBasePos, nodeOffsets),
           width: rawW,
-          zIndex: 2,
+          zIndex: GRAPH_Z_CARD,
           data: {
             macroStateId: p.ms.id,
             raw: p.ms.raw,
@@ -656,7 +668,7 @@ export function buildCanvasLayout(
             type: 'subState',
             position: applyOffset(subNodeId, subBasePos, nodeOffsets),
             width: subW,
-            zIndex: 2,
+            zIndex: GRAPH_Z_CARD,
             data: {
               subState: ss,
               direction,

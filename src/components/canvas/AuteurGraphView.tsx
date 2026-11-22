@@ -251,7 +251,8 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
         sourceHandle: e.sourceHandle,
         targetHandle: e.targetHandle,
         type: 'auteurEdge',
-        zIndex: e.isHot ? 10 : e.kind === 'recall' ? 5 : 1,
+        // Strictly above ShotChamber backdrop (0) and strictly behind all cards (10)
+        zIndex: e.isHot ? 3 : e.kind === 'recall' || e.kind === 'isolationThread' ? 2 : 1,
         data: {
           kind: e.kind,
           dimension: e.dimension,
@@ -471,6 +472,8 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
             onPaneClick={() => setSelectedObjectId(null)}
             nodesConnectable={false}
             elementsSelectable={true}
+            elevateEdgesOnSelect={false}
+            zIndexMode="manual"
             selectionOnDrag={false}
             panOnDrag={true}
             selectionKeyCode="Shift"
@@ -483,6 +486,7 @@ function GraphCanvasInner({doc, metadata, scriptSessionKey}: AuteurGraphViewProp
               variant={BackgroundVariant.Dots}
               gap={24}
               size={1.25}
+              bgColor="var(--app-bg)"
               color="var(--graph-dot)"
             />
 
