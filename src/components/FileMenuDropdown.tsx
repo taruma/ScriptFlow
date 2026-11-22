@@ -1,15 +1,17 @@
+import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {
   AlignLeft,
   ArchiveRestore,
+  BookOpen,
   Braces,
   ChevronDown,
+  ChevronRight,
   CopyPlus,
   Download,
   FileCode2,
   FilePlus2,
   FileText,
   FolderArchive,
-  FolderOpen,
   History,
   Settings,
   Upload,
@@ -37,10 +39,76 @@ export interface FileMenuDropdownProps {
   onOpenSettings: () => void;
 }
 
+function SectionHeading({title}: {title: string}) {
+  return (
+    <div className="px-2.5 pt-1 pb-0.5 text-[9.5px] font-black uppercase tracking-widest text-text-faint select-none">
+      {title}
+    </div>
+  );
+}
+
+interface MenuRowProps {
+  icon: ReactNode;
+  label: string;
+  tag?: string;
+  trailing?: ReactNode;
+  title?: string;
+  disabled?: boolean;
+  isActive?: boolean;
+  ariaHasPopup?: 'menu';
+  ariaExpanded?: boolean;
+  onClick: () => void;
+}
+
+function MenuRow({
+  icon,
+  label,
+  tag,
+  trailing,
+  title,
+  disabled = false,
+  isActive = false,
+  ariaHasPopup,
+  ariaExpanded,
+  onClick,
+}: MenuRowProps) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      title={title}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
+      onClick={onClick}
+      className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left ${
+        disabled
+          ? 'text-text-muted opacity-45 cursor-not-allowed'
+          : isActive
+            ? 'bg-surface-muted text-text-main cursor-pointer'
+            : 'text-text-body hover:text-text-main hover:bg-surface-subtle cursor-pointer'
+      }`}
+    >
+      <span className="flex items-center gap-2 min-w-0">
+        {icon}
+        <span className="whitespace-nowrap truncate">{label}</span>
+      </span>
+      <span className="flex items-center gap-1.5 shrink-0">
+        {tag && (
+          <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint">
+            {tag}
+          </span>
+        )}
+        {trailing}
+      </span>
+    </button>
+  );
+}
+
 /**
- * Quiet left-wing File menu dropdown housing creation, single-file import/export,
- * non-destructive formatting, version history, full-library backup/restore,
- * library navigation, JSON IR Inspector, and Settings access.
+ * Tiered left-wing File menu dropdown styled after StageFlow parity:
+ * slim inline micro-headers, rounded hover rows with colorful semantic icons,
+ * right-aligned format badges, and a Download flyout submenu.
  */
 export function FileMenuDropdown({
   isOpen,
@@ -61,7 +129,41 @@ export function FileMenuDropdown({
   onOpenDebug,
   onOpenSettings,
 }: FileMenuDropdownProps) {
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const hoverCloseTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsDownloadOpen(false);
+    }
+    return () => {
+      if (hoverCloseTimerRef.current !== null) {
+        window.clearTimeout(hoverCloseTimerRef.current);
+        hoverCloseTimerRef.current = null;
+      }
+    };
+  }, [isOpen]);
+
+  const openDownloadSubmenu = () => {
+    if (hoverCloseTimerRef.current !== null) {
+      window.clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = null;
+    }
+    setIsDownloadOpen(true);
+  };
+
+  const scheduleCloseDownloadSubmenu = () => {
+    if (hoverCloseTimerRef.current !== null) {
+      window.clearTimeout(hoverCloseTimerRef.current);
+    }
+    hoverCloseTimerRef.current = window.setTimeout(() => {
+      setIsDownloadOpen(false);
+      hoverCloseTimerRef.current = null;
+    }, 110);
+  };
+
   const runAndClose = (action: () => void) => () => {
+    setIsDownloadOpen(false);
     onClose();
     action();
   };
@@ -78,193 +180,150 @@ export function FileMenuDropdown({
       >
         <FileText className="h-3.5 w-3.5 text-text-muted" />
         <span className="hidden sm:inline">{UI_LABELS.topBar.fileButton}</span>
-        <ChevronDown className="h-3 w-3 text-text-faint" />
+        <ChevronDown
+          className={`h-3 w-3 transition-transform duration-150 ${
+            isOpen ? 'rotate-180 text-text-main' : 'text-text-faint'
+          }`}
+        />
       </button>
 
       {isOpen && (
-        <div role="menu" aria-label={UI_LABELS.topBar.fileMenuAria} className={UI_TOKENS.dropdown.menuLeftWide}>
-          {/* Create & Import */}
-          <div className="py-1">
-            <button
-              type="button"
-              role="menuitem"
+        <div
+          role="menu"
+          aria-label={UI_LABELS.topBar.fileMenuAria}
+          className="absolute top-full left-0 mt-2 w-[264px] bg-surface rounded-xl shadow-xl border border-border-main z-50 text-text-main divide-y divide-border-subtle"
+        >
+          {/* Section 1: Script & History */}
+          <div className="p-1.5 space-y-0.5">
+            <SectionHeading title={UI_LABELS.topBar.fileMenuScriptHeader} />
+            <MenuRow
+              icon={<FilePlus2 className="h-3.5 w-3.5 text-sky-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuNewBlank}
               onClick={runAndClose(onNewBlank)}
-              className={UI_TOKENS.dropdown.item}
-            >
-              <span className="inline-flex items-center gap-2">
-                <FilePlus2 className="h-3.5 w-3.5 text-text-muted" />
-                <span>{UI_LABELS.topBar.fileMenuNewBlank}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            />
+            <MenuRow
+              icon={<CopyPlus className="h-3.5 w-3.5 text-sky-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuDuplicateScript}
               onClick={runAndClose(onDuplicateScript)}
-              className={UI_TOKENS.dropdown.item}
-            >
-              <span className="inline-flex items-center gap-2">
-                <CopyPlus className="h-3.5 w-3.5 text-text-muted" />
-                <span>{UI_LABELS.topBar.fileMenuDuplicateScript}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            />
+            <MenuRow
+              icon={<Upload className="h-3.5 w-3.5 text-indigo-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuImportFile}
+              tag={UI_LABELS.topBar.fileMenuTagTxtJson}
               onClick={runAndClose(onImportFile)}
-              className={UI_TOKENS.dropdown.item}
-            >
-              <span className="inline-flex items-center gap-2">
-                <Upload className="h-3.5 w-3.5 text-text-muted" />
-                <span>{UI_LABELS.topBar.fileMenuImportFile}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            />
+            <MenuRow
+              icon={<AlignLeft className="h-3.5 w-3.5 text-violet-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuFormatScript}
               disabled={readOnly}
-              title={UI_LABELS.source.formatTitle}
+              title={
+                readOnly
+                  ? UI_LABELS.topBar.fileMenuFormatReadOnlyTitle
+                  : UI_LABELS.source.formatTitle
+              }
               onClick={runAndClose(onFormatScript)}
-              className={`${UI_TOKENS.dropdown.item} disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-text-body disabled:cursor-not-allowed`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <AlignLeft className="h-3.5 w-3.5 text-text-muted" />
-                <span>{UI_LABELS.topBar.fileMenuFormatScript}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            />
+            <MenuRow
+              icon={<History className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuVersionHistory}
               onClick={runAndClose(onVersionHistory)}
-              className={UI_TOKENS.dropdown.item}
+            />
+          </div>
+
+          {/* Section 2: Export & Library */}
+          <div className="p-1.5 space-y-0.5">
+            <SectionHeading title={UI_LABELS.topBar.fileMenuExportHeader} />
+
+            {/* Download ▸ Flyout Submenu */}
+            <div
+              className="relative"
+              onMouseEnter={openDownloadSubmenu}
+              onMouseLeave={scheduleCloseDownloadSubmenu}
             >
-              <span className="inline-flex items-center gap-2">
-                <History className="h-3.5 w-3.5 text-text-muted" />
-                <span>{UI_LABELS.topBar.fileMenuVersionHistory}</span>
-              </span>
-            </button>
-          </div>
+              <MenuRow
+                icon={<Download className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                label={UI_LABELS.topBar.fileMenuDownloadSubmenu}
+                isActive={isDownloadOpen}
+                ariaHasPopup="menu"
+                ariaExpanded={isDownloadOpen}
+                trailing={
+                  <ChevronRight
+                    className={`h-3.5 w-3.5 transition-transform duration-150 ${
+                      isDownloadOpen ? 'text-text-main translate-x-0.5' : 'text-text-faint'
+                    }`}
+                  />
+                }
+                onClick={() => setIsDownloadOpen((prev) => !prev)}
+              />
 
-          {/* Download Current */}
-          <div>
-            <div className={UI_TOKENS.dropdown.header}>
-              <span className={UI_TOKENS.dropdown.headerText}>
-                {UI_LABELS.topBar.fileMenuExportHeader}
-              </span>
-            </div>
-            <div className="py-1">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={runAndClose(onDownloadCanonical)}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Download className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuDownloadCanonical}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={runAndClose(onDownloadTagless)}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <FileCode2 className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuDownloadTagless}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={runAndClose(onDownloadJsonEnvelope)}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Braces className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuDownloadJsonEnvelope}</span>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Library & Backup */}
-          <div>
-            <div className={UI_TOKENS.dropdown.header}>
-              <span className={UI_TOKENS.dropdown.headerText}>
-                {UI_LABELS.topBar.fileMenuLibraryHeader}
-              </span>
-            </div>
-            <div className="py-1">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={runAndClose(onBackupAll)}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <FolderArchive className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuBackupAll}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={runAndClose(onRestoreBackup)}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <ArchiveRestore className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuRestoreBackup}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={runAndClose(onBrowseLibrary)}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <FolderOpen className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuBrowseLibrary}</span>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Tools & Settings */}
-          <div>
-            <div className={UI_TOKENS.dropdown.header}>
-              <span className={UI_TOKENS.dropdown.headerText}>
-                {UI_LABELS.topBar.fileMenuToolsHeader}
-              </span>
-            </div>
-            <div className="py-1">
-              {onOpenDebug && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={runAndClose(onOpenDebug)}
-                  className={UI_TOKENS.dropdown.item}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Braces className="h-3.5 w-3.5 text-text-muted" />
-                    <span>{UI_LABELS.topBar.fileMenuJsonIrInspector}</span>
-                  </span>
-                </button>
+              {isDownloadOpen && (
+                <div className="sm:absolute sm:left-full sm:top-0 sm:pl-1.5 pt-1 sm:pt-0 z-50">
+                  <div
+                    role="menu"
+                    aria-label={UI_LABELS.topBar.fileMenuDownloadSubmenu}
+                    className="w-full sm:w-56 bg-surface rounded-xl shadow-xl border border-border-main p-1.5 space-y-0.5 text-text-main"
+                  >
+                    <MenuRow
+                      icon={<Download className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                      label={UI_LABELS.topBar.fileMenuDownloadCanonical}
+                      tag={UI_LABELS.topBar.fileMenuTagTxt}
+                      onClick={runAndClose(onDownloadCanonical)}
+                    />
+                    <MenuRow
+                      icon={<FileCode2 className="h-3.5 w-3.5 text-teal-500 shrink-0" />}
+                      label={UI_LABELS.topBar.fileMenuDownloadTagless}
+                      tag={UI_LABELS.topBar.fileMenuTagPlain}
+                      onClick={runAndClose(onDownloadTagless)}
+                    />
+                    <MenuRow
+                      icon={<Braces className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                      label={UI_LABELS.topBar.fileMenuDownloadJsonEnvelope}
+                      tag={UI_LABELS.topBar.fileMenuTagJson}
+                      onClick={runAndClose(onDownloadJsonEnvelope)}
+                    />
+                  </div>
+                </div>
               )}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={onOpenSettings}
-                className={UI_TOKENS.dropdown.item}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Settings className="h-3.5 w-3.5 text-text-muted" />
-                  <span>{UI_LABELS.topBar.fileMenuSettings}</span>
-                </span>
-              </button>
             </div>
+
+            <MenuRow
+              icon={<FolderArchive className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuBackupAll}
+              tag={UI_LABELS.topBar.fileMenuTagJson}
+              onClick={runAndClose(onBackupAll)}
+            />
+            <MenuRow
+              icon={<ArchiveRestore className="h-3.5 w-3.5 text-teal-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuRestoreBackup}
+              tag={UI_LABELS.topBar.fileMenuTagJson}
+              onClick={runAndClose(onRestoreBackup)}
+            />
+            <MenuRow
+              icon={<BookOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuBrowseLibrary}
+              onClick={runAndClose(onBrowseLibrary)}
+            />
+          </div>
+
+          {/* Section 3: Tools & Settings */}
+          <div className="p-1.5 space-y-0.5">
+            <SectionHeading title={UI_LABELS.topBar.fileMenuToolsHeader} />
+            {onOpenDebug && (
+              <MenuRow
+                icon={<Braces className="h-3.5 w-3.5 text-purple-500 shrink-0" />}
+                label={UI_LABELS.topBar.fileMenuJsonIrInspector}
+                tag={UI_LABELS.topBar.fileMenuTagIr}
+                onClick={runAndClose(onOpenDebug)}
+              />
+            )}
+            <MenuRow
+              icon={<Settings className="h-3.5 w-3.5 text-text-muted shrink-0" />}
+              label={UI_LABELS.topBar.fileMenuSettings}
+              onClick={() => {
+                setIsDownloadOpen(false);
+                onOpenSettings();
+              }}
+            />
           </div>
         </div>
       )}
