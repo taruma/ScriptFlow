@@ -39,6 +39,8 @@ export const THEME_OPTIONS: ThemeOption[] = [
   },
 ];
 
+export const DEFAULT_THEME_MODE: ThemeMode = 'light';
+
 const THEME_STORAGE_KEY = 'auteur-editor-theme-v1';
 
 export function loadStoredTheme(): ThemeMode {
@@ -50,7 +52,7 @@ export function loadStoredTheme(): ThemeMode {
   } catch {
     // Ignore storage access errors in restricted environments
   }
-  return 'dark';
+  return DEFAULT_THEME_MODE;
 }
 
 export function saveStoredTheme(mode: ThemeMode): void {

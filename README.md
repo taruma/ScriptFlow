@@ -48,7 +48,7 @@ Live Mode, Source Mode, deterministic linting, exports, and programmatic JSON IR
 - **Programmatic JSON IR & Debug Inspector**
   - Pure TypeScript + Zod `AuteurScriptIR` and `AuteurEnvelope` codecs (`toAuteurIR`, `fromAuteurIR`, `compileAuteurDraft`), transactional ID-addressed `applyAuteurPatch()` & `projectAuteurPatchPreview()`, Composable Lens Slicer (`AUDIT_LENS_PRESETS`), Zod JSON Schema registry (`getAuteurJsonSchemas()`), and a zero-cost-when-closed 5-tab `JsonIrDebugDrawer`.
 - **Appearance, Accessibility & Safeguards**
-  - 4-mode semantic shell theme system (**Light**, **Warm**, **Dark** default, **Pure Black** OLED), script text-size presets (`13px`–`16px`), toggleable monochrome clause underlines, accessible `ConfirmDialog` prompts, `aria-modal="true"` / `data-native-undo="true"` keyboard isolation, and top-level `ErrorBoundary` crash recovery.
+  - 4-mode semantic shell theme system (**Light** default, **Warm**, **Dark**, **Pure Black** OLED), script text-size presets (`13px`–`16px`), toggleable monochrome clause underlines, accessible `ConfirmDialog` prompts, `aria-modal="true"` / `data-native-undo="true"` keyboard isolation, and top-level `ErrorBoundary` crash recovery.
 
 ---
 

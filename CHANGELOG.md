@@ -50,7 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Zero-Cost-When-Closed Debug Inspector**: Lazy-loaded 5-tab `JsonIrDebugDrawer` (`Envelope`, `Slicer`, `Patch Sandbox`, `Draft Compiler`, `Schema Explorer`) respecting active `ruleOverrides` and read-only example guards.
 
 #### Appearance, Accessibility & Safeguards
-- **4-Mode Semantic Theme System & Display Controls**: **Light** (*Clean Warm Stone*), **Warm** (*Drafting Paper*), **Dark** (*Warm Obsidian Studio*, default), and **Pure Black** (*OLED Blueprint Void*) powered exclusively by semantic CSS variables and `UI_TOKENS`, plus script text-size presets (`13px`–`16px`), toggleable monochrome clause underlines, and toggleable 1-based Execution Sub-State ID badges (`Sub-State IDs`, On by default).
+- **4-Mode Semantic Theme System & Display Controls**: **Light** (*Clean Warm Stone*, default), **Warm** (*Drafting Paper*), **Dark** (*Warm Obsidian Studio*), and **Pure Black** (*OLED Blueprint Void*) powered exclusively by semantic CSS variables and `UI_TOKENS`, plus script text-size presets (`13px`–`16px`), toggleable monochrome clause underlines, and toggleable 1-based Execution Sub-State ID badges (`Sub-State IDs`, On by default).
 - **Accessibility & Crash Recovery**: Custom `ConfirmDialog` for all destructive actions, top-level `ErrorBoundary` recovery card with direct saved-script copy, and strict `aria-modal="true"` / `data-native-undo="true"` keyboard and paste isolation.
 
 ### Architecture & Engineering Notes

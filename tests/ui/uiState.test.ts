@@ -12,6 +12,7 @@ import {
   matchSubStateMoveShortcut,
   reconcileStepFocusOnDelete,
 } from '../../src/ui/beatFocus.ts';
+import {DEFAULT_EDITOR_SETTINGS} from '../../src/ui/editorSettings.ts';
 import {matchHistoryShortcut} from '../../src/ui/historyShortcuts.ts';
 import {
   areLintRuleOverridesEqual,
@@ -45,6 +46,11 @@ import {
   loadStoredSubStateIds,
   saveStoredSubStateIds,
 } from '../../src/ui/subStateIds.ts';
+import {
+  DEFAULT_THEME_MODE,
+  loadStoredTheme,
+  saveStoredTheme,
+} from '../../src/ui/theme.ts';
 import {
   attachCaptureOutsideDismiss,
   isOutsideDismissTarget,
@@ -741,6 +747,44 @@ describe('capture-phase outside dismiss helper (Graph View & top-bar menus)', ()
 
     detach();
     expect(registered).toHaveLength(0);
+  });
+});
+
+describe('theme display setting helpers', () => {
+  it('defaults to light theme when storage is empty or invalid and persists valid theme selections', () => {
+    expect(DEFAULT_THEME_MODE).toBe('light');
+    expect(DEFAULT_EDITOR_SETTINGS.themeMode).toBe('light');
+
+    const store = new Map<string, string>();
+    const originalWindow = (globalThis as {window?: unknown}).window;
+
+    try {
+      (globalThis as {window?: unknown}).window = {
+        localStorage: {
+          getItem: (key: string) => store.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            store.set(key, value);
+          },
+        },
+      };
+
+      expect(loadStoredTheme()).toBe('light');
+
+      saveStoredTheme('dark');
+      expect(loadStoredTheme()).toBe('dark');
+
+      saveStoredTheme('oled');
+      expect(loadStoredTheme()).toBe('oled');
+
+      store.set('auteur-editor-theme-v1', 'unknown');
+      expect(loadStoredTheme()).toBe('light');
+    } finally {
+      if (originalWindow === undefined) {
+        delete (globalThis as {window?: unknown}).window;
+      } else {
+        (globalThis as {window?: unknown}).window = originalWindow;
+      }
+    }
   });
 });
 

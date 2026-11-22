@@ -92,7 +92,7 @@ function AiSettingsModalContent({
   const isAlreadyDefault = isDefaultAiPreferences(settings);
   const selectedReasoning =
     REASONING_LEVEL_OPTIONS.find((r) => r.id === settings.reasoningLevel) ??
-    REASONING_LEVEL_OPTIONS[1];
+    REASONING_LEVEL_OPTIONS[0];
   const selectedSensitivity =
     QUICK_SCAN_SENSITIVITY_OPTIONS.find((s) => s.id === settings.quickScanSensitivity) ??
     QUICK_SCAN_SENSITIVITY_OPTIONS[1];

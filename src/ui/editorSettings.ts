@@ -27,6 +27,7 @@ import {
 } from './textSize.ts';
 import {
   applyThemeMode,
+  DEFAULT_THEME_MODE,
   loadStoredTheme,
   saveStoredTheme,
   type ThemeMode,
@@ -49,7 +50,7 @@ export interface EditorSettings {
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
-  themeMode: 'dark',
+  themeMode: DEFAULT_THEME_MODE,
   textSize: DEFAULT_TEXT_SIZE,
   clauseGuides: DEFAULT_CLAUSE_GUIDES,
   subStateIds: DEFAULT_SUBSTATE_IDS,

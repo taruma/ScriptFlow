@@ -27,10 +27,10 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
     ]);
     expect(DEFAULT_GEMINI_MODEL).toBe('gemini-4-hydrogen');
     expect(REASONING_LEVEL_OPTIONS.map((r) => r.id)).toEqual(['low', 'medium', 'high']);
-    expect(DEFAULT_REASONING_LEVEL).toBe('medium');
+    expect(DEFAULT_REASONING_LEVEL).toBe('low');
     expect(DEFAULT_AI_SETTINGS).toEqual({
       model: 'gemini-4-hydrogen',
-      reasoningLevel: 'medium',
+      reasoningLevel: 'low',
       quickScanSensitivity: 'balanced',
       apiKey: '',
       sessionOnly: false,
@@ -113,7 +113,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
       })
     ).toEqual({
       model: 'gemini-4-hydrogen',
-      reasoningLevel: 'medium',
+      reasoningLevel: 'low',
       quickScanSensitivity: 'balanced',
       apiKey: 'secret',
       sessionOnly: false,
@@ -169,7 +169,7 @@ describe('aiSettings BYOK persistence and Gemini model catalog', () => {
     expect(isDefaultAiPreferences(reset)).toBe(true);
     expect(reset).toEqual({
       model: 'gemini-4-hydrogen',
-      reasoningLevel: 'medium',
+      reasoningLevel: 'low',
       quickScanSensitivity: 'balanced',
       apiKey: 'AIza-keep-me-intact',
       sessionOnly: true,

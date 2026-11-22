@@ -73,9 +73,9 @@ All components read exclusively from semantic CSS custom properties (`src/index.
 
 | Mode | Atmosphere | `--app-bg` | `--surface` | `--border-main` | `--text-main` |
 |---|---|---|---|---|---|
-| **`Light`** | Clean Warm Stone | `#f5f5f4` | `#ffffff` | `#e7e5e4` | `#1c1917` |
+| **`Light`** *(Default)* | Clean Warm Stone | `#f5f5f4` | `#ffffff` | `#e7e5e4` | `#1c1917` |
 | **`Warm`** | Drafting Paper | `#f3efe6` | `#faf7f0` | `#dfd7c5` | `#2b231d` |
-| **`Dark`** *(Default)* | Warm Obsidian Studio | `#0c0a09` | `#171514` | `#2c2825` | `#f5f5f4` |
+| **`Dark`** | Warm Obsidian Studio | `#0c0a09` | `#171514` | `#2c2825` | `#f5f5f4` |
 | **`Pure Black`** | OLED Blueprint Void | `#000000` | `#000000` | `#242424` | `#f5f5f4` |
 
 ### Semantic Macro-Block & Inline Token Colors

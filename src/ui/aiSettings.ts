@@ -52,7 +52,7 @@ export interface ReasoningLevelOption {
 }
 
 export const DEFAULT_GEMINI_MODEL: GeminiModelId = 'gemini-4-hydrogen';
-export const DEFAULT_REASONING_LEVEL: ReasoningLevel = 'medium';
+export const DEFAULT_REASONING_LEVEL: ReasoningLevel = 'low';
 
 export const GEMINI_MODEL_OPTIONS: readonly GeminiModelOption[] = [
   {
