@@ -118,29 +118,50 @@ describe('scriptSnapshots pure helpers', () => {
     expect(diff.removed).toBe(1);
   });
 
-  it('compacts long diffs into hunks with small context and avoids folding 1-line gaps', () => {
-    const baseLines = Array.from({length: 20}, (_, idx) => `line ${idx + 1}`);
+  it('compacts long diffs into hunks with inline word-level diffs and avoids folding 1-line gaps', () => {
+    const baseLines = Array.from({length: 20}, (_, idx) => `line ${idx + 1} steady`);
     const currentLines = [...baseLines];
     const snapshotLines = [...baseLines];
-    // Edit near line 6 (index 5) and line 16 (index 15)
+    // Edit word on line 6 (index 5) and line 16 (index 15), plus insert a brand new line after 16
     snapshotLines[5] = 'line 6 RESTORED';
     snapshotLines[15] = 'line 16 RESTORED';
+    snapshotLines.splice(16, 0, 'brand new inserted line');
 
     const diff = computeRestoreDiff(currentLines.join('\n'), snapshotLines.join('\n'));
     const rows = buildCompactDiffRows(diff.lines, 2);
 
-    // Leading lines 1..3 (3 unchanged) folded; lines 4..5 context + line 6 -/+ + lines 7..8 context;
-    // middle lines 9..13 (5 unchanged) folded; lines 14..15 context + line 16 -/+ + lines 17..18 context;
+    // Leading lines 1..3 (3 unchanged) folded; lines 4..5 context + line 6 changed + lines 7..8 context;
+    // middle lines 9..13 (5 unchanged) folded; lines 14..15 context + line 16 changed + inserted + lines 17..18 context;
     // trailing lines 19..20 (2 unchanged) folded.
     const omittedRows = rows.filter((row) => row.kind === 'omitted');
     expect(omittedRows.map((row) => row.count)).toEqual([3, 5, 2]);
-    expect(omittedRows[0].lines.map((l) => l.text)).toEqual(['line 1', 'line 2', 'line 3']);
-    expect(omittedRows[2].lines.map((l) => l.text)).toEqual(['line 19', 'line 20']);
+    expect(omittedRows[0].lines.map((l) => l.text)).toEqual([
+      'line 1 steady',
+      'line 2 steady',
+      'line 3 steady',
+    ]);
+    expect(omittedRows[2].lines.map((l) => l.text)).toEqual([
+      'line 19 steady',
+      'line 20 steady',
+    ]);
+
+    const changedRows = rows.filter((row) => row.kind === 'line' && row.entry.kind === 'changed');
+    expect(changedRows).toHaveLength(2);
+    expect(changedRows[0].kind === 'line' && changedRows[0].entry.tokens).toEqual([
+      {type: 'equal', text: 'line 6 '},
+      {type: 'removed', text: 'steady'},
+      {type: 'added', text: 'RESTORED'},
+    ]);
+
+    const pureAddedRows = rows.filter((row) => row.kind === 'line' && row.entry.kind === 'added');
+    expect(pureAddedRows).toHaveLength(1);
+    expect(pureAddedRows[0].kind === 'line' && pureAddedRows[0].entry.text).toBe(
+      'brand new inserted line'
+    );
 
     // Verify 1-line gap is shown directly rather than folded into a divider
     const smallBefore = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8'];
     const smallAfter = ['l1', 'l2 NEW', 'l3', 'l4', 'l5', 'l6', 'l7 NEW', 'l8'];
-    // With radius 2: edit at idx 1 shows 0..3; edit at idx 6 shows 4..7 -> adjacent, zero omitted
     const adjacentDiff = computeRestoreDiff(smallBefore.join('\n'), smallAfter.join('\n'));
     expect(buildCompactDiffRows(adjacentDiff.lines, 2).every((r) => r.kind === 'line')).toBe(true);
 

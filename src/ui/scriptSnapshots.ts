@@ -1,4 +1,5 @@
 import {buildLineDiff, type DiffLine} from '../services/scriptTools.ts';
+import {diffWords, type WordDiffToken} from './patchIndicators.ts';
 
 export type SnapshotTrigger = 'ai_draft' | 'ai_patch' | 'ai_fix' | 'pre_restore' | 'manual';
 
@@ -147,38 +148,103 @@ export function computeRestoreDiff(
   };
 }
 
+export interface DiffHunkLine {
+  kind: 'context' | 'changed' | 'added' | 'removed';
+  tokens: WordDiffToken[];
+  lineNumber?: number;
+  text: string;
+}
+
 export type DiffDisplayRow =
   | {
       kind: 'line';
-      line: DiffLine;
+      entry: DiffHunkLine;
       sourceIndex: number;
     }
   | {
       kind: 'omitted';
       id: string;
       count: number;
-      lines: DiffLine[];
+      lines: DiffHunkLine[];
       startIndex: number;
     };
 
 /**
- * Compacts a full line diff into Git-style hunks keeping `contextRadius`
- * unchanged lines around each edit and folding multi-line unchanged stretches
- * (2+ lines) into expandable `omitted` markers.
+ * Pairs adjacent removed/added runs into single-line inline word diffs (matching
+ * Live Mode patch previews), keeps `contextRadius` unchanged lines around each
+ * edit, and folds multi-line unchanged stretches (2+ lines) into expandable
+ * `omitted` markers.
  */
 export function buildCompactDiffRows(
   lines: readonly DiffLine[],
   contextRadius: number = 2
 ): DiffDisplayRow[] {
-  const total = lines.length;
-  if (total === 0) return [];
+  if (lines.length === 0) return [];
 
+  const grouped: DiffHunkLine[] = [];
+  let idx = 0;
+  while (idx < lines.length) {
+    const current = lines[idx];
+    if (current.type === 'context') {
+      grouped.push({
+        kind: 'context',
+        tokens: current.text.length > 0 ? [{type: 'equal', text: current.text}] : [],
+        lineNumber: current.afterLineNumber ?? current.beforeLineNumber,
+        text: current.text,
+      });
+      idx++;
+      continue;
+    }
+
+    const removedRun: DiffLine[] = [];
+    const addedRun: DiffLine[] = [];
+    while (idx < lines.length && lines[idx].type !== 'context') {
+      if (lines[idx].type === 'removed') {
+        removedRun.push(lines[idx]);
+      } else {
+        addedRun.push(lines[idx]);
+      }
+      idx++;
+    }
+
+    const pairedCount = Math.min(removedRun.length, addedRun.length);
+    for (let k = 0; k < pairedCount; k++) {
+      const removedLine = removedRun[k];
+      const addedLine = addedRun[k];
+      grouped.push({
+        kind: 'changed',
+        tokens: diffWords(removedLine.text, addedLine.text),
+        lineNumber: addedLine.afterLineNumber ?? removedLine.beforeLineNumber,
+        text: addedLine.text,
+      });
+    }
+    for (let k = pairedCount; k < removedRun.length; k++) {
+      const removedLine = removedRun[k];
+      grouped.push({
+        kind: 'removed',
+        tokens: removedLine.text.length > 0 ? [{type: 'removed', text: removedLine.text}] : [],
+        lineNumber: removedLine.beforeLineNumber,
+        text: removedLine.text,
+      });
+    }
+    for (let k = pairedCount; k < addedRun.length; k++) {
+      const addedLine = addedRun[k];
+      grouped.push({
+        kind: 'added',
+        tokens: addedLine.text.length > 0 ? [{type: 'added', text: addedLine.text}] : [],
+        lineNumber: addedLine.afterLineNumber,
+        text: addedLine.text,
+      });
+    }
+  }
+
+  const total = grouped.length;
   const radius = Math.max(0, Math.floor(contextRadius));
   const visible = new Uint8Array(total);
   let hasChange = false;
 
   for (let i = 0; i < total; i++) {
-    if (lines[i].type !== 'context') {
+    if (grouped[i].kind !== 'context') {
       hasChange = true;
       const start = Math.max(0, i - radius);
       const end = Math.min(total - 1, i + radius);
@@ -189,9 +255,9 @@ export function buildCompactDiffRows(
   }
 
   if (!hasChange) {
-    return lines.map((line, index) => ({
+    return grouped.map((entry, index) => ({
       kind: 'line',
-      line,
+      entry,
       sourceIndex: index,
     }));
   }
@@ -202,7 +268,7 @@ export function buildCompactDiffRows(
     if (visible[i] === 1) {
       rows.push({
         kind: 'line',
-        line: lines[i],
+        entry: grouped[i],
         sourceIndex: i,
       });
       i++;
@@ -220,7 +286,7 @@ export function buildCompactDiffRows(
     if (count === 1) {
       rows.push({
         kind: 'line',
-        line: lines[start],
+        entry: grouped[start],
         sourceIndex: start,
       });
     } else {
@@ -228,7 +294,7 @@ export function buildCompactDiffRows(
         kind: 'omitted',
         id: `omitted-${start}-${end}`,
         count,
-        lines: lines.slice(start, end + 1),
+        lines: grouped.slice(start, end + 1),
         startIndex: start,
       });
     }

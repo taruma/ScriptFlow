@@ -598,25 +598,22 @@ function VersionHistoryModalContent({
                               {compactDiffRows.map((row) => {
                                 if (row.kind === 'omitted') {
                                   if (expandedOmittedIds.has(row.id)) {
-                                    return row.lines.map((line, offset) => {
-                                      const lineNo = line.afterLineNumber ?? line.beforeLineNumber;
-                                      return (
-                                        <div
-                                          key={`expanded-${row.startIndex + offset}`}
-                                          className="flex px-2.5 py-0.5 text-text-muted"
-                                        >
-                                          <span className="w-7 shrink-0 select-none pr-2 text-right text-[10px] opacity-50 tabular-nums">
-                                            {lineNo ?? ''}
-                                          </span>
-                                          <span className="w-4 shrink-0 select-none opacity-65">
-                                            {' '}
-                                          </span>
-                                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-                                            {line.text || ' '}
-                                          </span>
-                                        </div>
-                                      );
-                                    });
+                                    return row.lines.map((entry, offset) => (
+                                      <div
+                                        key={`expanded-${row.startIndex + offset}`}
+                                        className="flex px-2.5 py-0.5 text-text-muted"
+                                      >
+                                        <span className="w-7 shrink-0 select-none pr-2 text-right text-[10px] opacity-50 tabular-nums">
+                                          {entry.lineNumber ?? ''}
+                                        </span>
+                                        <span className="w-4 shrink-0 select-none opacity-65">
+                                          {' '}
+                                        </span>
+                                        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                                          {entry.text || ' '}
+                                        </span>
+                                      </div>
+                                    ));
                                   }
 
                                   return (
@@ -632,37 +629,66 @@ function VersionHistoryModalContent({
                                   );
                                 }
 
-                                const {line, sourceIndex} = row;
-                                const lineNo =
-                                  line.type === 'added'
-                                    ? line.afterLineNumber
-                                    : line.type === 'removed'
-                                      ? line.beforeLineNumber
-                                      : (line.afterLineNumber ?? line.beforeLineNumber);
+                                const {entry, sourceIndex} = row;
+                                const rowToneClass =
+                                  entry.kind === 'added'
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                    : entry.kind === 'removed'
+                                      ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+                                      : entry.kind === 'changed'
+                                        ? 'bg-surface-subtle/40 text-text-body'
+                                        : 'text-text-muted';
+                                const gutterSymbol =
+                                  entry.kind === 'added'
+                                    ? '+'
+                                    : entry.kind === 'removed'
+                                      ? '-'
+                                      : entry.kind === 'changed'
+                                        ? '~'
+                                        : ' ';
 
                                 return (
                                   <div
-                                    key={`${line.type}-${sourceIndex}`}
-                                    className={`flex px-2.5 py-0.5 ${
-                                      line.type === 'added'
-                                        ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                                        : line.type === 'removed'
-                                          ? 'bg-red-500/12 text-red-700 dark:text-red-300'
-                                          : 'text-text-muted'
-                                    }`}
+                                    key={`${entry.kind}-${sourceIndex}`}
+                                    className={`flex px-2.5 py-0.5 ${rowToneClass}`}
                                   >
                                     <span className="w-7 shrink-0 select-none pr-2 text-right text-[10px] opacity-50 tabular-nums">
-                                      {lineNo ?? ''}
+                                      {entry.lineNumber ?? ''}
                                     </span>
-                                    <span className="w-4 shrink-0 select-none opacity-65">
-                                      {line.type === 'added'
-                                        ? '+'
-                                        : line.type === 'removed'
-                                          ? '-'
-                                          : ' '}
+                                    <span
+                                      className={`w-4 shrink-0 select-none ${
+                                        entry.kind === 'changed'
+                                          ? 'text-[var(--tok-continuity)] font-semibold'
+                                          : 'opacity-65'
+                                      }`}
+                                    >
+                                      {gutterSymbol}
                                     </span>
                                     <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-                                      {line.text || ' '}
+                                      {entry.kind === 'changed' ? (
+                                        entry.tokens.length > 0 ? (
+                                          entry.tokens.map((token, tokenIdx) =>
+                                            token.type === 'added' ? (
+                                              <span key={tokenIdx} className="auteur-word-diff-added">
+                                                {token.text}
+                                              </span>
+                                            ) : token.type === 'removed' ? (
+                                              <span
+                                                key={tokenIdx}
+                                                className="auteur-word-diff-removed"
+                                              >
+                                                {token.text}
+                                              </span>
+                                            ) : (
+                                              <span key={tokenIdx}>{token.text}</span>
+                                            )
+                                          )
+                                        ) : (
+                                          ' '
+                                        )
+                                      ) : (
+                                        entry.text || ' '
+                                      )}
                                     </span>
                                   </div>
                                 );
