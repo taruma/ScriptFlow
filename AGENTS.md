@@ -5,6 +5,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 ### Canonical Workspace Documentation (`docs/` & Root)
 - **`README.md`**: Project overview, feature tour, quick start, architecture highlights, and documentation map.
 - **`CHANGELOG.md`**: User-facing application release history (Keep a Changelog format, tracking **ScriptFlow `v1.0.0`** releases and engineering milestones).
+- **`docs/release/v1.0.0.md`**: Formatted initial `v1.0.0` release notes (`ScriptFlow v1.0.0` / `Auteur Script v0.4.0`).
 - **`docs/GLOSSARY.md`**: Authoritative Auteur Script vocabulary (explicit disambiguation of **Macro-Block**, **Macro-State**, **Sub-State**, **Sub-State Tag**, and inline `[BLOCK]`, plus all 27 grounded framework terms mapped to `src/core/types.ts`). **Read first** when interpreting user domain terminology.
 - **`docs/GRAMMAR_CONTRACT.md`**: Locked `v0.4.0` regexes, parsing edge cases, Tagless export rules, and deterministic linter contracts.
 - **`docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`**: Human-readable checklist of all 4 Scene Topologies, all 5 live deterministic linter rules, all 5 Script Supervisor Audit Lenses (`Lens 1`–`Lens 5`), temporal calibration, and pass/fail examples.
