@@ -389,6 +389,7 @@ export default function App() {
               onChange={mutations.handleUpdateSource}
               onCommitCheckpoint={mutations.handleCommitSourceCheckpoint}
               onFormatScript={mutations.handleFormatScript}
+              onToast={setToastMessage}
             />
           ) : (
             <Suspense

@@ -37,6 +37,7 @@ import {
   mergeLibraryBackup,
   parseImportedFile,
   parseLibraryBackup,
+  resolveSourceDroppedFileContent,
   slugifyFilename,
 } from '../../src/ui/scriptFileIO.ts';
 import {
@@ -1808,6 +1809,125 @@ describe('Unified Import Pre-Flight & Content Duplicate Detection', () => {
     expect(defaultResult.added.map((r) => r.id)).toEqual(['remote-new-3']);
     expect(defaultResult.forked.map((f) => f.forkedRecord.id)).toEqual(['forked-local-2']);
     expect(defaultResult.merged).toHaveLength(4);
+  });
+});
+
+describe('Source Mode Direct File Drop Resolver (resolveSourceDroppedFileContent)', () => {
+  const sampleRaw = SCRIPT_PRESETS[0].content;
+
+  it('extracts normalized plain text from .txt and .md files', () => {
+    const txtRes = resolveSourceDroppedFileContent(
+      'quick-scene.txt',
+      `\uFEFF${sampleRaw.replace(/\n/g, '\r\n')}\r\n`
+    );
+    expect(txtRes).toEqual({
+      ok: true,
+      rawText: sampleRaw,
+      sourceFormat: 'plain-text',
+    });
+
+    const mdRes = resolveSourceDroppedFileContent('draft.md', '[INTENT]\r\nAlleyway beat.\r\n\n');
+    expect(mdRes).toEqual({
+      ok: true,
+      rawText: '[INTENT]\nAlleyway beat.',
+      sourceFormat: 'plain-text',
+    });
+  });
+
+  it('unwraps AuteurEnvelope, AuteurScriptIR, and AuteurScriptDraft JSON into canonical plain text', () => {
+    const envelope = toAuteurEnvelope(sampleRaw);
+    const envRes = resolveSourceDroppedFileContent('scene.json', JSON.stringify(envelope));
+    expect(envRes).toEqual({
+      ok: true,
+      rawText: exportPlainText(sampleRaw),
+      sourceFormat: 'auteur-envelope',
+    });
+
+    const ir = toAuteurIR(sampleRaw);
+    const irRes = resolveSourceDroppedFileContent('ir.json', JSON.stringify(ir));
+    expect(irRes).toEqual({
+      ok: true,
+      rawText: exportPlainText(sampleRaw),
+      sourceFormat: 'auteur-ir',
+    });
+
+    const draftRes = resolveSourceDroppedFileContent(
+      'draft.json',
+      JSON.stringify({
+        stagingMacroBlocks: [{header: 'INTENT', format: 'prose', body: 'Rainy street.'}],
+        executionMacroBlock: null,
+      })
+    );
+    expect(draftRes.ok).toBe(true);
+    if (!draftRes.ok) return;
+    expect(draftRes.sourceFormat).toBe('auteur-draft');
+    expect(draftRes.rawText).toContain('[INTENT]\nRainy street.');
+  });
+
+  it('extracts the first script rawText from single-script and multi-script library backup bundles', () => {
+    const singleBackup = createLibraryBackup([
+      {
+        id: 's-1',
+        title: 'Solo Exported Scene',
+        rawText: '[INTENT]\r\nSingle exported script.\r\n',
+        createdAt: 1000,
+        updatedAt: 2000,
+      },
+    ]);
+    const singleRes = resolveSourceDroppedFileContent('single-export.json', JSON.stringify(singleBackup));
+    expect(singleRes).toEqual({
+      ok: true,
+      rawText: '[INTENT]\nSingle exported script.',
+      sourceFormat: 'library-backup',
+      bundleInfo: {
+        pickedTitle: 'Solo Exported Scene',
+        totalScripts: 1,
+      },
+    });
+
+    const multiBackup = createLibraryBackup([
+      {
+        id: 's-older',
+        title: 'Older Scene',
+        rawText: '[INTENT]\nOlder body.',
+        createdAt: 1000,
+        updatedAt: 1500,
+      },
+      {
+        id: 's-newer',
+        title: 'Newest Scene',
+        rawText: '[INTENT]\nNewest body.',
+        createdAt: 1000,
+        updatedAt: 3000,
+      },
+    ]);
+    const multiRes = resolveSourceDroppedFileContent('bundle.json', JSON.stringify(multiBackup));
+    expect(multiRes).toEqual({
+      ok: true,
+      rawText: '[INTENT]\nNewest body.',
+      sourceFormat: 'library-backup',
+      bundleInfo: {
+        pickedTitle: 'Newest Scene',
+        totalScripts: 2,
+      },
+    });
+  });
+
+  it('rejects empty files, empty backup bundles, malformed JSON, and unknown JSON schemas', () => {
+    expect(resolveSourceDroppedFileContent('empty.txt', '  \n ').ok).toBe(false);
+
+    const emptyBackup = createLibraryBackup([]);
+    const emptyBackupRes = resolveSourceDroppedFileContent('empty-backup.json', JSON.stringify(emptyBackup));
+    expect(emptyBackupRes).toEqual({
+      ok: false,
+      error: 'Backup JSON contains no scripts.',
+    });
+
+    const badJsonRes = resolveSourceDroppedFileContent('broken.json', '{ "bad": ');
+    expect(badJsonRes.ok).toBe(false);
+
+    const unknownRes = resolveSourceDroppedFileContent('other.json', JSON.stringify({foo: 'bar'}));
+    expect(unknownRes.ok).toBe(false);
   });
 });
 

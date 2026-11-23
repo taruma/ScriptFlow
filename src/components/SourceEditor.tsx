@@ -1,5 +1,5 @@
-import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {AlignLeft, Search, Tag} from 'lucide-react';
+import {memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent} from 'react';
+import {AlignLeft, Search, Tag, Upload} from 'lucide-react';
 import {
   collectScriptSymbols,
   findSourceMatches,
@@ -15,6 +15,7 @@ import {
   type SourceSearchScope,
 } from '../core/index.ts';
 import {UI_LABELS} from '../ui/labels.ts';
+import {resolveSourceDroppedFileContent} from '../ui/scriptFileIO.ts';
 import {LiveHighlightedEditor} from './LiveHighlightedEditor.tsx';
 import {SourceFindReplaceBar} from './source/SourceFindReplaceBar.tsx';
 import {SourceSymbolRenameBar} from './source/SourceSymbolRenameBar.tsx';
@@ -30,6 +31,7 @@ interface SourceEditorProps {
   onChange: (nextRawText: string) => void;
   onCommitCheckpoint?: (nextRawText: string, toastMessage?: string) => void;
   onFormatScript?: () => void;
+  onToast?: (message: string) => void;
 }
 
 const DEFAULT_FIND_OPTIONS: SourceFindOptions = {
@@ -50,8 +52,11 @@ export const SourceEditor = memo(function SourceEditor({
   onChange,
   onCommitCheckpoint,
   onFormatScript,
+  onToast,
 }: SourceEditorProps) {
   const [activeTool, setActiveTool] = useState<ActiveSourceTool>('none');
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragDepthRef = useRef(0);
 
   // Find & Replace state
   const [findQuery, setFindQuery] = useState('');
@@ -71,10 +76,14 @@ export const SourceEditor = memo(function SourceEditor({
   const lineCount = rawText.length === 0 ? 0 : rawText.split('\n').length;
   const charCount = rawText.length;
 
-  // Close Rename tray automatically if script becomes read-only (e.g. switching to bundled example)
+  // Close Rename tray and clear drag overlay automatically if script becomes read-only
   useEffect(() => {
-    if (readOnly && activeTool === 'rename') {
-      setActiveTool('none');
+    if (readOnly) {
+      dragDepthRef.current = 0;
+      setIsDraggingOver(false);
+      if (activeTool === 'rename') {
+        setActiveTool('none');
+      }
     }
   }, [readOnly, activeTool]);
 
@@ -314,6 +323,83 @@ export const SourceEditor = memo(function SourceEditor({
     setScrollTick((t) => t + 1);
   }, [readOnly, selectedSymbol, rawText, renameTarget, symbols, onCommitCheckpoint, onChange]);
 
+  const handleDragEnter = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (readOnly || !event.dataTransfer?.types?.includes('Files')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepthRef.current += 1;
+      setIsDraggingOver(true);
+    },
+    [readOnly]
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (readOnly || !event.dataTransfer?.types?.includes('Files')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'copy';
+    },
+    [readOnly]
+  );
+
+  const handleDragLeave = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (readOnly || !event.dataTransfer?.types?.includes('Files')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) {
+        setIsDraggingOver(false);
+      }
+    },
+    [readOnly]
+  );
+
+  const handleDrop = useCallback(
+    async (event: DragEvent<HTMLDivElement>) => {
+      if (readOnly || !event.dataTransfer?.types?.includes('Files')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepthRef.current = 0;
+      setIsDraggingOver(false);
+
+      const file = event.dataTransfer.files?.[0];
+      if (!file) return;
+
+      try {
+        const content = await file.text();
+        const resolved = resolveSourceDroppedFileContent(file.name, content);
+        if (!resolved.ok) {
+          onToast?.(resolved.error);
+          return;
+        }
+        if (resolved.rawText === rawText) {
+          onToast?.(UI_LABELS.toasts.sourceFileDropUnchanged);
+          return;
+        }
+
+        const toastMessage = resolved.bundleInfo
+          ? UI_LABELS.toasts.sourceFileDroppedFromBundle(
+              resolved.bundleInfo.pickedTitle,
+              resolved.bundleInfo.totalScripts
+            )
+          : UI_LABELS.toasts.sourceFileDropped(file.name);
+
+        if (onCommitCheckpoint) {
+          onCommitCheckpoint(resolved.rawText, toastMessage);
+        } else {
+          onChange(resolved.rawText);
+          onToast?.(toastMessage);
+        }
+      } catch {
+        onToast?.(UI_LABELS.toasts.fileReadError);
+      }
+    },
+    [readOnly, rawText, onCommitCheckpoint, onChange, onToast]
+  );
+
   const toolButtonClass = (isActive: boolean) =>
     `inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer ${
       isActive
@@ -414,7 +500,27 @@ export const SourceEditor = memo(function SourceEditor({
         />
       )}
 
-      <div className="rounded-lg border border-border-main bg-surface p-4 shadow-2xs">
+      <div
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => void handleDrop(e)}
+        className="relative rounded-lg border border-border-main bg-surface p-4 shadow-2xs"
+      >
+        {isDraggingOver && !readOnly && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-sky-500 bg-surface/95 backdrop-blur-xs p-6 text-center pointer-events-none">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-500">
+              <Upload className="h-5 w-5" />
+            </div>
+            <div className="font-serif text-sm font-bold text-text-main">
+              {UI_LABELS.source.dropOverlayTitle}
+            </div>
+            <p className="text-xs text-text-muted max-w-sm">
+              {UI_LABELS.source.dropOverlayDesc}
+            </p>
+          </div>
+        )}
+
         <LiveHighlightedEditor
           value={rawText}
           onChange={onChange}

@@ -232,6 +232,8 @@ export const EDITOR_LABELS = {
     formatAria: 'Format script whitespace',
     ariaLabel: 'Canonical Auteur Script plain-text source',
     placeholder: '[INTENT]\nCreate a cinematic scene...',
+    dropOverlayTitle: 'Drop file to replace Source content',
+    dropOverlayDesc: 'Supports .txt, .md, and .json (Envelope, IR, Draft, or Library export)',
     findTray: {
       regionAria: 'Find and replace in Source',
       findPlaceholder: 'Find in source...',
@@ -411,6 +413,13 @@ export const EDITOR_LABELS = {
       `Replaced ${count} ${count === 1 ? 'match' : 'matches'} — press Undo to revert`,
     symbolRenamed: (from: string, to: string, count: number) =>
       `Renamed ${from} → ${to} (${count} ${count === 1 ? 'occurrence' : 'occurrences'}) — press Undo to revert`,
+    sourceFileDropped: (filename: string) =>
+      `Replaced Source with "${filename}" — press Undo to revert`,
+    sourceFileDroppedFromBundle: (title: string, total: number) =>
+      total > 1
+        ? `Replaced Source with "${title}" (1 of ${total} in backup) — press Undo to revert`
+        : `Replaced Source with "${title}" — press Undo to revert`,
+    sourceFileDropUnchanged: 'Dropped file matches current Source content',
   },
 
   patchIndicators: {

@@ -23,6 +23,7 @@ export {
   mergeLibraryBackup,
   parseImportedFile,
   parseLibraryBackup,
+  resolveSourceDroppedFileContent,
   slugifyFilename,
   type AuteurLibraryBackup,
   type BuiltFileExport,
@@ -33,6 +34,7 @@ export {
   type ParsedImportResult,
   type ParsedImportSourceFormat,
   type ParseLibraryBackupResult,
+  type SourceDropResolutionResult,
 } from './scriptLibraryCodec.ts';
 export {
   applySelectedLibraryBackup,

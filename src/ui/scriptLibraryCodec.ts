@@ -86,6 +86,22 @@ export type ParsedImportResult =
       issues?: ValidationIssue[];
     };
 
+export type SourceDropResolutionResult =
+  | {
+      ok: true;
+      rawText: string;
+      sourceFormat: ParsedImportSourceFormat;
+      /** Present when extracted from a library backup bundle (`scripts[0]`). */
+      bundleInfo?: {
+        pickedTitle: string;
+        totalScripts: number;
+      };
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
 export type ParseLibraryBackupResult =
   | {
       ok: true;
@@ -562,5 +578,50 @@ export function parseImportedFile(filename: string, content: string): ParsedImpo
     ok: false,
     error:
       'Unsupported JSON format. Expected an Auteur Envelope, Script IR, Script Draft, or Library Backup.',
+  };
+}
+
+/**
+ * Pure resolver for immediate Source Mode file drag-and-drop content replacement:
+ * - `.txt` / `.md` / `.markdown`: returns normalized plain text.
+ * - `AuteurEnvelope` / `AuteurScriptIR` / `AuteurScriptDraft`: unwraps to canonical plain text.
+ * - `AuteurLibraryBackup`: extracts the first script (`scripts[0].rawText`) with bundle metadata.
+ */
+export function resolveSourceDroppedFileContent(
+  filename: string,
+  content: string
+): SourceDropResolutionResult {
+  const parsed = parseImportedFile(filename, content);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: parsed.error,
+    };
+  }
+
+  if (parsed.kind === 'single-script') {
+    return {
+      ok: true,
+      rawText: parsed.rawText,
+      sourceFormat: parsed.sourceFormat,
+    };
+  }
+
+  const first = parsed.backup.scripts[0];
+  if (!first) {
+    return {
+      ok: false,
+      error: 'Backup JSON contains no scripts.',
+    };
+  }
+
+  return {
+    ok: true,
+    rawText: normalizeLineEndings(first.rawText).replace(/\n+$/, ''),
+    sourceFormat: 'library-backup',
+    bundleInfo: {
+      pickedTitle: first.title,
+      totalScripts: parsed.backup.scripts.length,
+    },
   };
 }
