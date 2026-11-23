@@ -33,6 +33,7 @@ import {
   type LibraryRowItem,
 } from '../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
+import {LibraryFolderCombobox} from './library/LibraryFolderCombobox.tsx';
 import {ScriptLineageTree} from './library/ScriptLineageTree.tsx';
 
 export interface LibraryPreviewPaneProps {
@@ -86,7 +87,6 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   const [previewMode, setPreviewMode] = useState<PreviewMode>('structured');
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
   const [renameDraft, setRenameDraft] = useState<string>('');
-  const [folderDraft, setFolderDraft] = useState<string>('');
   const [branchNoteDraft, setBranchNoteDraft] = useState<string>('');
   const [tagDraft, setTagDraft] = useState<string>('');
 
@@ -122,10 +122,6 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
       setPreviewMode('structured');
     }
   }, [previewMode, hasLineageTab]);
-
-  useEffect(() => {
-    setFolderDraft(rowFolder);
-  }, [rowKey, rowFolder]);
 
   useEffect(() => {
     setBranchNoteDraft(rowBranchNote);
@@ -177,29 +173,6 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
       event.preventDefault();
       event.stopPropagation();
       setIsRenaming(false);
-    }
-  };
-
-  const commitFolder = () => {
-    if (!isCustom) return;
-    const cleaned = folderDraft.trim().replace(/\s+/g, ' ');
-    const current = row.folder ?? '';
-    if (cleaned !== current) {
-      onUpdateMetadata(row.record, {folder: cleaned || null});
-    }
-  };
-
-  const handleFolderKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      event.stopPropagation();
-      commitFolder();
-      event.currentTarget.blur();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      setFolderDraft(rowFolder);
-      event.currentTarget.blur();
     }
   };
 
@@ -497,26 +470,14 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
               </div>
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <div className="inline-flex items-center gap-1.5 min-w-[140px] max-w-[200px]">
-                  <Folder className="h-3 w-3 text-text-faint shrink-0" />
-                  <input
-                    type="text"
-                    list="library-existing-folders"
-                    data-native-undo="true"
-                    value={folderDraft}
-                    onChange={(e) => setFolderDraft(e.target.value)}
-                    onBlur={commitFolder}
-                    onKeyDown={handleFolderKeyDown}
-                    placeholder={UI_LABELS.library.folderPlaceholder}
-                    aria-label={UI_LABELS.library.folderInputAria}
-                    className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-0.5 text-[11.5px] text-text-body placeholder:text-text-faint/80 hover:bg-surface-subtle focus:bg-surface-subtle focus:outline-none focus:ring-1 focus:ring-border-main"
-                  />
-                  <datalist id="library-existing-folders">
-                    {existingFolders.map((folder) => (
-                      <option key={folder} value={folder} />
-                    ))}
-                  </datalist>
-                </div>
+                <LibraryFolderCombobox
+                  rowKey={rowKey ?? row.id}
+                  currentFolder={rowFolder}
+                  existingFolders={existingFolders}
+                  onCommitFolder={(nextFolder) =>
+                    onUpdateMetadata(row.record, {folder: nextFolder})
+                  }
+                />
 
                 <span
                   aria-hidden="true"

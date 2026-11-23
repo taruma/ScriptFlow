@@ -606,6 +606,62 @@ export function buildDuplicatedScriptRecord({
   };
 }
 
+export type FolderPickerOption =
+  | {kind: 'existing'; folder: string; isCurrent: boolean}
+  | {kind: 'create'; folder: string}
+  | {kind: 'clear'};
+
+export interface FolderPickerOptionsResult {
+  items: FolderPickerOption[];
+  hasExistingMatches: boolean;
+}
+
+/**
+ * Pure option builder for the LibraryPreviewPane custom folder combobox.
+ * Shows all existing folders on initial focus/toggle (`filterByDraft = false`),
+ * filters by substring while typing (`filterByDraft = true`), offers a `create`
+ * row when the trimmed draft is new, and offers `clear` when assigned to a folder.
+ */
+export function buildFolderPickerOptions(
+  existingFolders: readonly string[],
+  draft: string,
+  currentFolder: string,
+  filterByDraft: boolean
+): FolderPickerOptionsResult {
+  const normalizedDraft = draft.trim().replace(/\s+/g, ' ');
+  const normalizedCurrent = currentFolder.trim().replace(/\s+/g, ' ');
+  const draftLower = normalizedDraft.toLowerCase();
+  const currentLower = normalizedCurrent.toLowerCase();
+
+  const matchingFolders =
+    filterByDraft && draftLower.length > 0
+      ? existingFolders.filter((folder) => folder.toLowerCase().includes(draftLower))
+      : existingFolders;
+
+  const items: FolderPickerOption[] = matchingFolders.map((folder) => ({
+    kind: 'existing',
+    folder,
+    isCurrent: currentLower.length > 0 && folder.toLowerCase() === currentLower,
+  }));
+
+  const hasExactMatch =
+    draftLower.length > 0 &&
+    existingFolders.some((folder) => folder.toLowerCase() === draftLower);
+
+  if (normalizedDraft.length > 0 && !hasExactMatch) {
+    items.push({kind: 'create', folder: normalizedDraft});
+  }
+
+  if (normalizedCurrent.length > 0 && (!filterByDraft || draftLower.length === 0)) {
+    items.push({kind: 'clear'});
+  }
+
+  return {
+    items,
+    hasExistingMatches: matchingFolders.length > 0,
+  };
+}
+
 /**
  * Pure keyboard selection stepper for the searchable Library list.
  */

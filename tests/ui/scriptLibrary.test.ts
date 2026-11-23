@@ -54,6 +54,7 @@ import {
 import {reconcileHydratedScript} from '../../src/ui/useScriptLibrary.ts';
 import {
   buildDuplicatedScriptRecord,
+  buildFolderPickerOptions,
   buildLibraryRows,
   collectLibraryFacets,
   countExecutionBeatsFast,
@@ -1609,6 +1610,53 @@ describe('Persistence hardening: IndexedDB retry, fallback reconciliation & hydr
 
     writeMirrorUpdatedAt(null);
     expect(readMirrorUpdatedAt()).toBeNull();
+  });
+
+  it('builds folder combobox options across focus, filtering, creation, and clearing', () => {
+    const folders = ['Extension', 'Feature Film', 'Short'];
+
+    // 1. On focus/toggle (filterByDraft=false), shows all existing folders with active marker + clear option
+    expect(buildFolderPickerOptions(folders, 'Extension', 'Extension', false)).toEqual({
+      hasExistingMatches: true,
+      items: [
+        {kind: 'existing', folder: 'Extension', isCurrent: true},
+        {kind: 'existing', folder: 'Feature Film', isCurrent: false},
+        {kind: 'existing', folder: 'Short', isCurrent: false},
+        {kind: 'clear'},
+      ],
+    });
+
+    // 2. While typing a partial match (filterByDraft=true), filters existing folders and offers Create option
+    expect(buildFolderPickerOptions(folders, '  feat  ', 'Extension', true)).toEqual({
+      hasExistingMatches: true,
+      items: [
+        {kind: 'existing', folder: 'Feature Film', isCurrent: false},
+        {kind: 'create', folder: 'feat'},
+      ],
+    });
+
+    // 3. Exact case-insensitive match suppresses redundant Create option
+    expect(buildFolderPickerOptions(folders, 'feature film', 'Extension', true)).toEqual({
+      hasExistingMatches: true,
+      items: [{kind: 'existing', folder: 'Feature Film', isCurrent: false}],
+    });
+
+    // 4. Completely new folder name offers Create option only
+    expect(buildFolderPickerOptions(folders, 'Act   Two', '', true)).toEqual({
+      hasExistingMatches: false,
+      items: [{kind: 'create', folder: 'Act Two'}],
+    });
+
+    // 5. Clearing input while assigned shows all folders plus Remove from folder
+    expect(buildFolderPickerOptions(folders, '', 'Extension', true)).toEqual({
+      hasExistingMatches: true,
+      items: [
+        {kind: 'existing', folder: 'Extension', isCurrent: true},
+        {kind: 'existing', folder: 'Feature Film', isCurrent: false},
+        {kind: 'existing', folder: 'Short', isCurrent: false},
+        {kind: 'clear'},
+      ],
+    });
   });
 });
 
