@@ -129,60 +129,21 @@ export function TopSlateBar({
 
   return (
     <header ref={barRef} className={`${UI_TOKENS.layout.appHeader} sticky top-0`}>
-      {/* Left Zone: App Title + (Wide: File Menu) + Scene Title + (Wide: Quiet Diagnostic Jump) */}
+      {/* Left Zone: Narrow (Brand Mark) | Wide (App Brand + File Menu + Scene Title + Quiet Diagnostic Jump) */}
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-2">
         {isNarrow ? (
-          <>
-            <span
-              title={UI_LABELS.topBar.brandLogoTitle}
-              className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-xl border border-border-main bg-surface-subtle p-1 shadow-2xs shrink-0"
-            >
-              <img
-                src="/android-chrome-192x192.png"
-                alt={APP_META.name}
-                width={192}
-                height={192}
-                className="h-full w-full object-contain invert dark:invert-0 select-none pointer-events-none"
-              />
-            </span>
-
-            <span aria-hidden="true" className="h-3.5 w-px bg-border-main shrink-0" />
-
-            <button
-              type="button"
-              onClick={() => {
-                setOpenMenu(null);
-                onOpenVersionHistory();
-              }}
-              aria-label={UI_LABELS.topBar.sceneTitleButtonAria}
-              aria-expanded={isVersionHistoryOpen}
-              title={UI_LABELS.topBar.sceneTitleButtonTitle}
-              className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-colors cursor-pointer ${
-                isVersionHistoryOpen ? 'bg-surface-muted' : 'hover:bg-surface-subtle'
-              }`}
-            >
-              <span className="min-w-0 truncate font-serif text-sm font-bold tracking-tight text-text-main">
-                {title || APP_META.untitledScene}
-              </span>
-              {familyBranchCount > 1 && (
-                <span
-                  title={UI_LABELS.topBar.familyBranchBadgeTitle(familyBranchCount)}
-                  className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-text-muted"
-                >
-                  <GitFork className="h-3 w-3 text-sky-500 shrink-0" />
-                  <span>{familyBranchCount}</span>
-                </span>
-              )}
-              {readOnly && (
-                <span
-                  title={UI_LABELS.topBar.exampleBadgeTitle}
-                  className="auteur-phase-logic inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wide"
-                >
-                  {UI_LABELS.topBar.exampleBadge}
-                </span>
-              )}
-            </button>
-          </>
+          <span
+            title={UI_LABELS.topBar.brandLogoTitle}
+            className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-xl border border-border-main bg-surface-subtle p-1 shadow-2xs shrink-0"
+          >
+            <img
+              src="/android-chrome-192x192.png"
+              alt={APP_META.name}
+              width={192}
+              height={192}
+              className="h-full w-full object-contain invert dark:invert-0 select-none pointer-events-none"
+            />
+          </span>
         ) : (
           <>
             <div
@@ -343,7 +304,7 @@ export function TopSlateBar({
         </div>
       )}
 
-      {/* Right Zone: Wide (Undo/Redo, Library, Settings, AI, Split Copy) | Narrow (Library, Settings, 1-Tap Copy Icon) */}
+      {/* Right Zone: Wide (Undo/Redo, Library, Settings, AI, Split Copy, Info) | Narrow (Library, Settings, 1-Tap Copy Icon) */}
       <div
         className={
           isNarrow
@@ -609,8 +570,8 @@ export function TopSlateBar({
           </div>
         )}
 
-        {/* Standalone About / Info Modal Button (Top Right Corner, StageFlow / SceneFlow parity) */}
-        {onOpenInfo && (
+        {/* Standalone About / Info Modal Button (Hidden in Narrow Mode) */}
+        {!isNarrow && onOpenInfo && (
           <button
             type="button"
             onClick={() => {

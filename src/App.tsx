@@ -101,11 +101,13 @@ export default function App() {
     }
   }, [isAiOpen]);
 
-  // Close desktop-only drawers when entering narrow read-only mode (< 640px)
+  // Close desktop-only drawers & modals when entering narrow read-only mode (< 640px)
   useEffect(() => {
     if (!isNarrow) return;
     setIsAiOpen(false);
     setIsDebugOpen(false);
+    setIsInfoOpen(false);
+    setIsVersionHistoryOpen(false);
   }, [isNarrow]);
 
   const handleToggleAi = useCallback(() => {
@@ -324,7 +326,7 @@ export default function App() {
         onOpenDebug={isNarrow ? undefined : () => setIsDebugOpen(true)}
         onToggleAi={isNarrow ? undefined : handleToggleAi}
         isAiOpen={isAiOpen}
-        onOpenInfo={() => setIsInfoOpen(true)}
+        onOpenInfo={isNarrow ? undefined : () => setIsInfoOpen(true)}
         isInfoOpen={isInfoOpen}
         canUndo={canUndo}
         canRedo={canRedo}
@@ -472,7 +474,7 @@ export default function App() {
         />
       )}
 
-      {isVersionHistoryOpen && (
+      {!isNarrow && isVersionHistoryOpen && (
         <Suspense fallback={null}>
           <VersionHistoryModal
             isOpen={isVersionHistoryOpen}
@@ -518,7 +520,7 @@ export default function App() {
         </Suspense>
       )}
 
-      {isInfoOpen && (
+      {!isNarrow && isInfoOpen && (
         <Suspense fallback={null}>
           <AppInfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />
         </Suspense>
