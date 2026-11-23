@@ -1,8 +1,8 @@
-# Specification Changelog — Pure Auteur Script
+# Specification Changelog — Auteur Script
 
-This changelog tracks versions of the portable, 100% platform- and model-agnostic **Pure Auteur Script Specification** (plain-text inline grammar, domain vocabulary, Scene Topologies, deterministic Script Supervisor linter, 5-Lens audit methodology, Programmatic JSON IR / Patch / Lens Slicer contracts, and bundled Craft Knowledge Pack).
+This changelog tracks versions of the portable, 100% platform- and model-agnostic **Auteur Script Specification** (plain-text inline grammar, domain vocabulary, Scene Topologies, deterministic Script Supervisor linter, 5-Lens audit methodology, Programmatic JSON IR / Patch / Lens Slicer contracts, and bundled Craft Knowledge Pack).
 
-> **Note**: Releases of the **ScriptFlow** editor application (`1.0.0`+) are tracked separately in the repository root [`CHANGELOG.md`](../CHANGELOG.md).
+> **Note**: Releases of the **ScriptFlow** editor application (`v1.0.0`+) are tracked separately in the repository root [`CHANGELOG.md`](../CHANGELOG.md).
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the specification adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.4.0] — Canonical Inline Syntax (Locked Baseline)
 
-Locked baseline specification for **Pure Auteur Script `v0.4.0`** (`AUTEUR_IR_SCHEMA_VERSION = "0.4.0"`).
+Locked baseline specification for **Auteur Script `v0.4.0`** (`AUTEUR_IR_SCHEMA_VERSION = "0.4.0"`).
 
 ### Added
 
@@ -45,7 +45,7 @@ Locked baseline specification for **Pure Auteur Script `v0.4.0`** (`AUTEUR_IR_SC
 - **Craft Knowledge Pack, Quick Scan Rule Catalog & Reference Scripts**:
   - Versioned Craft Knowledge Pack baseline (`AUTEUR_KNOWLEDGE_VERSION = "0.4.0-k3"`) bundling foundational craft rules (including Beginner & Power-User Adaptation) and 6 modular skills (`draft_craft`, `video_continuation`, `token_mapping`, `character_reference`, `temporal_calibration`, `spatial_fences`).
   - Declarative atomic semantic Quick Scan catalog (`QUICK_SCAN_RULES_VERSION = "0.4.0-qs2"`) with 15 topology- and presence-gated binary (`true`/`false`) rules across `Lens 1`–`Lens 5` and `brief` (`document`, `macro_state`, and `sub_state` scopes).
-  - 4 canonical zero-false-positive reference scripts (`src/data/examples/catalog.json`): `interrogation-coverage`, `subway-train-oner`, `forest-pov-horror`, and `heist-montage`.
+  - 6 verbatim JSON bundled example families (10 scripts in `src/data/examples/catalog.json`) plus canonical zero-false-positive test exemplars in `tests/fixtures/craftExemplars.ts`.
 
 ### Changed & Deprecated (vs. Pre-`0.4.0` Drafts)
 

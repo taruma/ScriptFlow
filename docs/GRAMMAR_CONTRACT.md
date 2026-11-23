@@ -1,4 +1,4 @@
-# Grammar Contract — Pure Auteur Script (`v0.4.0`)
+# Grammar Contract — Auteur Script (`v0.4.0`)
 
 This document locks the exact parsing, extraction, formatting, export, and deterministic linting contracts implemented by `src/core/` (`parser.ts`, `aesthetic.ts`, `extractor.ts`, `serializer.ts`, `linter.ts`, `irSchemas.ts`, `ir.ts`, `patch.ts` + `patch/*`, `slicer.ts`).
 

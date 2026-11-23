@@ -1,6 +1,6 @@
 {
   "name": "ScriptFlow",
-  "description": "Minimalist single-page live document editor and deterministic Script Supervisor linter for Pure Auteur Script (v0.4.0).",
+  "description": "Minimalist single-page live document editor and deterministic Script Supervisor linter for Auteur Script (v0.4.0).",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -241,7 +241,11 @@ export function AppInfoModal({isOpen, onClose}: AppInfoModalProps) {
         <div className={UI_TOKENS.modal.footer}>
           <div className="flex items-center justify-between w-full">
             <span className="text-[11px] font-mono text-text-faint">
-              {UI_LABELS.infoModal.footerVersion(APP_META.name, APP_META.version)}
+              {UI_LABELS.infoModal.footerVersion(
+                APP_META.name,
+                APP_META.version,
+                APP_META.specVersion
+              )}
             </span>
             <button
               type="button"

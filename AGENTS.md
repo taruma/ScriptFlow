@@ -1,19 +1,19 @@
-# AGENTS.md — Auteur Script Editor Engineering Contract
+# AGENTS.md — ScriptFlow Engineering Contract
 
-This document is the operational Single Source of Truth (SSOT) for AI agents and engineers maintaining the **Auteur Script Editor** (`v0.4.0` Canonical Inline Syntax, 100% platform- and model-agnostic).
+This document is the operational Single Source of Truth (SSOT) for AI agents and engineers maintaining **ScriptFlow (`v1.0.0`)** — the Auteur Script Editor & Scene Blueprint (`Auteur Script v0.4.0` Canonical Inline Syntax, 100% platform- and model-agnostic).
 
 ### Canonical Workspace Documentation (`docs/` & Root)
 - **`README.md`**: Project overview, feature tour, quick start, architecture highlights, and documentation map.
-- **`CHANGELOG.md`**: User-facing application release history (Keep a Changelog format, tracking `1.0.0` Unreleased features and engineering milestones).
-- **`docs/GLOSSARY.md`**: Authoritative Pure Auteur Script vocabulary (explicit disambiguation of **Macro-Block**, **Macro-State**, **Sub-State**, **Sub-State Tag**, and inline `[BLOCK]`, plus all 27 grounded framework terms mapped to `src/core/types.ts`). **Read first** when interpreting user domain terminology.
+- **`CHANGELOG.md`**: User-facing application release history (Keep a Changelog format, tracking **ScriptFlow `v1.0.0`** releases and engineering milestones).
+- **`docs/GLOSSARY.md`**: Authoritative Auteur Script vocabulary (explicit disambiguation of **Macro-Block**, **Macro-State**, **Sub-State**, **Sub-State Tag**, and inline `[BLOCK]`, plus all 27 grounded framework terms mapped to `src/core/types.ts`). **Read first** when interpreting user domain terminology.
 - **`docs/GRAMMAR_CONTRACT.md`**: Locked `v0.4.0` regexes, parsing edge cases, Tagless export rules, and deterministic linter contracts.
 - **`docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`**: Human-readable checklist of all 4 Scene Topologies, all 5 live deterministic linter rules, all 5 Script Supervisor Audit Lenses (`Lens 1`–`Lens 5`), temporal calibration, and pass/fail examples.
-- **`docs/SPEC_CHANGELOG.md`**: Canonical Pure Auteur Script specification history (`v0.4.0` grammar, deterministic linter, and JSON IR / Patch / Slicer schema evolution & migration notes).
+- **`docs/SPEC_CHANGELOG.md`**: Canonical Auteur Script specification history (`v0.4.0` grammar, deterministic linter, and JSON IR / Patch / Slicer schema evolution & migration notes).
 - **`docs/ARCHITECTURE.md`**: Plain-Text-as-Truth data flow, modular facade map, pure serializer mutation contracts, and global paste/history guards.
 - **`docs/JSON_IR_SPEC.md`**: Programmatic JSON IR (`AuteurScriptIR`, `AuteurEnvelope`), Zod/JSON Schema contracts, transactional `AuteurPatch` engine, and composable Script Supervisor Lens Slicer (`AUDIT_LENS_PRESETS`).
 - **`docs/UI_PHILOSOPHY.md`**: Asymmetric `40/60` Live workspace, single-document Source mode, and read-only Graph View principles, Undo/Redo & crash recovery, 2-column Lookbook & Waterfall editing, shared DnD, unified Settings popover, and 4-mode theme system.
 - **`docs/GRAPH_VIEW.md`**: Transparent technical reference for the read-only Graph View (`[ Live | Graph | Source ]`)—plain-text extraction pipeline, dialogue extension/delivery parsing, Shot Chambers & `RECALL` arcs, dual-axis layout & z-index stacking contract, React Flow v13 reconciliation (`flowSync.ts`), 4-theme token binding, and extension recipes.
-- **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces across `src/ui/labels/*.ts`, Pure Auteur UI vocabulary contract, and theme labels).
+- **`docs/UI_LABELING.md`**: Human-readable UI copy & labeling contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS` namespaces across `src/ui/labels/*.ts`, Auteur Script UI vocabulary contract, and theme labels).
 - **`docs/AI_ASSISTANT_WALKTHROUGH.md`**: End-to-end user & operator walkthrough for the Unified Transparent AI Assistant (BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus routing, `Ask First` clarifying workflow, multimodal `Scene Brief & References` modal, all 10 local AI tools, Layer 2.5 Quick Scan, 3-state skill machine, 5-tab Context Inspector including `Function Tools` activation & editable Tool & Safety Protocol with JSON Pack Export/Import, suggestion cards including `TitleSuggestionCard` & Live Mode indicators, cost estimator, and Trace Inspector).
 
 ---
@@ -32,7 +32,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 |---|---|
 | **`src/core/`** | **100% pure TypeScript** domain engine: AST types (`types.ts`), parser (`parser.ts`), `[AESTHETIC]` codec (`aesthetic.ts`), live/clause tokenizer (`highlighter.ts`), metadata extractor (`extractor.ts`), lossless serializer (`serializer.ts`), deterministic linter (`linter.ts`), Undo/Redo history (`history.ts`), Zod JSON IR (`irSchemas.ts`, `ir.ts`), Lens Slicer (`slicer.ts`), barrel (`index.ts`), and modular transactional Patch engine (`patch.ts` facade + `src/core/patch/` with `applyOp.ts`, `diagnostics.ts`, `irHelpers.ts`, `preview.ts`, `types.ts`, and `src/core/patch/ops/stagingOps.ts` / `executionOps.ts`). **Zero** React, DOM, `localStorage`, or CSS imports. |
 | **`src/ui/`** | Pure UI state helpers, browser adapters, keyboard/mutation hooks (`subStateKeyboard.ts`, `useGlobalEditorShortcuts.ts`, `useDocumentMutations.ts`, `historyShortcuts.ts`), pure Graph View engine (`src/ui/canvas/index.ts` facade + `types.ts`, `canvasGraph.ts`, `layoutMetrics.ts`, `layoutEdges.ts`, `canvasLayout.ts`, `flowSync.ts` — zero React/DOM), IndexedDB script library, File I/O & Version History (`useScriptLibrary.ts`, `scriptLibraryDb.ts`, `scriptStorage.ts`, `scriptLibraryCodec.ts`, `scriptFileIO.ts`, `scriptLibraryView.ts`, `scriptSnapshots.ts`, plus internal `src/ui/library/`), AI assistant state, pricing, media & context packs (`aiSettings.ts`, `aiPricing.ts`, `aiSkillsStore.ts`, `quickScanRulesStore.ts`, `briefMedia.ts`, `patchIndicators.ts`, `quickScanIndicators.ts`, `aiAssistant.ts` + `src/ui/ai/`, `agentContextCodec.ts` + `src/ui/agentContext/`), display/theme/lint/token modules (`editorSettings.ts`, `theme.ts`, `textSize.ts`, `clauseGuides.ts`, `subStateIds.ts`, `lintRules.ts`, `tokens/ui.ts`), labeling SSOT (`labels.ts` facade + `src/ui/labels/meta.ts`, `src/ui/labels/editor.ts`, `src/ui/labels/library.ts`, `src/ui/labels/debug.ts`, `src/ui/labels/ai.ts`), focus/collapse transitions (`beatFocus.ts`, `stagingCollapse.ts`), and structural reference stabilization (`referenceStability.ts`, `useStableValue.ts`). |
-| **`src/components/`** | Thin, `memo()`-friendly React + Tailwind presentational views (`LiveDocument` → `StagingPane` / `ExecutionPane`, `StagingBlockCard`, `ExecutionBeatRow` + `src/components/execution/`, `SortableList`, `LiveHighlightedEditor`, `TopSlateBar`, `FileMenuDropdown`, `SettingsPopover`, `ConfirmDialog`, `ErrorBoundary`, `ScriptLibraryModal` + `src/components/library/`, AI views `AgentContextImportDialog` / `QuickScanRulesTabPanel` / `AiSuggestionCards` (`PatchSuggestionCard`, `DraftSuggestionCard`, `TitleSuggestionCard`, `AuditReviewSuggestionCard`, `QuestionSuggestionCard`) / `QuickScanCard` / `AiPatchIndicator` / `AiQuickScanIndicator` + `src/components/ai/`, and the 9 `React.lazy` chunks: `AuteurGraphView` in `src/components/canvas/`, `AppInfoModal`, `VersionHistoryModal`, `AiAssistantSidebar`, `AiBriefModal`, `AiContextInspectorModal`, `AiSettingsModal`, `AiTraceModal`, and `JsonIrDebugDrawer` in `src/components/debug/` + `src/components/debug/tabs/`). |
+| **`src/components/`** | Thin, `memo()`-friendly React + Tailwind presentational views (`LiveDocument` → `StagingPane` / `ExecutionPane`, `StagingBlockCard`, `ExecutionBeatRow` + `src/components/execution/`, `SortableList`, `LiveHighlightedEditor`, `TopSlateBar`, `FileMenuDropdown`, `SettingsPopover`, `ConfirmDialog`, `ErrorBoundary`, `ScriptLibraryModal` + `src/components/library/`, AI views `AgentContextImportDialog` / `QuickScanRulesTabPanel` / `AiSuggestionCards` (`PatchSuggestionCard`, `DraftSuggestionCard`, `TitleSuggestionCard`, `AuditReviewSuggestionCard`, `QuestionSuggestionCard`) / `QuickScanCard` / `AiPatchIndicator` / `AiQuickScanIndicator` + `src/components/ai/`, and the 10 `React.lazy` chunks: `AuteurGraphView` in `src/components/canvas/`, `AppInfoModal`, `ScriptImportModal`, `VersionHistoryModal`, `AiAssistantSidebar`, `AiBriefModal`, `AiContextInspectorModal`, `AiSettingsModal`, `AiTraceModal`, and `JsonIrDebugDrawer` in `src/components/debug/` + `src/components/debug/tabs/`). |
 | **`src/services/`** | AI knowledge registry & context composer (`auteurKnowledge.ts` facade + `src/services/knowledge/`, zero React/DOM/`localStorage`), 10 local staging/read-only script tools, audit rebasing & dynamic skill loader (`scriptTools.ts` facade + `src/services/tools/`), streaming Gemini Interactions client (`geminiInteractions.ts` facade + `src/services/gemini/`), Layer 2.5 Decisions API Quick Scan client (`geminiDecisions.ts` facade + `src/services/decisions/`), and Gemini Files API upload/browser client (`geminiFiles.ts`). Keeps prompt craft, tool orchestration, and SDK adapters decoupled from `src/core/` (pure domain) and `src/components/` (thin UI). |
 
 ---
@@ -58,7 +58,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 6. **Canonical `v0.4.0` Syntax Lock**:
    - Spoken dialogue uses curly braces (`Speaker says (delivery) {line}`), never quotation marks.
    - Foley uses `<sound>`, opt-in score uses `(score)`, opt-in on-screen text uses `【text】`. Never reintroduce legacy `[AUDIO]` or `[DIAL]`.
-7. **Pure Auteur Terminology & Agent Shorthand Lock**:
+7. **Auteur Script Terminology & Agent Shorthand Lock**:
    - Always enforce the strict 3-level hierarchy in UI labels, linter messages, AI prompts/tools, documentation, and user communication:
      - **Macro-Block** (`MB`, IDs `MB0`, `MB1`, …): document-level section (`[INTENT]`, `[EXECUTION]`, etc.).
      - **Macro-State** (`S` / `State`, IDs `S1`, `S2`, …; Staging = `S0`): strictly a single non-empty line inside the `[EXECUTION]` Macro-Block.
@@ -93,7 +93,7 @@ This document is the operational Single Source of Truth (SSOT) for AI agents and
 
 ### Adding a New Deterministic Linter Rule
 1. Implement an **isolated, exported pure function** in `src/core/linter.ts` returning `LintDiagnostic[]` tagged with `Lens 1`–`Lens 5`, `severity` (`'error'` | `'warning'`), `message`, and `repairHint`, then compose it inside `lintDocument()`.
-2. Add positive (violation caught) and negative (valid construct passes) tests in `tests/core/linter.test.ts`, and verify all 4 canonical presets in `src/data/presets.ts` pass with zero false positives.
+2. Add positive (violation caught) and negative (valid construct passes) tests in `tests/core/linter.test.ts`, and verify all canonical craft exemplars and clean showcase bundled presets pass with zero false positives.
 
 ---
 
@@ -114,7 +114,7 @@ Before concluding any task, update every affected doc and test suite mapped belo
 |---|---|---|
 | **Core modules / history / serializer / extractor / paste & undo guards** | `docs/ARCHITECTURE.md` (and `docs/GLOSSARY.md` if new domain terms); `CHANGELOG.md` if user-facing | `tests/core/` (`history`, `serializer`, `extractor`, `aesthetic`, etc.) |
 | **Grammar / regex / inline tags / Tagless export / highlighting** | `docs/GRAMMAR_CONTRACT.md`, `docs/GLOSSARY.md`, `docs/SPEC_CHANGELOG.md` | `tests/core/parser.test.ts`, `highlighter.test.ts`, `serializer.test.ts`, `ir.test.ts` |
-| **Deterministic linter rules / audit lenses** | `docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`, `docs/GRAMMAR_CONTRACT.md`, `docs/SPEC_CHANGELOG.md` | `tests/core/linter.test.ts` (positive, negative & 4 presets clean) |
+| **Deterministic linter rules / audit lenses** | `docs/SCRIPT_SUPERVISOR_AUDIT_RULES.md`, `docs/GRAMMAR_CONTRACT.md`, `docs/SPEC_CHANGELOG.md` | `tests/core/linter.test.ts` (positive, negative & clean showcase presets) |
 | **JSON IR / Patch Engine / Lens Slicer / Zod schemas** | `docs/JSON_IR_SPEC.md`, `docs/SPEC_CHANGELOG.md` (and `docs/ARCHITECTURE.md` if new workflows) | `tests/core/ir.test.ts`, `patch.test.ts`, `slicer.test.ts` |
 | **Graph View (model / layout / edges / React Flow nodes & theming)** | `docs/GRAPH_VIEW.md`, `docs/UI_PHILOSOPHY.md`, `docs/ARCHITECTURE.md` (and `CHANGELOG.md` if user-facing) | `tests/ui/canvasGraph.test.ts` (`tests/core/{aesthetic,extractor,parser}.test.ts` if extraction changes) |
 | **UI interactions / layout / settings / DnD / focus / collapse / library / snapshots / recovery** | `docs/UI_PHILOSOPHY.md`, `CHANGELOG.md` (and `docs/ARCHITECTURE.md` if new module/guard) | `tests/ui/uiState.test.ts`, `subStateKeyboard.test.ts`, `scriptLibrary.test.ts`, `scriptSnapshots.test.ts` |
@@ -124,7 +124,7 @@ Before concluding any task, update every affected doc and test suite mapped belo
 ### Verification Commands (All Must Exit `0`)
 
 ```bash
-npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (29 files, 308 tests)
+npm test          # Runs the Vitest unit suite across tests/core/ and tests/ui/ (30 files, 347 tests)
 npm run lint      # Runs strict TypeScript type-checking (tsc --noEmit)
 npm run build     # Runs tsc --noEmit && vite build
 ```

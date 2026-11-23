@@ -25,7 +25,7 @@ export const AI_LABELS = {
     focuses: {
       autoEmpty: {
         placeholder: 'Describe your scene idea, or open Brief below to add cast refs and specs...',
-        emptyTitle: 'Draft a Pure Auteur Script',
+        emptyTitle: 'Draft an Auteur Script',
         emptyDesc:
           'Describe the premise, cast, and look—or open Brief below for @ref handles, specs, and subtext. Drafts compile with live lint checks before applying.',
       },
@@ -667,7 +667,7 @@ export const AI_LABELS = {
       fieldTriggerPlaceholder:
         'When the user asks to choreograph combat [ACT] Sub-States or kinetic camera passes.',
       fieldBodyLabel: 'Skill Instructions',
-      fieldBodyPlaceholder: 'Write clear, Pure Auteur Script v0.4.0 guidelines for this skill...',
+      fieldBodyPlaceholder: 'Write clear, Auteur Script v0.4.0 guidelines for this skill...',
       saveSkillButton: 'Save Skill',
       updateSkillButton: 'Update Skill',
       builtInBadge: 'Built-in',

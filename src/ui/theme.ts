@@ -65,7 +65,7 @@ export function saveStoredTheme(mode: ThemeMode): void {
 
 /**
  * Applies one of the 4 shell themes to <html> with zero-stutter transition disabling
- * per 06_VISUAL_DESIGN_SYSTEM.md §7.1.
+ * per docs/UI_PHILOSOPHY.md §4.
  */
 export function applyThemeMode(mode: ThemeMode, disableTransitions = true): void {
   const root = document.documentElement;

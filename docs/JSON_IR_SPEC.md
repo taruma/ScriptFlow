@@ -7,7 +7,7 @@ This document is the canonical engineering specification for the **Auteur Script
 - `src/core/patch.ts` — Public patch facade (`applyAuteurPatch`, `projectAuteurPatchPreview`) backed by modular `src/core/patch/*` internals (`types.ts`, `applyOp.ts`, `diagnostics.ts`, `irHelpers.ts`, `preview.ts`, `ops/stagingOps.ts`, `ops/executionOps.ts`)
 - `src/core/slicer.ts` — Composable Lens Slicer (`AUDIT_LENS_PRESETS`, `sliceAuteurEnvelope`, `sliceAuteurScript`) & `validateAuteurReview`
 
-It defines how automated pipelines, conversational editing agents, full-draft generators, and multi-lens Script Supervisor evaluators **create**, **read**, **edit**, **preview**, and **evaluate** Pure Auteur Scripts while preserving **Plain-Text-as-Truth** for the human editor.
+It defines how automated pipelines, conversational editing agents, full-draft generators, and multi-lens Script Supervisor evaluators **create**, **read**, **edit**, **preview**, and **evaluate** Auteur Scripts while preserving **Plain-Text-as-Truth** for the human editor.
 
 ---
 

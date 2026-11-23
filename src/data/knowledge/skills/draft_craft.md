@@ -1,4 +1,4 @@
-Block-by-Block Drafting Craft (Pure Auteur Script v0.4.0):
+Block-by-Block Drafting Craft (Auteur Script v0.4.0):
 - [INTENT]: one flowing directorial sentence starting with "Create ..." covering format/genre, setting container, primary subjects, dramatic stakes, and any `@ref as Name (voice: @audio)` bindings. Never write a shot-by-shot list here.
 - [LOGIC]: 1-3 dense affirmative prose sentences (zero bullet lists) locking the 180-degree axis, screen direction, hand-prop permanence, physical surface/momentum laws, or montage independence. End with `No subtitles appear on screen.` whenever spoken dialogue exists and on-screen captions are unwanted.
 - [AESTHETIC]: tactile `Category: Value` rows (`Medium`, `Palette`, `Lighting`, `Location`, `Wardrobe`, `Audio`) describing physical lens stock, light falloff, materials, and continuous room tone. Zero kinetic action or camera moves.

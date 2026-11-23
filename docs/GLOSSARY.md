@@ -1,6 +1,6 @@
-# Glossary — Pure Auteur Script (`v0.4.0`)
+# Glossary — Auteur Script (`v0.4.0`)
 
-This document is the canonical domain vocabulary for **Pure Auteur Script** (`v0.4.0` Canonical Inline Syntax, 100% platform- and model-agnostic) and maps each concept directly to its representation in `src/core/`.
+This document is the canonical domain vocabulary for **Auteur Script** (`v0.4.0` Canonical Inline Syntax, 100% platform- and model-agnostic) and maps each concept directly to its representation in `src/core/`.
 
 ---
 

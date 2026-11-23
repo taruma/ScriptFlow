@@ -1,16 +1,16 @@
 # Changelog
 
-All notable changes to the **ScriptFlow** application (**Auteur Script Editor**) are documented in this file.
+All notable changes to the **ScriptFlow** application (**Auteur Script Editor & Scene Blueprint**) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > **Versioning Scope Note**
-> - This file tracks **ScriptFlow application releases** (`1.0.0` pre-release UI/UX polish phase). `package.json` intentionally remains at `"0.4.0"` until the final `1.0.0` release tag is cut.
-> - Changes to the platform- and model-agnostic **Pure Auteur Script (`v0.4.0`)** canonical inline grammar, deterministic Script Supervisor linter, and programmatic JSON IR specification are tracked separately in [`docs/SPEC_CHANGELOG.md`](docs/SPEC_CHANGELOG.md).
+> - This file tracks **ScriptFlow application releases** (`1.0.0` in `package.json`).
+> - Changes to the platform- and model-agnostic **Auteur Script (`v0.4.0`)** canonical inline grammar, deterministic Script Supervisor linter, and programmatic JSON IR specification are tracked separately in [`docs/SPEC_CHANGELOG.md`](docs/SPEC_CHANGELOG.md).
 
 ---
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-23
 
 ### Changed
 - **Theme-Aware Script Library Folder Combobox (`LibraryFolderCombobox`)**: Replaced the unstyled native `<datalist>` popup on the Project Folder input in `LibraryPreviewPane` with a custom, 4-theme-aware, keyboard-navigable combobox (`ArrowUp`/`ArrowDown`/`Enter`/`Escape` and click-to-toggle chevron) that lists all existing folders immediately on focus, filters while typing, offers 1-click creation for new folder names, and provides a `Remove from folder` action when assigned.
@@ -59,5 +59,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Architecture & Engineering Notes
 - **Zero-React Pure Core & Plain-Text-as-Truth Pipeline**: Every module under `src/core/` is 100% pure TypeScript with zero React, DOM, `localStorage`, or CSS dependencies, deriving AST, extracted metadata, deterministic diagnostics, highlights, and JSON envelopes synchronously from `rawText`.
-- **Modular Facade Architecture**: Codebase decomposed cleanly beneath preserved top-level `.ts`/`.tsx` facades across `src/core/patch/`, `src/services/knowledge/`, `src/services/tools/`, `src/services/gemini/`, `src/services/decisions/`, `src/ui/canvas/`, `src/ui/labels/`, `src/ui/library/`, `src/ui/ai/`, `src/ui/agentContext/`, `src/components/canvas/`, `src/components/ai/`, `src/components/library/`, `src/components/execution/`, and `src/components/debug/`, maintaining zero source files over 800 lines and 8 lazy-loaded Vite chunks (`AuteurGraphView`, `AiAssistantSidebar`, `AiBriefModal`, `AiContextInspectorModal`, `AiSettingsModal`, `AiTraceModal`, `VersionHistoryModal`, and `JsonIrDebugDrawer`).
-- **Verification Baseline**: Verified against `30` Vitest test files (`npm test`), strict TypeScript checking (`npm run lint` / `tsc --noEmit`), and Vite production bundling (`npm run build`).
+- **Modular Facade Architecture**: Codebase decomposed cleanly beneath preserved top-level `.ts`/`.tsx` facades across `src/core/patch/`, `src/services/knowledge/`, `src/services/tools/`, `src/services/gemini/`, `src/services/decisions/`, `src/ui/canvas/`, `src/ui/labels/`, `src/ui/library/`, `src/ui/ai/`, `src/ui/agentContext/`, `src/components/canvas/`, `src/components/ai/`, `src/components/library/`, `src/components/execution/`, and `src/components/debug/`, with 10 lazy-loaded Vite chunks (`AuteurGraphView`, `AppInfoModal`, `ScriptImportModal`, `VersionHistoryModal`, `JsonIrDebugDrawer`, `AiAssistantSidebar`, `AiBriefModal`, `AiContextInspectorModal`, `AiSettingsModal`, and `AiTraceModal`).
+- **Verification Baseline**: Verified against `30` Vitest test files (`347` tests via `npm test`), strict TypeScript checking (`npm run lint` / `tsc --noEmit`), and Vite production bundling (`npm run build`).

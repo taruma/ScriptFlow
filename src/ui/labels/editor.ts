@@ -589,12 +589,13 @@ export const EDITOR_LABELS = {
     shortcutsHeading: 'Quick Editor Shortcuts',
     privacyNoteTitle: 'Local-First:',
     privacyNoteBody:
-      'All scripts, version snapshots, and preferences stay strictly in your browser (IndexedDB & localStorage). Auteur Script v0.4.0 is inspired by the Seedance 2.5 prompt guide.',
-    footerVersion: (name: string, version: string) => `${name} v${version}`,
+      'All scripts, version snapshots, and preferences stay strictly in your browser (IndexedDB & localStorage).',
+    footerVersion: (name: string, version: string, specVersion = '0.4.0') =>
+      `${name} v${version} · Auteur Script v${specVersion}`,
     resources: {
       repoLabel: 'GitHub Repository',
       repoTag: 'Source',
-      grammarLabel: 'Pure Auteur Grammar Spec',
+      grammarLabel: 'Auteur Script Grammar Spec',
       grammarTag: 'v0.4.0',
       graphLabel: 'Graph View Architecture',
       graphTag: 'Graph',

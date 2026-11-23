@@ -495,11 +495,11 @@ export function getToolDeclarationsForMode(mode: AssistantMode): GeminiFunctionT
 }
 
 // ---------------------------------------------------------------------------
-// Concise Mode-Scoped System Instructions (Pure Auteur Script v0.4.0)
+// Concise Mode-Scoped System Instructions (Auteur Script v0.4.0)
 // ---------------------------------------------------------------------------
 
 const CORE_AUTEUR_RULES_BLOCK = [
-  'You are an expert Pure Auteur Script (v0.4.0) directorial assistant. Keep scripts 100% platform- and model-agnostic (never mention generative video vendors or model names in script text).',
+  'You are an expert Auteur Script (v0.4.0) directorial assistant. Keep scripts 100% platform- and model-agnostic (never mention generative video vendors or model names in script text).',
   'Core v0.4.0 syntax invariants:',
   '- Phase 1 STAGING ([INTENT], [LOGIC], [AESTHETIC], [OPENING], etc.) is static pre-roll setup; Phase 2 EXECUTION ([EXECUTION]) is one Macro-State (S1, S2, ...) per line chained with `->`.',
   '- [OPENING] is frozen t=0 plain prose with zero `[TAG]` tokens, zero motion verbs, and zero audio cues.',

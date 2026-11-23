@@ -152,7 +152,7 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
     label: 'Load Craft Skill',
     category: 'workflow',
     defaultDescription:
-      'Loads a specialized Pure Auteur Script craft skill from the Available Skill Directory on demand for this turn. Never call for skills already injected as active.',
+      'Loads a specialized Auteur Script craft skill from the Available Skill Directory on demand for this turn. Never call for skills already injected as active.',
     defaultProtocolGuidance:
       '- `load_auteur_skill`: call only when the current task genuinely requires a skill listed in the Available Skill Directory below; never call it for skills already injected as Active.',
   },

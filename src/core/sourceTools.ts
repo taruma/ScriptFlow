@@ -692,7 +692,7 @@ export function normalizeSymbolTarget(kind: ScriptSymbolKind, rawInput: string):
 }
 
 /**
- * Validates a proposed symbol rename against canonical Pure Auteur Script syntax
+ * Validates a proposed symbol rename against canonical Auteur Script syntax
  * and blocks collisions against existing symbols in the same category (including camera slots).
  */
 export function validateSymbolRename(

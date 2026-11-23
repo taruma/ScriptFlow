@@ -1,6 +1,6 @@
 # Script Supervisor Audit Rules — Human-Readable Reference (`v0.4.0`)
 
-This document is the single, human-readable checklist of all **Script Supervisor Audit Rules** for **Pure Auteur Script (`v0.4.0`)**.
+This document is the single, human-readable checklist of all **Script Supervisor Audit Rules** for **Auteur Script (`v0.4.0`)**.
 
 It brings together three complementary audit layers:
 1. **Deterministic Rules (Live Automated Linter)** — 5 pure rules enforced synchronously on every keystroke and patch inside `src/core/linter.ts`.
@@ -121,7 +121,7 @@ Use this checklist when reviewing a script manually or configuring an automated 
 
 ## 4. Optional Semantic Quick Scan Rule Layer (`QUICK_SCAN_RULES_VERSION = "0.4.0-qs2"`)
 
-Between the 5 synchronous deterministic regex rules (`src/core/linter.ts`) and a full multi-lens Script Supervisor review, Pure Auteur Script defines a portable, model-agnostic catalog of **15 atomic semantic binary rules** in `src/data/knowledge/quick-scan-rules.json` (validated and normalized by `resolveQuickScanRuleCatalog()` in `src/data/knowledge/index.ts`).
+Between the 5 synchronous deterministic regex rules (`src/core/linter.ts`) and a full multi-lens Script Supervisor review, Auteur Script defines a portable, model-agnostic catalog of **15 atomic semantic binary rules** in `src/data/knowledge/quick-scan-rules.json` (validated and normalized by `resolveQuickScanRuleCatalog()` in `src/data/knowledge/index.ts`).
 
 Each rule answers a single yes/no semantic check (`true` = violation detected, `false` = clean), declares an explicit `scope` (`'document' | 'macro_state' | 'sub_state'`), attaches to one of the 5 Audit Lenses or `'brief'`, and specifies topology/presence `when` predicates (`all`, `continuous`, `oner`, `montage`, `has_opening`, `has_intent`, `has_aesthetic`, `has_dialogue`, `has_foley`, `has_action`, `has_action_or_prop`, `has_brief_text`, `has_brief_media`, `sub_is_action`, `sub_is_camera`, `sub_is_foley`, `sub_is_dialogue`, `sub_is_action_or_prop`) so irrelevant checks never fire on the wrong Scene Topology. Each rule also carries an `escalationHint` for handing flagged items off to deep 5-Lens review or surgical patching.
 
@@ -164,5 +164,5 @@ Each rule answers a single yes/no semantic check (`true` = violation detected, `
 - **Declarative Deterministic Registry & Engine**: `src/core/linter.ts` (`LINT_RULE_REGISTRY`, `getLintRuleDefinition`, `lintDocument(doc, metadata?, ruleOverrides?)`, plus exported pure rule functions `lintViewportCoordinates`, `lintCameraRedefinition`, `lintMacroStateResolution`, `lintMultimodalReferenceIsolation`, `lintFrozenFirstFrame`).
 - **Declarative Semantic Quick Scan Catalog**: `src/data/knowledge/quick-scan-rules.json` and `src/data/knowledge/index.ts` (`QUICK_SCAN_RULES_VERSION`, `BUNDLED_QUICK_SCAN_RULES`, `resolveQuickScanRuleCatalog`).
 - **In-App Rule Settings & Persistence**: `src/ui/lintRules.ts` (`sanitizeLintRuleOverrides`, `getEffectiveLintRuleSeverity`, `setLintRuleOverride`, `countCustomLintRules`), `src/ui/editorSettings.ts` (`useEditorSettings`), and `src/components/SettingsPopover.tsx` (**Settings → Supervisor rules**).
-- **Automated Rule Unit Tests**: `tests/core/linter.test.ts` (positive & negative cases, Staging vs. Execution `@ref` defaults, `ruleOverrides` suppression/promotion/demotion, and zero-false-positive verification across all 4 canonical presets in `src/data/examples/catalog.json`) and `tests/ui/uiState.test.ts` (`lintRules` state helpers).
+- **Automated Rule Unit Tests**: `tests/core/linter.test.ts` (positive & negative cases, Staging vs. Execution `@ref` defaults, `ruleOverrides` suppression/promotion/demotion, and zero-false-positive verification across canonical craft exemplars and clean showcase bundled presets in `src/data/examples/catalog.json`) and `tests/ui/uiState.test.ts` (`lintRules` state helpers).
 - **Lens Evaluation Slicers & Review Schema**: `src/core/slicer.ts` (`AUDIT_LENS_PRESETS`, `sliceAuteurEnvelope`, `sliceAuteurScript`, `validateAuteurReview`) and `docs/JSON_IR_SPEC.md`.

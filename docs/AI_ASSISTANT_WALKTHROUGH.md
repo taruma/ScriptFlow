@@ -1,6 +1,6 @@
 # AI Assistant Walkthrough & Tools Guide
 
-This guide explains how the **Auteur Script Editor AI Assistant** works end-to-end—from BYOK setup and unified `Auto` focus routing to every local script tool, passive/on-demand skill, Layer 2.5 Quick Scan, multimodal Scene Brief, pre-send prompt customization, review card & Live Mode indicator workflow, and debug trace inspection.
+This guide explains how the **ScriptFlow (`v1.0.0`) AI Assistant** works end-to-end—from BYOK setup and unified `Auto` focus routing to every local script tool, passive/on-demand skill, Layer 2.5 Quick Scan, multimodal Scene Brief, pre-send prompt customization, review card & Live Mode indicator workflow, and debug trace inspection.
 
 > **Related References**
 > - **Architecture & Data Flow**: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
@@ -252,7 +252,7 @@ Every turn's `system_instruction` is assembled deterministically by `composeAgen
 
 | Section | Editable? | What It Contains |
 |---|---|---|
-| **1. Foundational Craft** | **Editable** | Core Pure Auteur Script `v0.4.0` directorial craft (*boundaries not handcuffs*, *static once / volatile always*, *state inheritance*, *literal over literary*, *acting is reacting*, *anti-twitch*, *repetition mandate*, canonical inline syntax invariants, and **Beginner & Power-User Adaptation** translating plain filmmaking intent cleanly for beginners while matching exact `MB#`/`S#`/`S#.#` technical shorthand for power users). |
+| **1. Foundational Craft** | **Editable** | Core Auteur Script `v0.4.0` directorial craft (*boundaries not handcuffs*, *static once / volatile always*, *state inheritance*, *literal over literary*, *acting is reacting*, *anti-twitch*, *repetition mandate*, canonical inline syntax invariants, and **Beginner & Power-User Adaptation** translating plain filmmaking intent cleanly for beginners while matching exact `MB#`/`S#`/`S#.#` technical shorthand for power users). |
 | **2. Live Editor State** | Read-Only (Code-Owned) | Authoritative current snapshot: `sceneTitle`, `isEmpty`, `snapshotHash`, `changedSinceLastTurn` warning, automatic **Recent user edits since last turn** summary (`Modified`/`Added`/`Removed` `MB#`/`S#` IDs + bounded line delta when edited manually between turns), `sceneTopology`, `hasContinuationContext`, Macro-Block/Macro-State/ref/token counts, and active deterministic linter diagnostics so the AI focuses on semantic continuity. |
 | **3. Scene Brief & References** *(when active)* | Controlled via `Brief` modal | Mode-agnostic active reference context (`Cast & References`, `Format & Specs`, `Subtext & Additional Instructions`) carried across `Auto`, `Draft`, `Refine`, and `Audit` whenever populated and toggled on. Omitted completely when empty or paused. |
 | **4. Active Skills** | Read-Only (Computed) | Full bodies of every skill currently in the **`active`** state (pinned by you or passively matched from your script/brief). |
