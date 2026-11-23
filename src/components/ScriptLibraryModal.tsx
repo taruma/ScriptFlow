@@ -181,6 +181,11 @@ function ScriptLibraryModalContent({
               onToggleSortMenu={() => nav.setIsSortMenuOpen((prev) => !prev)}
               onCloseSortMenu={() => nav.setIsSortMenuOpen(false)}
               sortMenuRef={nav.sortMenuRef}
+              isFilterMenuOpen={nav.isFilterMenuOpen}
+              onToggleFilterMenu={() => nav.setIsFilterMenuOpen((prev) => !prev)}
+              onCloseFilterMenu={() => nav.setIsFilterMenuOpen(false)}
+              filterTriggerRef={nav.filterTriggerRef}
+              filterPopoverRef={nav.filterPopoverRef}
               customScriptsCount={customScripts.length}
               readOnly={readOnly}
               isBulkMode={effectiveBulkMode}
@@ -239,10 +244,20 @@ function ScriptLibraryModalContent({
               }
               readOnly={readOnly}
               openedAt={nav.openedAt}
-              existingFolders={nav.facets.folders}
+              existingFolders={nav.existingFolders}
               customScripts={customScripts}
               examples={examples}
               activeScript={activeScript}
+              activeFolder={nav.activeFolder}
+              activeTag={nav.activeTag}
+              onToggleFolderFilter={(folder) =>
+                nav.setActiveFolder(
+                  nav.activeFolder?.toLowerCase() === folder.toLowerCase() ? null : folder
+                )
+              }
+              onToggleTagFilter={(tag) =>
+                nav.setActiveTag(nav.activeTag === tag ? null : tag)
+              }
               onOpen={nav.handleOpenRow}
               onOpenCustomScript={(record) => {
                 onOpenCustomScript(record);

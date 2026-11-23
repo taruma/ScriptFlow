@@ -64,6 +64,7 @@ import {
   countExecutionBeatsFast,
   createCopyTitle,
   extractLibraryScriptPreview,
+  filterAndSortLibraryFacets,
   formatRelativeUpdatedTime,
   getScriptFamilyTree,
   LIBRARY_PAGE_SIZE,
@@ -872,11 +873,30 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
       expect(restoredAlpha?.tags).toEqual(['noir', 'action']);
     }
 
-    // Facet collection
+    // Facet collection, counts, tab scoping, and popover facet filtering/sorting
     const facets = collectLibraryFacets(loaded);
     expect(facets.folders).toEqual(['Episode 2', 'Pilot Episode']);
     expect(facets.tags).toEqual(['action', 'dialogue', 'noir']);
+    expect(facets.folderCounts).toEqual({'Pilot Episode': 2, 'Episode 2': 1});
+    expect(facets.tagCounts).toEqual({action: 2, dialogue: 1, noir: 1});
     expect(facets.pinnedCount).toBe(1);
+
+    const customOnlyFacets = collectLibraryFacets(loaded, BUNDLED_EXAMPLES, 'custom');
+    expect(customOnlyFacets.folders).toEqual(['Episode 2', 'Pilot Episode']);
+    expect(customOnlyFacets.tags).toEqual(['action', 'dialogue', 'noir']);
+
+    const exampleOnlyFacets = collectLibraryFacets(loaded, BUNDLED_EXAMPLES, 'examples');
+    expect(exampleOnlyFacets.folders).not.toContain('Pilot Episode');
+    expect(exampleOnlyFacets.tags).toContain('video-continuation');
+    expect(exampleOnlyFacets.tags).not.toContain('noir');
+
+    const sortedAllFacets = filterAndSortLibraryFacets(facets, '');
+    expect(sortedAllFacets.folders).toEqual(['Episode 2', 'Pilot Episode']);
+    expect(sortedAllFacets.tags).toEqual(['action', 'dialogue', 'noir']); // action (2) first, then alphabetical
+
+    const hashFilteredFacets = filterAndSortLibraryFacets(facets, '#noi');
+    expect(hashFilteredFacets.folders).toEqual([]);
+    expect(hashFilteredFacets.tags).toEqual(['noir']);
 
     // Pinned floats first across all sort modes
     const byRecent = buildLibraryRows(loaded, [], 'custom', '', {sortBy: 'recent'});

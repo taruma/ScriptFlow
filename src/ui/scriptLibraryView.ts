@@ -88,6 +88,8 @@ export type LibraryRowItem =
 export interface LibraryFacets {
   folders: string[];
   tags: string[];
+  folderCounts: Record<string, number>;
+  tagCounts: Record<string, number>;
   pinnedCount: number;
 }
 
@@ -205,15 +207,18 @@ export function extractBodyMatchSnippet(rawText: string, normalizedQuery: string
 }
 
 /**
- * Collects unique folders, tags, and pinned count across custom scripts and bundled examples
- * for quiet filter facets.
+ * Collects unique folders, tags, item counts, and pinned count across custom scripts
+ * and/or bundled examples (optionally scoped to the active LibraryFilterTab).
  */
 export function collectLibraryFacets(
   customScripts: readonly ScriptRecord[],
-  examples: readonly BundledExample[] = []
+  examples: readonly BundledExample[] = [],
+  filterTab: LibraryFilterTab = 'all'
 ): LibraryFacets {
   const folderMap = new Map<string, string>();
+  const folderCounts: Record<string, number> = {};
   const tagSet = new Set<string>();
+  const tagCounts: Record<string, number> = {};
   let pinnedCount = 0;
 
   const collectFromItem = (item: {folder?: string; tags?: readonly string[]; pinned?: boolean}) => {
@@ -221,30 +226,75 @@ export function collectLibraryFacets(
     if (item.folder) {
       const clean = item.folder.trim();
       const key = clean.toLowerCase();
-      if (clean.length > 0 && !folderMap.has(key)) {
-        folderMap.set(key, clean);
+      if (clean.length > 0) {
+        let canonical = folderMap.get(key);
+        if (!canonical) {
+          canonical = clean;
+          folderMap.set(key, canonical);
+        }
+        folderCounts[canonical] = (folderCounts[canonical] ?? 0) + 1;
       }
     }
     if (item.tags) {
+      const seenTags = new Set<string>();
       for (const tag of item.tags) {
         const clean = tag.trim().toLowerCase();
-        if (clean.length > 0) tagSet.add(clean);
+        if (clean.length > 0 && !seenTags.has(clean)) {
+          seenTags.add(clean);
+          tagSet.add(clean);
+          tagCounts[clean] = (tagCounts[clean] ?? 0) + 1;
+        }
       }
     }
   };
 
-  for (const record of customScripts) {
-    collectFromItem(record);
+  if (filterTab === 'all' || filterTab === 'custom') {
+    for (const record of customScripts) {
+      collectFromItem(record);
+    }
   }
-  for (const example of examples) {
-    collectFromItem(example);
+  if (filterTab === 'all' || filterTab === 'examples') {
+    for (const example of examples) {
+      collectFromItem(example);
+    }
   }
 
   return {
     folders: Array.from(folderMap.values()).sort((a, b) => a.localeCompare(b)),
     tags: Array.from(tagSet).sort((a, b) => a.localeCompare(b)),
+    folderCounts,
+    tagCounts,
     pinnedCount,
   };
+}
+
+/**
+ * Pure filter & sort projection for the Script Library Filter popover:
+ * - Filters folders and `#tags` by optional search query (stripping leading `#` for tag matching)
+ * - Keeps folders alphabetical and sorts tags by frequency descending (tie-breaking alphabetically)
+ */
+export function filterAndSortLibraryFacets(
+  facets: LibraryFacets,
+  facetQuery: string
+): {folders: string[]; tags: string[]} {
+  const rawQuery = facetQuery.trim().toLowerCase();
+  const tagQuery = rawQuery.startsWith('#') ? rawQuery.slice(1) : rawQuery;
+
+  const folders =
+    rawQuery.length > 0
+      ? facets.folders.filter((folder) => folder.toLowerCase().includes(rawQuery))
+      : [...facets.folders];
+
+  const matchingTags =
+    tagQuery.length > 0
+      ? facets.tags.filter((tag) => tag.includes(tagQuery))
+      : [...facets.tags];
+
+  const tags = matchingTags.sort(
+    (a, b) => (facets.tagCounts[b] ?? 0) - (facets.tagCounts[a] ?? 0) || a.localeCompare(b)
+  );
+
+  return {folders, tags};
 }
 
 function buildExampleRowFromNode(

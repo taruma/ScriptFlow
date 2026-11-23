@@ -65,11 +65,16 @@ export interface UseLibraryModalNavigationResult {
   toggleSelectAllVisible: () => void;
   isSortMenuOpen: boolean;
   setIsSortMenuOpen: (next: boolean | ((prev: boolean) => boolean)) => void;
+  isFilterMenuOpen: boolean;
+  setIsFilterMenuOpen: (next: boolean | ((prev: boolean) => boolean)) => void;
   openedAt: number;
   searchInputRef: RefObject<HTMLInputElement | null>;
   sortMenuRef: RefObject<HTMLDivElement | null>;
+  filterTriggerRef: RefObject<HTMLButtonElement | null>;
+  filterPopoverRef: RefObject<HTMLDivElement | null>;
   registerRowRef: (index: number, el: HTMLDivElement | null) => void;
   facets: LibraryFacets;
+  existingFolders: string[];
   filteredRows: LibraryRowItem[];
   paginated: PaginatedLibraryRows;
   visibleBeatCounts: number[];
@@ -111,10 +116,13 @@ export function useLibraryModalNavigation({
   const [isBulkMode, setIsBulkMode] = useState<boolean>(false);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isSortMenuOpen, setIsSortMenuOpen] = useState<boolean>(false);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState<boolean>(false);
   const [openedAt] = useState<number>(() => Date.now());
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const filterPopoverRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const shouldScrollSelectedIntoViewRef = useRef<boolean>(false);
 
@@ -151,9 +159,14 @@ export function useLibraryModalNavigation({
     });
   }, [activeScript.kind, activeScript.id, lineageIndex, exampleLineageIndex]);
 
-  const facets = useMemo(
-    () => collectLibraryFacets(customScripts, examples),
+  const allFacets = useMemo(
+    () => collectLibraryFacets(customScripts, examples, 'all'),
     [customScripts, examples]
+  );
+
+  const facets = useMemo(
+    () => collectLibraryFacets(customScripts, examples, filterTab),
+    [customScripts, examples, filterTab]
   );
 
   // Clear stale folder/tag filters if the last script with that facet was removed or edited
@@ -349,6 +362,15 @@ export function useLibraryModalNavigation({
     }
   }, [selectedBulkRecords.length, visibleCustomRecords]);
 
+  const hasFacetFilters = activeFolder !== null || activeTag !== null;
+  const hasFacets = facets.folders.length > 0 || facets.tags.length > 0;
+
+  useEffect(() => {
+    if (!hasFacets && isFilterMenuOpen) {
+      setIsFilterMenuOpen(false);
+    }
+  }, [hasFacets, isFilterMenuOpen]);
+
   // Close custom sort popover on outside pointer down
   useEffect(() => {
     if (!isSortMenuOpen) return;
@@ -360,6 +382,21 @@ export function useLibraryModalNavigation({
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [isSortMenuOpen]);
+
+  // Close folder/tag filter popover on outside pointer down
+  useEffect(() => {
+    if (!isFilterMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const inTrigger = filterTriggerRef.current?.contains(target) ?? false;
+      const inPopover = filterPopoverRef.current?.contains(target) ?? false;
+      if (!inTrigger && !inPopover) {
+        setIsFilterMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isFilterMenuOpen]);
 
   // Keyboard navigation (↑ / ↓ / Enter / Esc) while modal is active and ConfirmDialog is closed
   useEffect(() => {
@@ -383,6 +420,12 @@ export function useLibraryModalNavigation({
           setIsSortMenuOpen(false);
           return;
         }
+        if (isFilterMenuOpen) {
+          event.preventDefault();
+          setIsFilterMenuOpen(false);
+          filterTriggerRef.current?.focus();
+          return;
+        }
         if (isInOtherInput) return;
         event.preventDefault();
         if (isBulkMode) {
@@ -394,7 +437,7 @@ export function useLibraryModalNavigation({
         return;
       }
 
-      if (isInOtherInput || isSortMenuOpen) return;
+      if (isInOtherInput || isSortMenuOpen || isFilterMenuOpen) return;
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -431,6 +474,7 @@ export function useLibraryModalNavigation({
     isConfirmDialogOpen,
     isBulkMode,
     isSortMenuOpen,
+    isFilterMenuOpen,
     filteredRows,
     selectedIndex,
     selectedRow,
@@ -443,9 +487,6 @@ export function useLibraryModalNavigation({
     custom: customScripts.length,
     examples: examples.length,
   };
-
-  const hasFacetFilters = activeFolder !== null || activeTag !== null;
-  const hasFacets = facets.folders.length > 0 || facets.tags.length > 0;
 
   return {
     filterTab,
@@ -472,11 +513,16 @@ export function useLibraryModalNavigation({
     toggleSelectAllVisible,
     isSortMenuOpen,
     setIsSortMenuOpen,
+    isFilterMenuOpen,
+    setIsFilterMenuOpen,
     openedAt,
     searchInputRef,
     sortMenuRef,
+    filterTriggerRef,
+    filterPopoverRef,
     registerRowRef,
     facets,
+    existingFolders: allFacets.folders,
     filteredRows,
     paginated,
     visibleBeatCounts,

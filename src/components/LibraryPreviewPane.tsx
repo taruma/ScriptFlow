@@ -45,6 +45,10 @@ export interface LibraryPreviewPaneProps {
   customScripts: readonly ScriptRecord[];
   examples: readonly BundledExample[];
   activeScript: ActiveScriptRef;
+  activeFolder?: string | null;
+  activeTag?: string | null;
+  onToggleFolderFilter?: (folder: string) => void;
+  onToggleTagFilter?: (tag: string) => void;
   onOpen: (row: LibraryRowItem) => void;
   onOpenCustomScript: (record: ScriptRecord) => void;
   onOpenExample: (example: BundledExample) => void;
@@ -72,6 +76,10 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
   customScripts,
   examples,
   activeScript,
+  activeFolder = null,
+  activeTag = null,
+  onToggleFolderFilter,
+  onToggleTagFilter,
   onOpen,
   onOpenCustomScript,
   onOpenExample,
@@ -458,24 +466,14 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                 {row.branchNote && (
                   <p className="text-[11.5px] text-text-muted">{row.branchNote}</p>
                 )}
-                {(row.folder || currentTags.length > 0) && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {row.folder && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
-                        <Folder className="h-2.5 w-2.5 shrink-0" />
-                        <span>{row.folder}</span>
-                      </span>
-                    )}
-                    {currentTags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <PreviewMetadataPills
+                  folder={row.folder}
+                  tags={currentTags}
+                  activeFolder={activeFolder}
+                  activeTag={activeTag}
+                  onToggleFolderFilter={onToggleFolderFilter}
+                  onToggleTagFilter={onToggleTagFilter}
+                />
               </div>
             )
           ) : (
@@ -513,22 +511,46 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
 
                 <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-[160px]">
                   <Tag className="h-3 w-3 text-text-faint shrink-0" />
-                  {currentTags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-                    >
-                      <span>#{tag}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTag(tag)}
-                        aria-label={UI_LABELS.library.removeTagAria(tag)}
-                        className="text-text-faint hover:text-text-main cursor-pointer"
+                  {currentTags.map((tag) => {
+                    const isTagOn = activeTag === tag;
+                    return (
+                      <span
+                        key={tag}
+                        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+                          isTagOn
+                            ? 'border-text-main bg-text-main text-surface'
+                            : 'border-border-main bg-surface-subtle text-text-muted'
+                        }`}
                       >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </span>
-                  ))}
+                        {onToggleTagFilter ? (
+                          <button
+                            type="button"
+                            onClick={() => onToggleTagFilter(tag)}
+                            aria-label={UI_LABELS.library.tagFilterAria(tag)}
+                            aria-pressed={isTagOn}
+                            title={UI_LABELS.library.tagFilterAria(tag)}
+                            className="hover:underline underline-offset-2 cursor-pointer"
+                          >
+                            #{tag}
+                          </button>
+                        ) : (
+                          <span>#{tag}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTag(tag)}
+                          aria-label={UI_LABELS.library.removeTagAria(tag)}
+                          className={`cursor-pointer ${
+                            isTagOn
+                              ? 'text-surface/80 hover:text-surface'
+                              : 'text-text-faint hover:text-text-main'
+                          }`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    );
+                  })}
                   <input
                     type="text"
                     data-native-undo="true"
@@ -552,24 +574,14 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                 {row.branchNote && (
                   <p className="text-[11.5px] text-text-body">{row.branchNote}</p>
                 )}
-                {(row.folder || (row.tags && row.tags.length > 0)) && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {row.folder && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
-                        <Folder className="h-2.5 w-2.5 shrink-0" />
-                        <span>{row.folder}</span>
-                      </span>
-                    )}
-                    {row.tags?.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <PreviewMetadataPills
+                  folder={row.folder}
+                  tags={row.tags}
+                  activeFolder={activeFolder}
+                  activeTag={activeTag}
+                  onToggleFolderFilter={onToggleFolderFilter}
+                  onToggleTagFilter={onToggleTagFilter}
+                />
               </div>
             )}
           </div>
@@ -801,3 +813,81 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
     </div>
   );
 });
+
+interface PreviewMetadataPillsProps {
+  folder?: string;
+  tags?: readonly string[];
+  activeFolder: string | null;
+  activeTag: string | null;
+  onToggleFolderFilter?: (folder: string) => void;
+  onToggleTagFilter?: (tag: string) => void;
+}
+
+function PreviewMetadataPills({
+  folder,
+  tags,
+  activeFolder,
+  activeTag,
+  onToggleFolderFilter,
+  onToggleTagFilter,
+}: PreviewMetadataPillsProps) {
+  if (!folder && (!tags || tags.length === 0)) return null;
+
+  const isFolderOn =
+    folder !== undefined && activeFolder?.toLowerCase() === folder.toLowerCase();
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {folder &&
+        (onToggleFolderFilter ? (
+          <button
+            type="button"
+            onClick={() => onToggleFolderFilter(folder)}
+            aria-label={UI_LABELS.library.folderFilterAria(folder)}
+            aria-pressed={isFolderOn}
+            title={UI_LABELS.library.folderFilterAria(folder)}
+            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] transition-colors cursor-pointer ${
+              isFolderOn
+                ? 'border-text-main bg-text-main text-surface font-medium'
+                : 'border-border-main bg-surface-subtle text-text-muted hover:border-text-muted/60 hover:text-text-main'
+            }`}
+          >
+            <Folder className="h-2.5 w-2.5 shrink-0" />
+            <span>{folder}</span>
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
+            <Folder className="h-2.5 w-2.5 shrink-0" />
+            <span>{folder}</span>
+          </span>
+        ))}
+      {tags?.map((tag) => {
+        const isTagOn = activeTag === tag;
+        return onToggleTagFilter ? (
+          <button
+            key={tag}
+            type="button"
+            onClick={() => onToggleTagFilter(tag)}
+            aria-label={UI_LABELS.library.tagFilterAria(tag)}
+            aria-pressed={isTagOn}
+            title={UI_LABELS.library.tagFilterAria(tag)}
+            className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors cursor-pointer ${
+              isTagOn
+                ? 'border-text-main bg-text-main text-surface'
+                : 'border-border-main bg-surface-subtle text-text-muted hover:border-text-muted/60 hover:text-text-main'
+            }`}
+          >
+            #{tag}
+          </button>
+        ) : (
+          <span
+            key={tag}
+            className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+          >
+            #{tag}
+          </span>
+        );
+      })}
+    </div>
+  );
+}

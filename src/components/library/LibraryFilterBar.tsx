@@ -1,4 +1,4 @@
-import type {RefObject} from 'react';
+import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
 import {
   ArrowUpDown,
   Check,
@@ -7,20 +7,23 @@ import {
   Download,
   Folder,
   Search,
+  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-react';
 import {UI_LABELS} from '../../ui/labels.ts';
 import type {ScriptRecord} from '../../ui/scriptLibraryDb.ts';
-import type {
-  LibraryFacets,
-  LibraryFilterTab,
-  LibrarySortBy,
+import {
+  filterAndSortLibraryFacets,
+  type LibraryFacets,
+  type LibraryFilterTab,
+  type LibrarySortBy,
 } from '../../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../../ui/tokens/ui.ts';
 
 const FILTER_TABS: readonly LibraryFilterTab[] = ['all', 'custom', 'examples'];
 const SORT_OPTIONS: readonly LibrarySortBy[] = ['recent', 'title', 'beats'];
+const FACET_SEARCH_THRESHOLD = 6;
 
 export interface LibraryFilterBarProps {
   query: string;
@@ -35,6 +38,11 @@ export interface LibraryFilterBarProps {
   onToggleSortMenu: () => void;
   onCloseSortMenu: () => void;
   sortMenuRef: RefObject<HTMLDivElement | null>;
+  isFilterMenuOpen: boolean;
+  onToggleFilterMenu: () => void;
+  onCloseFilterMenu: () => void;
+  filterTriggerRef: RefObject<HTMLButtonElement | null>;
+  filterPopoverRef: RefObject<HTMLDivElement | null>;
   customScriptsCount: number;
   readOnly?: boolean;
   isBulkMode: boolean;
@@ -51,8 +59,8 @@ export interface LibraryFilterBarProps {
 
 /**
  * Left-pane filter header for ScriptLibraryModal:
- * full-text search input, segmented filter tabs, custom sort popover,
- * bulk selection mode toggle, and quiet folder/tag facet chips.
+ * full-text search input, segmented filter tabs, custom sort & folder/tag filter popovers,
+ * bulk selection mode toggle, and active-only filter chips.
  */
 export function LibraryFilterBar({
   query,
@@ -67,6 +75,11 @@ export function LibraryFilterBar({
   onToggleSortMenu,
   onCloseSortMenu,
   sortMenuRef,
+  isFilterMenuOpen,
+  onToggleFilterMenu,
+  onCloseFilterMenu,
+  filterTriggerRef,
+  filterPopoverRef,
   customScriptsCount,
   readOnly = false,
   isBulkMode,
@@ -80,6 +93,31 @@ export function LibraryFilterBar({
   onSelectTag,
   onClearFacetFilters,
 }: LibraryFilterBarProps) {
+  const [facetQuery, setFacetQuery] = useState<string>('');
+  const facetSearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const totalFacetCount = facets.folders.length + facets.tags.length;
+  const showFacetSearch = totalFacetCount > FACET_SEARCH_THRESHOLD;
+  const activeFacetCount = (activeFolder !== null ? 1 : 0) + (activeTag !== null ? 1 : 0);
+
+  useEffect(() => {
+    if (!isFilterMenuOpen) {
+      setFacetQuery('');
+      return;
+    }
+    if (showFacetSearch) {
+      const id = requestAnimationFrame(() => {
+        facetSearchInputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isFilterMenuOpen, showFacetSearch]);
+
+  const filteredFacets = useMemo(
+    () => filterAndSortLibraryFacets(facets, facetQuery),
+    [facets, facetQuery]
+  );
+
   return (
     <div className="px-3.5 py-3 border-b border-border-subtle space-y-2.5 shrink-0">
       <div className="relative">
@@ -142,60 +180,101 @@ export function LibraryFilterBar({
         })}
       </div>
 
-      {/* Row 2: Custom Sort Menu (left) + Bulk Select Toggle (right) */}
-      <div className="flex items-center justify-between gap-2">
-        <div ref={sortMenuRef} className="relative">
-          <button
-            type="button"
-            aria-label={UI_LABELS.library.sortAria}
-            aria-haspopup="menu"
-            aria-expanded={isSortMenuOpen}
-            onClick={onToggleSortMenu}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
-              isSortMenuOpen
-                ? 'border-border-main bg-surface-muted text-text-main'
-                : 'border-border-main bg-surface text-text-body hover:bg-surface-subtle hover:text-text-main'
-            }`}
-          >
-            <ArrowUpDown className="h-3 w-3 text-text-faint shrink-0" />
-            <span>{UI_LABELS.library.sortOptions[sortBy]}</span>
-            <ChevronDown
-              className={`h-3 w-3 text-text-faint shrink-0 transition-transform duration-150 ${
-                isSortMenuOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          {isSortMenuOpen && (
-            <div
-              role="menu"
+      {/* Row 2: Sort Menu + Folder/Tag Filter Popover (left) + Bulk Select Toggle (right) */}
+      <div className="relative flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div ref={sortMenuRef} className="relative">
+            <button
+              type="button"
               aria-label={UI_LABELS.library.sortAria}
-              className="absolute top-full left-0 mt-1.5 w-40 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main py-1"
+              aria-haspopup="menu"
+              aria-expanded={isSortMenuOpen}
+              onClick={() => {
+                onCloseFilterMenu();
+                onToggleSortMenu();
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                isSortMenuOpen
+                  ? 'border-border-main bg-surface-muted text-text-main'
+                  : 'border-border-main bg-surface text-text-body hover:bg-surface-subtle hover:text-text-main'
+              }`}
             >
-              {SORT_OPTIONS.map((opt) => {
-                const isActiveSort = sortBy === opt;
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={isActiveSort}
-                    onClick={() => {
-                      onSortByChange(opt);
-                      onCloseSortMenu();
-                    }}
-                    className={`w-full text-left px-3 py-1.5 text-[11.5px] flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                      isActiveSort
-                        ? 'bg-surface-muted font-semibold text-text-main'
-                        : 'font-medium text-text-body hover:bg-surface-subtle hover:text-text-main'
-                    }`}
-                  >
-                    <span>{UI_LABELS.library.sortOptions[opt]}</span>
-                    {isActiveSort && <Check className="h-3 w-3 text-text-main shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
+              <ArrowUpDown className="h-3 w-3 text-text-faint shrink-0" />
+              <span>{UI_LABELS.library.sortOptions[sortBy]}</span>
+              <ChevronDown
+                className={`h-3 w-3 text-text-faint shrink-0 transition-transform duration-150 ${
+                  isSortMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {isSortMenuOpen && (
+              <div
+                role="menu"
+                aria-label={UI_LABELS.library.sortAria}
+                className="absolute top-full left-0 mt-1.5 w-40 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main py-1"
+              >
+                {SORT_OPTIONS.map((opt) => {
+                  const isActiveSort = sortBy === opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={isActiveSort}
+                      onClick={() => {
+                        onSortByChange(opt);
+                        onCloseSortMenu();
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-[11.5px] flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                        isActiveSort
+                          ? 'bg-surface-muted font-semibold text-text-main'
+                          : 'font-medium text-text-body hover:bg-surface-subtle hover:text-text-main'
+                      }`}
+                    >
+                      <span>{UI_LABELS.library.sortOptions[opt]}</span>
+                      {isActiveSort && <Check className="h-3 w-3 text-text-main shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {hasFacets && (
+            <button
+              ref={filterTriggerRef}
+              type="button"
+              aria-label={UI_LABELS.library.filterAria}
+              aria-haspopup="dialog"
+              aria-expanded={isFilterMenuOpen}
+              onClick={() => {
+                onCloseSortMenu();
+                onToggleFilterMenu();
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                isFilterMenuOpen || hasFacetFilters
+                  ? 'border-border-main bg-surface-muted text-text-main'
+                  : 'border-border-main bg-surface text-text-body hover:bg-surface-subtle hover:text-text-main'
+              }`}
+            >
+              <SlidersHorizontal
+                className={`h-3 w-3 shrink-0 ${
+                  isFilterMenuOpen || hasFacetFilters ? 'text-text-main' : 'text-text-faint'
+                }`}
+              />
+              <span>{UI_LABELS.library.filterButton}</span>
+              {activeFacetCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full bg-text-main text-surface font-mono text-[9.5px] font-semibold tabular-nums leading-none">
+                  {activeFacetCount}
+                </span>
+              )}
+              <ChevronDown
+                className={`h-3 w-3 text-text-faint shrink-0 transition-transform duration-150 ${
+                  isFilterMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
           )}
         </div>
 
@@ -219,53 +298,179 @@ export function LibraryFilterBar({
             </span>
           </button>
         )}
+
+        {/* Folder & Tag Filter Popover */}
+        {hasFacets && isFilterMenuOpen && (
+          <div
+            ref={filterPopoverRef}
+            role="dialog"
+            aria-label={UI_LABELS.library.filterMenuAria}
+            className="absolute top-full left-0 right-0 mt-1.5 bg-surface rounded-xl shadow-xl border border-border-main overflow-hidden z-50 text-text-main"
+          >
+            {showFacetSearch && (
+              <div className="px-2.5 py-2 border-b border-border-subtle bg-surface-subtle">
+                <div className="relative">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-text-faint"
+                  />
+                  <input
+                    ref={facetSearchInputRef}
+                    type="text"
+                    data-native-undo="true"
+                    value={facetQuery}
+                    onChange={(e) => setFacetQuery(e.target.value)}
+                    placeholder={UI_LABELS.library.filterSearchPlaceholder}
+                    aria-label={UI_LABELS.library.filterSearchAria}
+                    className="w-full rounded-lg border border-border-main bg-surface pl-7 pr-6 py-1 text-[11px] text-text-body placeholder:text-text-faint focus:border-text-muted focus:outline-none"
+                  />
+                  {facetQuery.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFacetQuery('');
+                        facetSearchInputRef.current?.focus();
+                      }}
+                      aria-label={UI_LABELS.library.filterClearSearchAria}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-text-faint hover:bg-surface-muted hover:text-text-main transition-colors cursor-pointer"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="max-h-[264px] overflow-y-auto auteur-pane-scroll p-2.5 space-y-2.5">
+              {filteredFacets.folders.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+                    {UI_LABELS.library.filterFoldersHeading}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filteredFacets.folders.map((folder) => {
+                      const isOn = activeFolder?.toLowerCase() === folder.toLowerCase();
+                      const count = facets.folderCounts[folder] ?? 0;
+                      return (
+                        <button
+                          key={`folder:${folder}`}
+                          type="button"
+                          aria-label={UI_LABELS.library.folderFilterAria(folder)}
+                          aria-pressed={isOn}
+                          onClick={() => {
+                            onSelectFolder(isOn ? null : folder);
+                            onCloseFilterMenu();
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10.5px] font-medium transition-colors cursor-pointer ${
+                            isOn
+                              ? 'border-text-main bg-text-main text-surface'
+                              : 'border-border-main bg-surface-subtle text-text-body hover:border-text-muted/60 hover:text-text-main'
+                          }`}
+                        >
+                          <Folder className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate max-w-[160px]">{folder}</span>
+                          {count > 0 && (
+                            <span className="font-mono text-[9.5px] opacity-65 tabular-nums">
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {filteredFacets.tags.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+                    {UI_LABELS.library.filterTagsHeading}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filteredFacets.tags.map((tag) => {
+                      const isOn = activeTag === tag;
+                      const count = facets.tagCounts[tag] ?? 0;
+                      return (
+                        <button
+                          key={`tag:${tag}`}
+                          type="button"
+                          aria-label={UI_LABELS.library.tagFilterAria(tag)}
+                          aria-pressed={isOn}
+                          onClick={() => {
+                            onSelectTag(isOn ? null : tag);
+                            onCloseFilterMenu();
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors cursor-pointer ${
+                            isOn
+                              ? 'border-text-main bg-text-main text-surface'
+                              : 'border-border-subtle bg-surface-subtle text-text-muted hover:border-border-main hover:text-text-main'
+                          }`}
+                        >
+                          <span>#{tag}</span>
+                          {count > 0 && (
+                            <span className="text-[9.5px] opacity-65 tabular-nums">{count}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {filteredFacets.folders.length === 0 && filteredFacets.tags.length === 0 && (
+                <p className="py-3 text-center text-[11px] text-text-faint">
+                  {UI_LABELS.library.filterEmptyMatch}
+                </p>
+              )}
+            </div>
+
+            {hasFacetFilters && (
+              <div className="flex items-center justify-end px-2.5 py-1.5 border-t border-border-subtle bg-surface-subtle">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearFacetFilters();
+                    onCloseFilterMenu();
+                  }}
+                  className="text-[10.5px] font-medium text-text-muted hover:text-text-main underline underline-offset-2 cursor-pointer"
+                >
+                  {UI_LABELS.library.facetsClearFilters}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Quiet Folder & Tag Filter Strip (only shown when folders/tags exist) */}
-      {hasFacets && (
+      {/* Active-Only Filter Chips Strip */}
+      {hasFacetFilters && (
         <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-          {facets.folders.map((folder) => {
-            const isOn = activeFolder?.toLowerCase() === folder.toLowerCase();
-            return (
-              <button
-                key={`folder:${folder}`}
-                type="button"
-                aria-label={UI_LABELS.library.folderFilterAria(folder)}
-                aria-pressed={isOn}
-                onClick={() => onSelectFolder(isOn ? null : folder)}
-                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium transition-colors cursor-pointer ${
-                  isOn
-                    ? 'border-text-main bg-text-main text-surface'
-                    : 'border-border-main bg-surface-subtle text-text-muted hover:text-text-main'
-                }`}
-              >
-                <Folder className="h-2.5 w-2.5" />
-                <span className="truncate max-w-[110px]">{folder}</span>
-              </button>
-            );
-          })}
+          {activeFolder && (
+            <button
+              type="button"
+              aria-label={UI_LABELS.library.clearFolderFilterAria(activeFolder)}
+              onClick={() => onSelectFolder(null)}
+              className="inline-flex items-center gap-1 rounded-md border border-text-main bg-text-main text-surface px-1.5 py-0.5 text-[10.5px] font-medium transition-opacity hover:opacity-90 cursor-pointer"
+            >
+              <Folder className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate max-w-[140px]">{activeFolder}</span>
+              <X className="h-2.5 w-2.5 shrink-0 opacity-75" />
+            </button>
+          )}
 
-          {facets.tags.map((tag) => {
-            const isOn = activeTag === tag;
-            return (
-              <button
-                key={`tag:${tag}`}
-                type="button"
-                aria-label={UI_LABELS.library.tagFilterAria(tag)}
-                aria-pressed={isOn}
-                onClick={() => onSelectTag(isOn ? null : tag)}
-                className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] transition-colors cursor-pointer ${
-                  isOn
-                    ? 'border-text-main bg-text-main text-surface'
-                    : 'border-border-subtle bg-surface-subtle text-text-faint hover:border-border-main hover:text-text-main'
-                }`}
-              >
-                #{tag}
-              </button>
-            );
-          })}
+          {activeTag && (
+            <button
+              type="button"
+              aria-label={UI_LABELS.library.clearTagFilterAria(activeTag)}
+              onClick={() => onSelectTag(null)}
+              className="inline-flex items-center gap-1 rounded-md border border-text-main bg-text-main text-surface px-1.5 py-0.5 font-mono text-[10px] font-medium transition-opacity hover:opacity-90 cursor-pointer"
+            >
+              <span>#{activeTag}</span>
+              <X className="h-2.5 w-2.5 shrink-0 opacity-75" />
+            </button>
+          )}
 
-          {hasFacetFilters && (
+          {activeFacetCount > 1 && (
             <button
               type="button"
               onClick={onClearFacetFilters}
