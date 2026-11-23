@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [1.0.0] - Unreleased
 
 ### Changed
+- **Timestamped & Content-Hashed Export Filenames (`scriptLibraryCodec`, `agentContextCodec`)**: Standardized all 5 browser file exports to embed a sortable local `YYYYMMDD-HHMMSS` timestamp and full 8-character deterministic `computeSnapshotHash()` digest (`<slug>-YYYYMMDD-HHMMSS-<hash8>.txt`, `<slug>-YYYYMMDD-HHMMSS-<hash8>-tagless.txt`, `<slug>-YYYYMMDD-HHMMSS-<hash8>.json`, `auteur-library-backup-YYYYMMDD-HHMMSS-<hash8>.json`, and `auteur-agent-context-YYYYMMDD-HHMMSS-<hash8>.json`), placing `-tagless` at the end for clean sorting and updating `deriveTitleFromFilename()` to strip exported timestamp/hash suffixes on re-import.
 - **Brand Identity, Header Logo Swap & Metadata (`TopSlateBar`, `AppInfoModal`, `index.html`, `public/`)**: Replaced the plain-text `"ScriptFlow"` / `"S"` header title with theme-adaptive, pixel-aligned `SCRIPTFLOW - BLACK.png` / `SCRIPTFLOW - WHITE.png` brand lockups (`h-7 md:h-8 lg:h-9`) on desktop/tablet and a compact `30×30px` theme-adaptive clapboard mark (`/android-chrome-192x192.png`) on `< 640px` viewports; added the brand lockup inside `AppInfoModal`; wired `/favicon.ico`, PNG favicons, `/apple-touch-icon.png`, and `/site.webmanifest`; and updated page titles, meta descriptions, and docs to **`Auteur Script Editor & Scene Blueprint`** (*Draft the World. Direct Every Beat.*).
 
 ### Added

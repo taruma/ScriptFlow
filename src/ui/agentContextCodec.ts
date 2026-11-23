@@ -1,3 +1,4 @@
+import {computeSnapshotHash} from '../core/index.ts';
 import {
   sanitizeAiSkillsState,
   type AiSkillsState,
@@ -6,6 +7,7 @@ import {
   sanitizeQuickScanRulesState,
   type QuickScanRulesState,
 } from './quickScanRulesStore.ts';
+import {formatExportTimestamp} from './scriptLibraryCodec.ts';
 import {
   AUTEUR_AGENT_CONTEXT_PACK_FORMAT,
   AUTEUR_AGENT_CONTEXT_PACK_VERSION,
@@ -63,9 +65,12 @@ export function buildAgentContextPackExport(
     quickScanRules: sanitizeQuickScanRulesState(quickScanRulesState),
   };
 
-  const dateStamp = exportedAt.slice(0, 10).replace(/[^0-9-]/g, '') || 'export';
+  const stamp = formatExportTimestamp(options.exportedAt ?? new Date());
+  const hash = computeSnapshotHash(
+    JSON.stringify({skills: pack.skills, quickScanRules: pack.quickScanRules})
+  );
   return {
-    filename: `auteur-agent-context-${dateStamp}.json`,
+    filename: `auteur-agent-context-${stamp}-${hash}.json`,
     mimeType: 'application/json;charset=utf-8',
     content: JSON.stringify(pack, null, 2),
     pack,

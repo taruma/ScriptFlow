@@ -4,6 +4,7 @@ import {
   AuteurEnvelopeSchema,
   AuteurScriptIRSchema,
   compileAuteurDraft,
+  computeSnapshotHash,
   exportPlainText,
   exportTagless,
   fromAuteurIR,
@@ -147,6 +148,36 @@ export function slugifyFilename(title: string, fallback = 'untitled-scene'): str
 }
 
 /**
+ * Formats a Date (local wall-clock time) or ISO-8601 timestamp string into a
+ * filesystem-safe, sortable `YYYYMMDD-HHMMSS` stamp.
+ */
+export function formatExportTimestamp(dateOrIso: Date | string = new Date()): string {
+  if (typeof dateOrIso === 'string') {
+    const isoMatch = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2}))?/.exec(
+      dateOrIso.trim()
+    );
+    if (isoMatch) {
+      const [, y, m, d, hh = '00', mm = '00', ss = '00'] = isoMatch;
+      return `${y}${m}${d}-${hh}${mm}${ss}`;
+    }
+    const parsed = new Date(dateOrIso);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatExportTimestamp(parsed);
+    }
+    return '00000000-000000';
+  }
+
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const y = dateOrIso.getFullYear();
+  const m = pad2(dateOrIso.getMonth() + 1);
+  const d = pad2(dateOrIso.getDate());
+  const hh = pad2(dateOrIso.getHours());
+  const mm = pad2(dateOrIso.getMinutes());
+  const ss = pad2(dateOrIso.getSeconds());
+  return `${y}${m}${d}-${hh}${mm}${ss}`;
+}
+
+/**
  * Derives a clean human-readable scene title from an imported filename.
  */
 export function deriveTitleFromFilename(filename: string, fallback = 'Untitled Scene'): string {
@@ -157,7 +188,9 @@ export function deriveTitleFromFilename(filename: string, fallback = 'Untitled S
     .replace(/\.(auteur|envelope)\.json$/i, '')
     .replace(/[-_.]tagless\.txt$/i, '')
     .replace(/\.(txt|md|markdown|json)$/i, '')
-    .replace(/\.[^.]+$/, '');
+    .replace(/\.[^.]+$/, '')
+    .replace(/[-_.]tagless$/i, '')
+    .replace(/[-_]\d{8}-\d{6}(?:-[0-9a-f]{6,8})?$/i, '');
 
   const spaced = withoutExt.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!spaced) return fallback;
@@ -170,17 +203,31 @@ export function deriveTitleFromFilename(filename: string, fallback = 'Untitled S
   return spaced;
 }
 
-export function buildCanonicalTxtExport(title: string, rawText: string): BuiltFileExport {
+export function buildCanonicalTxtExport(
+  title: string,
+  rawText: string,
+  options: {exportedAt?: Date | string} = {}
+): BuiltFileExport {
+  const content = exportPlainText(rawText);
+  const hash = computeSnapshotHash(content);
+  const stamp = formatExportTimestamp(options.exportedAt);
   return {
-    filename: `${slugifyFilename(title)}.txt`,
+    filename: `${slugifyFilename(title)}-${stamp}-${hash}.txt`,
     mimeType: 'text/plain;charset=utf-8',
-    content: exportPlainText(rawText),
+    content,
   };
 }
 
-export function buildTaglessTxtExport(title: string, rawText: string): BuiltFileExport {
+export function buildTaglessTxtExport(
+  title: string,
+  rawText: string,
+  options: {exportedAt?: Date | string} = {}
+): BuiltFileExport {
+  const canonical = exportPlainText(rawText);
+  const hash = computeSnapshotHash(canonical);
+  const stamp = formatExportTimestamp(options.exportedAt);
   return {
-    filename: `${slugifyFilename(title)}-tagless.txt`,
+    filename: `${slugifyFilename(title)}-${stamp}-${hash}-tagless.txt`,
     mimeType: 'text/plain;charset=utf-8',
     content: exportTagless(rawText),
   };
@@ -189,11 +236,13 @@ export function buildTaglessTxtExport(title: string, rawText: string): BuiltFile
 export function buildJsonEnvelopeExport(
   title: string,
   rawText: string,
-  ruleOverrides?: LintRuleOverrides
+  ruleOverrides?: LintRuleOverrides,
+  options: {exportedAt?: Date | string} = {}
 ): BuiltJsonEnvelopeExport {
   const envelope = toAuteurEnvelope(rawText, ruleOverrides);
+  const stamp = formatExportTimestamp(options.exportedAt);
   return {
-    filename: `${slugifyFilename(title)}.json`,
+    filename: `${slugifyFilename(title)}-${stamp}-${envelope.snapshotHash}.json`,
     mimeType: 'application/json;charset=utf-8',
     content: JSON.stringify(envelope, null, 2),
     envelope,
@@ -222,9 +271,10 @@ export function buildLibraryBackupExport(
   options: {activeScriptId?: string | null; exportedAt?: string} = {}
 ): BuiltFileExport & {backup: AuteurLibraryBackup} {
   const backup = createLibraryBackup(scripts, options);
-  const dateStamp = backup.exportedAt.slice(0, 10).replace(/[^0-9-]/g, '') || 'backup';
+  const stamp = formatExportTimestamp(options.exportedAt ?? new Date());
+  const hash = computeSnapshotHash(JSON.stringify(backup.scripts));
   return {
-    filename: `auteur-library-backup-${dateStamp}.json`,
+    filename: `auteur-library-backup-${stamp}-${hash}.json`,
     mimeType: 'application/json;charset=utf-8',
     content: JSON.stringify(backup, null, 2),
     backup,

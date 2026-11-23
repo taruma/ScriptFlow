@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest';
+import {computeSnapshotHash} from '../../src/core/index.ts';
 import {BUNDLED_QUICK_SCAN_RULES} from '../../src/data/knowledge/index.ts';
 import {BUILTIN_AUTEUR_SKILLS} from '../../src/services/auteurKnowledge.ts';
 import {
@@ -103,7 +104,25 @@ describe('agentContextCodec', () => {
       {exportedAt: '2026-11-21T15:30:00.000Z'}
     );
 
-    expect(exported.filename).toBe('auteur-agent-context-2026-11-21.json');
+    const expectedHash = computeSnapshotHash(
+      JSON.stringify({
+        skills: exported.pack.skills,
+        quickScanRules: exported.pack.quickScanRules,
+      })
+    );
+    expect(expectedHash).toMatch(/^[0-9a-f]{8}$/);
+    expect(exported.filename).toBe(`auteur-agent-context-20261121-153000-${expectedHash}.json`);
+
+    // Hash remains stable across timestamps when pack contents are unchanged
+    const exportedLater = buildAgentContextPackExport(
+      makeSampleSkillsState(),
+      makeSampleQuickScanState(),
+      {exportedAt: '2026-11-22T09:05:12.000Z'}
+    );
+    expect(exportedLater.filename).toBe(
+      `auteur-agent-context-20261122-090512-${expectedHash}.json`
+    );
+
     expect(exported.pack.format).toBe(AUTEUR_AGENT_CONTEXT_PACK_FORMAT);
     expect(exported.pack.packVersion).toBe(AUTEUR_AGENT_CONTEXT_PACK_VERSION);
 

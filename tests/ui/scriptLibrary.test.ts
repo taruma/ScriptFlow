@@ -1,6 +1,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {
   AuteurEnvelopeSchema,
+  computeSnapshotHash,
   exportPlainText,
   exportTagless,
   extractMetadata,
@@ -29,6 +30,7 @@ import {
   buildTaglessTxtExport,
   createLibraryBackup,
   deriveTitleFromFilename,
+  formatExportTimestamp,
   mergeLibraryBackup,
   parseImportedFile,
   parseLibraryBackup,
@@ -321,10 +323,13 @@ describe('IndexedDB Script Library Store (with graceful fallback & legacy migrat
 describe('Single-Script Export Builders & Filename Helpers', () => {
   const sampleRaw = SCRIPT_PRESETS[0].content;
 
-  it('slugifies titles and derives clean human-readable titles from filenames', () => {
+  it('slugifies titles, formats export timestamps, and derives clean titles from filenames', () => {
     expect(slugifyFilename('Interrogation Room Coverage')).toBe('interrogation-room-coverage');
     expect(slugifyFilename('Café Noir: Act #2 — Rain!')).toBe('cafe-noir-act-2-rain');
     expect(slugifyFilename('   !!!   ')).toBe('untitled-scene');
+
+    expect(formatExportTimestamp('2026-11-23T08:36:40.000Z')).toBe('20261123-083640');
+    expect(formatExportTimestamp(new Date(2026, 10, 23, 8, 5, 9))).toBe('20261123-080509');
 
     expect(deriveTitleFromFilename('interrogation-room-coverage.txt')).toBe(
       'Interrogation Room Coverage'
@@ -332,25 +337,57 @@ describe('Single-Script Export Builders & Filename Helpers', () => {
     expect(deriveTitleFromFilename('interrogation-room-coverage-tagless.txt')).toBe(
       'Interrogation Room Coverage'
     );
+    expect(
+      deriveTitleFromFilename('interrogation-room-coverage-20261123-083640-8f4a2c10.txt')
+    ).toBe('Interrogation Room Coverage');
+    expect(
+      deriveTitleFromFilename('interrogation-room-coverage-20261123-083640-8f4a2c10-tagless.txt')
+    ).toBe('Interrogation Room Coverage');
+    expect(
+      deriveTitleFromFilename('interrogation-room-coverage-20261123-083640-8f4a2c10.json')
+    ).toBe('Interrogation Room Coverage');
     expect(deriveTitleFromFilename('POV Forest Horror.md')).toBe('POV Forest Horror');
     expect(deriveTitleFromFilename('folder/sub/night_vault.auteur.json')).toBe('Night Vault');
     expect(deriveTitleFromFilename('.json')).toBe('Untitled Scene');
   });
 
-  it('builds Canonical .txt, Tagless .txt, and schema-valid JSON Envelope exports', () => {
-    const canonical = buildCanonicalTxtExport('Interrogation Room Coverage', sampleRaw);
-    expect(canonical.filename).toBe('interrogation-room-coverage.txt');
+  it('builds Canonical .txt, Tagless .txt, and schema-valid JSON Envelope exports with timestamp and shared hash', () => {
+    const fixedTime = '2026-11-23T08:36:40.000Z';
+    const expectedHash = computeSnapshotHash(exportPlainText(sampleRaw));
+    expect(expectedHash).toMatch(/^[0-9a-f]{8}$/);
+
+    const canonical = buildCanonicalTxtExport('Interrogation Room Coverage', sampleRaw, {
+      exportedAt: fixedTime,
+    });
+    expect(canonical.filename).toBe(
+      `interrogation-room-coverage-20261123-083640-${expectedHash}.txt`
+    );
     expect(canonical.content).toBe(exportPlainText(sampleRaw));
 
-    const tagless = buildTaglessTxtExport('Interrogation Room Coverage', sampleRaw);
-    expect(tagless.filename).toBe('interrogation-room-coverage-tagless.txt');
+    const tagless = buildTaglessTxtExport('Interrogation Room Coverage', sampleRaw, {
+      exportedAt: fixedTime,
+    });
+    expect(tagless.filename).toBe(
+      `interrogation-room-coverage-20261123-083640-${expectedHash}-tagless.txt`
+    );
     expect(tagless.content).toBe(exportTagless(sampleRaw));
     expect(tagless.content).not.toContain('[CAM 01]');
 
-    const jsonExport = buildJsonEnvelopeExport('Interrogation Room Coverage', sampleRaw);
-    expect(jsonExport.filename).toBe('interrogation-room-coverage.json');
+    const jsonExport = buildJsonEnvelopeExport('Interrogation Room Coverage', sampleRaw, undefined, {
+      exportedAt: fixedTime,
+    });
+    expect(jsonExport.filename).toBe(
+      `interrogation-room-coverage-20261123-083640-${expectedHash}.json`
+    );
     expect(AuteurEnvelopeSchema.safeParse(JSON.parse(jsonExport.content)).success).toBe(true);
     expect(jsonExport.envelope.snapshotHash).toBe(toAuteurEnvelope(sampleRaw).snapshotHash);
+    expect(jsonExport.envelope.snapshotHash).toBe(expectedHash);
+
+    // Default call without explicit exportedAt also follows YYYYMMDD-HHMMSS-<hash8>
+    const liveCanonical = buildCanonicalTxtExport('Interrogation Room Coverage', sampleRaw);
+    expect(liveCanonical.filename).toMatch(
+      new RegExp(`^interrogation-room-coverage-\\d{8}-\\d{6}-${expectedHash}\\.txt$`)
+    );
   });
 });
 
@@ -515,7 +552,18 @@ describe('Full-Library Backup Codec & Smart Non-Destructive Merge', () => {
       exportedAt: '2026-11-19T15:30:00.000Z',
     });
 
-    expect(exported.filename).toBe('auteur-library-backup-2026-11-19.json');
+    const expectedHash = computeSnapshotHash(JSON.stringify(exported.backup.scripts));
+    expect(expectedHash).toMatch(/^[0-9a-f]{8}$/);
+    expect(exported.filename).toBe(`auteur-library-backup-20261119-153000-${expectedHash}.json`);
+
+    // Hash remains identical across timestamps when script contents are unchanged
+    const exportedLater = buildLibraryBackupExport(existingScripts, {
+      activeScriptId: 's-keep-local-only',
+      exportedAt: '2026-11-20T09:15:45.000Z',
+    });
+    expect(exportedLater.filename).toBe(
+      `auteur-library-backup-20261120-091545-${expectedHash}.json`
+    );
     const parsed = parseLibraryBackup(exported.content);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;

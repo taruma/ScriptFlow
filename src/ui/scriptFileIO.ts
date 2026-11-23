@@ -19,6 +19,7 @@ export {
   buildTaglessTxtExport,
   createLibraryBackup,
   deriveTitleFromFilename,
+  formatExportTimestamp,
   mergeLibraryBackup,
   parseImportedFile,
   parseLibraryBackup,
