@@ -1,4 +1,7 @@
 import type {AuteurLensPresetId} from '../../core/index.ts';
+import forestPovHorrorExemplarRaw from './exemplars/forest-pov-horror.txt?raw';
+import heistMontageExemplarRaw from './exemplars/heist-montage.txt?raw';
+import interrogationCoverageExemplarRaw from './exemplars/interrogation-coverage.txt?raw';
 import foundationalCraftRaw from './foundational-craft.md?raw';
 import quickScanRulesManifest from './quick-scan-rules.json';
 import skillCatalogManifest from './skills/catalog.json';
@@ -213,6 +216,36 @@ export function resolveQuickScanRuleCatalog(
     };
   });
 }
+
+export interface CraftExemplarEntry {
+  id: 'forest-pov-horror' | 'interrogation-coverage' | 'heist-montage';
+  title: string;
+  topology: string;
+  content: string;
+}
+
+export const BUNDLED_CRAFT_EXEMPLARS: Readonly<
+  Record<CraftExemplarEntry['id'], CraftExemplarEntry>
+> = {
+  'forest-pov-horror': {
+    id: 'forest-pov-horror',
+    title: 'POV Forest Horror',
+    topology: 'POV Handheld Oner',
+    content: normalizeMarkdownContent(forestPovHorrorExemplarRaw),
+  },
+  'interrogation-coverage': {
+    id: 'interrogation-coverage',
+    title: 'Interrogation Room Coverage',
+    topology: 'Multi-Cam Coverage',
+    content: normalizeMarkdownContent(interrogationCoverageExemplarRaw),
+  },
+  'heist-montage': {
+    id: 'heist-montage',
+    title: '1970s Heist Montage',
+    topology: 'Discontinuous Montage',
+    content: normalizeMarkdownContent(heistMontageExemplarRaw),
+  },
+};
 
 export const BUNDLED_QUICK_SCAN_RULES: readonly QuickScanRuleDefinition[] =
   resolveQuickScanRuleCatalog(quickScanRulesManifest as QuickScanRuleDefinition[]);

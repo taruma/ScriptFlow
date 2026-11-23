@@ -271,7 +271,7 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 
 | Skill ID | Category | Passive Auto-Activation Trigger | What It Provides |
 |---|---|---|---|
-| `draft_craft` | Workflow | Editor is empty **OR** `Focus = Draft` | Block-by-block drafting specs (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]` 4 coordinates, `[EXECUTION]`), silent pre-flight ledger, and curated canonical examples from `src/data/examples/` (`forest-pov-horror`, `interrogation-coverage`, plus `heist-montage` on montage topology). |
+| `draft_craft` | Workflow | Editor is empty **OR** `Focus = Draft` | Block-by-block drafting specs (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]` 4 coordinates, `[EXECUTION]`), silent pre-flight ledger, and curated canonical exemplars from `src/data/knowledge/exemplars/` (`forest-pov-horror`, `interrogation-coverage`, plus `heist-montage` on montage topology). |
 | `video_continuation` | Module | Script has `@video1` / `[CONTINUITY PROTOCOL]` **OR** active Brief has `@video*` handle | Terminal-frame `[OPENING]` handoff, `[CONTINUITY PROTOCOL]` placement, reduced delta-only `[AESTHETIC]`, and `S1` camera continuation rules. |
 | `token_mapping` | Module | Script has declared `Description -> TOKEN` mappings in `[AESTHETIC]` | Shorthand dictionary authoring (`LOC01`, `EV01`, `PROP01`) and downstream reuse without lookbook bleed. |
 | `character_reference` | Module | Script has `@ref` bindings **OR** active Brief has `@image*`/`@actor*`/`@audio*` handle | Phase 1 reference isolation, separating facial/vocal identity from fresh scene wardrobe in `[AESTHETIC]`, and canonical name usage downstream. |

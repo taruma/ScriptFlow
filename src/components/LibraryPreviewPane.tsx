@@ -105,7 +105,8 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
     familyTree &&
       ((familyTree.kind === 'custom' &&
         (familyTree.totalMembers > 1 || familyTree.originExample !== null)) ||
-        (familyTree.kind === 'example' && familyTree.nodes.length > 0))
+        (familyTree.kind === 'example' &&
+          (familyTree.exampleFamilyNodes.length > 1 || familyTree.nodes.length > 0)))
   );
 
   // Reset transient drafts and scroll position whenever the selected script changes
@@ -296,6 +297,11 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
             <div className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[10.5px] text-text-faint tabular-nums">
               {row.kind === 'example' ? (
                 <>
+                  {isActive && (
+                    <span className="inline-flex items-center rounded border border-border-main bg-surface-muted px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-text-muted">
+                      {UI_LABELS.library.activeBadge}
+                    </span>
+                  )}
                   <span className="auteur-phase-logic inline-flex items-center rounded border px-1.5 py-px text-[9.5px] font-semibold">
                     {UI_LABELS.library.exampleBadge}
                   </span>
@@ -304,6 +310,27 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
                   <span>
                     {preview.beatCount} {UI_LABELS.topBar.beatUnit(preview.beatCount)}
                   </span>
+                  {familyTree?.parentExample && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSelectRowKey(
+                            `example:${familyTree.parentExample!.id}`,
+                            familyTree.root?.id
+                          )
+                        }
+                        title={UI_LABELS.library.jumpToParentTitle(familyTree.parentExample.title)}
+                        className="inline-flex items-center gap-1 rounded border border-border-subtle bg-surface-subtle px-1.5 py-px text-[10px] font-sans text-text-muted hover:text-text-main hover:border-border-main transition-colors cursor-pointer max-w-[190px]"
+                      >
+                        <GitFork className="h-2.5 w-2.5 text-sky-500 shrink-0" />
+                        <span className="truncate">
+                          {UI_LABELS.library.parentBreadcrumbPrefix} {familyTree.parentExample.title}
+                        </span>
+                      </button>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -518,9 +545,34 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
             </div>
           )
         ) : (
-          <p className="text-xs leading-relaxed text-text-muted pt-1 border-t border-border-subtle/80">
-            {row.summary}
-          </p>
+          <div className="space-y-1.5 pt-2 border-t border-border-subtle/80 text-xs">
+            <p className="leading-relaxed text-text-muted">{row.summary}</p>
+            {(row.branchNote || row.folder || (row.tags && row.tags.length > 0)) && (
+              <div className="space-y-1.5 pt-1">
+                {row.branchNote && (
+                  <p className="text-[11.5px] text-text-body">{row.branchNote}</p>
+                )}
+                {(row.folder || (row.tags && row.tags.length > 0)) && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {row.folder && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 text-[10.5px] text-text-muted">
+                        <Folder className="h-2.5 w-2.5 shrink-0" />
+                        <span>{row.folder}</span>
+                      </span>
+                    )}
+                    {row.tags?.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center rounded-md border border-border-main bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -580,34 +632,56 @@ export const LibraryPreviewPane = memo(function LibraryPreviewPane({
         className="auteur-pane-scroll flex-1 min-h-0 overflow-y-auto px-5 py-4"
       >
         {previewMode === 'lineage' && familyTree ? (
-          <div className="space-y-3">
-            <h4 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint">
-              {familyTree.kind === 'example'
-                ? UI_LABELS.library.lineageExampleForksHeading
-                : UI_LABELS.library.lineageHeading}
-            </h4>
-            {familyTree.nodes.length > 0 ? (
-              <ScriptLineageTree
-                nodes={familyTree.nodes}
-                activeScriptId={activeScript.id}
-                selectedNodeId={row.kind === 'custom' ? row.id : null}
-                originExample={familyTree.kind === 'custom' ? familyTree.originExample : null}
-                nowMs={openedAt}
-                compact
-                onSelectNode={(record) => onSelectRowKey(`custom:${record.id}`, record.id)}
-                onActivateNode={(record) => onOpenCustomScript(record)}
-                onSelectOriginExample={(exampleId) => {
-                  const matched = examples.find((ex) => ex.id === exampleId);
-                  if (matched) onOpenExample(matched);
-                }}
-              />
-            ) : (
-              <p className="text-xs italic text-text-faint">
-                {familyTree.kind === 'example'
-                  ? UI_LABELS.library.lineageExampleEmptyNote
-                  : UI_LABELS.library.lineageEmptyNote}
-              </p>
+          <div className="space-y-4">
+            {familyTree.kind === 'example' && familyTree.exampleFamilyNodes.length > 1 && (
+              <div className="space-y-2.5">
+                <h4 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+                  {UI_LABELS.library.lineageExampleSeriesHeading}
+                </h4>
+                <ScriptLineageTree
+                  nodes={familyTree.exampleFamilyNodes}
+                  activeScriptId={activeScript.id}
+                  selectedNodeId={row.kind === 'example' ? row.id : null}
+                  nowMs={openedAt}
+                  compact
+                  onSelectNode={(record) => onSelectRowKey(`example:${record.id}`, familyTree.root?.id)}
+                  onActivateNode={(record) => {
+                    const matched = examples.find((ex) => ex.id === record.id);
+                    if (matched) onOpenExample(matched);
+                  }}
+                />
+              </div>
             )}
+
+            <div className="space-y-2.5">
+              <h4 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+                {familyTree.kind === 'example'
+                  ? UI_LABELS.library.lineageExampleForksHeading
+                  : UI_LABELS.library.lineageHeading}
+              </h4>
+              {familyTree.nodes.length > 0 ? (
+                <ScriptLineageTree
+                  nodes={familyTree.nodes}
+                  activeScriptId={activeScript.id}
+                  selectedNodeId={row.kind === 'custom' ? row.id : null}
+                  originExample={familyTree.kind === 'custom' ? familyTree.originExample : null}
+                  nowMs={openedAt}
+                  compact
+                  onSelectNode={(record) => onSelectRowKey(`custom:${record.id}`, record.id)}
+                  onActivateNode={(record) => onOpenCustomScript(record)}
+                  onSelectOriginExample={(exampleId) => {
+                    const matched = examples.find((ex) => ex.id === exampleId);
+                    if (matched) onOpenExample(matched);
+                  }}
+                />
+              ) : (
+                <p className="text-xs italic text-text-faint">
+                  {familyTree.kind === 'example'
+                    ? UI_LABELS.library.lineageExampleEmptyNote
+                    : UI_LABELS.library.lineageEmptyNote}
+                </p>
+              )}
+            </div>
           </div>
         ) : previewMode === 'source' ? (
           <pre className="whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-text-body bg-surface rounded-xl border border-border-subtle p-4">

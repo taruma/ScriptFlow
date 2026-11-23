@@ -1,5 +1,9 @@
-import {BUNDLED_EXAMPLES} from '../../data/examples/index.ts';
-import {BUNDLED_KNOWLEDGE_SKILLS, FOUNDATIONAL_CRAFT_MD} from '../../data/knowledge/index.ts';
+import {
+  BUNDLED_CRAFT_EXEMPLARS,
+  BUNDLED_KNOWLEDGE_SKILLS,
+  FOUNDATIONAL_CRAFT_MD,
+  type CraftExemplarEntry,
+} from '../../data/knowledge/index.ts';
 import type {
   AskQuestionMode,
   AssistantFocus,
@@ -19,8 +23,8 @@ export const DEFAULT_FOUNDATIONAL_CRAFT = FOUNDATIONAL_CRAFT_MD;
 // Built-in Extension Skills Registry (Loaded from src/data/knowledge/skills/)
 // ---------------------------------------------------------------------------
 
-export function formatCuratedExample(exampleId: string): string {
-  const found = BUNDLED_EXAMPLES.find((ex) => ex.id === exampleId);
+export function formatCuratedExample(exampleId: CraftExemplarEntry['id']): string {
+  const found = BUNDLED_CRAFT_EXEMPLARS[exampleId];
   if (!found) return '';
   return [`### Curated Example — ${found.title} (${found.topology})`, found.content].join('\n');
 }

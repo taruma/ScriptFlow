@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {extractMetadata, parseAuteurScript} from '../../src/core/index.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 import {
   buildCanvasLayout,
@@ -42,9 +43,9 @@ function makeLayoutOptions(overrides: Partial<GraphLayoutOptions> = {}): GraphLa
 }
 
 describe('Graph View Pure Scene Model & Deterministic Layout', () => {
-  it('derives clean models across all 4 bundled presets with Shot Chambers and RECALL links', () => {
-    // 0: Interrogation Room Coverage (CAM 01 -> CAM 02 -> CAM 01 RECALL)
-    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+  it('derives clean models across canonical craft exemplars and bundled JSON presets with Shot Chambers and RECALL links', () => {
+    // Interrogation Room Coverage (CAM 01 -> CAM 02 -> CAM 01 RECALL)
+    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     expect(coverage.topology).toBe('multi_camera_coverage');
     expect(coverage.stagingBlocks.map((b) => b.name)).toEqual([
       'INTENT',
@@ -57,7 +58,7 @@ describe('Graph View Pure Scene Model & Deterministic Layout', () => {
     expect(coverage.macroStates[2].recallSourceMacroStateId).toBe('S1');
     expect(coverage.cameraSlotObjects.map((o) => o.matchToken)).toEqual(['CAM 01', 'CAM 02']);
 
-    // 1: Subway Train Fight Oner (CAM 01 held across all 5 states -> single Shot Chamber)
+    // Simit and River Pebbles (CAM 01 held across all 5 states -> single Shot Chamber)
     const oner = buildModelFromRaw(SCRIPT_PRESETS[1].content);
     expect(oner.topology).toBe('continuous_oner');
     expect(oner.macroStates).toHaveLength(5);
@@ -68,13 +69,14 @@ describe('Graph View Pure Scene Model & Deterministic Layout', () => {
     });
     expect(oner.macroStates.every((ms) => ms.shotChamberId === oner.shotChambers[0].id)).toBe(true);
 
-    // 2: Forest POV Horror (CAM 01 continuous oner)
-    const pov = buildModelFromRaw(SCRIPT_PRESETS[2].content);
-    expect(pov.topology).toBe('continuous_oner');
-    expect(pov.stats.macroStateCount).toBe(pov.macroStates.length);
+    // Cappadocia Balloon Panic (CAM 01 -> CAM 02 -> CAM 01 RECALL)
+    const balloon = buildModelFromRaw(SCRIPT_PRESETS[2].content);
+    expect(balloon.topology).toBe('multi_camera_coverage');
+    expect(balloon.macroStates).toHaveLength(4);
+    expect(balloon.macroStates[3].cameraTransition).toBe('RECALL');
 
-    // 3: 1970s Heist Montage (unnumbered [CAM] -> no Shot Chambers)
-    const montage = buildModelFromRaw(SCRIPT_PRESETS[3].content);
+    // The Grand Continental (unnumbered [CAM] -> no Shot Chambers)
+    const montage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
     expect(montage.topology).toBe('discontinuous_montage');
     expect(montage.shotChambers).toHaveLength(0);
   });
@@ -157,7 +159,7 @@ Evan stands in LOC01 wearing EV01 as rain taps the awning.
   });
 
   it('defaults to all Macro-States coupled with Raw Input branches collapsed', () => {
-    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const defaults = createDefaultGraphExpansionState(coverage);
 
     expect(defaults.expandedIds.size).toBe(0);
@@ -263,7 +265,7 @@ Location: Rainy alley -> LOC01
 
     // Interrogation Coverage: at rest, RECALL shows cleanly on the spine (`RECALL CAM 01`) with zero lane clutter;
     // focusing CAM 01, isolating CAM, or toggling Show Threads reveals the stepped RECALL lane (`S1 -> S3`)
-    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const restingCoverage = buildCanvasLayout(coverage, makeLayoutOptions());
     expect(restingCoverage.edges.some((e) => e.kind === 'recall')).toBe(false);
     expect(
@@ -401,7 +403,7 @@ Minimal scene.
   });
 
   it('preserves React Flow measured dimensions, selection, style identity, and active drag positions across layout merges', () => {
-    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const layout1 = buildCanvasLayout(coverage, makeLayoutOptions());
     const initial = mergeLayoutIntoFlowNodes<FlowNodeLike>([], layout1.nodes, {});
 
@@ -1008,7 +1010,7 @@ Featuring @img1 as Detective.
   });
 
   it('detects modified Graph View state cleanly via isGraphViewModified across LR and TB defaults', () => {
-    const coverage = buildModelFromRaw(SCRIPT_PRESETS[0].content);
+    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const aesBlock = coverage.stagingBlocks.find((b) => b.kind === 'AESTHETIC')!;
 
     // Resting defaults in LR and TB are unmodified

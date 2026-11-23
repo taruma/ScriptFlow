@@ -20,9 +20,10 @@ import {
   updateExecutionSubState,
   updateStagingBlock,
 } from '../../src/core/index.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
-const INTERROGATION = SCRIPT_PRESETS[0].content;
+const INTERROGATION = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
 describe('Auteur Script Serializer & Tagless Exporter', () => {
   it('updates a Staging block without altering other blocks or Execution beats', () => {

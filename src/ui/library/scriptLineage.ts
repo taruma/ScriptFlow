@@ -51,7 +51,11 @@ export interface ScriptFamilyTree {
   targetId: string;
   root: ScriptRecord | null;
   nodes: ScriptLineageNode[];
+  /** Connected bundled example series nodes when inspecting a branched bundled example family */
+  exampleFamilyNodes: ScriptLineageNode[];
   parentRecord: ScriptRecord | null;
+  /** Parent bundled example when inspecting a child part of a branched bundled example */
+  parentExample: Pick<BundledExample, 'id' | 'title'> | null;
   originExample: ScriptOriginExample | null;
   totalMembers: number;
   /** Direct custom root forks when inspecting a bundled example */
@@ -63,40 +67,53 @@ function compareSiblingRecords(a: ScriptRecord, b: ScriptRecord): number {
 }
 
 /**
- * Pure lineage & family-tree resolver for custom scripts and bundled examples:
- * - Custom parent links (`forkedFromId` matching another custom script) build connected trees.
- * - Bundled example forks (`forkedFromId` matching a bundled example ID) start independent
- *   custom root families while recording `originExample` so unrelated projects never merge.
- * - Unknown/deleted `forkedFromId` values fall back to root custom scripts.
- * - Any cyclic parent chain is broken deterministically at its earliest-created member.
+ * Converts a BundledExample into a ScriptRecord shape for shared lineage resolution.
  */
-export function resolveScriptLineage(
-  customScripts: readonly ScriptRecord[],
-  examples: readonly Pick<BundledExample, 'id' | 'title'>[] = []
+export function exampleToScriptRecord(example: BundledExample): ScriptRecord {
+  return {
+    id: example.id,
+    title: example.title,
+    rawText: example.content,
+    createdAt: example.createdAt,
+    updatedAt: example.updatedAt,
+    ...(example.forkedFromId ? {forkedFromId: example.forkedFromId} : {}),
+    ...(example.branchNote ? {branchNote: example.branchNote} : {}),
+    ...(example.folder ? {folder: example.folder} : {}),
+    ...(example.tags && example.tags.length > 0 ? {tags: example.tags} : {}),
+  };
+}
+
+interface BuildLineageCoreOptions {
+  externalOrigins?: readonly Pick<BundledExample, 'id' | 'title'>[];
+  preserveInputRootOrder?: boolean;
+}
+
+function buildLineageCore(
+  records: readonly ScriptRecord[],
+  options: BuildLineageCoreOptions = {}
 ): ScriptLineageIndex {
-  const customById = new Map<string, ScriptRecord>();
-  for (const record of customScripts) {
-    customById.set(record.id, record);
+  const recordById = new Map<string, ScriptRecord>();
+  for (const record of records) {
+    recordById.set(record.id, record);
   }
 
-  const exampleById = new Map<string, ScriptOriginExample>();
-  for (const example of examples) {
-    exampleById.set(example.id, {id: example.id, title: example.title});
+  const originById = new Map<string, ScriptOriginExample>();
+  for (const origin of options.externalOrigins ?? []) {
+    originById.set(origin.id, {id: origin.id, title: origin.title});
   }
 
-  // Initial parent resolution (custom parents only) + bundled example origin map
   const parentById = new Map<string, string | null>();
   const originExampleById = new Map<string, ScriptOriginExample | null>();
   const customForksByExampleId = new Map<string, ScriptRecord[]>();
 
-  for (const record of customScripts) {
+  for (const record of records) {
     const rawParentId = record.forkedFromId?.trim() || null;
-    if (rawParentId && rawParentId !== record.id && customById.has(rawParentId)) {
+    if (rawParentId && rawParentId !== record.id && recordById.has(rawParentId)) {
       parentById.set(record.id, rawParentId);
       originExampleById.set(record.id, null);
     } else {
       parentById.set(record.id, null);
-      const originExample = rawParentId ? (exampleById.get(rawParentId) ?? null) : null;
+      const originExample = rawParentId ? (originById.get(rawParentId) ?? null) : null;
       originExampleById.set(record.id, originExample);
       if (originExample) {
         const list = customForksByExampleId.get(originExample.id) ?? [];
@@ -113,7 +130,7 @@ export function resolveScriptLineage(
 
   // Cycle protection: break any cycle deterministically by promoting its earliest-created node to root
   const visitState = new Map<string, 'visiting' | 'done'>();
-  for (const record of customScripts) {
+  for (const record of records) {
     if (visitState.get(record.id) === 'done') continue;
 
     const path: string[] = [];
@@ -125,10 +142,10 @@ export function resolveScriptLineage(
       if (cycleStart !== undefined) {
         const cycleIds = path.slice(cycleStart);
         let rootCandidateId = cycleIds[0];
-        let rootCandidate = customById.get(rootCandidateId)!;
+        let rootCandidate = recordById.get(rootCandidateId)!;
         for (let i = 1; i < cycleIds.length; i += 1) {
           const id = cycleIds[i];
-          const candidate = customById.get(id)!;
+          const candidate = recordById.get(id)!;
           if (compareSiblingRecords(candidate, rootCandidate) < 0) {
             rootCandidateId = id;
             rootCandidate = candidate;
@@ -153,7 +170,7 @@ export function resolveScriptLineage(
   const childrenByParentId = new Map<string, ScriptRecord[]>();
   const roots: ScriptRecord[] = [];
 
-  for (const record of customScripts) {
+  for (const record of records) {
     const parentId = parentById.get(record.id) ?? null;
     if (parentId === null) {
       roots.push(record);
@@ -164,7 +181,9 @@ export function resolveScriptLineage(
     }
   }
 
-  roots.sort(compareSiblingRecords);
+  if (!options.preserveInputRootOrder) {
+    roots.sort(compareSiblingRecords);
+  }
   for (const siblings of childrenByParentId.values()) {
     siblings.sort(compareSiblingRecords);
   }
@@ -244,12 +263,39 @@ export function resolveScriptLineage(
 }
 
 /**
+ * Pure lineage & family-tree resolver for custom scripts and bundled examples:
+ * - Custom parent links (`forkedFromId` matching another custom script) build connected trees.
+ * - Bundled example forks (`forkedFromId` matching a bundled example ID) start independent
+ *   custom root families while recording `originExample` so unrelated projects never merge.
+ * - Unknown/deleted `forkedFromId` values fall back to root custom scripts.
+ * - Any cyclic parent chain is broken deterministically at its earliest-created member.
+ */
+export function resolveScriptLineage(
+  customScripts: readonly ScriptRecord[],
+  examples: readonly Pick<BundledExample, 'id' | 'title'>[] = []
+): ScriptLineageIndex {
+  return buildLineageCore(customScripts, {externalOrigins: examples});
+}
+
+/**
+ * Pure lineage & family-tree resolver for bundled examples, preserving catalog root order
+ * while building connected parent/child trees across multi-part example series.
+ */
+export function resolveExampleLineage(
+  examples: readonly BundledExample[]
+): ScriptLineageIndex {
+  return buildLineageCore(examples.map(exampleToScriptRecord), {
+    preserveInputRootOrder: true,
+  });
+}
+
+/**
  * Returns the full connected family tree for a given custom script ID or bundled example ID.
  */
 export function getScriptFamilyTree(
   scriptId: string,
   customScripts: readonly ScriptRecord[],
-  examples: readonly Pick<BundledExample, 'id' | 'title'>[] = []
+  examples: readonly BundledExample[] = []
 ): ScriptFamilyTree | null {
   const index = resolveScriptLineage(customScripts, examples);
   const customNode = index.nodeById.get(scriptId);
@@ -267,7 +313,9 @@ export function getScriptFamilyTree(
       targetId: scriptId,
       root: family.rootRecord,
       nodes: family.nodes,
+      exampleFamilyNodes: [],
       parentRecord,
+      parentExample: null,
       originExample: customNode.originExample ?? family.originExample,
       totalMembers: family.nodes.length,
       exampleForks: [],
@@ -276,6 +324,16 @@ export function getScriptFamilyTree(
 
   const matchedExample = examples.find((example) => example.id === scriptId);
   if (matchedExample) {
+    const exampleIndex = resolveExampleLineage(examples);
+    const exampleNode = exampleIndex.nodeById.get(matchedExample.id);
+    const exampleFamily = exampleNode
+      ? exampleIndex.familyByRootId.get(exampleNode.rootId)
+      : undefined;
+    const exampleFamilyNodes = exampleFamily?.nodes ?? [];
+    const parentExample = exampleNode?.parentId
+      ? (examples.find((ex) => ex.id === exampleNode.parentId) ?? null)
+      : null;
+
     const exampleForks = index.customForksByExampleId.get(matchedExample.id) ?? [];
     const forkNodes: ScriptLineageNode[] = [];
     for (const forkRoot of exampleForks) {
@@ -288,11 +346,13 @@ export function getScriptFamilyTree(
     return {
       kind: 'example',
       targetId: matchedExample.id,
-      root: null,
+      root: exampleFamily?.rootRecord ?? null,
       nodes: forkNodes,
+      exampleFamilyNodes,
       parentRecord: null,
+      parentExample: parentExample ? {id: parentExample.id, title: parentExample.title} : null,
       originExample: {id: matchedExample.id, title: matchedExample.title},
-      totalMembers: 1 + forkNodes.length,
+      totalMembers: Math.max(1, exampleFamilyNodes.length) + forkNodes.length,
       exampleForks,
     };
   }

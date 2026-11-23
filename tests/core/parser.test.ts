@@ -8,19 +8,29 @@ import {
   parseExecutionLine,
   parseSubState,
 } from '../../src/core/index.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script v0.4.0 Parser', () => {
-  it('parses all 4 canonical presets with lossless raw round-tripping', () => {
-    for (const preset of SCRIPT_PRESETS) {
-      const doc = parseAuteurScript(preset.content);
-
+  it('parses all bundled presets and canonical craft exemplars with lossless raw round-tripping', () => {
+    for (const exemplar of Object.values(BUNDLED_CRAFT_EXEMPLARS)) {
+      const doc = parseAuteurScript(exemplar.content);
       expect(doc.stagingBlocks.map((b) => b.name)).toEqual([
         'INTENT',
         'LOGIC',
         'AESTHETIC',
         'OPENING',
       ]);
+      expect(doc.execution).not.toBeNull();
+      expect(doc.execution?.headerName).toBe('EXECUTION');
+      expect(doc.execution!.beats.length).toBeGreaterThanOrEqual(3);
+      expect(exportPlainText(doc.raw)).toBe(exportPlainText(exemplar.content));
+    }
+
+    expect(SCRIPT_PRESETS).toHaveLength(10);
+    for (const preset of SCRIPT_PRESETS) {
+      const doc = parseAuteurScript(preset.content);
+      expect(doc.stagingBlocks.length).toBeGreaterThanOrEqual(2);
       expect(doc.execution).not.toBeNull();
       expect(doc.execution?.headerName).toBe('EXECUTION');
       expect(doc.execution!.beats.length).toBeGreaterThanOrEqual(3);

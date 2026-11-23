@@ -85,10 +85,9 @@ export function LibraryRowList({
             const isActive = activeScript.kind === row.kind && activeScript.id === row.id;
             const beatCount = visibleBeatCounts[index] ?? 0;
             const isChecked = row.kind === 'custom' && checkedIds.has(row.id);
-            const depth = row.kind === 'custom' ? (row.depth ?? 0) : 0;
-            const isChildBranch = row.kind === 'custom' && depth >= 1;
+            const depth = row.depth ?? 0;
+            const isChildBranch = depth >= 1;
             const hasCollapsibleBranches =
-              row.kind === 'custom' &&
               row.depth === 0 &&
               row.rootId !== undefined &&
               (row.branchCount ?? 0) > 0;
@@ -217,6 +216,26 @@ export function LibraryRowList({
                         <span>
                           {beatCount} {UI_LABELS.topBar.beatUnit(beatCount)}
                         </span>
+                        {row.parentTitle && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center gap-0.5 text-text-muted truncate max-w-[140px]">
+                              <span aria-hidden="true">↳</span>
+                              <span className="truncate">
+                                {UI_LABELS.library.fromParentLabel(row.parentTitle)}
+                              </span>
+                            </span>
+                          </>
+                        )}
+                        {row.folder && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center gap-0.5 text-text-muted truncate max-w-[110px]">
+                              <Folder className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate">{row.folder}</span>
+                            </span>
+                          </>
+                        )}
                       </>
                     ) : (
                       <>
@@ -249,11 +268,11 @@ export function LibraryRowList({
                     )}
                   </div>
 
-                  {row.kind === 'custom' && row.branchNote && (
+                  {row.branchNote && (
                     <p className="truncate text-[11px] text-text-muted">{row.branchNote}</p>
                   )}
 
-                  {row.kind === 'custom' && row.tags && row.tags.length > 0 && (
+                  {row.tags && row.tags.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1">
                       {row.tags.slice(0, 3).map((tag) => (
                         <span

@@ -14,6 +14,7 @@ import {
   countExecutionBeatsFast,
   LIBRARY_PAGE_SIZE,
   paginateLibraryRows,
+  resolveExampleLineage,
   resolveScriptLineage,
   stepLibrarySelectionIndex,
   type ActiveScriptRef,
@@ -122,18 +123,25 @@ export function useLibraryModalNavigation({
     [customScripts, examples]
   );
 
+  const exampleLineageIndex = useMemo(
+    () => resolveExampleLineage(examples),
+    [examples]
+  );
+
   const [expandedRootIds, setExpandedRootIds] = useState<ReadonlySet<string>>(() => {
-    if (activeScript.kind === 'custom') {
-      const rootId = lineageIndex.nodeById.get(activeScript.id)?.rootId;
-      if (rootId) return new Set([rootId]);
-    }
-    return new Set();
+    const rootId =
+      activeScript.kind === 'custom'
+        ? lineageIndex.nodeById.get(activeScript.id)?.rootId
+        : exampleLineageIndex.nodeById.get(activeScript.id)?.rootId;
+    return rootId ? new Set([rootId]) : new Set();
   });
 
-  // Auto-expand the family containing the currently active custom script
+  // Auto-expand the family containing the currently active custom script or branched example
   useEffect(() => {
-    if (activeScript.kind !== 'custom') return;
-    const rootId = lineageIndex.nodeById.get(activeScript.id)?.rootId;
+    const rootId =
+      activeScript.kind === 'custom'
+        ? lineageIndex.nodeById.get(activeScript.id)?.rootId
+        : exampleLineageIndex.nodeById.get(activeScript.id)?.rootId;
     if (!rootId) return;
     setExpandedRootIds((prev) => {
       if (prev.has(rootId)) return prev;
@@ -141,9 +149,12 @@ export function useLibraryModalNavigation({
       next.add(rootId);
       return next;
     });
-  }, [activeScript.kind, activeScript.id, lineageIndex]);
+  }, [activeScript.kind, activeScript.id, lineageIndex, exampleLineageIndex]);
 
-  const facets = useMemo(() => collectLibraryFacets(customScripts), [customScripts]);
+  const facets = useMemo(
+    () => collectLibraryFacets(customScripts, examples),
+    [customScripts, examples]
+  );
 
   // Clear stale folder/tag filters if the last script with that facet was removed or edited
   useEffect(() => {
@@ -298,7 +309,9 @@ export function useLibraryModalNavigation({
 
   const ensureFamilyExpanded = useCallback(
     (scriptId: string) => {
-      const rootId = lineageIndex.nodeById.get(scriptId)?.rootId;
+      const rootId =
+        lineageIndex.nodeById.get(scriptId)?.rootId ??
+        exampleLineageIndex.nodeById.get(scriptId)?.rootId;
       if (!rootId) return;
       setExpandedRootIds((prev) => {
         if (prev.has(rootId)) return prev;
@@ -307,7 +320,7 @@ export function useLibraryModalNavigation({
         return next;
       });
     },
-    [lineageIndex]
+    [lineageIndex, exampleLineageIndex]
   );
 
   const registerRowRef = useCallback((index: number, el: HTMLDivElement | null) => {

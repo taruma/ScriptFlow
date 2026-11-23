@@ -96,6 +96,7 @@ export const LIBRARY_LABELS = {
       'Choose any script or reference example on the left to inspect its Staging setup, Macro-States, and metadata.',
     previewReadOnlyNote: 'Read-only reference example · Fork to edit or organize',
     lineageHeading: 'Script Family Tree',
+    lineageExampleSeriesHeading: 'Bundled Example Series',
     lineageExampleForksHeading: 'Custom Scripts Forked from This Example',
     lineageEmptyNote: 'Standalone script — branch it to start a connected family tree.',
     lineageExampleEmptyNote: 'No custom scripts have been forked from this example yet.',

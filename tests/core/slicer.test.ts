@@ -4,10 +4,10 @@ import {
   sliceAuteurScript,
   validateAuteurReview,
 } from '../../src/core/index.ts';
-import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 
-const INTERROGATION = SCRIPT_PRESETS[0].content;
-const SUBWAY_ONER = SCRIPT_PRESETS[1].content;
+const INTERROGATION = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+const POV_ONER = BUNDLED_CRAFT_EXEMPLARS['forest-pov-horror'].content;
 
 describe('Auteur Script Composable Lens Slicer & Review Validator', () => {
   it('isolates [ACT] only alongside deterministically resolved [CAM] framing', () => {
@@ -39,7 +39,7 @@ describe('Auteur Script Composable Lens Slicer & Review Validator', () => {
 
   it('supports all 5 built-in Script Supervisor Audit Lens presets', () => {
     // Lens 1: Spatial & Optics on Moving Oner
-    const lens1 = sliceAuteurScript(SUBWAY_ONER, 'lens1_spatial_optics');
+    const lens1 = sliceAuteurScript(POV_ONER, 'lens1_spatial_optics');
     expect(lens1.preset).toBe('lens1_spatial_optics');
     expect(lens1.sceneTopology).toBe('continuous_oner');
     expect(lens1.stagingMacroBlocks.map((b) => b.header)).toEqual(['LOGIC', 'OPENING']);

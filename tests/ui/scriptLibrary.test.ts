@@ -69,6 +69,7 @@ import {
   LIBRARY_PAGE_SIZE,
   paginateLibraryRows,
   repairLineageOnDelete,
+  resolveExampleLineage,
   resolveScriptLineage,
   stepLibrarySelectionIndex,
 } from '../../src/ui/scriptLibraryView.ts';
@@ -111,81 +112,112 @@ function createMemoryLegacyStorage(initial?: {
 }
 
 describe('File-Based Bundled Example Catalog (src/data/examples/)', () => {
-  it('loads all 4 canonical reference scripts from catalog.json and .txt files with backwards-compatible presets exports', () => {
-    expect(EXAMPLE_CATALOG_MANIFEST).toHaveLength(4);
-    expect(BUNDLED_EXAMPLES).toHaveLength(4);
-    expect(SCRIPT_PRESETS).toHaveLength(4);
+  it('loads all 6 JSON example families (10 scripts) with metadata overlays and backwards-compatible presets exports', () => {
+    expect(EXAMPLE_CATALOG_MANIFEST).toHaveLength(6);
+    expect(BUNDLED_EXAMPLES).toHaveLength(10);
+    expect(SCRIPT_PRESETS).toHaveLength(10);
     expect(DEFAULT_PRESET).toEqual(SCRIPT_PRESETS[0]);
+    expect(DEFAULT_PRESET.title).toBe('The Grand Continental');
     expect(BLANK_SCRIPT_TEMPLATE).toBe('');
     const blankDoc = parseAuteurScript(BLANK_SCRIPT_TEMPLATE);
     expect(blankDoc.stagingBlocks).toHaveLength(0);
     expect(blankDoc.execution).toBeNull();
     expect(lintDocument(blankDoc, extractMetadata(blankDoc))).toEqual([]);
 
-    expect(SCRIPT_PRESETS.map((p) => p.id)).toEqual([
-      'interrogation-coverage',
-      'subway-train-oner',
-      'forest-pov-horror',
-      'heist-montage',
-    ]);
-
     for (const example of BUNDLED_EXAMPLES) {
-      expect(example.file.endsWith('.txt')).toBe(true);
+      expect(example.file.endsWith('.json')).toBe(true);
       expect(example.content.length).toBeGreaterThan(100);
       expect(example.content.endsWith('\n')).toBe(false);
       expect(getBundledExampleById(example.id)).toEqual(example);
-
-      const doc = parseAuteurScript(example.content);
-      const meta = extractMetadata(doc);
-      expect(lintDocument(doc, meta)).toEqual([]);
+      expect(example.branchNote?.length).toBeGreaterThan(0);
+      expect(example.tags?.length).toBeGreaterThan(0);
     }
+
+    // Standalone 4 remain unfoldered; the 2 branched continuation series share "Video Continuation"
+    expect(DEFAULT_PRESET.folder).toBeUndefined();
+    const threeYearsLate = BUNDLED_EXAMPLES.filter((e) => e.file === 'scriptflow_three-years-late.json');
+    expect(threeYearsLate.map((e) => e.title)).toEqual([
+      'Three Years Late - Part 1',
+      'Three Years Late - Part 2',
+      'Three Years Late - Part 3',
+      'Three Years Late - Part 4',
+    ]);
+    expect(threeYearsLate.every((e) => e.folder === 'Video Continuation')).toBe(true);
+
+    const freq = BUNDLED_EXAMPLES.filter((e) => e.file === 'scriptflow_frequency-over-force.json');
+    expect(freq.map((e) => e.title)).toEqual([
+      'Frequency Over Force - Part 1',
+      'Frequency Over Force - Part 2',
+    ]);
+    expect(freq.every((e) => e.folder === 'Video Continuation')).toBe(true);
 
     expect(getBundledExampleById('nonexistent-id')).toBeNull();
   });
 
-  it('normalizes CRLF/BOM/trailing newlines and rejects missing files or duplicate catalog IDs', () => {
+  it('normalizes CRLF/BOM/trailing newlines, merges overrides, and rejects missing files or duplicate catalog IDs', () => {
     const resolved = resolveExampleCatalog(
       [
         {
-          id: 'custom-example',
-          title: 'Custom Example',
           topology: 'Continuous Moving Oner',
           summary: 'Test summary',
-          file: 'custom.txt',
+          file: 'custom.json',
           category: 'Test',
+          folder: 'Showcase',
+          tags: ['Oner', '#hybrid'],
+          overridesById: {
+            'custom-1': {
+              branchNote: '  Custom   branch note  ',
+            },
+          },
         },
       ],
       {
-        './custom.txt': '\uFEFF[INTENT]\r\nScene body.\r\n\r\n',
+        './custom.json': JSON.stringify({
+          format: 'auteur-script-library-backup',
+          backupVersion: 1,
+          scripts: [
+            {
+              id: 'custom-1',
+              title: 'Custom Example',
+              rawText: '\uFEFF[INTENT]\r\nScene body.\r\n\r\n',
+              createdAt: 1000,
+              updatedAt: 2000,
+            },
+          ],
+        }),
       }
     );
 
     expect(resolved).toHaveLength(1);
     expect(resolved[0].content).toBe('[INTENT]\nScene body.');
     expect(resolved[0].category).toBe('Test');
+    expect(resolved[0].folder).toBe('Showcase');
+    expect(resolved[0].tags).toEqual(['oner', 'hybrid']);
+    expect(resolved[0].branchNote).toBe('Custom branch note');
 
     expect(() =>
       resolveExampleCatalog(
         [
           {
-            id: 'missing-file',
-            title: 'Missing',
             topology: 'Test',
             summary: 'Missing file entry',
-            file: 'does-not-exist.txt',
+            file: 'does-not-exist.json',
           },
         ],
         {}
       )
-    ).toThrow(/Missing bundled example script file/);
+    ).toThrow(/Missing bundled example JSON file/);
 
     expect(() =>
       resolveExampleCatalog(
         [
-          {id: 'dup', title: 'A', topology: 'T', summary: 'S', file: 'a.txt'},
-          {id: 'dup', title: 'B', topology: 'T', summary: 'S', file: 'a.txt'},
+          {topology: 'T', summary: 'S', file: 'a.json'},
+          {topology: 'T', summary: 'S', file: 'b.json'},
         ],
-        {'./a.txt': '[INTENT]\nHello'}
+        {
+          './a.json': {scripts: [{id: 'dup', title: 'A', rawText: '[INTENT]\nHello'}]},
+          './b.json': {scripts: [{id: 'dup', title: 'B', rawText: '[INTENT]\nWorld'}]},
+        }
       )
     ).toThrow(/Duplicate bundled example id/);
   });
@@ -733,8 +765,11 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
       updatedAt: 10000 - idx,
     }));
 
+    const exampleRootsCount = resolveExampleLineage(BUNDLED_EXAMPLES).families.length;
+    expect(exampleRootsCount).toBe(6);
+
     const allRows = buildLibraryRows(customScripts, BUNDLED_EXAMPLES, 'all', '');
-    expect(allRows).toHaveLength(1205 + BUNDLED_EXAMPLES.length);
+    expect(allRows).toHaveLength(1205 + exampleRootsCount);
     expect(allRows[0].kind).toBe('custom');
     expect(allRows[allRows.length - 1].kind).toBe('example');
 
@@ -748,7 +783,25 @@ describe('Script Library View Helpers (src/ui/scriptLibraryView.ts)', () => {
     expect(customOnly[0].id).toBe('script-777');
 
     const examplesByTopology = buildLibraryRows(customScripts, BUNDLED_EXAMPLES, 'examples', 'montage');
-    expect(examplesByTopology.map((r) => r.id)).toEqual(['heist-montage']);
+    expect(examplesByTopology.map((r) => r.id)).toEqual([DEFAULT_PRESET.id]);
+
+    // Branched example families expand cleanly and filter by folder/tags consistently with custom scripts
+    const threeYearsRoot = BUNDLED_EXAMPLES.find((e) => e.title === 'Three Years Late - Part 1')!;
+    const expandedExampleRows = buildLibraryRows([], BUNDLED_EXAMPLES, 'examples', '', {
+      expandedRootIds: new Set([threeYearsRoot.id]),
+    });
+    expect(expandedExampleRows).toHaveLength(9); // 6 roots + 3 expanded children (Parts 2..4)
+    expect(expandedExampleRows.some((r) => r.title === 'Three Years Late - Part 3' && r.depth === 2)).toBe(
+      true
+    );
+
+    const videoContFolder = buildLibraryRows([], BUNDLED_EXAMPLES, 'examples', '', {
+      folder: 'Video Continuation',
+    });
+    expect(videoContFolder).toHaveLength(6); // 4 parts of Three Years Late + 2 parts of Frequency Over Force
+    const facets = collectLibraryFacets([], BUNDLED_EXAMPLES);
+    expect(facets.folders).toContain('Video Continuation');
+    expect(facets.tags).toContain('video-continuation');
   });
 
   it('generates clean non-colliding copy/fork titles and steps keyboard selection with wrap-around', () => {
@@ -1047,10 +1100,21 @@ describe('Script lineage, branching, and anti-clutter library grouping', () => {
       'ex-fork-2',
     ]);
 
-    // Example family tree lookup surfaces direct custom forks
+    // Example family tree lookup surfaces direct custom forks and multi-part bundled series
     const exampleTree = getScriptFamilyTree(example.id, scripts, BUNDLED_EXAMPLES);
     expect(exampleTree?.kind).toBe('example');
     expect(exampleTree?.exampleForks.map((s) => s.id)).toEqual(['ex-fork-1', 'ex-fork-2']);
+
+    const threeYearsPart2 = BUNDLED_EXAMPLES.find((e) => e.title === 'Three Years Late - Part 2')!;
+    const branchedExampleTree = getScriptFamilyTree(threeYearsPart2.id, [], BUNDLED_EXAMPLES);
+    expect(branchedExampleTree?.kind).toBe('example');
+    expect(branchedExampleTree?.parentExample?.title).toBe('Three Years Late - Part 1');
+    expect(branchedExampleTree?.exampleFamilyNodes.map((n) => `${n.record.title}@${n.depth}`)).toEqual([
+      'Three Years Late - Part 1@0',
+      'Three Years Late - Part 2@1',
+      'Three Years Late - Part 3@2',
+      'Three Years Late - Part 4@3',
+    ]);
 
     // Cycle broken cleanly at earliest-created member ('cyc-a' createdAt 700 < 'cyc-b' createdAt 800)
     const cycleFamily = index.familyByRootId.get('cyc-a');

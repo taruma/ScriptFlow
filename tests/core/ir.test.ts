@@ -11,15 +11,25 @@ import {
   toAuteurEnvelope,
   toAuteurIR,
 } from '../../src/core/index.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 import {BLANK_SCRIPT_TEMPLATE, SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script JSON IR Codec & Draft Compiler', () => {
-  it('round-trips all 4 canonical presets and blank template losslessly', () => {
-    const scripts = [...SCRIPT_PRESETS.map((p) => p.content), BLANK_SCRIPT_TEMPLATE];
-    for (const raw of scripts) {
+  it('round-trips all canonical exemplars, bundled presets, and blank template cleanly', () => {
+    const strictScripts = [
+      ...Object.values(BUNDLED_CRAFT_EXEMPLARS).map((p) => p.content),
+      BLANK_SCRIPT_TEMPLATE,
+    ];
+    for (const raw of strictScripts) {
       const ir = toAuteurIR(raw);
       const recompiled = fromAuteurIR(ir);
       expect(recompiled).toBe(exportPlainText(raw));
+    }
+
+    for (const preset of SCRIPT_PRESETS) {
+      const ir = toAuteurIR(preset.content);
+      const recompiled = fromAuteurIR(ir);
+      expect(fromAuteurIR(toAuteurIR(recompiled))).toBe(recompiled);
     }
   });
 
@@ -158,7 +168,7 @@ Continue seamlessly from @video1.
   });
 
   it('resolves inherited effectiveFraming across bare holds, recalls, and moving oner transitions', () => {
-    const coverageEnv = toAuteurEnvelope(SCRIPT_PRESETS[0].content);
+    const coverageEnv = toAuteurEnvelope(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     expect(coverageEnv.derived.sceneTopology).toBe('multi_camera_coverage');
     expect(coverageEnv.derived.cameraSlots['01']).toEqual({
       subStateTag: 'CAM',
@@ -178,13 +188,13 @@ Continue seamlessly from @video1.
     const onerEnv = toAuteurEnvelope(SCRIPT_PRESETS[1].content);
     expect(onerEnv.derived.sceneTopology).toBe('continuous_oner');
     expect(onerEnv.derived.macroStateContinuity[1].effectiveFraming).toContain(
-      'Waist-level MS, tracking backward down the aisle'
+      'Steadicam low-angle MS, tracking backward ahead of Mark and Lucas'
     );
     expect(onerEnv.derived.macroStateContinuity[1].effectiveFraming).toContain(
-      'TRACKING BACKWARD IN RHYTHMIC SWAY'
+      'ARCING RIGHT around them'
     );
 
-    const montageEnv = toAuteurEnvelope(SCRIPT_PRESETS[3].content);
+    const montageEnv = toAuteurEnvelope(SCRIPT_PRESETS[0].content);
     expect(montageEnv.derived.sceneTopology).toBe('discontinuous_montage');
     expect(montageEnv.derived.macroStateContinuity[1].activeCameraIdentifier).toBeNull();
   });

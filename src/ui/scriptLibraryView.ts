@@ -4,6 +4,7 @@ import type {ScriptRecord} from './scriptLibraryDb.ts';
 import {
   getScriptFamilyTree,
   repairLineageOnDelete,
+  resolveExampleLineage,
   resolveScriptLineage,
   type ScriptFamilyTree,
   type ScriptLineageFamily,
@@ -15,6 +16,7 @@ import {
 export {
   getScriptFamilyTree,
   repairLineageOnDelete,
+  resolveExampleLineage,
   resolveScriptLineage,
   type ScriptFamilyTree,
   type ScriptLineageFamily,
@@ -70,6 +72,15 @@ export type LibraryRowItem =
       summary: string;
       category?: string;
       rawText: string;
+      forkedFromId?: string;
+      branchNote?: string;
+      rootId?: string;
+      parentTitle?: string;
+      depth?: number;
+      branchCount?: number;
+      isFamilyExpanded?: boolean;
+      folder?: string;
+      tags?: string[];
       matchSnippet?: string;
       example: BundledExample;
     };
@@ -194,34 +205,79 @@ export function extractBodyMatchSnippet(rawText: string, normalizedQuery: string
 }
 
 /**
- * Collects unique folders, tags, and pinned count from custom scripts for quiet filter facets.
+ * Collects unique folders, tags, and pinned count across custom scripts and bundled examples
+ * for quiet filter facets.
  */
-export function collectLibraryFacets(customScripts: readonly ScriptRecord[]): LibraryFacets {
+export function collectLibraryFacets(
+  customScripts: readonly ScriptRecord[],
+  examples: readonly BundledExample[] = []
+): LibraryFacets {
   const folderMap = new Map<string, string>();
   const tagSet = new Set<string>();
   let pinnedCount = 0;
 
-  for (const record of customScripts) {
-    if (record.pinned) pinnedCount += 1;
-    if (record.folder) {
-      const clean = record.folder.trim();
+  const collectFromItem = (item: {folder?: string; tags?: readonly string[]; pinned?: boolean}) => {
+    if (item.pinned) pinnedCount += 1;
+    if (item.folder) {
+      const clean = item.folder.trim();
       const key = clean.toLowerCase();
       if (clean.length > 0 && !folderMap.has(key)) {
         folderMap.set(key, clean);
       }
     }
-    if (record.tags) {
-      for (const tag of record.tags) {
+    if (item.tags) {
+      for (const tag of item.tags) {
         const clean = tag.trim().toLowerCase();
         if (clean.length > 0) tagSet.add(clean);
       }
     }
+  };
+
+  for (const record of customScripts) {
+    collectFromItem(record);
+  }
+  for (const example of examples) {
+    collectFromItem(example);
   }
 
   return {
     folders: Array.from(folderMap.values()).sort((a, b) => a.localeCompare(b)),
     tags: Array.from(tagSet).sort((a, b) => a.localeCompare(b)),
     pinnedCount,
+  };
+}
+
+function buildExampleRowFromNode(
+  example: BundledExample,
+  node?: ScriptLineageNode,
+  options: {
+    branchCount?: number;
+    isFamilyExpanded?: boolean;
+    matchSnippet?: string;
+    includeDepth?: boolean;
+  } = {}
+): Extract<LibraryRowItem, {kind: 'example'}> {
+  return {
+    kind: 'example',
+    id: example.id,
+    title: example.title,
+    topology: example.topology,
+    summary: example.summary,
+    ...(example.category ? {category: example.category} : {}),
+    rawText: example.content,
+    ...(example.forkedFromId ? {forkedFromId: example.forkedFromId} : {}),
+    ...(example.branchNote ? {branchNote: example.branchNote} : {}),
+    ...(node ? {rootId: node.rootId} : {}),
+    ...(node?.parentTitle ? {parentTitle: node.parentTitle} : {}),
+    ...(node && options.includeDepth !== false ? {depth: node.depth} : {}),
+    ...(options.branchCount !== undefined && options.branchCount > 0
+      ? {branchCount: options.branchCount}
+      : {}),
+    ...(options.isFamilyExpanded !== undefined ? {isFamilyExpanded: options.isFamilyExpanded} : {}),
+    ...(example.folder ? {folder: example.folder} : {}),
+    ...(example.tags && example.tags.length > 0 ? {tags: example.tags} : {}),
+    ...(options.matchSnippet ? {matchSnippet: options.matchSnippet} : {}),
+    example,
   };
 }
 
@@ -419,43 +475,108 @@ export function buildLibraryRows(
     }
   }
 
-  if ((filter === 'all' || filter === 'examples') && !hasCustomFacetFilter) {
-    for (const example of examples) {
-      let matchSnippet: string | undefined;
-      if (normalizedQuery.length > 0) {
-        const metaMatch =
-          example.title.toLowerCase().includes(normalizedQuery) ||
-          example.topology.toLowerCase().includes(normalizedQuery) ||
-          (example.category?.toLowerCase().includes(normalizedQuery) ?? false) ||
-          example.summary.toLowerCase().includes(normalizedQuery);
-        if (!metaMatch) {
-          matchSnippet = extractBodyMatchSnippet(example.content, normalizedQuery);
-          if (!matchSnippet) continue;
+  if (filter === 'all' || filter === 'examples') {
+    const exampleLineage = resolveExampleLineage(examples);
+    const exampleById = new Map(examples.map((ex) => [ex.id, ex]));
+
+    if (isUnfilteredBrowse) {
+      const activeExampleRootId =
+        options.expandedRootIds === undefined && options.activeScriptId
+          ? (exampleLineage.nodeById.get(options.activeScriptId)?.rootId ?? null)
+          : null;
+
+      const sortedExampleFamilies =
+        sortBy === 'recent'
+          ? exampleLineage.families
+          : [...exampleLineage.families].sort((a, b) => {
+              if (sortBy === 'title') {
+                return a.rootRecord.title.localeCompare(b.rootRecord.title);
+              }
+              return (
+                getBeatsById(`example:${b.rootId}`, b.rootRecord.rawText) -
+                  getBeatsById(`example:${a.rootId}`, a.rootRecord.rawText) ||
+                a.rootRecord.title.localeCompare(b.rootRecord.title)
+              );
+            });
+
+      for (const family of sortedExampleFamilies) {
+        const rootNode = family.nodes[0];
+        if (!rootNode) continue;
+        const rootExample = exampleById.get(rootNode.id);
+        if (!rootExample) continue;
+
+        const isExpanded =
+          family.branchCount > 0 &&
+          (options.expandedRootIds !== undefined
+            ? options.expandedRootIds.has(family.rootId)
+            : activeExampleRootId === family.rootId);
+
+        exampleRows.push(
+          buildExampleRowFromNode(rootExample, rootNode, {
+            branchCount: family.branchCount,
+            isFamilyExpanded: isExpanded,
+          })
+        );
+
+        if (isExpanded) {
+          for (let i = 1; i < family.nodes.length; i += 1) {
+            const childNode = family.nodes[i];
+            const childExample = exampleById.get(childNode.id);
+            if (childExample) {
+              exampleRows.push(buildExampleRowFromNode(childExample, childNode));
+            }
+          }
         }
       }
+    } else {
+      for (const example of examples) {
+        if (folderFilter !== null && (example.folder?.trim().toLowerCase() ?? '') !== folderFilter) {
+          continue;
+        }
+        if (
+          tagFilter !== null &&
+          !(example.tags?.some((t) => t.trim().toLowerCase() === tagFilter) ?? false)
+        ) {
+          continue;
+        }
 
-      exampleRows.push({
-        kind: 'example',
-        id: example.id,
-        title: example.title,
-        topology: example.topology,
-        summary: example.summary,
-        ...(example.category ? {category: example.category} : {}),
-        rawText: example.content,
-        ...(matchSnippet ? {matchSnippet} : {}),
-        example,
-      });
+        let matchSnippet: string | undefined;
+        if (normalizedQuery.length > 0) {
+          const metaMatch =
+            example.title.toLowerCase().includes(normalizedQuery) ||
+            example.topology.toLowerCase().includes(normalizedQuery) ||
+            (example.category?.toLowerCase().includes(normalizedQuery) ?? false) ||
+            example.summary.toLowerCase().includes(normalizedQuery) ||
+            (example.branchNote?.toLowerCase().includes(normalizedQuery) ?? false) ||
+            (example.folder?.toLowerCase().includes(normalizedQuery) ?? false) ||
+            (example.tags?.some((t) => t.toLowerCase().includes(normalizedQuery)) ?? false);
+          if (!metaMatch) {
+            matchSnippet = extractBodyMatchSnippet(example.content, normalizedQuery);
+            if (!matchSnippet) continue;
+          }
+        }
+
+        const node = exampleLineage.nodeById.get(example.id);
+        const family = node ? exampleLineage.familyByRootId.get(node.rootId) : undefined;
+        exampleRows.push(
+          buildExampleRowFromNode(example, node, {
+            branchCount: node?.depth === 0 ? family?.branchCount : undefined,
+            matchSnippet,
+            includeDepth: false,
+          })
+        );
+      }
+
+      if (sortBy === 'title') {
+        exampleRows.sort((a, b) => a.title.localeCompare(b.title));
+      } else if (sortBy === 'beats') {
+        exampleRows.sort(
+          (a, b) =>
+            getBeatsById(`example:${b.id}`, b.rawText) - getBeatsById(`example:${a.id}`, a.rawText) ||
+            a.title.localeCompare(b.title)
+        );
+      }
     }
-  }
-
-  if (sortBy === 'title') {
-    exampleRows.sort((a, b) => a.title.localeCompare(b.title));
-  } else if (sortBy === 'beats') {
-    exampleRows.sort(
-      (a, b) =>
-        getBeatsById(`example:${b.id}`, b.rawText) - getBeatsById(`example:${a.id}`, a.rawText) ||
-        a.title.localeCompare(b.title)
-    );
   }
 
   return [...customRows, ...exampleRows];

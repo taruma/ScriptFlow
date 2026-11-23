@@ -4,6 +4,7 @@ import {
   inferSceneTopologyFromDocument,
   parseAuteurScript,
 } from '../../src/core/index.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script Metadata & Continuity Extractor', () => {
@@ -60,7 +61,9 @@ Wardrobe Mapping: Evan in mustard yellow track jacket → EV01`;
 
   it('tracks camera HOLD, CUT, RECALL, and MONTAGE transitions across beats', () => {
     // Interrogation Coverage: CAM 01 -> CAM 02 (CUT) -> CAM 01 (RECALL)
-    const coverageMeta = extractMetadata(parseAuteurScript(SCRIPT_PRESETS[0].content));
+    const coverageMeta = extractMetadata(
+      parseAuteurScript(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content)
+    );
     expect(coverageMeta.beatLinks.map((l) => l.transition)).toEqual([
       'ESTABLISH',
       'CUT',
@@ -69,7 +72,7 @@ Wardrobe Mapping: Evan in mustard yellow track jacket → EV01`;
     expect(coverageMeta.beatLinks[1].isCutFromPrevious).toBe(true);
     expect(coverageMeta.beatLinks[2].isCutFromPrevious).toBe(true);
 
-    // Subway Train Oner: CAM 01 held across all 5 beats
+    // Simit and River Pebbles (Steadicam Oner): CAM 01 held across all 5 beats
     const onerMeta = extractMetadata(parseAuteurScript(SCRIPT_PRESETS[1].content));
     expect(onerMeta.beatLinks.map((l) => l.transition)).toEqual([
       'ESTABLISH',
@@ -81,16 +84,23 @@ Wardrobe Mapping: Evan in mustard yellow track jacket → EV01`;
     expect(onerMeta.beatLinks.slice(1).every((l) => l.connectsFromPrevious)).toBe(true);
     expect(onerMeta.beatLinks.every((l) => !l.isCutFromPrevious)).toBe(true);
 
-    // Heist Montage: plain [CAM] severs inheritance with CUT hairlines between lines
-    const montageMeta = extractMetadata(parseAuteurScript(SCRIPT_PRESETS[3].content));
-    expect(montageMeta.beatLinks.map((l) => l.transition)).toEqual([
-      'MONTAGE',
-      'MONTAGE',
-      'MONTAGE',
-      'MONTAGE',
-    ]);
+    // The Grand Continental (Montage): plain [CAM] severs inheritance with CUT hairlines between lines
+    const montageMeta = extractMetadata(parseAuteurScript(SCRIPT_PRESETS[0].content));
+    expect(montageMeta.beatLinks).toHaveLength(9);
+    expect(montageMeta.beatLinks.every((l) => l.transition === 'MONTAGE')).toBe(true);
     expect(montageMeta.beatLinks[0].isCutFromPrevious).toBe(false);
     expect(montageMeta.beatLinks.slice(1).every((l) => l.isCutFromPrevious)).toBe(true);
+    expect(montageMeta.aestheticTokens.map((t) => t.token)).toEqual([
+      'LOC01',
+      'LOC02',
+      'LOC03',
+      'RS01',
+      'RS02',
+      'EV01',
+      'EV02',
+      'FN01',
+      'FN02',
+    ]);
   });
 
   it('detects continuation context from [CONTINUITY PROTOCOL] or @video1', () => {
@@ -146,16 +156,16 @@ Props: Brass compass (ref: @compass)
 
   it('infers canonical Scene Topologies cleanly across bundled presets and empty scripts', () => {
     expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[0].content))).toBe(
-      'multi_camera_coverage'
+      'discontinuous_montage'
     );
     expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[1].content))).toBe(
       'continuous_oner'
     );
     expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[2].content))).toBe(
-      'continuous_oner'
+      'multi_camera_coverage'
     );
     expect(inferSceneTopologyFromDocument(parseAuteurScript(SCRIPT_PRESETS[3].content))).toBe(
-      'discontinuous_montage'
+      'continuous_oner'
     );
     expect(inferSceneTopologyFromDocument(parseAuteurScript(''))).toBe('empty');
   });

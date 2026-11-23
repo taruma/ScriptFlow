@@ -209,10 +209,11 @@ export default function App() {
   );
 
   const activeFamilyCount = useMemo(() => {
-    if (activeScript.kind !== 'custom') return 0;
     const tree = getScriptFamilyTree(activeScript.id, customScripts, BUNDLED_EXAMPLES);
-    return tree?.kind === 'custom' ? tree.totalMembers : 0;
-  }, [activeScript.kind, activeScript.id, customScripts]);
+    if (!tree) return 0;
+    if (tree.kind === 'custom') return tree.totalMembers;
+    return tree.exampleFamilyNodes.length > 1 ? tree.exampleFamilyNodes.length : 0;
+  }, [activeScript.id, customScripts]);
 
   const isModalOpen =
     isDebugOpen ||
@@ -479,6 +480,7 @@ export default function App() {
             onBranchFromScript={(record) => library.handleDuplicateScript(record, {activate: true})}
             onOpenCustomScript={library.handleOpenCustomScript}
             onOpenExample={library.handleOpenExample}
+            onForkExample={library.handleForkExample}
             onForkCurrentExample={library.handleForkCurrentExample}
             onSaveMilestone={(label) =>
               library.handleCreateSnapshot({

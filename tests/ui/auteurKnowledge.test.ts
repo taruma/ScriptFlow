@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
+import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
@@ -28,8 +28,8 @@ import {
 } from '../../src/services/scriptTools.ts';
 import {asAsyncStream} from './aiTestFixtures.ts';
 describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & Dynamic Skills', () => {
-  const MONTAGE_SCRIPT = SCRIPT_PRESETS.find((p) => p.id === 'heist-montage')!.content;
-  const INTERROGATION_SCRIPT = SCRIPT_PRESETS.find((p) => p.id === 'interrogation-coverage')!.content;
+  const MONTAGE_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['heist-montage'].content;
+  const INTERROGATION_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
   it('prunes allowed tools by focus and editor emptiness without triple write-schema bloat', () => {
     expect(assistantModeToFocus('check')).toBe('audit');

@@ -321,16 +321,17 @@ export function useScriptLibrary({
     async (example: BundledExample) => {
       await persistCurrentCustomIfDirty();
       const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
-      const title = createCopyTitle(example.title, existingTitles, 'Fork');
-      const now = Date.now();
-      const forked: ScriptRecord = {
+      const forked = buildDuplicatedScriptRecord({
         id: createScriptId('script'),
-        title,
+        sourceId: example.id,
+        sourceTitle: example.title,
         rawText: example.content,
-        createdAt: now,
-        updatedAt: now,
-        forkedFromId: example.id,
-      };
+        existingTitles,
+        now: Date.now(),
+        folder: example.folder,
+        tags: example.tags,
+        suffix: 'Fork',
+      });
       const saved = await scriptLibraryDb.put(forked);
       customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
@@ -367,21 +368,20 @@ export function useScriptLibrary({
       const example = getBundledExampleById(current.id) ?? DEFAULT_PRESET;
       const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
       const requestedTitle = options?.title?.trim();
-      const title = requestedTitle
-        ? existingTitles.has(requestedTitle)
-          ? createCopyTitle(requestedTitle, existingTitles, 'Copy')
-          : requestedTitle
-        : createCopyTitle(example.title, existingTitles, 'Fork');
 
       const now = Date.now();
-      const forked: ScriptRecord = {
+      const forked = buildDuplicatedScriptRecord({
         id: createScriptId('script'),
-        title,
+        sourceId: example.id,
+        sourceTitle: example.title,
         rawText: nextRawText,
-        createdAt: now,
-        updatedAt: now,
-        forkedFromId: example.id,
-      };
+        existingTitles,
+        now,
+        folder: example.folder,
+        tags: example.tags,
+        explicitTitle: requestedTitle || undefined,
+        suffix: requestedTitle ? 'Copy' : 'Fork',
+      });
       const saved = await scriptLibraryDb.put(forked);
       customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
@@ -512,8 +512,8 @@ export function useScriptLibrary({
           current.kind === 'example' ? (currentExample?.content ?? rawTextRef.current) : rawTextRef.current,
         existingTitles,
         now: Date.now(),
-        folder: currentCustom?.folder,
-        tags: currentCustom?.tags,
+        folder: currentCustom?.folder ?? currentExample?.folder,
+        tags: currentCustom?.tags ?? currentExample?.tags,
         branchNote: options?.branchNote,
         explicitTitle: options?.title,
         suffix: options?.suffix ?? 'Branch',

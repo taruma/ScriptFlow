@@ -54,6 +54,7 @@ export interface VersionHistoryModalProps {
   onBranchFromScript: (record: ScriptRecord) => Promise<ScriptRecord | null>;
   onOpenCustomScript: (record: ScriptRecord) => Promise<void>;
   onOpenExample: (example: BundledExample) => Promise<void>;
+  onForkExample?: (example: BundledExample) => Promise<void> | void;
   onForkCurrentExample: () => void;
   onSaveMilestone: (label: string) => Promise<ScriptSnapshot | null>;
   onRestoreSnapshot: (snapshot: ScriptSnapshot) => Promise<boolean>;
@@ -99,6 +100,7 @@ function VersionHistoryModalContent({
   onBranchFromScript,
   onOpenCustomScript,
   onOpenExample,
+  onForkExample,
   onForkCurrentExample,
   onSaveMilestone,
   onRestoreSnapshot,
@@ -120,11 +122,20 @@ function VersionHistoryModalContent({
     [activeScript, customScripts]
   );
 
+  const allLineageNodes = useMemo(() => {
+    if (!familyTree) return [];
+    if (familyTree.kind === 'custom') return familyTree.nodes;
+    return [
+      ...(familyTree.exampleFamilyNodes.length > 1 ? familyTree.exampleFamilyNodes : []),
+      ...familyTree.nodes,
+    ];
+  }, [familyTree]);
+
   const familyMemberCount =
     familyTree?.kind === 'custom'
       ? familyTree.totalMembers
       : familyTree?.kind === 'example'
-        ? familyTree.nodes.length
+        ? allLineageNodes.length
         : 1;
 
   const [activeTab, setActiveTab] = useState<ModalTab>(() =>
@@ -134,7 +145,7 @@ function VersionHistoryModalContent({
   const [isLoading, setIsLoading] = useState<boolean>(activeScript.kind === 'custom');
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
   const [selectedLineageNodeId, setSelectedLineageNodeId] = useState<string | null>(
-    () => (activeScript.kind === 'custom' ? activeScript.id : (familyTree?.nodes[0]?.id ?? null))
+    () => (allLineageNodes.some((n) => n.id === activeScript.id) ? activeScript.id : (allLineageNodes[0]?.id ?? null))
   );
   const [previewMode, setPreviewMode] = useState<PreviewMode>('diff');
   const [milestoneLabel, setMilestoneLabel] = useState<string>('');
@@ -157,16 +168,16 @@ function VersionHistoryModalContent({
 
   // Keep selected lineage node valid whenever scriptId or family tree changes
   useEffect(() => {
-    if (!familyTree) {
+    if (allLineageNodes.length === 0) {
       setSelectedLineageNodeId(null);
       return;
     }
     setSelectedLineageNodeId((prev) => {
-      if (prev && familyTree.nodes.some((n) => n.id === prev)) return prev;
-      if (familyTree.nodes.some((n) => n.id === scriptId)) return scriptId;
-      return familyTree.nodes[0]?.id ?? null;
+      if (prev && allLineageNodes.some((n) => n.id === prev)) return prev;
+      if (allLineageNodes.some((n) => n.id === scriptId)) return scriptId;
+      return allLineageNodes[0]?.id ?? null;
     });
-  }, [familyTree, scriptId]);
+  }, [allLineageNodes, scriptId]);
 
   const loadSnapshots = useCallback(async () => {
     if (activeScript.kind !== 'custom') {
@@ -198,11 +209,19 @@ function VersionHistoryModalContent({
   );
 
   const selectedLineageNode = useMemo(() => {
-    if (!familyTree || familyTree.nodes.length === 0) return null;
+    if (allLineageNodes.length === 0) return null;
     return (
-      familyTree.nodes.find((n) => n.id === selectedLineageNodeId) ?? familyTree.nodes[0] ?? null
+      allLineageNodes.find((n) => n.id === selectedLineageNodeId) ?? allLineageNodes[0] ?? null
     );
-  }, [familyTree, selectedLineageNodeId]);
+  }, [allLineageNodes, selectedLineageNodeId]);
+
+  const selectedLineageExample = useMemo(
+    () =>
+      selectedLineageNode
+        ? (examples.find((ex) => ex.id === selectedLineageNode.id) ?? null)
+        : null,
+    [examples, selectedLineageNode]
+  );
 
   const selectedLineagePreview = useMemo(
     () =>
@@ -291,12 +310,20 @@ function VersionHistoryModalContent({
 
   const handleSwitchToNode = useCallback(
     async (record: ScriptRecord) => {
+      const matchedExample = examples.find((ex) => ex.id === record.id);
+      if (matchedExample) {
+        if (activeScript.kind === 'example' && activeScript.id === matchedExample.id) return;
+        commitBranchNote();
+        await onOpenExample(matchedExample);
+        onClose();
+        return;
+      }
       if (activeScript.kind === 'custom' && activeScript.id === record.id) return;
       commitBranchNote();
       await onOpenCustomScript(record);
       onClose();
     },
-    [activeScript, commitBranchNote, onOpenCustomScript, onClose]
+    [examples, activeScript, commitBranchNote, onOpenExample, onOpenCustomScript, onClose]
   );
 
   const handleJumpToOriginExample = useCallback(
@@ -339,10 +366,10 @@ function VersionHistoryModalContent({
               : Math.max(0, Math.min(snapshots.length - 1, currentIdx + delta));
           setSelectedSnapshotId(snapshots[nextIdx].id);
         }
-      } else if (familyTree && familyTree.nodes.length > 0) {
+      } else if (allLineageNodes.length > 0) {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
-          const nodes = familyTree.nodes;
+          const nodes = allLineageNodes;
           const currentIdx = selectedLineageNode
             ? nodes.findIndex((n) => n.id === selectedLineageNode.id)
             : -1;
@@ -355,7 +382,7 @@ function VersionHistoryModalContent({
         } else if (
           event.key === 'Enter' &&
           selectedLineageNode &&
-          !(activeScript.kind === 'custom' && activeScript.id === selectedLineageNode.id)
+          selectedLineageNode.id !== activeScript.id
         ) {
           event.preventDefault();
           void handleSwitchToNode(selectedLineageNode.record);
@@ -371,7 +398,7 @@ function VersionHistoryModalContent({
     activeTab,
     snapshots,
     selectedSnapshot,
-    familyTree,
+    allLineageNodes,
     selectedLineageNode,
     activeScript,
     handleSwitchToNode,
@@ -468,7 +495,7 @@ function VersionHistoryModalContent({
     familyTree?.kind === 'custom'
       ? familyTree.totalMembers
       : familyTree?.kind === 'example'
-        ? familyTree.nodes.length
+        ? allLineageNodes.length
         : 1;
 
   return (
@@ -728,23 +755,50 @@ function VersionHistoryModalContent({
                   </span>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll p-3 space-y-2.5">
-                  {familyTree && familyTree.nodes.length > 0 ? (
+                <div className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll p-3 space-y-3">
+                  {familyTree && allLineageNodes.length > 0 ? (
                     <>
-                      <ScriptLineageTree
-                        nodes={familyTree.nodes}
-                        activeScriptId={activeScript.id}
-                        selectedNodeId={selectedLineageNode?.id ?? null}
-                        originExample={
-                          familyTree.kind === 'custom' ? familyTree.originExample : null
-                        }
-                        nowMs={openedAt}
-                        onSelectNode={(record) => setSelectedLineageNodeId(record.id)}
-                        onActivateNode={(record) => void handleSwitchToNode(record)}
-                        onSelectOriginExample={(exampleId) =>
-                          void handleJumpToOriginExample(exampleId)
-                        }
-                      />
+                      {familyTree.kind === 'example' && familyTree.exampleFamilyNodes.length > 1 && (
+                        <div className="space-y-1.5">
+                          <div className="px-1 font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-text-faint">
+                            {UI_LABELS.library.lineageExampleSeriesHeading}
+                          </div>
+                          <ScriptLineageTree
+                            nodes={familyTree.exampleFamilyNodes}
+                            activeScriptId={activeScript.id}
+                            selectedNodeId={selectedLineageNode?.id ?? null}
+                            nowMs={openedAt}
+                            onSelectNode={(record) => setSelectedLineageNodeId(record.id)}
+                            onActivateNode={(record) => void handleSwitchToNode(record)}
+                          />
+                        </div>
+                      )}
+
+                      {familyTree.nodes.length > 0 && (
+                        <div className="space-y-1.5">
+                          {familyTree.kind === 'example' &&
+                            familyTree.exampleFamilyNodes.length > 1 && (
+                              <div className="px-1 pt-1 font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-text-faint">
+                                {UI_LABELS.library.lineageExampleForksHeading}
+                              </div>
+                            )}
+                          <ScriptLineageTree
+                            nodes={familyTree.nodes}
+                            activeScriptId={activeScript.id}
+                            selectedNodeId={selectedLineageNode?.id ?? null}
+                            originExample={
+                              familyTree.kind === 'custom' ? familyTree.originExample : null
+                            }
+                            nowMs={openedAt}
+                            onSelectNode={(record) => setSelectedLineageNodeId(record.id)}
+                            onActivateNode={(record) => void handleSwitchToNode(record)}
+                            onSelectOriginExample={(exampleId) =>
+                              void handleJumpToOriginExample(exampleId)
+                            }
+                          />
+                        </div>
+                      )}
+
                       {familyTree.kind === 'custom' && familyTree.totalMembers === 1 && (
                         <p className="px-1 pt-1 text-[11px] leading-relaxed text-text-faint">
                           {labels.lineageStandaloneHint}
@@ -781,12 +835,11 @@ function VersionHistoryModalContent({
                               {labels.lineageRootBadge}
                             </span>
                           )}
-                          {activeScript.kind === 'custom' &&
-                            selectedLineageNode.id === activeScript.id && (
-                              <span className="auteur-phase-continuity inline-flex shrink-0 items-center rounded border px-1.5 py-px font-mono text-[9.5px] font-semibold uppercase tracking-wide">
-                                {labels.lineageCurrentBadge}
-                              </span>
-                            )}
+                          {selectedLineageNode.id === activeScript.id && (
+                            <span className="auteur-phase-continuity inline-flex shrink-0 items-center rounded border px-1.5 py-px font-mono text-[9.5px] font-semibold uppercase tracking-wide">
+                              {labels.lineageCurrentBadge}
+                            </span>
+                          )}
                         </div>
                         <span className="font-mono text-[10.5px] text-text-faint shrink-0 tabular-nums">
                           {labels.beatCountLabel(selectedLineagePreview.beatCount)}
@@ -873,7 +926,7 @@ function VersionHistoryModalContent({
                     </div>
 
                     <div className="px-4 py-2.5 border-t border-border-subtle bg-surface flex flex-wrap items-center justify-end gap-2 shrink-0">
-                      {!isReadOnly && (
+                      {!isReadOnly && !selectedLineageExample && (
                         <button
                           type="button"
                           disabled={isBranching}
@@ -887,17 +940,31 @@ function VersionHistoryModalContent({
                         </button>
                       )}
 
+                      {selectedLineageExample && (onForkExample || selectedLineageExample.id === activeScript.id) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            if (onForkExample) {
+                              void onForkExample(selectedLineageExample);
+                            } else {
+                              onForkCurrentExample();
+                            }
+                          }}
+                          className={`${UI_TOKENS.button.secondary} inline-flex items-center gap-1.5 py-1.5`}
+                        >
+                          <GitFork className="h-3.5 w-3.5" />
+                          <span>{labels.forkToEditButton}</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        disabled={
-                          activeScript.kind === 'custom' &&
-                          selectedLineageNode.id === activeScript.id
-                        }
+                        disabled={selectedLineageNode.id === activeScript.id}
                         onClick={() => void handleSwitchToNode(selectedLineageNode.record)}
                         className={`${UI_TOKENS.button.primary} inline-flex items-center gap-1.5 py-1.5 disabled:opacity-45 disabled:cursor-not-allowed`}
                       >
-                        {activeScript.kind === 'custom' &&
-                        selectedLineageNode.id === activeScript.id ? (
+                        {selectedLineageNode.id === activeScript.id ? (
                           <>
                             <Check className="h-3.5 w-3.5" />
                             <span>{labels.lineageAlreadyActive}</span>
