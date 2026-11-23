@@ -736,11 +736,13 @@ export const AI_LABELS = {
       exportBackupBeforeResetDone: 'Backup JSON exported',
       exportImport: {
         exportButton: 'Export JSON',
-        exportAria: 'Export unified Agent Context, Skills, and Quick Scan Rules as JSON',
+        exportAria:
+          'Export unified Agent Context, Skills, Function Tools, and Quick Scan Rules as JSON',
         exportTitle:
-          'Export Foundational Craft override, skill pin/body overrides, custom skills, and Quick Scan rules as one JSON file',
+          'Export Foundational Craft override, skill pin/body overrides, custom skills, Tool & Safety Protocol / Function Tool overrides, and Quick Scan rules as one JSON file',
         importButton: 'Import JSON',
-        importAria: 'Import Agent Context, Skills, and Quick Scan Rules from a JSON file',
+        importAria:
+          'Import Agent Context, Skills, Function Tools, and Quick Scan Rules from a JSON file',
         importTitle: 'Import an exported Agent Context JSON pack (choose exact items & Merge or Replace)',
         dismissNoticeAria: 'Dismiss import notice',
         exportedNotice: (filename: string) => `Exported ${filename}`,

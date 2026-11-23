@@ -96,6 +96,7 @@ export function analyzeAgentContextImport(
       pack.skills.toolProtocolOverride !== null || pack.skills.enforceToolLinterGate === false;
     if (hasIncomingToolProtocol) {
       const text = pack.skills.toolProtocolOverride;
+      const incomingBypassesGate = pack.skills.enforceToolLinterGate === false;
       toolProtocol = {
         text,
         charCount: text ? text.length : 0,
@@ -104,8 +105,8 @@ export function analyzeAgentContextImport(
           : 'Linter gate bypassed on staged proposals (default protocol text)',
         enforceToolLinterGate: pack.skills.enforceToolLinterGate,
         willOverwrite:
-          currentSkills.toolProtocolOverride !== null ||
-          currentSkills.enforceToolLinterGate === false,
+          (text !== null && currentSkills.toolProtocolOverride !== null) ||
+          (incomingBypassesGate && currentSkills.enforceToolLinterGate === false),
       };
     }
 
@@ -430,8 +431,17 @@ export function applyAgentContextImport(
       (incomingSkills.toolProtocolOverride !== null ||
         incomingSkills.enforceToolLinterGate === false)
     ) {
-      baseSkills.toolProtocolOverride = incomingSkills.toolProtocolOverride;
-      baseSkills.enforceToolLinterGate = incomingSkills.enforceToolLinterGate;
+      if (mode === 'replace') {
+        baseSkills.toolProtocolOverride = incomingSkills.toolProtocolOverride;
+        baseSkills.enforceToolLinterGate = incomingSkills.enforceToolLinterGate;
+      } else {
+        if (incomingSkills.toolProtocolOverride !== null) {
+          baseSkills.toolProtocolOverride = incomingSkills.toolProtocolOverride;
+        }
+        if (incomingSkills.enforceToolLinterGate === false) {
+          baseSkills.enforceToolLinterGate = false;
+        }
+      }
     }
 
     for (const [id, override] of Object.entries(incomingSkills.skillOverrides)) {

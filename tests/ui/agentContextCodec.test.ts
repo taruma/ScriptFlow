@@ -521,5 +521,51 @@ describe('agentContextCodec', () => {
     expect(replaceImpact.toolProtocolCleared).toBe(true);
     expect(replaceImpact.toolOverridesReset).toBe(1);
     expect(replaceImpact.hasDestructiveRemovals).toBe(true);
+
+    // Regression: Merge mode preserves local toolProtocolOverride when incoming pack only bypasses linter gate
+    const gateOnlyPack = buildAgentContextPackExport(
+      {...DEFAULT_AI_SKILLS_STATE, enforceToolLinterGate: false},
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    ).pack;
+    const gateOnlyAnalysis = analyzeAgentContextImport(
+      gateOnlyPack,
+      localSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(gateOnlyAnalysis.toolProtocol?.willOverwrite).toBe(false);
+    const gateMerged = applyAgentContextImport(
+      gateOnlyPack,
+      createDefaultImportSelection(gateOnlyAnalysis),
+      'merge',
+      localSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(gateMerged.skills.toolProtocolOverride).toBe('- Keep local core protocol.');
+    expect(gateMerged.skills.enforceToolLinterGate).toBe(false);
+
+    // Regression: Merge mode preserves local enforceToolLinterGate=false when incoming pack only sets protocol text
+    const localBypassedSkills: AiSkillsState = {
+      ...DEFAULT_AI_SKILLS_STATE,
+      enforceToolLinterGate: false,
+    };
+    const textOnlyPack = buildAgentContextPackExport(
+      {...DEFAULT_AI_SKILLS_STATE, toolProtocolOverride: '- Pack protocol text.'},
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    ).pack;
+    const textOnlyAnalysis = analyzeAgentContextImport(
+      textOnlyPack,
+      localBypassedSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(textOnlyAnalysis.toolProtocol?.willOverwrite).toBe(false);
+    const textMerged = applyAgentContextImport(
+      textOnlyPack,
+      createDefaultImportSelection(textOnlyAnalysis),
+      'merge',
+      localBypassedSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(textMerged.skills.toolProtocolOverride).toBe('- Pack protocol text.');
+    expect(textMerged.skills.enforceToolLinterGate).toBe(false);
   });
 });
