@@ -42,18 +42,6 @@ Live Mode, Graph View, Source Mode, deterministic Script Supervisor diagnostics,
 
 ---
 
-## Why I Built This
-
-> *"How do you give directors and writers strict spatial, optical, and acoustic precision without turning a script into unreadable JSON or heavy node-graph boilerplate?"*
-
-ScriptFlow is built around three quiet ideas:
-
-* **Plain Text as Truth**: Your `.txt` script is always the single source of truth. Live cards, waterfall Sub-States, the spatial Graph View, and JSON IR projections compile synchronously from plain text so nothing can ever drift out of sync.
-* **Staging vs. Execution**: Separating static pre-roll world rules (**Phase 1 — Staging**) from rolling timeline beats (**Phase 2 — Execution**) keeps lookbook details, `@ref` bindings, and camera invariants crisp without repeating static setup on every line.
-* **Platform- & Model-Agnostic Craft**: Auteur Script `v0.4.0` enforces camera-viewport geometry, explicit hand-prop lifecycles, and clean acoustic boundaries with zero vendor lock-in.
-
----
-
 ## Key Capabilities
 
 1. **Asymmetric `40/60` Live Mode & Source Mode**
