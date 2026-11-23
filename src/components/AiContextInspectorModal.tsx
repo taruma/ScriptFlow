@@ -1,4 +1,4 @@
-import {type ChangeEvent, useEffect, useRef, useState} from 'react';
+import {type ChangeEvent, type DragEvent, useEffect, useRef, useState} from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -159,7 +159,10 @@ export function AiContextInspectorModal({
     details?: string[];
   } | null>(null);
 
+  const [isDraggingOverTop, setIsDraggingOverTop] = useState<boolean>(false);
+
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef<number>(0);
   const skillsTabRef = useRef<SkillsManagerTabHandle | null>(null);
   const labels = UI_LABELS.ai.contextInspector;
   const effectiveQuickScanRulesState = quickScanRulesState ?? DEFAULT_QUICK_SCAN_RULES_STATE;
@@ -169,6 +172,8 @@ export function AiContextInspectorModal({
     if (isOpen) {
       setActiveTab(initialTab);
       setTransferNotice(null);
+      dragDepthRef.current = 0;
+      setIsDraggingOverTop(false);
     }
   }, [isOpen, initialTab]);
 
@@ -206,11 +211,7 @@ export function AiContextInspectorModal({
     return ok;
   };
 
-  const handleImportFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-
+  const importContextPackFile = async (file: File) => {
     try {
       const content = await file.text();
       const parsed = parseAgentContextPack(content);
@@ -236,6 +237,55 @@ export function AiContextInspectorModal({
         message: labels.exportImport.importReadError,
       });
     }
+  };
+
+  const handleImportFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    void importContextPackFile(file);
+  };
+
+  const canAcceptFileDrop = Boolean(onReplaceSkillsState) && !confirmRequest && !pendingImport;
+
+  const hasDraggedFiles = (event: DragEvent<HTMLDivElement>): boolean =>
+    Boolean(event.dataTransfer?.types && Array.from(event.dataTransfer.types).includes('Files'));
+
+  const handleTopDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!canAcceptFileDrop || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDraggingOverTop(true);
+  };
+
+  const handleTopDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!canAcceptFileDrop || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleTopDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!canAcceptFileDrop || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDraggingOverTop(false);
+    }
+  };
+
+  const handleTopDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!canAcceptFileDrop || !hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDraggingOverTop(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    void importContextPackFile(file);
   };
 
   const handleConfirmImport = (
@@ -363,8 +413,35 @@ export function AiContextInspectorModal({
         <div
           className={`${UI_TOKENS.modal.containerLg} flex h-[min(88vh,780px)] flex-col !rounded-2xl`}
         >
-          {/* Header */}
-          <div className="flex items-start justify-between gap-3 border-b border-border-subtle px-5 py-4 shrink-0">
+          {/* Top Chrome (Header + Notices + Tab Bar) — Scoped JSON Drop Zone */}
+          <div
+            onDragEnter={handleTopDragEnter}
+            onDragOver={handleTopDragOver}
+            onDragLeave={handleTopDragLeave}
+            onDrop={handleTopDrop}
+            className="relative shrink-0"
+          >
+            {isDraggingOverTop && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center gap-3 rounded-t-2xl border-2 border-dashed border-[var(--phase-continuity-border)] bg-surface/95 px-5 py-3 backdrop-blur-xs"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--phase-continuity-border)] bg-[var(--phase-continuity-bg)] text-[var(--phase-continuity-text)]">
+                  <Upload className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 text-left">
+                  <div className="font-serif text-xs font-bold text-text-main">
+                    {labels.exportImport.dropOverlayTitle}
+                  </div>
+                  <p className="text-[11px] text-text-muted truncate">
+                    {labels.exportImport.dropOverlaySubtitle}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-border-subtle px-5 py-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4 shrink-0 text-[var(--phase-continuity-text)]" />
@@ -549,6 +626,7 @@ export function AiContextInspectorModal({
                 onSetAllToolModes={onSetAllToolModes}
               />
             )}
+          </div>
           </div>
 
           {/* Scrollable Body */}

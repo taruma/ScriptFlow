@@ -743,7 +743,11 @@ export const AI_LABELS = {
         importButton: 'Import JSON',
         importAria:
           'Import Agent Context, Skills, Function Tools, and Quick Scan Rules from a JSON file',
-        importTitle: 'Import an exported Agent Context JSON pack (choose exact items & Merge or Replace)',
+        importTitle:
+          'Import an exported Agent Context JSON pack (click or drop a .json file onto this header)',
+        dropOverlayTitle: 'Drop Agent Context JSON pack to import',
+        dropOverlaySubtitle:
+          'Opens the selective Merge / Replace inspector before applying any changes',
         dismissNoticeAria: 'Dismiss import notice',
         exportedNotice: (filename: string) => `Exported ${filename}`,
         exportFailedNotice: 'Unable to download the Agent Context JSON file in this environment.',
