@@ -27,6 +27,7 @@ export {
   buildToolDeclarationsForContext,
   getSystemInstructionForMode,
   getToolDeclarationsForMode,
+  getToolParametersSchema,
   sanitizeJsonSchemaForTool,
   type GeminiFunctionToolDeclaration,
 } from './tools/declarations.ts';

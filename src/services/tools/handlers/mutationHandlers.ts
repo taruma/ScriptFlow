@@ -26,6 +26,10 @@ import {
   type TitleSuggestion,
 } from '../suggestions.ts';
 
+function shouldEnforceLinterGate(context: ScriptToolContext): boolean {
+  return context.enforceToolLinterGate ?? context.composedContext?.enforceToolLinterGate ?? true;
+}
+
 export function runProposeScriptPatch(
   args: Record<string, unknown>,
   context: ScriptToolContext,
@@ -40,7 +44,8 @@ export function runProposeScriptPatch(
     context.rawText,
     patchPayload as AuteurPatch,
     context.ruleOverrides,
-    nextId
+    nextId,
+    {rejectOnNewErrors: shouldEnforceLinterGate(context)}
   );
 
   if (!built.ok) {
@@ -480,7 +485,8 @@ export function runProposeTextReplace(
     rawRules.length,
     context.ruleOverrides,
     nextId,
-    validSyntheticPatch
+    validSyntheticPatch,
+    {rejectOnNewErrors: shouldEnforceLinterGate(context)}
   );
 
   if (!built.ok) {
@@ -650,7 +656,7 @@ export function runProposeScriptDraft(
   }
 
   const diagCounts = countBySeverity(compiled.diagnostics);
-  if (diagCounts.errors > 0) {
+  if (shouldEnforceLinterGate(context) && diagCounts.errors > 0) {
     const errorHints = compiled.diagnostics
       .filter((d) => d.severity === 'error')
       .map((d) => `[${d.ruleId} at ${d.targetId}] ${d.repairHint}`);
@@ -788,7 +794,8 @@ export function runReportAuditReview(
         context.rawText,
         issue.suggestedPatch,
         context.ruleOverrides,
-        nextId
+        nextId,
+        {rejectOnNewErrors: shouldEnforceLinterGate(context)}
       );
       if (built.ok) {
         baseItem.patchSuggestion = built.suggestion;

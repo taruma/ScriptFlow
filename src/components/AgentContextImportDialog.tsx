@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
 import {AlertTriangle, Check, FileUp, FolderArchive, X} from 'lucide-react';
+import type {ScriptToolName} from '../services/auteurKnowledge.ts';
 import {
   analyzeAgentContextImport,
   createDefaultImportSelection,
@@ -91,7 +92,9 @@ export function AgentContextImportDialog({
   const skillsItemsTotal =
     (analysis.foundationalCraft ? 1 : 0) +
     analysis.builtInSkillOverrides.length +
-    analysis.customSkills.length;
+    analysis.customSkills.length +
+    (analysis.toolProtocol ? 1 : 0) +
+    analysis.toolOverrides.length;
   const quickScanItemsTotal =
     analysis.builtInQuickScanOverrides.length + analysis.customQuickScanRules.length;
 
@@ -104,6 +107,8 @@ export function AgentContextImportDialog({
         ? analysis.builtInSkillOverrides.map((item) => item.id)
         : [],
       customSkillIds: checked ? analysis.customSkills.map((item) => item.skill.id) : [],
+      includeToolProtocol: checked ? analysis.toolProtocol !== null : false,
+      toolOverrideNames: checked ? analysis.toolOverrides.map((item) => item.name) : [],
     }));
   };
 
@@ -147,6 +152,26 @@ export function AgentContextImportDialog({
         ...prev,
         applySkills: nextIds.length > prev.customSkillIds.length ? true : prev.applySkills,
         customSkillIds: nextIds,
+      };
+    });
+  };
+
+  const handleToggleToolProtocol = (checked: boolean) => {
+    setSelection((prev) => ({
+      ...prev,
+      applySkills: checked ? true : prev.applySkills,
+      includeToolProtocol: checked,
+    }));
+  };
+
+  const handleToggleToolOverride = (name: ScriptToolName) => {
+    setSelection((prev) => {
+      const current = prev.toolOverrideNames ?? [];
+      const nextNames = toggleIdInList(current, name) as ScriptToolName[];
+      return {
+        ...prev,
+        applySkills: nextNames.length > current.length ? true : prev.applySkills,
+        toolOverrideNames: nextNames,
       };
     });
   };
@@ -325,6 +350,8 @@ export function AgentContextImportDialog({
               onToggleFoundationalCraft={handleToggleFoundationalCraft}
               onToggleBuiltInSkillOverride={handleToggleBuiltInSkillOverride}
               onToggleCustomSkill={handleToggleCustomSkill}
+              onToggleToolProtocol={handleToggleToolProtocol}
+              onToggleToolOverride={handleToggleToolOverride}
             />
           )}
 

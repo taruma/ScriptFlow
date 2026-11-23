@@ -2,17 +2,27 @@ import {useCallback, useState} from 'react';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
+  BUILTIN_SCRIPT_TOOLS,
   DEFAULT_FOUNDATIONAL_CRAFT,
+  DEFAULT_TOOL_PROTOCOL_CORE,
   type CustomAuteurSkill,
+  type ScriptToolDefinition,
+  type ScriptToolName,
+  type ScriptToolOverride,
   type SkillOverride,
   type SkillPinMode,
+  type ToolActivationMode,
 } from '../services/auteurKnowledge.ts';
 import type {KeyValueStorageLike} from './aiSettings.ts';
 
 export const AI_SKILLS_STORAGE_KEY = 'auteur-editor-ai-skills-v1';
 
 const BUILTIN_SKILL_BY_ID = new Map(BUILTIN_AUTEUR_SKILLS.map((skill) => [skill.id, skill]));
+const BUILTIN_TOOL_BY_NAME = new Map<ScriptToolName, ScriptToolDefinition>(
+  BUILTIN_SCRIPT_TOOLS.map((tool) => [tool.name, tool])
+);
 const VALID_PIN_MODES = new Set<SkillPinMode>(['auto', 'pinned', 'muted']);
+const VALID_TOOL_ACTIVATION_MODES = new Set<ToolActivationMode>(['auto', 'enabled', 'disabled']);
 const CUSTOM_SKILL_ID_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 
 export interface AiSkillsState {
@@ -20,6 +30,9 @@ export interface AiSkillsState {
   foundationalCraftOverride: string | null;
   skillOverrides: Record<string, SkillOverride>;
   customSkills: CustomAuteurSkill[];
+  toolProtocolOverride: string | null;
+  enforceToolLinterGate: boolean;
+  toolOverrides: Partial<Record<ScriptToolName, ScriptToolOverride>>;
 }
 
 export const DEFAULT_AI_SKILLS_STATE: AiSkillsState = {
@@ -27,6 +40,9 @@ export const DEFAULT_AI_SKILLS_STATE: AiSkillsState = {
   foundationalCraftOverride: null,
   skillOverrides: {},
   customSkills: [],
+  toolProtocolOverride: null,
+  enforceToolLinterGate: true,
+  toolOverrides: {},
 };
 
 export interface CustomSkillValidationResult {
@@ -68,6 +84,10 @@ function safeSet(storage: KeyValueStorageLike | null, key: string, value: string
 
 export function isBuiltinSkillId(id: string): boolean {
   return BUILTIN_SKILL_BY_ID.has(id.trim().toLowerCase());
+}
+
+export function isBuiltinToolName(name: string): name is ScriptToolName {
+  return BUILTIN_TOOL_BY_NAME.has(name.trim() as ScriptToolName);
 }
 
 /**
@@ -185,12 +205,57 @@ function normalizeSkillOverride(skillId: string, raw: unknown): SkillOverride | 
   };
 }
 
+function normalizeToolOverride(
+  toolName: ScriptToolName,
+  raw: unknown
+): ScriptToolOverride | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const def = BUILTIN_TOOL_BY_NAME.get(toolName);
+  if (!def) return null;
+
+  const record = raw as Record<string, unknown>;
+  const activationMode =
+    typeof record.activationMode === 'string' &&
+    VALID_TOOL_ACTIVATION_MODES.has(record.activationMode as ToolActivationMode)
+      ? (record.activationMode as ToolActivationMode)
+      : undefined;
+
+  let descriptionOverride: string | undefined;
+  if (typeof record.descriptionOverride === 'string' && record.descriptionOverride.trim().length > 0) {
+    if (record.descriptionOverride.trim() !== def.defaultDescription.trim()) {
+      descriptionOverride = record.descriptionOverride;
+    }
+  }
+
+  let protocolGuidanceOverride: string | undefined;
+  if (
+    typeof record.protocolGuidanceOverride === 'string' &&
+    record.protocolGuidanceOverride.trim().length > 0
+  ) {
+    if (record.protocolGuidanceOverride.trim() !== def.defaultProtocolGuidance.trim()) {
+      protocolGuidanceOverride = record.protocolGuidanceOverride;
+    }
+  }
+
+  const effectiveMode = activationMode && activationMode !== 'auto' ? activationMode : undefined;
+  if (!effectiveMode && !descriptionOverride && !protocolGuidanceOverride) {
+    return null;
+  }
+
+  return {
+    ...(effectiveMode ? {activationMode: effectiveMode} : {}),
+    ...(descriptionOverride ? {descriptionOverride} : {}),
+    ...(protocolGuidanceOverride ? {protocolGuidanceOverride} : {}),
+  };
+}
+
 export function sanitizeAiSkillsState(input: unknown): AiSkillsState {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return {
       ...DEFAULT_AI_SKILLS_STATE,
       skillOverrides: {},
       customSkills: [],
+      toolOverrides: {},
     };
   }
 
@@ -206,6 +271,15 @@ export function sanitizeAiSkillsState(input: unknown): AiSkillsState {
     record.foundationalCraftOverride.trim() !== DEFAULT_FOUNDATIONAL_CRAFT.trim()
       ? record.foundationalCraftOverride
       : null;
+
+  const toolProtocolOverride =
+    typeof record.toolProtocolOverride === 'string' &&
+    record.toolProtocolOverride.trim().length > 0 &&
+    record.toolProtocolOverride.trim() !== DEFAULT_TOOL_PROTOCOL_CORE.trim()
+      ? record.toolProtocolOverride
+      : null;
+
+  const enforceToolLinterGate = record.enforceToolLinterGate === false ? false : true;
 
   const customSkills: CustomAuteurSkill[] = [];
   const seenCustomIds = new Set<string>();
@@ -260,11 +334,32 @@ export function sanitizeAiSkillsState(input: unknown): AiSkillsState {
     }
   }
 
+  const toolOverrides: Partial<Record<ScriptToolName, ScriptToolOverride>> = {};
+  if (
+    record.toolOverrides &&
+    typeof record.toolOverrides === 'object' &&
+    !Array.isArray(record.toolOverrides)
+  ) {
+    for (const [rawName, rawOverride] of Object.entries(
+      record.toolOverrides as Record<string, unknown>
+    )) {
+      const name = rawName.trim();
+      if (!isBuiltinToolName(name)) continue;
+      const normalized = normalizeToolOverride(name, rawOverride);
+      if (normalized) {
+        toolOverrides[name] = normalized;
+      }
+    }
+  }
+
   return {
     knowledgeVersion,
     foundationalCraftOverride,
     skillOverrides,
     customSkills,
+    toolProtocolOverride,
+    enforceToolLinterGate,
+    toolOverrides,
   };
 }
 
@@ -276,6 +371,7 @@ export function loadStoredAiSkills(storage?: KeyValueStorageLike | null): AiSkil
       ...DEFAULT_AI_SKILLS_STATE,
       skillOverrides: {},
       customSkills: [],
+      toolOverrides: {},
     };
   }
   try {
@@ -285,6 +381,7 @@ export function loadStoredAiSkills(storage?: KeyValueStorageLike | null): AiSkil
       ...DEFAULT_AI_SKILLS_STATE,
       skillOverrides: {},
       customSkills: [],
+      toolOverrides: {},
     };
   }
 }
@@ -477,12 +574,169 @@ export function deleteCustomSkill(state: AiSkillsState, skillId: string): AiSkil
   };
 }
 
+export function setToolProtocolOverride(
+  state: AiSkillsState,
+  value: string | null
+): AiSkillsState {
+  const nextValue =
+    value !== null &&
+    value.trim().length > 0 &&
+    value.trim() !== DEFAULT_TOOL_PROTOCOL_CORE.trim()
+      ? value
+      : null;
+
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolProtocolOverride: nextValue,
+  };
+}
+
+export function setEnforceToolLinterGate(
+  state: AiSkillsState,
+  enforce: boolean
+): AiSkillsState {
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    enforceToolLinterGate: enforce,
+  };
+}
+
+export function setToolActivationMode(
+  state: AiSkillsState,
+  toolName: ScriptToolName,
+  activationMode: ToolActivationMode
+): AiSkillsState {
+  const nextOverrides = {...state.toolOverrides};
+  const current = nextOverrides[toolName] ?? {};
+  const normalized = normalizeToolOverride(toolName, {...current, activationMode});
+
+  if (normalized) {
+    nextOverrides[toolName] = normalized;
+  } else {
+    delete nextOverrides[toolName];
+  }
+
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolOverrides: nextOverrides,
+  };
+}
+
+/**
+ * Bulk-sets `activationMode` (`'auto'` or `'disabled'`) across every function tool
+ * while preserving per-tool description and protocol guidance overrides.
+ */
+export function setAllToolsActivationMode(
+  state: AiSkillsState,
+  activationMode: 'auto' | 'disabled'
+): AiSkillsState {
+  const nextOverrides: Partial<Record<ScriptToolName, ScriptToolOverride>> = {
+    ...state.toolOverrides,
+  };
+  for (const def of BUILTIN_SCRIPT_TOOLS) {
+    const existing = nextOverrides[def.name];
+    const normalized = normalizeToolOverride(def.name, {
+      ...existing,
+      activationMode,
+    });
+    if (normalized) {
+      nextOverrides[def.name] = normalized;
+    } else {
+      delete nextOverrides[def.name];
+    }
+  }
+
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolOverrides: nextOverrides,
+  };
+}
+
+export function setToolDescriptionOverride(
+  state: AiSkillsState,
+  toolName: ScriptToolName,
+  descriptionOverride: string | null
+): AiSkillsState {
+  const nextOverrides = {...state.toolOverrides};
+  const current = nextOverrides[toolName] ?? {};
+  const normalized = normalizeToolOverride(toolName, {
+    ...current,
+    descriptionOverride: descriptionOverride ?? undefined,
+  });
+
+  if (normalized) {
+    nextOverrides[toolName] = normalized;
+  } else {
+    delete nextOverrides[toolName];
+  }
+
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolOverrides: nextOverrides,
+  };
+}
+
+export function setToolProtocolGuidanceOverride(
+  state: AiSkillsState,
+  toolName: ScriptToolName,
+  protocolGuidanceOverride: string | null
+): AiSkillsState {
+  const nextOverrides = {...state.toolOverrides};
+  const current = nextOverrides[toolName] ?? {};
+  const normalized = normalizeToolOverride(toolName, {
+    ...current,
+    protocolGuidanceOverride: protocolGuidanceOverride ?? undefined,
+  });
+
+  if (normalized) {
+    nextOverrides[toolName] = normalized;
+  } else {
+    delete nextOverrides[toolName];
+  }
+
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolOverrides: nextOverrides,
+  };
+}
+
+export function resetToolOverride(
+  state: AiSkillsState,
+  toolName: ScriptToolName
+): AiSkillsState {
+  if (!(toolName in state.toolOverrides)) return state;
+  const nextOverrides = {...state.toolOverrides};
+  delete nextOverrides[toolName];
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolOverrides: nextOverrides,
+  };
+}
+
+export function resetAllToolsAndProtocol(state: AiSkillsState): AiSkillsState {
+  return {
+    ...state,
+    knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
+    toolProtocolOverride: null,
+    enforceToolLinterGate: true,
+    toolOverrides: {},
+  };
+}
+
 export function resetAllAiSkills(): AiSkillsState {
   return {
     ...DEFAULT_AI_SKILLS_STATE,
     knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
     skillOverrides: {},
     customSkills: [],
+    toolOverrides: {},
   };
 }
 
@@ -491,6 +745,28 @@ export function acknowledgeUpstreamKnowledgeUpdate(state: AiSkillsState): AiSkil
     ...state,
     knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
   };
+}
+
+export function countToolCustomizations(state: AiSkillsState): number {
+  let count = 0;
+  if (state.toolProtocolOverride !== null) count += 1;
+  if (state.enforceToolLinterGate === false) count += 1;
+
+  for (const override of Object.values(state.toolOverrides)) {
+    if (!override) continue;
+    const hasCustomMode = Boolean(override.activationMode && override.activationMode !== 'auto');
+    const hasCustomDesc = Boolean(
+      override.descriptionOverride && override.descriptionOverride.trim().length > 0
+    );
+    const hasCustomGuidance = Boolean(
+      override.protocolGuidanceOverride && override.protocolGuidanceOverride.trim().length > 0
+    );
+    if (hasCustomMode || hasCustomDesc || hasCustomGuidance) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 export function countCustomizations(state: AiSkillsState): number {
@@ -506,6 +782,7 @@ export function countCustomizations(state: AiSkillsState): number {
   }
 
   count += state.customSkills.length;
+  count += countToolCustomizations(state);
   return count;
 }
 
@@ -527,6 +804,7 @@ export function hasUpstreamKnowledgeUpdate(state: AiSkillsState): boolean {
 export function useAiSkills(): {
   skillsState: AiSkillsState;
   customizationCount: number;
+  toolCustomizationCount: number;
   hasUpstreamUpdate: boolean;
   setFoundationalCraft: (value: string | null) => void;
   setPinMode: (skillId: string, pinMode: SkillPinMode) => void;
@@ -535,6 +813,14 @@ export function useAiSkills(): {
   resetSkill: (skillId: string) => void;
   saveCustomSkill: (skill: CustomAuteurSkill, editingId?: string) => void;
   removeCustomSkill: (skillId: string) => void;
+  setToolProtocol: (value: string | null) => void;
+  setEnforceLinterGate: (enforce: boolean) => void;
+  setToolMode: (toolName: ScriptToolName, mode: ToolActivationMode) => void;
+  setAllToolModes: (mode: 'auto' | 'disabled') => void;
+  setToolDescription: (toolName: ScriptToolName, description: string | null) => void;
+  setToolGuidance: (toolName: ScriptToolName, guidance: string | null) => void;
+  resetTool: (toolName: ScriptToolName) => void;
+  resetAllTools: () => void;
   replaceSkillsState: (nextState: AiSkillsState) => void;
   resetAll: () => void;
   acknowledgeUpdate: () => void;
@@ -569,6 +855,45 @@ export function useAiSkills(): {
     setSkillsState((prev) => saveStoredAiSkills(deleteCustomSkill(prev, skillId)));
   }, []);
 
+  const setToolProtocol = useCallback((value: string | null) => {
+    setSkillsState((prev) => saveStoredAiSkills(setToolProtocolOverride(prev, value)));
+  }, []);
+
+  const setEnforceLinterGate = useCallback((enforce: boolean) => {
+    setSkillsState((prev) => saveStoredAiSkills(setEnforceToolLinterGate(prev, enforce)));
+  }, []);
+
+  const setToolMode = useCallback((toolName: ScriptToolName, mode: ToolActivationMode) => {
+    setSkillsState((prev) => saveStoredAiSkills(setToolActivationMode(prev, toolName, mode)));
+  }, []);
+
+  const setAllToolModes = useCallback((mode: 'auto' | 'disabled') => {
+    setSkillsState((prev) => saveStoredAiSkills(setAllToolsActivationMode(prev, mode)));
+  }, []);
+
+  const setToolDescription = useCallback(
+    (toolName: ScriptToolName, description: string | null) => {
+      setSkillsState((prev) =>
+        saveStoredAiSkills(setToolDescriptionOverride(prev, toolName, description))
+      );
+    },
+    []
+  );
+
+  const setToolGuidance = useCallback((toolName: ScriptToolName, guidance: string | null) => {
+    setSkillsState((prev) =>
+      saveStoredAiSkills(setToolProtocolGuidanceOverride(prev, toolName, guidance))
+    );
+  }, []);
+
+  const resetTool = useCallback((toolName: ScriptToolName) => {
+    setSkillsState((prev) => saveStoredAiSkills(resetToolOverride(prev, toolName)));
+  }, []);
+
+  const resetAllTools = useCallback(() => {
+    setSkillsState((prev) => saveStoredAiSkills(resetAllToolsAndProtocol(prev)));
+  }, []);
+
   const replaceSkillsState = useCallback((nextState: AiSkillsState) => {
     setSkillsState(() => saveStoredAiSkills(nextState));
   }, []);
@@ -584,6 +909,7 @@ export function useAiSkills(): {
   return {
     skillsState,
     customizationCount: countCustomizations(skillsState),
+    toolCustomizationCount: countToolCustomizations(skillsState),
     hasUpstreamUpdate: hasUpstreamKnowledgeUpdate(skillsState),
     setFoundationalCraft,
     setPinMode,
@@ -592,6 +918,14 @@ export function useAiSkills(): {
     resetSkill,
     saveCustomSkill,
     removeCustomSkill,
+    setToolProtocol,
+    setEnforceLinterGate,
+    setToolMode,
+    setAllToolModes,
+    setToolDescription,
+    setToolGuidance,
+    resetTool,
+    resetAllTools,
     replaceSkillsState,
     resetAll,
     acknowledgeUpdate,

@@ -9,6 +9,9 @@ import {
   type InteractionsClientLike,
 } from '../../src/services/geminiInteractions.ts';
 import {
+  BUILTIN_SCRIPT_TOOLS,
+} from '../../src/services/auteurKnowledge.ts';
+import {
   MODE_TOOL_NAMES,
   type PatchSuggestion,
   type StagedSuggestion,
@@ -636,5 +639,47 @@ describe('geminiInteractions streaming agent client', () => {
     const serialized = JSON.stringify(trace);
     expect(serialized).not.toContain(secretKey);
     expect(serialized).not.toContain('apiKey');
+  });
+
+  it('omits tools from API request params when all function tools are disabled (pure conversation mode)', async () => {
+    const capturedRequests: Array<Record<string, unknown>> = [];
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async (params) => {
+          capturedRequests.push(params);
+          return asAsyncStream([
+            {event_type: 'interaction.created', interaction: {id: 'int-chat-1', status: 'in_progress'}},
+            {
+              event_type: 'step.delta',
+              index: 0,
+              delta: {type: 'text', text: 'Pure prose brainstorming reply.'},
+            },
+            {event_type: 'interaction.completed', interaction: {id: 'int-chat-1', status: 'completed'}},
+          ]);
+        },
+      },
+    };
+
+    const allDisabled = Object.fromEntries(
+      BUILTIN_SCRIPT_TOOLS.map((tool) => [tool.name, {activationMode: 'disabled' as const}])
+    );
+
+    const result = await runGeminiAgentTurn({
+      apiKey: 'AIza-pure-chat-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'low',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Let us brainstorm lighting moods only.',
+      rawText: SAMPLE_SCRIPT,
+      toolOverrides: allDisabled,
+      createClient: () => fakeClient,
+    });
+
+    expect(result.text).toBe('Pure prose brainstorming reply.');
+    expect(capturedRequests).toHaveLength(1);
+    expect('tools' in capturedRequests[0]).toBe(false);
+    expect(String(capturedRequests[0].system_instruction)).toContain('pure conversation mode');
+    expect(result.trace.rounds[0].request.toolNames).toEqual([]);
   });
 });

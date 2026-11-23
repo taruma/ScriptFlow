@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import {Layers, ScanSearch} from 'lucide-react';
+import type {ScriptToolName} from '../../../services/auteurKnowledge.ts';
 import type {
   AgentContextImportAnalysis,
   AgentContextImportSelection,
@@ -185,6 +186,8 @@ export interface SkillsImportSectionProps {
   onToggleFoundationalCraft: (checked: boolean) => void;
   onToggleBuiltInSkillOverride: (id: string) => void;
   onToggleCustomSkill: (id: string) => void;
+  onToggleToolProtocol: (checked: boolean) => void;
+  onToggleToolOverride: (name: ScriptToolName) => void;
 }
 
 export function SkillsImportSection({
@@ -195,6 +198,8 @@ export function SkillsImportSection({
   onToggleFoundationalCraft,
   onToggleBuiltInSkillOverride,
   onToggleCustomSkill,
+  onToggleToolProtocol,
+  onToggleToolOverride,
 }: SkillsImportSectionProps) {
   const ctxLabels = UI_LABELS.ai.contextInspector;
   const labels = ctxLabels.exportImport;
@@ -275,6 +280,69 @@ export function SkillsImportSection({
           meta: item.skill.id,
           badges,
           subtitle: item.skill.triggerHint,
+        };
+      }),
+    });
+  }
+
+  if (analysis.toolProtocol) {
+    const proto = analysis.toolProtocol;
+    const badges: ImportChecklistBadge[] = [];
+    if (!proto.enforceToolLinterGate) {
+      badges.push({label: labels.badgeLinterBypassed, tone: 'intent'});
+    }
+    badges.push({
+      label: proto.willOverwrite ? labels.badgeOverwrites : labels.badgeNew,
+      tone: proto.willOverwrite ? 'overwrite' : 'new',
+    });
+    groups.push({
+      key: 'tool-protocol',
+      heading: labels.groupToolProtocol,
+      items: [
+        {
+          key: 'tool-protocol',
+          checked: selection.applySkills && Boolean(selection.includeToolProtocol),
+          onToggle: onToggleToolProtocol,
+          title: ctxLabels.functionTools.coreProtocolHeading,
+          meta: proto.charCount > 0 ? ctxLabels.charsCount(proto.charCount) : undefined,
+          badges,
+          subtitle: proto.preview,
+          subtitleMono: proto.charCount > 0,
+          bodySpacing: 'normal',
+        },
+      ],
+    });
+  }
+
+  if (analysis.toolOverrides.length > 0) {
+    groups.push({
+      key: 'tool-overrides',
+      heading: labels.groupToolOverrides(analysis.toolOverrides.length),
+      items: analysis.toolOverrides.map((item) => {
+        const badges: ImportChecklistBadge[] = [];
+        if (item.activationMode) {
+          badges.push({
+            label: ctxLabels.functionTools.activationModes[item.activationMode],
+            tone: 'neutral',
+          });
+        }
+        if (item.hasProtocolGuidanceOverride) {
+          badges.push({label: labels.badgeEditedGuidance, tone: 'intent'});
+        }
+        if (item.hasDescriptionOverride) {
+          badges.push({label: labels.badgeEditedDesc, tone: 'intent'});
+        }
+        if (item.willOverwrite) {
+          badges.push({label: labels.badgeOverwrites, tone: 'overwrite'});
+        }
+        return {
+          key: item.name,
+          checked:
+            selection.applySkills && (selection.toolOverrideNames ?? []).includes(item.name),
+          onToggle: () => onToggleToolOverride(item.name),
+          title: item.label,
+          meta: item.name,
+          badges,
         };
       }),
     });

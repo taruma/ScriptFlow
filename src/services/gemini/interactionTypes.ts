@@ -4,6 +4,8 @@ import type {
   AskQuestionMode,
   AssistantFocus,
   CustomAuteurSkill,
+  ScriptToolName,
+  ScriptToolOverride,
   SkillOverride,
 } from '../auteurKnowledge.ts';
 import type {AssistantMode, StagedSuggestion} from '../scriptTools.ts';
@@ -146,6 +148,9 @@ export interface RunAgentTurnOptions {
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
+  toolProtocolOverride?: string;
+  enforceToolLinterGate?: boolean;
+  toolOverrides?: Partial<Record<ScriptToolName, ScriptToolOverride>>;
   referenceHandles?: readonly string[];
   briefContext?: string;
   askQuestionMode?: AskQuestionMode;

@@ -1,6 +1,7 @@
 import {QUICK_SCAN_RULES_VERSION} from '../../data/knowledge/index.ts';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
+  type ScriptToolName,
   type SkillPinMode,
 } from '../../services/auteurKnowledge.ts';
 import {
@@ -16,6 +17,7 @@ import {
 import {
   BUILTIN_RULE_BY_ID,
   BUILTIN_SKILL_BY_ID,
+  BUILTIN_TOOL_BY_NAME,
   buildCompactPreview,
   type AgentContextImportAnalysis,
   type AgentContextImportImpact,
@@ -26,6 +28,8 @@ import {
   type AnalyzedCustomQuickScanRuleImport,
   type AnalyzedCustomSkillImport,
   type AnalyzedFoundationalCraftImport,
+  type AnalyzedScriptToolOverrideImport,
+  type AnalyzedToolProtocolImport,
   type AppliedAgentContextImportResult,
   type AuteurAgentContextPack,
 } from './schema.ts';
@@ -52,6 +56,8 @@ export function analyzeAgentContextImport(
   let foundationalCraft: AnalyzedFoundationalCraftImport | null = null;
   const builtInSkillOverrides: AnalyzedBuiltInSkillOverrideImport[] = [];
   const customSkills: AnalyzedCustomSkillImport[] = [];
+  let toolProtocol: AnalyzedToolProtocolImport | null = null;
+  const toolOverrides: AnalyzedScriptToolOverrideImport[] = [];
 
   if (pack.skills) {
     if (pack.skills.foundationalCraftOverride !== null) {
@@ -83,6 +89,43 @@ export function analyzeAgentContextImport(
         skill,
         pinMode,
         willOverwrite: existingCustomSkillIds.has(skill.id.toLowerCase()),
+      });
+    }
+
+    const hasIncomingToolProtocol =
+      pack.skills.toolProtocolOverride !== null || pack.skills.enforceToolLinterGate === false;
+    if (hasIncomingToolProtocol) {
+      const text = pack.skills.toolProtocolOverride;
+      toolProtocol = {
+        text,
+        charCount: text ? text.length : 0,
+        preview: text
+          ? buildCompactPreview(text)
+          : 'Linter gate bypassed on staged proposals (default protocol text)',
+        enforceToolLinterGate: pack.skills.enforceToolLinterGate,
+        willOverwrite:
+          currentSkills.toolProtocolOverride !== null ||
+          currentSkills.enforceToolLinterGate === false,
+      };
+    }
+
+    for (const [rawName, override] of Object.entries(pack.skills.toolOverrides ?? {})) {
+      if (!override) continue;
+      const toolName = rawName as ScriptToolName;
+      const builtInTool = BUILTIN_TOOL_BY_NAME.get(toolName);
+      if (!builtInTool) continue;
+      toolOverrides.push({
+        name: toolName,
+        label: builtInTool.label,
+        override,
+        activationMode: override.activationMode,
+        hasDescriptionOverride: Boolean(
+          override.descriptionOverride && override.descriptionOverride.trim().length > 0
+        ),
+        hasProtocolGuidanceOverride: Boolean(
+          override.protocolGuidanceOverride && override.protocolGuidanceOverride.trim().length > 0
+        ),
+        willOverwrite: Boolean(currentSkills.toolOverrides?.[toolName]),
       });
     }
   }
@@ -122,6 +165,8 @@ export function analyzeAgentContextImport(
     (foundationalCraft ? 1 : 0) +
     builtInSkillOverrides.length +
     customSkills.length +
+    (toolProtocol ? 1 : 0) +
+    toolOverrides.length +
     builtInQuickScanOverrides.length +
     customQuickScanRules.length;
 
@@ -131,6 +176,8 @@ export function analyzeAgentContextImport(
     foundationalCraft,
     builtInSkillOverrides,
     customSkills,
+    toolProtocol,
+    toolOverrides,
     builtInQuickScanOverrides,
     customQuickScanRules,
     totalSelectableItems,
@@ -150,6 +197,8 @@ export function createDefaultImportSelection(
     includeFoundationalCraft: analysis.foundationalCraft !== null,
     builtInSkillOverrideIds: analysis.builtInSkillOverrides.map((item) => item.id),
     customSkillIds: analysis.customSkills.map((item) => item.skill.id),
+    includeToolProtocol: analysis.toolProtocol !== null,
+    toolOverrideNames: analysis.toolOverrides.map((item) => item.name),
     builtInQuickScanOverrideIds: analysis.builtInQuickScanOverrides.map((item) => item.id),
     customQuickScanRuleIds: analysis.customQuickScanRules.map((item) => item.rule.id),
   };
@@ -210,8 +259,29 @@ export function summarizeAgentContextImportImpact(
     else customSkillsAdded += 1;
   }
 
+  const selectedToolOverrideNames = new Set<ScriptToolName>(
+    applySkills && pack.skills
+      ? (selection.toolOverrideNames ?? []).filter(
+          (name) => BUILTIN_TOOL_BY_NAME.has(name) && Boolean(pack.skills?.toolOverrides?.[name])
+        )
+      : []
+  );
+  const incomingHasToolProtocol = Boolean(
+    pack.skills &&
+      (pack.skills.toolProtocolOverride !== null || pack.skills.enforceToolLinterGate === false)
+  );
+  const localHasToolProtocol =
+    currentSkills.toolProtocolOverride !== null || currentSkills.enforceToolLinterGate === false;
+  const toolProtocolApplied = Boolean(
+    applySkills && selection.includeToolProtocol && incomingHasToolProtocol
+  );
+  const toolProtocolOverwritten = toolProtocolApplied && localHasToolProtocol;
+  const toolProtocolCleared =
+    mode === 'replace' && applySkills && !toolProtocolApplied && localHasToolProtocol;
+
   let customSkillsRemoved = 0;
   let builtInSkillOverridesReset = 0;
+  let toolOverridesReset = 0;
   if (mode === 'replace' && applySkills) {
     for (const existing of currentSkills.customSkills) {
       if (!selectedCustomSkillIds.has(existing.id)) {
@@ -221,6 +291,12 @@ export function summarizeAgentContextImportImpact(
     for (const existingId of Object.keys(currentSkills.skillOverrides)) {
       if (BUILTIN_SKILL_BY_ID.has(existingId) && !selectedBuiltInSkillIds.has(existingId)) {
         builtInSkillOverridesReset += 1;
+      }
+    }
+    for (const existingTool of Object.keys(currentSkills.toolOverrides ?? {})) {
+      const toolName = existingTool as ScriptToolName;
+      if (BUILTIN_TOOL_BY_NAME.has(toolName) && !selectedToolOverrideNames.has(toolName)) {
+        toolOverridesReset += 1;
       }
     }
   }
@@ -266,6 +342,8 @@ export function summarizeAgentContextImportImpact(
     (craftApplied ? 1 : 0) +
     selectedBuiltInSkillIds.size +
     selectedCustomSkillIds.size +
+    (toolProtocolApplied ? 1 : 0) +
+    selectedToolOverrideNames.size +
     selectedBuiltInRuleIds.size +
     selectedCustomRuleIds.size;
 
@@ -273,6 +351,8 @@ export function summarizeAgentContextImportImpact(
     craftCleared ||
     customSkillsRemoved > 0 ||
     builtInSkillOverridesReset > 0 ||
+    toolProtocolCleared ||
+    toolOverridesReset > 0 ||
     customRulesRemoved > 0 ||
     builtInRuleOverridesReset > 0;
 
@@ -289,6 +369,11 @@ export function summarizeAgentContextImportImpact(
     customSkillsAdded,
     customSkillsOverwritten,
     customSkillsRemoved,
+    toolProtocolApplied,
+    toolProtocolOverwritten,
+    toolProtocolCleared,
+    toolOverridesApplied: selectedToolOverrideNames.size,
+    toolOverridesReset,
     builtInRuleOverridesApplied: selectedBuiltInRuleIds.size,
     builtInRuleOverridesReset,
     customRulesAdded,
@@ -317,6 +402,7 @@ export function applyAgentContextImport(
     const incomingSkills = pack.skills;
     const selectedBuiltInSkillIds = new Set(selection.builtInSkillOverrideIds);
     const selectedCustomSkillIds = new Set(selection.customSkillIds);
+    const selectedToolOverrideNames = new Set<ScriptToolName>(selection.toolOverrideNames ?? []);
 
     const baseSkills: AiSkillsState =
       mode === 'replace'
@@ -325,21 +411,39 @@ export function applyAgentContextImport(
             knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
             skillOverrides: {},
             customSkills: [],
+            toolOverrides: {},
           }
         : {
             ...currentSkills,
             knowledgeVersion: AUTEUR_KNOWLEDGE_VERSION,
             skillOverrides: {...currentSkills.skillOverrides},
             customSkills: [...currentSkills.customSkills],
+            toolOverrides: {...(currentSkills.toolOverrides ?? {})},
           };
 
     if (selection.includeFoundationalCraft && incomingSkills.foundationalCraftOverride !== null) {
       baseSkills.foundationalCraftOverride = incomingSkills.foundationalCraftOverride;
     }
 
+    if (
+      selection.includeToolProtocol &&
+      (incomingSkills.toolProtocolOverride !== null ||
+        incomingSkills.enforceToolLinterGate === false)
+    ) {
+      baseSkills.toolProtocolOverride = incomingSkills.toolProtocolOverride;
+      baseSkills.enforceToolLinterGate = incomingSkills.enforceToolLinterGate;
+    }
+
     for (const [id, override] of Object.entries(incomingSkills.skillOverrides)) {
       if (BUILTIN_SKILL_BY_ID.has(id) && selectedBuiltInSkillIds.has(id)) {
         baseSkills.skillOverrides[id] = {...override};
+      }
+    }
+
+    for (const [rawName, override] of Object.entries(incomingSkills.toolOverrides ?? {})) {
+      const toolName = rawName as ScriptToolName;
+      if (override && BUILTIN_TOOL_BY_NAME.has(toolName) && selectedToolOverrideNames.has(toolName)) {
+        baseSkills.toolOverrides[toolName] = {...override};
       }
     }
 

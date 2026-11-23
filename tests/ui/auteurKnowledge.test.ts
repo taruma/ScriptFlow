@@ -259,7 +259,8 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(ctx.knowledgeVersion).toBe(AUTEUR_KNOWLEDGE_VERSION);
     expect(ctx.sections.foundationalCraft.isOverridden).toBe(true);
     expect(ctx.sections.foundationalCraft.text).toBe('Custom director voice override.');
-    expect(ctx.sections.toolProtocol.editable).toBe(false);
+    expect(ctx.sections.toolProtocol.editable).toBe(true);
+    expect(ctx.sections.toolProtocol.isOverridden).toBe(false);
     expect(ctx.sections.toolProtocol.text).toContain(ctx.editorState.snapshotHash);
     expect(ctx.sections.toolProtocol.text).toContain('expectedSnapshotHash');
 
@@ -837,5 +838,85 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     // Trace still records both tool rounds transparently
     expect(result.trace.toolRounds).toBe(2);
     expect(result.trace.rounds).toHaveLength(3);
+  });
+
+  it('supports 3-state function tool activation (auto/enabled/disabled), editable protocol, and pure conversation mode', () => {
+    // 1. Force Always On (ask_question & propose_script_draft) + Disable (propose_text_replace)
+    const customCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: INTERROGATION_SCRIPT,
+      toolProtocolOverride: '- Custom core staging safety rule.',
+      enforceToolLinterGate: false,
+      toolOverrides: {
+        ask_question: {activationMode: 'enabled'},
+        propose_script_draft: {
+          activationMode: 'enabled',
+          protocolGuidanceOverride: '- Custom draft bullet for forced draft tool.',
+          descriptionOverride: 'Custom API description for draft tool.',
+        },
+        propose_text_replace: {activationMode: 'disabled'},
+      },
+    });
+
+    expect(customCtx.enforceToolLinterGate).toBe(false);
+    expect(customCtx.allowedToolNames).toContain('ask_question');
+    expect(customCtx.allowedToolNames).toContain('propose_script_draft');
+    expect(customCtx.allowedToolNames).not.toContain('propose_text_replace');
+    expect(customCtx.sections.toolProtocol.isOverridden).toBe(true);
+    expect(customCtx.sections.toolProtocol.text).toContain('- Custom core staging safety rule.');
+    expect(customCtx.sections.toolProtocol.text).toContain(
+      '- Custom draft bullet for forced draft tool.'
+    );
+    expect(customCtx.sections.toolProtocol.text).toContain('Linter gate override:');
+    expect(customCtx.sections.toolProtocol.text).not.toContain('- `propose_text_replace`:');
+
+    // ask_question forced Always On without Ask First uses on-demand ambiguity guidance
+    expect(customCtx.sections.toolProtocol.text).toContain('genuine directorial ambiguity');
+    expect(customCtx.sections.toolProtocol.text).not.toContain('Clarifying interview requested (Ask First)');
+
+    // When Ask First IS toggled while ask_question is Always On, Ask First interview mode takes precedence
+    const forcedWithAskFirst = composeAgentContext({
+      focus: 'auto',
+      rawText: INTERROGATION_SCRIPT,
+      askQuestionMode: 'ask_first',
+      toolOverrides: {ask_question: {activationMode: 'enabled'}},
+    });
+    expect(forcedWithAskFirst.sections.toolProtocol.text).toContain(
+      'Clarifying interview requested (Ask First)'
+    );
+
+    // Custom API description flows into Gemini function declarations
+    const decls = buildToolDeclarationsForContext(customCtx);
+    const draftDecl = decls.find((d) => d.name === 'propose_script_draft');
+    expect(draftDecl?.description).toBe('Custom API description for draft tool.');
+    expect(decls.find((d) => d.name === 'propose_text_replace')).toBeUndefined();
+
+    // 2. Schema safety guard: load_auteur_skill forced Always On stays inactive when 0 available skills
+    const allMutedSkills = Object.fromEntries(
+      BUILTIN_AUTEUR_SKILLS.map((s) => [s.id, {pinMode: 'muted' as const}])
+    );
+    const guardedLoadCtx = composeAgentContext({
+      focus: 'refine',
+      rawText: INTERROGATION_SCRIPT,
+      skillOverrides: allMutedSkills,
+      toolOverrides: {load_auteur_skill: {activationMode: 'enabled'}},
+    });
+    expect(guardedLoadCtx.allowedToolNames).not.toContain('load_auteur_skill');
+    const resolvedLoadTool = guardedLoadCtx.resolvedTools.find((t) => t.name === 'load_auteur_skill');
+    expect(resolvedLoadTool?.status).toBe('inactive');
+    expect(resolvedLoadTool?.reason).toBe('inactive_no_available_skills');
+
+    // 3. Disabling all tools enters Pure Conversation Mode (0 tool schemas)
+    const allDisabledTools = Object.fromEntries(
+      customCtx.resolvedTools.map((t) => [t.name, {activationMode: 'disabled' as const}])
+    );
+    const pureChatCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: INTERROGATION_SCRIPT,
+      toolOverrides: allDisabledTools,
+    });
+    expect(pureChatCtx.allowedToolNames).toEqual([]);
+    expect(buildToolDeclarationsForContext(pureChatCtx)).toEqual([]);
+    expect(pureChatCtx.sections.toolProtocol.text).toContain('pure conversation mode');
   });
 });

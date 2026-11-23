@@ -56,11 +56,14 @@ export function ContextPreviewToolbar({systemInstruction}: ContextPreviewToolbar
   );
 }
 
+export type ContextPreviewJumpTarget = 'craft' | 'skills' | 'tools';
+
 export interface ContextPreviewTabProps {
   composedContext: ComposedAgentContext;
+  onJumpToTab?: (tab: ContextPreviewJumpTarget) => void;
 }
 
-export function ContextPreviewTab({composedContext}: ContextPreviewTabProps) {
+export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreviewTabProps) {
   const labels = UI_LABELS.ai.contextInspector;
   const focusLabel = UI_LABELS.ai.focusLabels[composedContext.focus];
 
@@ -68,6 +71,8 @@ export function ContextPreviewTab({composedContext}: ContextPreviewTabProps) {
     key: string;
     title: string;
     editable: boolean;
+    jumpTab?: ContextPreviewJumpTarget;
+    jumpTabLabel?: string;
     badgeLabel?: string;
     badgeAccent?: boolean;
     modified?: boolean;
@@ -78,6 +83,8 @@ export function ContextPreviewTab({composedContext}: ContextPreviewTabProps) {
       key: 'foundationalCraft',
       title: labels.sectionFoundationalCraft,
       editable: true,
+      jumpTab: 'craft',
+      jumpTabLabel: labels.tabCraft,
       modified: composedContext.sections.foundationalCraft.isOverridden,
       body: composedContext.sections.foundationalCraft.text,
     },
@@ -102,6 +109,8 @@ export function ContextPreviewTab({composedContext}: ContextPreviewTabProps) {
       key: 'activeSkills',
       title: labels.sectionActiveSkills,
       editable: false,
+      jumpTab: 'skills',
+      jumpTabLabel: labels.tabSkills,
       body: composedContext.sections.activeSkills.text,
       emptyNote: labels.emptyActiveSkills,
     },
@@ -109,13 +118,18 @@ export function ContextPreviewTab({composedContext}: ContextPreviewTabProps) {
       key: 'skillDirectory',
       title: labels.sectionSkillDirectory,
       editable: false,
+      jumpTab: 'skills',
+      jumpTabLabel: labels.tabSkills,
       body: composedContext.sections.skillDirectory.text,
       emptyNote: labels.emptyAvailableSkills,
     },
     {
       key: 'toolProtocol',
       title: labels.sectionToolProtocol,
-      editable: false,
+      editable: true,
+      jumpTab: 'tools',
+      jumpTabLabel: labels.tabTools,
+      modified: composedContext.sections.toolProtocol.isOverridden,
       body: composedContext.sections.toolProtocol.text,
     },
   ];
@@ -161,59 +175,101 @@ export function ContextPreviewTab({composedContext}: ContextPreviewTabProps) {
           <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0">
             {labels.summaryTools}
           </span>
-          {composedContext.allowedToolNames.map((toolName) => (
-            <span
-              key={toolName}
-              className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-            >
-              {toolName}
-            </span>
-          ))}
+          {composedContext.allowedToolNames.length === 0 ? (
+            onJumpToTab ? (
+              <button
+                type="button"
+                onClick={() => onJumpToTab('tools')}
+                title={labels.summaryToolsJumpTitle}
+                className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent hover:opacity-85 transition-opacity cursor-pointer"
+              >
+                {labels.summaryToolsNone}
+              </button>
+            ) : (
+              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
+                {labels.summaryToolsNone}
+              </span>
+            )
+          ) : (
+            composedContext.allowedToolNames.map((toolName) =>
+              onJumpToTab ? (
+                <button
+                  key={toolName}
+                  type="button"
+                  onClick={() => onJumpToTab('tools')}
+                  title={labels.summaryToolsJumpTitle}
+                  className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted hover:border-border-main hover:text-text-main transition-colors cursor-pointer"
+                >
+                  {toolName}
+                </button>
+              ) : (
+                <span
+                  key={toolName}
+                  className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+                >
+                  {toolName}
+                </span>
+              )
+            )
+          )}
         </div>
       </div>
 
       <div className="space-y-3">
-        {previewSections.map((section) => (
-          <section
-            key={section.key}
-            className="rounded-xl border border-border-subtle bg-surface overflow-hidden"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle/60 px-3.5 py-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <h3 className="text-xs font-semibold text-text-main truncate">
-                  {section.title}
-                </h3>
-                {section.modified && (
-                  <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
-                    {labels.modifiedBadge}
+        {previewSections.map((section) => {
+          const badgeClassName = `inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] shrink-0 ${
+            section.editable || section.badgeAccent
+              ? 'auteur-phase-aesthetic'
+              : 'border-border-subtle bg-surface text-text-faint'
+          }`;
+
+          return (
+            <section
+              key={section.key}
+              className="rounded-xl border border-border-subtle bg-surface overflow-hidden"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle/60 px-3.5 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h3 className="text-xs font-semibold text-text-main truncate">
+                    {section.title}
+                  </h3>
+                  {section.modified && (
+                    <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
+                      {labels.modifiedBadge}
+                    </span>
+                  )}
+                </div>
+                {onJumpToTab && section.jumpTab && section.editable ? (
+                  <button
+                    type="button"
+                    onClick={() => onJumpToTab(section.jumpTab!)}
+                    title={labels.sectionJumpTitle(section.jumpTabLabel ?? section.title)}
+                    className={`${badgeClassName} hover:opacity-85 transition-opacity cursor-pointer`}
+                  >
+                    <span>{section.badgeLabel ?? labels.editableBadge}</span>
+                  </button>
+                ) : (
+                  <span className={badgeClassName}>
+                    {!section.editable && !section.badgeLabel && <Lock className="h-2.5 w-2.5" />}
+                    <span>
+                      {section.badgeLabel ??
+                        (section.editable ? labels.editableBadge : labels.readOnlyBadge)}
+                    </span>
                   </span>
                 )}
               </div>
-              <span
-                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] shrink-0 ${
-                  section.editable || section.badgeAccent
-                    ? 'auteur-phase-aesthetic'
-                    : 'border-border-subtle bg-surface text-text-faint'
-                }`}
-              >
-                {!section.editable && !section.badgeLabel && <Lock className="h-2.5 w-2.5" />}
-                <span>
-                  {section.badgeLabel ??
-                    (section.editable ? labels.editableBadge : labels.readOnlyBadge)}
-                </span>
-              </span>
-            </div>
-            <div className="px-3.5 py-3">
-              {section.body.trim().length > 0 ? (
-                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-text-body">
-                  {section.body}
-                </pre>
-              ) : (
-                <p className="text-xs italic text-text-faint">{section.emptyNote}</p>
-              )}
-            </div>
-          </section>
-        ))}
+              <div className="px-3.5 py-3">
+                {section.body.trim().length > 0 ? (
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-text-body">
+                    {section.body}
+                  </pre>
+                ) : (
+                  <p className="text-xs italic text-text-faint">{section.emptyNote}</p>
+                )}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </>
   );

@@ -14,6 +14,7 @@ import {
   AuteurAgentContextPackSchema,
   BUILTIN_RULE_BY_ID,
   BUILTIN_SKILL_BY_ID,
+  BUILTIN_TOOL_BY_NAME,
   formatZodIssues,
   type AuteurAgentContextPack,
   type BuiltAgentContextPackExport,
@@ -33,6 +34,8 @@ export {
   type AnalyzedCustomQuickScanRuleImport,
   type AnalyzedCustomSkillImport,
   type AnalyzedFoundationalCraftImport,
+  type AnalyzedScriptToolOverrideImport,
+  type AnalyzedToolProtocolImport,
   type AppliedAgentContextImportResult,
   type AuteurAgentContextPack,
   type BuiltAgentContextPackExport,
@@ -139,6 +142,23 @@ export function parseAgentContextPack(input: unknown): ParseAgentContextPackResu
         warnings.push(
           `Ignored ${unknownOverrides} unrecognized skill ${
             unknownOverrides === 1 ? 'override' : 'overrides'
+          }.`
+        );
+      }
+    }
+
+    if (rawSkills.toolOverrides) {
+      let unknownToolOverrides = 0;
+      for (const rawToolName of Object.keys(rawSkills.toolOverrides)) {
+        const toolName = rawToolName.trim();
+        if (toolName && !BUILTIN_TOOL_BY_NAME.has(toolName as never)) {
+          unknownToolOverrides += 1;
+        }
+      }
+      if (unknownToolOverrides > 0) {
+        warnings.push(
+          `Ignored ${unknownToolOverrides} unrecognized function tool ${
+            unknownToolOverrides === 1 ? 'override' : 'overrides'
           }.`
         );
       }

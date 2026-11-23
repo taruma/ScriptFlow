@@ -3,9 +3,13 @@ import type {ValidationIssue} from '../../core/index.ts';
 import {BUNDLED_QUICK_SCAN_RULES} from '../../data/knowledge/index.ts';
 import {
   BUILTIN_AUTEUR_SKILLS,
+  BUILTIN_SCRIPT_TOOLS,
   type CustomAuteurSkill,
+  type ScriptToolName,
+  type ScriptToolOverride,
   type SkillOverride,
   type SkillPinMode,
+  type ToolActivationMode,
 } from '../../services/auteurKnowledge.ts';
 import type {
   CustomQuickScanRule,
@@ -18,6 +22,7 @@ export const AUTEUR_AGENT_CONTEXT_PACK_FORMAT = 'auteur-agent-context-pack' as c
 export const AUTEUR_AGENT_CONTEXT_PACK_VERSION = 1 as const;
 
 export const BUILTIN_SKILL_BY_ID = new Map(BUILTIN_AUTEUR_SKILLS.map((skill) => [skill.id, skill]));
+export const BUILTIN_TOOL_BY_NAME = new Map(BUILTIN_SCRIPT_TOOLS.map((tool) => [tool.name, tool]));
 export const BUILTIN_RULE_BY_ID = new Map(BUNDLED_QUICK_SCAN_RULES.map((rule) => [rule.id, rule]));
 
 const RawSkillsSectionSchema = z.object({
@@ -25,6 +30,9 @@ const RawSkillsSectionSchema = z.object({
   foundationalCraftOverride: z.string().nullable().optional(),
   skillOverrides: z.record(z.string(), z.unknown()).optional(),
   customSkills: z.array(z.unknown()).optional(),
+  toolProtocolOverride: z.string().nullable().optional(),
+  enforceToolLinterGate: z.boolean().optional(),
+  toolOverrides: z.record(z.string(), z.unknown()).optional(),
 });
 
 const RawQuickScanSectionSchema = z.object({
@@ -97,6 +105,24 @@ export interface AnalyzedCustomSkillImport {
   willOverwrite: boolean;
 }
 
+export interface AnalyzedToolProtocolImport {
+  text: string | null;
+  charCount: number;
+  preview: string;
+  enforceToolLinterGate: boolean;
+  willOverwrite: boolean;
+}
+
+export interface AnalyzedScriptToolOverrideImport {
+  name: ScriptToolName;
+  label: string;
+  override: ScriptToolOverride;
+  activationMode?: ToolActivationMode;
+  hasDescriptionOverride: boolean;
+  hasProtocolGuidanceOverride: boolean;
+  willOverwrite: boolean;
+}
+
 export interface AnalyzedBuiltInQuickScanOverrideImport {
   id: string;
   label: string;
@@ -118,6 +144,8 @@ export interface AgentContextImportAnalysis {
   foundationalCraft: AnalyzedFoundationalCraftImport | null;
   builtInSkillOverrides: AnalyzedBuiltInSkillOverrideImport[];
   customSkills: AnalyzedCustomSkillImport[];
+  toolProtocol: AnalyzedToolProtocolImport | null;
+  toolOverrides: AnalyzedScriptToolOverrideImport[];
   builtInQuickScanOverrides: AnalyzedBuiltInQuickScanOverrideImport[];
   customQuickScanRules: AnalyzedCustomQuickScanRuleImport[];
   totalSelectableItems: number;
@@ -129,6 +157,8 @@ export interface AgentContextImportSelection {
   includeFoundationalCraft: boolean;
   builtInSkillOverrideIds: string[];
   customSkillIds: string[];
+  includeToolProtocol?: boolean;
+  toolOverrideNames?: ScriptToolName[];
   builtInQuickScanOverrideIds: string[];
   customQuickScanRuleIds: string[];
 }
@@ -143,6 +173,11 @@ export interface AgentContextImportImpact {
   customSkillsAdded: number;
   customSkillsOverwritten: number;
   customSkillsRemoved: number;
+  toolProtocolApplied: boolean;
+  toolProtocolOverwritten: boolean;
+  toolProtocolCleared: boolean;
+  toolOverridesApplied: number;
+  toolOverridesReset: number;
   builtInRuleOverridesApplied: number;
   builtInRuleOverridesReset: number;
   customRulesAdded: number;

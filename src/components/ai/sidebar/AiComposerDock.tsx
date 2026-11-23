@@ -39,6 +39,7 @@ export interface AiComposerDockProps {
   briefIsActive: boolean;
   briefSummaryLabel: string | undefined;
   askFirstEnabled: boolean;
+  askFirstDisabled?: boolean;
   showEstimatedCost: boolean;
   sessionCostTurnCount: number;
   formattedSessionCost: string;
@@ -76,6 +77,7 @@ export const AiComposerDock = memo(function AiComposerDock({
   briefIsActive,
   briefSummaryLabel,
   askFirstEnabled,
+  askFirstDisabled = false,
   showEstimatedCost,
   sessionCostTurnCount,
   formattedSessionCost,
@@ -296,14 +298,22 @@ export const AiComposerDock = memo(function AiComposerDock({
           {focus !== 'audit' && (
             <button
               type="button"
-              aria-pressed={askFirstEnabled}
-              aria-label={UI_LABELS.ai.askFirstAria(askFirstEnabled)}
-              title={UI_LABELS.ai.askFirstTitle}
+              disabled={askFirstDisabled}
+              aria-pressed={!askFirstDisabled && askFirstEnabled}
+              aria-label={UI_LABELS.ai.askFirstAria(
+                !askFirstDisabled && askFirstEnabled,
+                askFirstDisabled
+              )}
+              title={
+                askFirstDisabled ? UI_LABELS.ai.askFirstDisabledTitle : UI_LABELS.ai.askFirstTitle
+              }
               onClick={onToggleAskFirst}
-              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors cursor-pointer shrink-0 ${
-                askFirstEnabled
-                  ? 'auteur-phase-logic'
-                  : 'border-border-main bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main'
+              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-medium text-[11px] transition-colors shrink-0 ${
+                askFirstDisabled
+                  ? 'border-border-subtle bg-surface-subtle text-text-faint opacity-50 cursor-not-allowed'
+                  : askFirstEnabled
+                    ? 'auteur-phase-logic cursor-pointer'
+                    : 'border-border-main bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main cursor-pointer'
               }`}
             >
               <HelpCircle className="h-3 w-3" />

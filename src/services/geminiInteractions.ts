@@ -310,6 +310,9 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     foundationalCraftOverride: options.foundationalCraftOverride,
     skillOverrides: options.skillOverrides,
     customSkills: options.customSkills,
+    toolProtocolOverride: options.toolProtocolOverride,
+    enforceToolLinterGate: options.enforceToolLinterGate,
+    toolOverrides: options.toolOverrides,
     referenceHandles: options.referenceHandles,
     briefContext: options.briefContext,
     askQuestionMode: options.askQuestionMode,
@@ -371,7 +374,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         model: options.model,
         input: nextInput,
         system_instruction: systemInstruction,
-        tools,
+        ...(tools.length > 0 ? {tools} : {}),
         generation_config: generationConfig,
         stream: true,
       };

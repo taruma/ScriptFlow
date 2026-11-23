@@ -1,13 +1,14 @@
 import {describe, expect, it} from 'vitest';
 import {projectAuteurPatchPreview, toAuteurEnvelope} from '../../src/core/index.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
-import {composeAgentContext} from '../../src/services/auteurKnowledge.ts';
+import {BUILTIN_SCRIPT_TOOLS, composeAgentContext} from '../../src/services/auteurKnowledge.ts';
 import {
   buildLineDiff,
   buildToolDeclarationsForContext,
   executeScriptToolCall,
   getSystemInstructionForMode,
   getToolDeclarationsForMode,
+  getToolParametersSchema,
   MODE_TOOL_NAMES,
   sanitizeJsonSchemaForTool,
   upsertStagedSuggestion,
@@ -991,5 +992,120 @@ describe('get_script_source, propose_text_replace, and propose_script_title tool
     const merged = upsertStagedSuggestion(staged, replacement);
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe('title-2');
+  });
+
+  it('exposes sanitized JSON Schema parameters for all 10 tools and honors enforceToolLinterGate=false', () => {
+    for (const def of BUILTIN_SCRIPT_TOOLS) {
+      const schema = getToolParametersSchema(def.name);
+      expect(schema).toBeTruthy();
+      expect(schema.type).toBe('object');
+      const serialized = JSON.stringify(schema);
+      expect(serialized).not.toContain('"$schema":');
+      expect(serialized).not.toContain('"const":');
+    }
+
+    const baseHash = toAuteurEnvelope(SAMPLE_SCRIPT).snapshotHash;
+
+    // 1. Patch introducing a deterministic lint error ("stage-left") is rejected by default
+    const gatedPatch = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: baseHash,
+          summary: 'Introduce stage-left wording',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S1.2',
+              subState: {
+                dimension: 'action',
+                subStateTag: 'ACT',
+                content: 'Detective Vance leans stage-left over the table',
+              },
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT}
+    );
+    expect(gatedPatch.ok).toBe(false);
+
+    // 2. With enforceToolLinterGate=false, the same valid AST patch stages while still tracking lintDelta
+    const bypassedPatch = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: baseHash,
+          summary: 'Introduce stage-left wording (gate bypassed)',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S1.2',
+              subState: {
+                dimension: 'action',
+                subStateTag: 'ACT',
+                content: 'Detective Vance leans stage-left over the table',
+              },
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, enforceToolLinterGate: false}
+    );
+    expect(bypassedPatch.ok).toBe(true);
+    expect((bypassedPatch.stagedSuggestion as PatchSuggestion).lintDelta.introducedErrors.length).toBeGreaterThan(0);
+
+    // 3. Even with enforceToolLinterGate=false, SNAPSHOT_MISMATCH is still strictly rejected
+    const stalePatch = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: 'wrong-hash-9999',
+          summary: 'Stale patch',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S1.2',
+              subState: {
+                dimension: 'action',
+                subStateTag: 'ACT',
+                content: 'Detective Vance leans stage-left over the table',
+              },
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SAMPLE_SCRIPT, enforceToolLinterGate: false}
+    );
+    expect(stalePatch.ok).toBe(false);
+
+    // 4. Draft with lint error stages when enforceToolLinterGate=false
+    const bypassedDraft = executeScriptToolCall(
+      {
+        name: 'propose_script_draft',
+        arguments: {
+          title: 'Unchecked Draft',
+          draft: {
+            stagingMacroBlocks: [
+              {header: 'OPENING', format: 'prose', body: 'Mara stands stage-left.'},
+            ],
+            executionMacroBlock: {
+              header: 'EXECUTION',
+              macroStates: [
+                {
+                  subStates: [
+                    {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS'},
+                    {dimension: 'action', subStateTag: 'ACT', content: 'Mara crosses stage-left'},
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {mode: 'draft', rawText: '', enforceToolLinterGate: false}
+    );
+    expect(bypassedDraft.ok).toBe(true);
+    expect((bypassedDraft.stagedSuggestion as DraftSuggestion).errorCount).toBeGreaterThan(0);
   });
 });

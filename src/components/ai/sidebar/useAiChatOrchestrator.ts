@@ -267,8 +267,12 @@ export function useAiChatOrchestrator({
     async (rawUserPrompt: string, options?: SubmitPromptOptions) => {
       const activeFocus = options?.overrideFocus ?? focus;
       const legacyMode = focusToLegacyMode(activeFocus, isEmpty);
+      const isAskQuestionDisabled =
+        skillsState.toolOverrides?.ask_question?.activationMode === 'disabled';
       const effectiveAskMode: AskQuestionMode =
-        activeFocus === 'audit' ? 'off' : (options?.askQuestionMode ?? 'off');
+        activeFocus === 'audit' || isAskQuestionDisabled
+          ? 'off'
+          : (options?.askQuestionMode ?? 'off');
       const trimmed = rawUserPrompt.trim();
       if (!trimmed || isStreaming) return;
 
@@ -352,6 +356,9 @@ export function useAiChatOrchestrator({
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
+          toolProtocolOverride: skillsState.toolProtocolOverride ?? undefined,
+          enforceToolLinterGate: skillsState.enforceToolLinterGate,
+          toolOverrides: skillsState.toolOverrides,
           referenceHandles: activeReferenceHandles,
           briefContext: activeBriefContext,
           askQuestionMode: effectiveAskMode,
@@ -463,6 +470,9 @@ export function useAiChatOrchestrator({
       skillsState.foundationalCraftOverride,
       skillsState.skillOverrides,
       skillsState.customSkills,
+      skillsState.toolProtocolOverride,
+      skillsState.enforceToolLinterGate,
+      skillsState.toolOverrides,
       onOpenSettings,
       onStreamStart,
       onLastTurnSnapshotHashChange,

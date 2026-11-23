@@ -7,6 +7,7 @@ import {
 import {buildLineDiff} from './scriptTools.ts';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
+  SCRIPT_TOOL_NAMES,
   assistantModeToFocus,
   type AskQuestionMode,
   type AssistantFocus,
@@ -21,31 +22,47 @@ import {
   type LiveEditorDiagnosticItem,
   type LiveEditorStateSummary,
   type ResolvedAuteurSkill,
+  type ResolvedScriptTool,
+  type ScriptToolCategory,
+  type ScriptToolDefinition,
   type ScriptToolName,
+  type ScriptToolOverride,
   type SkillActivationReason,
   type SkillOverride,
   type SkillPinMode,
   type SkillResolutionStatus,
+  type ToolActivationMode,
+  type ToolActivationReason,
+  type ToolResolutionStatus,
 } from './knowledge/types.ts';
 import {getLensAuditChecklist} from './knowledge/checklists.ts';
 import {
   BUILTIN_AUTEUR_SKILLS,
+  BUILTIN_SCRIPT_TOOLS,
   DEFAULT_FOUNDATIONAL_CRAFT,
+  DEFAULT_TOOL_PROTOCOL_CORE,
   DRAFT_CRAFT_CORE_RULES,
   buildDraftCraftBody,
   buildToolProtocolBlock,
+  buildToolProtocolRuntimeHeader,
   type ToolProtocolParams,
+  type ToolProtocolRuntimeHeaderParams,
 } from './knowledge/protocol.ts';
 
 export {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
+  BUILTIN_SCRIPT_TOOLS,
   DEFAULT_FOUNDATIONAL_CRAFT,
+  DEFAULT_TOOL_PROTOCOL_CORE,
+  SCRIPT_TOOL_NAMES,
   assistantModeToFocus,
   buildRecentEditSummary,
   buildToolProtocolBlock,
+  buildToolProtocolRuntimeHeader,
   computeAllowedToolNames,
   getLensAuditChecklist,
+  resolveScriptTools,
 };
 
 export type {
@@ -62,12 +79,20 @@ export type {
   LiveEditorDiagnosticItem,
   LiveEditorStateSummary,
   ResolvedAuteurSkill,
+  ResolvedScriptTool,
+  ScriptToolCategory,
+  ScriptToolDefinition,
   ScriptToolName,
+  ScriptToolOverride,
   SkillActivationReason,
   SkillOverride,
   SkillPinMode,
   SkillResolutionStatus,
+  ToolActivationMode,
+  ToolActivationReason,
   ToolProtocolParams,
+  ToolProtocolRuntimeHeaderParams,
+  ToolResolutionStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -233,52 +258,164 @@ function buildSkillDirectorySectionText(availableSkills: readonly ResolvedAuteur
   ].join('\n');
 }
 
-function computeAllowedToolNames(
+function computeDefaultAutoTools(
   focus: AssistantFocus,
   isEmpty: boolean,
   hasAvailableSkills: boolean,
   askQuestionMode: AskQuestionMode = 'off'
-): ScriptToolName[] {
-  const tools: ScriptToolName[] = [];
+): Set<ScriptToolName> {
+  const tools = new Set<ScriptToolName>();
 
   if (focus === 'draft' || (focus === 'auto' && isEmpty)) {
     if (!isEmpty) {
-      tools.push('get_script_overview', 'get_script_source', 'inspect_lens_slice');
+      tools.add('get_script_overview');
+      tools.add('get_script_source');
+      tools.add('inspect_lens_slice');
     }
-    tools.push('propose_script_draft', 'propose_script_title');
+    tools.add('propose_script_draft');
+    tools.add('propose_script_title');
   } else if (focus === 'auto') {
-    tools.push(
-      'get_script_overview',
-      'get_script_source',
-      'inspect_lens_slice',
-      'propose_script_patch',
-      'propose_text_replace',
-      'propose_script_title',
-      'report_audit_review'
-    );
+    tools.add('get_script_overview');
+    tools.add('get_script_source');
+    tools.add('inspect_lens_slice');
+    tools.add('propose_script_patch');
+    tools.add('propose_text_replace');
+    tools.add('propose_script_title');
+    tools.add('report_audit_review');
   } else if (focus === 'refine') {
-    tools.push(
-      'get_script_overview',
-      'get_script_source',
-      'inspect_lens_slice',
-      'propose_script_patch',
-      'propose_text_replace',
-      'propose_script_title'
-    );
+    tools.add('get_script_overview');
+    tools.add('get_script_source');
+    tools.add('inspect_lens_slice');
+    tools.add('propose_script_patch');
+    tools.add('propose_text_replace');
+    tools.add('propose_script_title');
   } else {
     // focus === 'audit'
-    tools.push('get_script_overview', 'get_script_source', 'inspect_lens_slice', 'report_audit_review');
+    tools.add('get_script_overview');
+    tools.add('get_script_source');
+    tools.add('inspect_lens_slice');
+    tools.add('report_audit_review');
   }
 
   if (askQuestionMode !== 'off' && focus !== 'audit') {
-    tools.push('ask_question');
+    tools.add('ask_question');
   }
 
   if (hasAvailableSkills) {
-    tools.push('load_auteur_skill');
+    tools.add('load_auteur_skill');
   }
 
   return tools;
+}
+
+function resolveScriptTools(params: {
+  focus: AssistantFocus;
+  isEmpty: boolean;
+  hasAvailableSkills: boolean;
+  askQuestionMode?: AskQuestionMode;
+  toolOverrides?: Partial<Record<ScriptToolName, ScriptToolOverride>>;
+}): ResolvedScriptTool[] {
+  const {
+    focus,
+    isEmpty,
+    hasAvailableSkills,
+    askQuestionMode = 'off',
+    toolOverrides,
+  } = params;
+
+  const defaultAutoSet = computeDefaultAutoTools(
+    focus,
+    isEmpty,
+    hasAvailableSkills,
+    askQuestionMode
+  );
+
+  return BUILTIN_SCRIPT_TOOLS.map((def) => {
+    const override = toolOverrides?.[def.name];
+    const activationMode: ToolActivationMode = override?.activationMode ?? 'auto';
+
+    const trimmedDescOverride = override?.descriptionOverride?.trim();
+    const isDescriptionOverridden = Boolean(
+      trimmedDescOverride &&
+        trimmedDescOverride.length > 0 &&
+        trimmedDescOverride !== def.defaultDescription.trim()
+    );
+    const description = isDescriptionOverridden ? trimmedDescOverride! : def.defaultDescription;
+
+    const trimmedGuidanceOverride = override?.protocolGuidanceOverride?.trim();
+    const isProtocolGuidanceOverridden = Boolean(
+      trimmedGuidanceOverride &&
+        trimmedGuidanceOverride.length > 0 &&
+        trimmedGuidanceOverride !== def.defaultProtocolGuidance.trim()
+    );
+    const protocolGuidance = isProtocolGuidanceOverridden
+      ? trimmedGuidanceOverride!
+      : def.defaultProtocolGuidance;
+
+    let status: ToolResolutionStatus;
+    let reason: ToolActivationReason;
+
+    if (activationMode === 'disabled') {
+      status = 'disabled';
+      reason = 'disabled_by_user';
+    } else if (activationMode === 'enabled') {
+      // Schema guard: load_auteur_skill requires >= 1 available skill for a valid enum
+      if (def.name === 'load_auteur_skill' && !hasAvailableSkills) {
+        status = 'inactive';
+        reason = 'inactive_no_available_skills';
+      } else {
+        status = 'active';
+        reason = 'forced_on';
+      }
+    } else if (defaultAutoSet.has(def.name)) {
+      status = 'active';
+      if (def.name === 'ask_question') {
+        reason = 'auto_ask_first';
+      } else if (def.name === 'load_auteur_skill') {
+        reason = 'auto_available_skills';
+      } else {
+        reason = 'auto_focus';
+      }
+    } else {
+      status = 'inactive';
+      reason =
+        def.name === 'load_auteur_skill' && !hasAvailableSkills
+          ? 'inactive_no_available_skills'
+          : 'inactive_focus';
+    }
+
+    return {
+      name: def.name,
+      label: def.label,
+      category: def.category,
+      activationMode,
+      status,
+      reason,
+      description,
+      defaultDescription: def.defaultDescription,
+      isDescriptionOverridden,
+      protocolGuidance,
+      defaultProtocolGuidance: def.defaultProtocolGuidance,
+      isProtocolGuidanceOverridden,
+    };
+  });
+}
+
+function computeAllowedToolNames(
+  focus: AssistantFocus,
+  isEmpty: boolean,
+  hasAvailableSkills: boolean,
+  askQuestionMode: AskQuestionMode = 'off',
+  toolOverrides?: Partial<Record<ScriptToolName, ScriptToolOverride>>
+): ScriptToolName[] {
+  const resolved = resolveScriptTools({
+    focus,
+    isEmpty,
+    hasAvailableSkills,
+    askQuestionMode,
+    toolOverrides,
+  });
+  return resolved.filter((tool) => tool.status === 'active').map((tool) => tool.name);
 }
 
 /**
@@ -455,18 +592,30 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   const effectiveAskQuestionMode: AskQuestionMode =
     options.focus === 'audit' ? 'off' : (options.askQuestionMode ?? 'off');
 
-  const allowedToolNames = computeAllowedToolNames(
-    options.focus,
+  const enforceToolLinterGate = options.enforceToolLinterGate ?? true;
+  const resolvedTools = resolveScriptTools({
+    focus: options.focus,
     isEmpty,
-    availableSkills.length > 0,
-    effectiveAskQuestionMode
-  );
+    hasAvailableSkills: availableSkills.length > 0,
+    askQuestionMode: effectiveAskQuestionMode,
+    toolOverrides: options.toolOverrides,
+  });
+  const allowedToolNames = resolvedTools
+    .filter((tool) => tool.status === 'active')
+    .map((tool) => tool.name);
 
   const trimmedCraftOverride = options.foundationalCraftOverride?.trim();
   const isCraftOverridden = Boolean(trimmedCraftOverride && trimmedCraftOverride.length > 0);
   const foundationalCraftText = isCraftOverridden
     ? trimmedCraftOverride!
     : DEFAULT_FOUNDATIONAL_CRAFT;
+
+  const trimmedToolProtocolOverride = options.toolProtocolOverride?.trim();
+  const isCoreProtocolOverridden = Boolean(
+    trimmedToolProtocolOverride &&
+      trimmedToolProtocolOverride.length > 0 &&
+      trimmedToolProtocolOverride !== DEFAULT_TOOL_PROTOCOL_CORE.trim()
+  );
 
   const liveEditorStateText = buildLiveEditorStateText(editorState);
   const sceneBriefText = buildSceneBriefSectionText(options.briefContext);
@@ -479,7 +628,17 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     isEmpty,
     availableSkillCount: availableSkills.length,
     askQuestionMode: effectiveAskQuestionMode,
+    enforceToolLinterGate,
+    coreProtocolOverride: isCoreProtocolOverridden ? trimmedToolProtocolOverride : undefined,
+    resolvedTools,
   });
+
+  const isToolProtocolOverridden =
+    isCoreProtocolOverridden ||
+    !enforceToolLinterGate ||
+    resolvedTools.some(
+      (tool) => tool.activationMode !== 'auto' || tool.isProtocolGuidanceOverridden
+    );
 
   const sections: ComposedSystemSections = {
     foundationalCraft: {
@@ -508,7 +667,8 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     },
     toolProtocol: {
       text: toolProtocolText,
-      editable: false,
+      isOverridden: isToolProtocolOverridden,
+      editable: true,
     },
   };
 
@@ -531,7 +691,9 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     activeSkills,
     availableSkills,
     mutedSkills,
+    resolvedTools,
     allowedToolNames,
+    enforceToolLinterGate,
     sections,
     systemInstruction,
   };

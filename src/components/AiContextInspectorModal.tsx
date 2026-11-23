@@ -9,12 +9,15 @@ import {
   RotateCcw,
   ScanSearch,
   Upload,
+  Wrench,
   X,
 } from 'lucide-react';
 import type {
   ComposedAgentContext,
   CustomAuteurSkill,
+  ScriptToolName,
   SkillPinMode,
+  ToolActivationMode,
 } from '../services/auteurKnowledge.ts';
 import type {CustomQuickScanRule} from '../services/geminiDecisions.ts';
 import {
@@ -25,7 +28,7 @@ import {
   type AgentContextImportSelection,
   type AuteurAgentContextPack,
 } from '../ui/agentContextCodec.ts';
-import {isBuiltinSkillId, type AiSkillsState} from '../ui/aiSkillsStore.ts';
+import {countToolCustomizations, isBuiltinSkillId, type AiSkillsState} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import {
   DEFAULT_QUICK_SCAN_RULES_STATE,
@@ -43,12 +46,16 @@ import {
 } from './ai/context/ContextPreviewTab.tsx';
 import {FoundationalCraftTab} from './ai/context/FoundationalCraftTab.tsx';
 import {
+  FunctionToolsTab,
+  FunctionToolsToolbar,
+} from './ai/context/FunctionToolsTab.tsx';
+import {
   SkillsManagerTab,
   SkillsManagerToolbar,
   type SkillsManagerTabHandle,
 } from './ai/context/SkillsManagerTab.tsx';
 
-export type ContextInspectorTabId = 'preview' | 'craft' | 'skills' | 'quick_scan';
+export type ContextInspectorTabId = 'preview' | 'craft' | 'skills' | 'tools' | 'quick_scan';
 
 export interface AiContextInspectorModalProps {
   isOpen: boolean;
@@ -57,6 +64,7 @@ export interface AiContextInspectorModalProps {
   composedContext: ComposedAgentContext;
   skillsState: AiSkillsState;
   customizationCount: number;
+  toolCustomizationCount?: number;
   hasUpstreamUpdate: boolean;
   onSetFoundationalCraft: (value: string | null) => void;
   onSetPinMode: (skillId: string, pinMode: SkillPinMode) => void;
@@ -65,6 +73,14 @@ export interface AiContextInspectorModalProps {
   onResetSkill: (skillId: string) => void;
   onSaveCustomSkill: (skill: CustomAuteurSkill, editingId?: string) => void;
   onDeleteCustomSkill: (skillId: string) => void;
+  onSetToolProtocol?: (value: string | null) => void;
+  onSetEnforceLinterGate?: (enforce: boolean) => void;
+  onSetToolMode?: (toolName: ScriptToolName, mode: ToolActivationMode) => void;
+  onSetAllToolModes?: (mode: 'auto' | 'disabled') => void;
+  onSetToolDescription?: (toolName: ScriptToolName, description: string | null) => void;
+  onSetToolGuidance?: (toolName: ScriptToolName, guidance: string | null) => void;
+  onResetTool?: (toolName: ScriptToolName) => void;
+  onResetAllTools?: () => void;
   onReplaceSkillsState?: (nextState: AiSkillsState) => void;
   onResetAll: () => void;
   onAcknowledgeUpdate: () => void;
@@ -96,6 +112,7 @@ export function AiContextInspectorModal({
   composedContext,
   skillsState,
   customizationCount,
+  toolCustomizationCount,
   hasUpstreamUpdate,
   onSetFoundationalCraft,
   onSetPinMode,
@@ -104,6 +121,14 @@ export function AiContextInspectorModal({
   onResetSkill,
   onSaveCustomSkill,
   onDeleteCustomSkill,
+  onSetToolProtocol,
+  onSetEnforceLinterGate,
+  onSetToolMode,
+  onSetAllToolModes,
+  onSetToolDescription,
+  onSetToolGuidance,
+  onResetTool,
+  onResetAllTools,
   onReplaceSkillsState,
   onResetAll,
   onAcknowledgeUpdate,
@@ -240,6 +265,9 @@ export function AiContextInspectorModal({
     });
   };
 
+  const effectiveToolCustomizationCount =
+    toolCustomizationCount ?? countToolCustomizations(skillsState);
+
   const requestResetAll = () => {
     const builtInOverrideCount = Object.keys(skillsState.skillOverrides).filter((id) =>
       isBuiltinSkillId(id)
@@ -249,7 +277,8 @@ export function AiContextInspectorModal({
       description: labels.confirmResetAllDetailedDesc(
         skillsState.foundationalCraftOverride !== null,
         skillsState.customSkills.length,
-        builtInOverrideCount
+        builtInOverrideCount,
+        effectiveToolCustomizationCount
       ),
       confirmLabel: labels.confirmResetAllAction,
       tone: 'danger',
@@ -263,6 +292,31 @@ export function AiContextInspectorModal({
       onConfirm: () => {
         onResetAll();
         skillsTabRef.current?.closeForm();
+      },
+    });
+  };
+
+  const requestResetAllTools = () => {
+    if (!onResetAllTools) return;
+    const toolOverrideCount = Object.keys(skillsState.toolOverrides ?? {}).length;
+    setConfirmRequest({
+      title: labels.functionTools.confirmResetAllToolsTitle,
+      description: labels.functionTools.confirmResetAllToolsDesc(
+        skillsState.toolProtocolOverride !== null,
+        skillsState.enforceToolLinterGate === false,
+        toolOverrideCount
+      ),
+      confirmLabel: labels.functionTools.confirmResetAllToolsAction,
+      tone: 'danger',
+      auxiliaryAction: {
+        label: labels.exportBackupBeforeResetButton,
+        completedLabel: labels.exportBackupBeforeResetDone,
+        onAction: () => {
+          handleExportAgentContext(false);
+        },
+      },
+      onConfirm: () => {
+        onResetAllTools();
       },
     });
   };
@@ -449,6 +503,7 @@ export function AiContextInspectorModal({
                   {id: 'preview', label: labels.tabPreview, icon: FileCode2},
                   {id: 'craft', label: labels.tabCraft, icon: BookOpen},
                   {id: 'skills', label: labels.tabSkills, icon: Layers},
+                  {id: 'tools', label: labels.tabTools, icon: Wrench},
                   ...(quickScanRulesState
                     ? [{id: 'quick_scan' as const, label: labels.tabQuickScan, icon: ScanSearch}]
                     : []),
@@ -487,11 +542,20 @@ export function AiContextInspectorModal({
                 onOpenAddForm={() => skillsTabRef.current?.openAddForm()}
               />
             )}
+
+            {activeTab === 'tools' && (
+              <FunctionToolsToolbar
+                composedContext={composedContext}
+                onSetAllToolModes={onSetAllToolModes}
+              />
+            )}
           </div>
 
           {/* Scrollable Body */}
           <div className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll bg-app/40 px-5 py-4 space-y-4">
-            {activeTab === 'preview' && <ContextPreviewTab composedContext={composedContext} />}
+            {activeTab === 'preview' && (
+              <ContextPreviewTab composedContext={composedContext} onJumpToTab={setActiveTab} />
+            )}
 
             {activeTab === 'craft' && (
               <FoundationalCraftTab
@@ -512,6 +576,19 @@ export function AiContextInspectorModal({
                 onDeleteCustomSkill={onDeleteCustomSkill}
                 onRequestConfirm={setConfirmRequest}
                 onCustomFormOpenChange={setIsCustomSkillFormOpen}
+              />
+            )}
+
+            {activeTab === 'tools' && (
+              <FunctionToolsTab
+                composedContext={composedContext}
+                skillsState={skillsState}
+                onSetToolProtocol={(value) => onSetToolProtocol?.(value)}
+                onSetEnforceLinterGate={(enforce) => onSetEnforceLinterGate?.(enforce)}
+                onSetToolMode={(name, mode) => onSetToolMode?.(name, mode)}
+                onSetToolDescription={(name, desc) => onSetToolDescription?.(name, desc)}
+                onSetToolGuidance={(name, guidance) => onSetToolGuidance?.(name, guidance)}
+                onResetTool={(name) => onResetTool?.(name)}
               />
             )}
 
@@ -550,6 +627,16 @@ export function AiContextInspectorModal({
               >
                 <RotateCcw className="h-3 w-3" />
                 <span>{labels.quickScanRules.resetAllRulesButton}</span>
+              </button>
+            ) : activeTab === 'tools' && onResetAllTools ? (
+              <button
+                type="button"
+                disabled={effectiveToolCustomizationCount === 0}
+                onClick={requestResetAllTools}
+                className={`${UI_TOKENS.button.danger} inline-flex items-center gap-1.5 !px-3 !py-1.5 !rounded-lg disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>{labels.functionTools.resetAllToolsButton}</span>
               </button>
             ) : (
               <button

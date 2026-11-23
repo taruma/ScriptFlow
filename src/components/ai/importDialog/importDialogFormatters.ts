@@ -28,6 +28,20 @@ export function formatAppliedParts(impact: AgentContextImportImpact): string[] {
       }`
     );
   }
+  if (impact.toolProtocolApplied) {
+    parts.push(
+      impact.toolProtocolOverwritten
+        ? 'Tool & Safety Protocol (overwrite)'
+        : 'Tool & Safety Protocol'
+    );
+  }
+  if (impact.toolOverridesApplied > 0) {
+    parts.push(
+      `${impact.toolOverridesApplied} function tool ${
+        impact.toolOverridesApplied === 1 ? 'override' : 'overrides'
+      }`
+    );
+  }
   if (impact.customRulesAdded > 0) {
     parts.push(
       `+${impact.customRulesAdded} new Quick Scan ${impact.customRulesAdded === 1 ? 'rule' : 'rules'}`
@@ -66,6 +80,16 @@ export function formatRemovalParts(impact: AgentContextImportImpact): string[] {
     parts.push(
       `${impact.builtInSkillOverridesReset} built-in skill ${
         impact.builtInSkillOverridesReset === 1 ? 'override' : 'overrides'
+      }`
+    );
+  }
+  if (impact.toolProtocolCleared) {
+    parts.push('Tool & Safety Protocol edit');
+  }
+  if (impact.toolOverridesReset > 0) {
+    parts.push(
+      `${impact.toolOverridesReset} function tool ${
+        impact.toolOverridesReset === 1 ? 'override' : 'overrides'
       }`
     );
   }

@@ -161,6 +161,7 @@ export interface ScriptToolContext {
   rawText: string;
   sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
+  enforceToolLinterGate?: boolean;
   composedContext?: ComposedAgentContext;
   allowedTools?: readonly ScriptToolName[];
   createSuggestionId?: () => string;
@@ -374,8 +375,8 @@ function assemblePatchSuggestion(params: {
 }
 
 /**
- * Shared linter-gated PatchSuggestion builder (`rejectOnNewErrors: true`) from
- * a pre-computed `candidateRawText` (used by `propose_text_replace`).
+ * Shared PatchSuggestion builder (optionally linter-gated via `rejectOnNewErrors`,
+ * defaulting to `true`) from a pre-computed `candidateRawText` (used by `propose_text_replace`).
  */
 export function buildPatchSuggestionFromCandidateText(
   rawText: string,
@@ -385,8 +386,10 @@ export function buildPatchSuggestionFromCandidateText(
   opsCount: number,
   ruleOverrides: LintRuleOverrides | undefined,
   nextId: () => string,
-  syntheticPatch?: AuteurPatch
+  syntheticPatch?: AuteurPatch,
+  options?: {rejectOnNewErrors?: boolean}
 ): BuildPatchSuggestionResult {
+  const rejectOnNewErrors = options?.rejectOnNewErrors ?? true;
   const beforeEnvelope = toAuteurEnvelope(rawText, ruleOverrides);
   const nextEnvelope = toAuteurEnvelope(candidateRawText, ruleOverrides);
 
@@ -399,7 +402,7 @@ export function buildPatchSuggestionFromCandidateText(
   const introducedErrors = introduced.filter((d) => d.severity === 'error');
   const introducedWarnings = introduced.filter((d) => d.severity === 'warning');
 
-  if (introducedErrors.length > 0) {
+  if (rejectOnNewErrors && introducedErrors.length > 0) {
     const errors: PatchError[] = introducedErrors.map((d) => ({
       code: 'LINT_ERROR_INTRODUCED',
       path: d.targetId,
@@ -445,11 +448,13 @@ export function buildPatchSuggestion(
   rawText: string,
   patch: AuteurPatch,
   ruleOverrides: LintRuleOverrides | undefined,
-  nextId: () => string
+  nextId: () => string,
+  options?: {rejectOnNewErrors?: boolean}
 ): BuildPatchSuggestionResult {
+  const rejectOnNewErrors = options?.rejectOnNewErrors ?? true;
   const beforeEnvelope = toAuteurEnvelope(rawText, ruleOverrides);
   const applied = applyAuteurPatch(rawText, patch, {
-    rejectOnNewErrors: true,
+    rejectOnNewErrors,
     ruleOverrides,
   });
 

@@ -37,19 +37,29 @@ import {
   acknowledgeUpstreamKnowledgeUpdate,
   AI_SKILLS_STORAGE_KEY,
   countCustomizations,
+  countToolCustomizations,
   DEFAULT_AI_SKILLS_STATE,
   deleteCustomSkill,
   hasUpstreamKnowledgeUpdate,
   isBuiltinSkillId,
+  isBuiltinToolName,
   loadStoredAiSkills,
   resetAllAiSkills,
-  setAllSkillsPinMode,
+  resetAllToolsAndProtocol,
   resetSkillOverride,
+  resetToolOverride,
   sanitizeAiSkillsState,
   saveStoredAiSkills,
+  setAllSkillsPinMode,
+  setAllToolsActivationMode,
+  setEnforceToolLinterGate,
   setFoundationalCraftOverride,
   setSkillBodyOverride,
   setSkillPinMode,
+  setToolActivationMode,
+  setToolDescriptionOverride,
+  setToolProtocolGuidanceOverride,
+  setToolProtocolOverride,
   slugifyCustomSkillId,
   upsertCustomSkill,
   validateCustomSkillInput,
@@ -617,6 +627,70 @@ describe('src/data/knowledge markdown catalog loader', () => {
     for (const skill of BUILTIN_AUTEUR_SKILLS) {
       expect(autoAll.skillOverrides[skill.id]?.pinMode).toBeUndefined();
     }
+  });
+
+  it('persists, sanitizes, bulk-toggles, and resets function tool and protocol overrides without losing craft or skills', () => {
+    const storage = createMemoryStorage();
+    expect(isBuiltinToolName('propose_script_patch')).toBe(true);
+    expect(isBuiltinToolName('unknown_tool')).toBe(false);
+
+    let state = setFoundationalCraftOverride(DEFAULT_AI_SKILLS_STATE, 'Keep craft.');
+    state = setToolProtocolOverride(state, '- Custom core safety rule.');
+    state = setEnforceToolLinterGate(state, false);
+    state = setToolActivationMode(state, 'ask_question', 'enabled');
+    state = setToolDescriptionOverride(state, 'propose_script_patch', 'Custom patch description.');
+    state = setToolProtocolGuidanceOverride(
+      state,
+      'propose_script_patch',
+      '- Custom patch guidance.'
+    );
+
+    expect(countToolCustomizations(state)).toBe(4);
+    expect(countCustomizations(state)).toBe(5);
+
+    saveStoredAiSkills(state, storage);
+    const reloaded = loadStoredAiSkills(storage);
+    expect(reloaded.toolProtocolOverride).toBe('- Custom core safety rule.');
+    expect(reloaded.enforceToolLinterGate).toBe(false);
+    expect(reloaded.toolOverrides.ask_question).toEqual({activationMode: 'enabled'});
+    expect(reloaded.toolOverrides.propose_script_patch).toEqual({
+      descriptionOverride: 'Custom patch description.',
+      protocolGuidanceOverride: '- Custom patch guidance.',
+    });
+
+    // Bulk disable preserves text overrides; bulk auto clears activationMode while preserving text overrides
+    const allDisabled = setAllToolsActivationMode(reloaded, 'disabled');
+    expect(allDisabled.toolOverrides.propose_script_patch?.activationMode).toBe('disabled');
+    expect(allDisabled.toolOverrides.propose_script_patch?.descriptionOverride).toBe(
+      'Custom patch description.'
+    );
+
+    const allAuto = setAllToolsActivationMode(allDisabled, 'auto');
+    expect(allAuto.toolOverrides.ask_question).toBeUndefined();
+    expect(allAuto.toolOverrides.propose_script_patch).toEqual({
+      descriptionOverride: 'Custom patch description.',
+      protocolGuidanceOverride: '- Custom patch guidance.',
+    });
+
+    // Single tool reset & resetAllToolsAndProtocol leave Foundational Craft intact
+    const afterSingleReset = resetToolOverride(allAuto, 'propose_script_patch');
+    expect(afterSingleReset.toolOverrides.propose_script_patch).toBeUndefined();
+
+    const afterToolsReset = resetAllToolsAndProtocol(reloaded);
+    expect(afterToolsReset.foundationalCraftOverride).toBe('Keep craft.');
+    expect(afterToolsReset.toolProtocolOverride).toBeNull();
+    expect(afterToolsReset.enforceToolLinterGate).toBe(true);
+    expect(afterToolsReset.toolOverrides).toEqual({});
+    expect(countToolCustomizations(afterToolsReset)).toBe(0);
+
+    // Sanitizer strips unrecognized tool names
+    const sanitized = sanitizeAiSkillsState({
+      toolOverrides: {
+        nonexistent_tool: {activationMode: 'disabled'},
+        ask_question: {activationMode: 'disabled'},
+      },
+    });
+    expect(Object.keys(sanitized.toolOverrides)).toEqual(['ask_question']);
   });
 });
 

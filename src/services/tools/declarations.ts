@@ -3,11 +3,12 @@ import {
   getAuteurJsonSchemas,
   type AuteurLensPresetId,
 } from '../../core/index.ts';
-import type {
-  AssistantMode,
-  ComposedAgentContext,
-  ResolvedAuteurSkill,
-  ScriptToolName,
+import {
+  BUILTIN_SCRIPT_TOOLS,
+  type AssistantMode,
+  type ComposedAgentContext,
+  type ResolvedAuteurSkill,
+  type ScriptToolName,
 } from '../auteurKnowledge.ts';
 
 type StaticScriptToolName = Exclude<ScriptToolName, 'load_auteur_skill'>;
@@ -138,8 +139,7 @@ function buildStaticToolDeclarationsMap(): Record<
     get_script_overview: {
       type: 'function',
       name: 'get_script_overview',
-      description:
-        'Returns a compact read-only overview of the current Auteur Script: sceneTitle, snapshotHash, sceneTopology, staging Macro-Blocks (MB#), Macro-State count, camera slots, reference/token counts, and active Script Supervisor diagnostics.',
+      description: getDefaultToolDescription('get_script_overview'),
       parameters: {
         type: 'object',
         properties: {},
@@ -148,8 +148,7 @@ function buildStaticToolDeclarationsMap(): Record<
     get_script_source: {
       type: 'function',
       name: 'get_script_source',
-      description:
-        'Reads the current Auteur Script—or a targeted subset via targetIds (MB#, header names like AESTHETIC/EXECUTION, or S#)—as compact canonical v0.4.0 plain text with optional ID annotations.',
+      description: getDefaultToolDescription('get_script_source'),
       parameters: {
         type: 'object',
         properties: {
@@ -170,8 +169,7 @@ function buildStaticToolDeclarationsMap(): Record<
     inspect_lens_slice: {
       type: 'function',
       name: 'inspect_lens_slice',
-      description:
-        'Extracts a focused read-only JSON slice of the current script using one of the 5 built-in Script Supervisor audit presets or a custom composable LensSliceSpec (including surgical macroStateIds and includeStaging) with resolved camera framing.',
+      description: getDefaultToolDescription('inspect_lens_slice'),
       parameters: {
         type: 'object',
         properties: {
@@ -239,15 +237,13 @@ function buildStaticToolDeclarationsMap(): Record<
     propose_script_patch: {
       type: 'function',
       name: 'propose_script_patch',
-      description:
-        'Dry-runs a transactional, ID-addressed AuteurPatch against the current script with rejectOnNewErrors=true. If valid and lint-clean, stages a reviewable PatchSuggestion without mutating the editor; if invalid or lint-rejected, returns structured errors and repairHint for self-repair.',
+      description: getDefaultToolDescription('propose_script_patch'),
       parameters: patchSchema,
     },
     propose_text_replace: {
       type: 'function',
       name: 'propose_text_replace',
-      description:
-        'Performs 1 to 20 atomic literal or regex find-and-replace rules across the script body or scoped targetIds (MB# / S#), preserving [HEADER] lines and dry-running the deterministic Script Supervisor linter (rejectOnNewErrors=true) before staging a reviewable PatchSuggestion.',
+      description: getDefaultToolDescription('propose_text_replace'),
       parameters: sanitizeJsonSchemaForTool({
         type: 'object',
         properties: {
@@ -303,8 +299,7 @@ function buildStaticToolDeclarationsMap(): Record<
     propose_script_draft: {
       type: 'function',
       name: 'propose_script_draft',
-      description:
-        'Validates and compiles a full AuteurScriptDraft JSON into canonical v0.4.0 plain text and stages a reviewable DraftSuggestion without overwriting the editor.',
+      description: getDefaultToolDescription('propose_script_draft'),
       parameters: sanitizeJsonSchemaForTool({
         type: 'object',
         properties: {
@@ -324,8 +319,7 @@ function buildStaticToolDeclarationsMap(): Record<
     propose_script_title: {
       type: 'function',
       name: 'propose_script_title',
-      description:
-        'Stages a dedicated TitleSuggestion card to rename the active scene independently of script body edits.',
+      description: getDefaultToolDescription('propose_script_title'),
       parameters: sanitizeJsonSchemaForTool({
         type: 'object',
         properties: {
@@ -344,15 +338,13 @@ function buildStaticToolDeclarationsMap(): Record<
     report_audit_review: {
       type: 'function',
       name: 'report_audit_review',
-      description:
-        'Validates a structured Script Supervisor AuteurReview (including dry-running any embedded suggestedPatch payloads against active lint rules) and stages clickable AuditReviewSuggestion items.',
+      description: getDefaultToolDescription('report_audit_review'),
       parameters: reviewSchema,
     },
     ask_question: {
       type: 'function',
       name: 'ask_question',
-      description:
-        'Presents 1 to 4 concise clarifying questions to the user as an interactive multi-select card (every question lets the user pick multiple options and add an optional custom comment). Stop after calling and wait for the user to answer.',
+      description: getDefaultToolDescription('ask_question'),
       parameters: sanitizeJsonSchemaForTool({
         type: 'object',
         properties: {
@@ -401,6 +393,17 @@ function getStaticToolDeclarations(): Record<StaticScriptToolName, GeminiFunctio
   return cachedStaticToolDeclarations;
 }
 
+let cachedDefaultToolDescriptions: Map<ScriptToolName, string> | null = null;
+
+function getDefaultToolDescription(name: ScriptToolName): string {
+  if (!cachedDefaultToolDescriptions) {
+    cachedDefaultToolDescriptions = new Map<ScriptToolName, string>(
+      BUILTIN_SCRIPT_TOOLS.map((tool) => [tool.name, tool.defaultDescription])
+    );
+  }
+  return cachedDefaultToolDescriptions.get(name) ?? '';
+}
+
 export function buildLoadAuteurSkillDeclaration(
   availableSkills: readonly ResolvedAuteurSkill[]
 ): GeminiFunctionToolDeclaration {
@@ -408,8 +411,7 @@ export function buildLoadAuteurSkillDeclaration(
   return {
     type: 'function',
     name: 'load_auteur_skill',
-    description:
-      'Loads a specialized Pure Auteur Script craft skill from the Available Skill Directory on demand for this turn. Never call for skills already injected as active.',
+    description: getDefaultToolDescription('load_auteur_skill'),
     parameters: sanitizeJsonSchemaForTool({
       type: 'object',
       properties: {
@@ -426,24 +428,59 @@ export function buildLoadAuteurSkillDeclaration(
 }
 
 /**
+ * Returns the exact sanitized JSON Schema `parameters` object sent to the API
+ * for a given function tool (for read-only inspection in the Function Tools tab).
+ */
+export function getToolParametersSchema(
+  toolName: ScriptToolName,
+  availableSkills: readonly ResolvedAuteurSkill[] = []
+): Record<string, unknown> {
+  if (toolName === 'load_auteur_skill') {
+    return buildLoadAuteurSkillDeclaration(availableSkills).parameters;
+  }
+  return getStaticToolDeclarations()[toolName].parameters;
+}
+
+/**
  * Builds function tool declarations for a composed turn context.
  * Heavy Zod-derived schemas stay cached; `load_auteur_skill` is generated dynamically
- * per turn from `context.availableSkills` (including custom user skills).
+ * per turn from `context.availableSkills` (including custom user skills), and any
+ * user `descriptionOverride` from `context.resolvedTools` is applied cleanly.
  */
 export function buildToolDeclarationsForContext(
   context: ComposedAgentContext
 ): GeminiFunctionToolDeclaration[] {
   const staticDecls = getStaticToolDeclarations();
+  const descriptionOverrideByName = new Map<ScriptToolName, string>();
+  for (const resolved of context.resolvedTools ?? []) {
+    if (resolved.isDescriptionOverridden) {
+      descriptionOverrideByName.set(resolved.name, resolved.description);
+    }
+  }
+
   const result: GeminiFunctionToolDeclaration[] = [];
 
   for (const name of context.allowedToolNames) {
+    let baseDecl: GeminiFunctionToolDeclaration | null = null;
     if (name === 'load_auteur_skill') {
       if (context.availableSkills.length > 0) {
-        result.push(buildLoadAuteurSkillDeclaration(context.availableSkills));
+        baseDecl = buildLoadAuteurSkillDeclaration(context.availableSkills);
       }
     } else {
-      result.push(staticDecls[name]);
+      baseDecl = staticDecls[name];
     }
+
+    if (!baseDecl) continue;
+
+    const customDescription = descriptionOverrideByName.get(name);
+    result.push(
+      customDescription
+        ? {
+            ...baseDecl,
+            description: customDescription,
+          }
+        : baseDecl
+    );
   }
 
   return result;

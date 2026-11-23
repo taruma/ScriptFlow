@@ -427,4 +427,99 @@ describe('agentContextCodec', () => {
     // Quick Scan domain remained completely untouched
     expect(applied.quickScanRules).toBe(currentQuickScan);
   });
+
+  it('exports, parses, warns on unknown tool overrides, and selectively merges/replaces tool & protocol customizations', () => {
+    const sampleSkills: AiSkillsState = {
+      ...DEFAULT_AI_SKILLS_STATE,
+      toolProtocolOverride: '- Custom tool safety protocol.',
+      enforceToolLinterGate: false,
+      toolOverrides: {
+        ask_question: {activationMode: 'enabled'},
+        propose_text_replace: {
+          activationMode: 'disabled',
+          protocolGuidanceOverride: '- Custom text replace guidance.',
+        },
+      },
+    };
+
+    const exported = buildAgentContextPackExport(sampleSkills, DEFAULT_QUICK_SCAN_RULES_STATE);
+    const parsed = parseAgentContextPack(exported.content);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.pack.skills?.toolProtocolOverride).toBe('- Custom tool safety protocol.');
+    expect(parsed.pack.skills?.enforceToolLinterGate).toBe(false);
+    expect(parsed.pack.skills?.toolOverrides.ask_question).toEqual({activationMode: 'enabled'});
+
+    // Unrecognized tool override emits sanitizer warning
+    const withUnknownTool = parseAgentContextPack(
+      JSON.stringify({
+        format: AUTEUR_AGENT_CONTEXT_PACK_FORMAT,
+        packVersion: 1,
+        skills: {
+          toolOverrides: {
+            fake_tool_xyz: {activationMode: 'disabled'},
+            ask_question: {activationMode: 'disabled'},
+          },
+        },
+      })
+    );
+    expect(withUnknownTool.ok).toBe(true);
+    if (withUnknownTool.ok) {
+      expect(withUnknownTool.warnings).toEqual([
+        'Ignored 1 unrecognized function tool override.',
+      ]);
+      expect(Object.keys(withUnknownTool.pack.skills?.toolOverrides ?? {})).toEqual([
+        'ask_question',
+      ]);
+    }
+
+    // Selective Merge: include only ask_question override, skip protocol & propose_text_replace
+    const localSkills: AiSkillsState = {
+      ...DEFAULT_AI_SKILLS_STATE,
+      toolProtocolOverride: '- Keep local core protocol.',
+      toolOverrides: {
+        propose_script_title: {activationMode: 'disabled'},
+      },
+    };
+    const analysis = analyzeAgentContextImport(
+      parsed.pack,
+      localSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(analysis.toolProtocol?.willOverwrite).toBe(true);
+    expect(analysis.toolOverrides).toHaveLength(2);
+
+    const mergeSel = {
+      ...createDefaultImportSelection(analysis),
+      includeToolProtocol: false,
+      toolOverrideNames: ['ask_question' as const],
+    };
+    const merged = applyAgentContextImport(
+      parsed.pack,
+      mergeSel,
+      'merge',
+      localSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(merged.skills.toolProtocolOverride).toBe('- Keep local core protocol.');
+    expect(merged.skills.enforceToolLinterGate).toBe(true);
+    expect(merged.skills.toolOverrides).toEqual({
+      propose_script_title: {activationMode: 'disabled'},
+      ask_question: {activationMode: 'enabled'},
+    });
+
+    // Replace mode resets unselected local tool/protocol overrides
+    const replaceImpact = summarizeAgentContextImportImpact(
+      parsed.pack,
+      mergeSel,
+      'replace',
+      localSkills,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(replaceImpact.toolProtocolCleared).toBe(true);
+    expect(replaceImpact.toolOverridesReset).toBe(1);
+    expect(replaceImpact.hasDestructiveRemovals).toBe(true);
+  });
 });

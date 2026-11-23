@@ -16,17 +16,62 @@ export type AssistantMode = 'refine' | 'check' | 'draft';
 export type AssistantFocus = 'auto' | 'draft' | 'refine' | 'audit';
 export type AskQuestionMode = 'off' | 'ask_first' | 'followup';
 
-export type ScriptToolName =
-  | 'get_script_overview'
-  | 'get_script_source'
-  | 'inspect_lens_slice'
-  | 'propose_script_patch'
-  | 'propose_text_replace'
-  | 'propose_script_draft'
-  | 'propose_script_title'
-  | 'report_audit_review'
-  | 'load_auteur_skill'
-  | 'ask_question';
+export const SCRIPT_TOOL_NAMES = [
+  'get_script_overview',
+  'get_script_source',
+  'inspect_lens_slice',
+  'propose_script_patch',
+  'propose_text_replace',
+  'propose_script_draft',
+  'propose_script_title',
+  'report_audit_review',
+  'ask_question',
+  'load_auteur_skill',
+] as const;
+
+export type ScriptToolName = (typeof SCRIPT_TOOL_NAMES)[number];
+
+export type ScriptToolCategory = 'inspect' | 'mutation' | 'audit' | 'workflow';
+export type ToolActivationMode = 'auto' | 'enabled' | 'disabled';
+export type ToolResolutionStatus = 'active' | 'inactive' | 'disabled';
+
+export type ToolActivationReason =
+  | 'auto_focus'
+  | 'auto_ask_first'
+  | 'auto_available_skills'
+  | 'forced_on'
+  | 'inactive_focus'
+  | 'inactive_no_available_skills'
+  | 'disabled_by_user';
+
+export interface ScriptToolDefinition {
+  name: ScriptToolName;
+  label: string;
+  category: ScriptToolCategory;
+  defaultDescription: string;
+  defaultProtocolGuidance: string;
+}
+
+export interface ScriptToolOverride {
+  activationMode?: ToolActivationMode;
+  descriptionOverride?: string;
+  protocolGuidanceOverride?: string;
+}
+
+export interface ResolvedScriptTool {
+  name: ScriptToolName;
+  label: string;
+  category: ScriptToolCategory;
+  activationMode: ToolActivationMode;
+  status: ToolResolutionStatus;
+  reason: ToolActivationReason;
+  description: string;
+  defaultDescription: string;
+  isDescriptionOverridden: boolean;
+  protocolGuidance: string;
+  defaultProtocolGuidance: string;
+  isProtocolGuidanceOverridden: boolean;
+}
 
 export type AuteurSkillCategory = 'workflow' | 'module';
 export type SkillPinMode = 'auto' | 'pinned' | 'muted';
@@ -141,7 +186,8 @@ export interface ComposedSystemSections {
   };
   toolProtocol: {
     text: string;
-    editable: false;
+    isOverridden: boolean;
+    editable: true;
   };
 }
 
@@ -155,6 +201,9 @@ export interface ComposeAgentContextOptions {
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
+  toolProtocolOverride?: string;
+  enforceToolLinterGate?: boolean;
+  toolOverrides?: Partial<Record<ScriptToolName, ScriptToolOverride>>;
   referenceHandles?: readonly string[];
   briefContext?: string;
   askQuestionMode?: AskQuestionMode;
@@ -168,7 +217,9 @@ export interface ComposedAgentContext {
   activeSkills: ResolvedAuteurSkill[];
   availableSkills: ResolvedAuteurSkill[];
   mutedSkills: ResolvedAuteurSkill[];
+  resolvedTools: ResolvedScriptTool[];
   allowedToolNames: ScriptToolName[];
+  enforceToolLinterGate: boolean;
   sections: ComposedSystemSections;
   systemInstruction: string;
 }

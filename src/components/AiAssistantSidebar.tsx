@@ -148,8 +148,12 @@ export function AiAssistantSidebar({
   const briefCtrl = useAiBriefController();
   const resizeCtrl = useSidebarResize({isOpen, inputValue, sidebarRef, composerRef});
 
+  const isAskQuestionToolDisabled =
+    aiSkills.skillsState.toolOverrides?.ask_question?.activationMode === 'disabled';
+  const effectiveAskFirstEnabled = askFirstEnabled && !isAskQuestionToolDisabled;
+
   const effectivePreviewAskMode: AskQuestionMode =
-    askFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
+    effectiveAskFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
 
   // Compose live agent context lazily only while sidebar is open so closed typing incurs zero composition cost
   const previewComposedContext = useMemo(
@@ -165,6 +169,9 @@ export function AiAssistantSidebar({
             foundationalCraftOverride: aiSkills.skillsState.foundationalCraftOverride ?? undefined,
             skillOverrides: aiSkills.skillsState.skillOverrides,
             customSkills: aiSkills.skillsState.customSkills,
+            toolProtocolOverride: aiSkills.skillsState.toolProtocolOverride ?? undefined,
+            enforceToolLinterGate: aiSkills.skillsState.enforceToolLinterGate,
+            toolOverrides: aiSkills.skillsState.toolOverrides,
             referenceHandles: briefCtrl.activeReferenceHandles,
             briefContext: briefCtrl.activeBriefContext,
             askQuestionMode: effectivePreviewAskMode,
@@ -181,6 +188,9 @@ export function AiAssistantSidebar({
       aiSkills.skillsState.foundationalCraftOverride,
       aiSkills.skillsState.skillOverrides,
       aiSkills.skillsState.customSkills,
+      aiSkills.skillsState.toolProtocolOverride,
+      aiSkills.skillsState.enforceToolLinterGate,
+      aiSkills.skillsState.toolOverrides,
       briefCtrl.activeReferenceHandles,
       briefCtrl.activeBriefContext,
       effectivePreviewAskMode,
@@ -327,13 +337,20 @@ export function AiAssistantSidebar({
     const trimmed = inputValue.trim();
     if (!trimmed || chat.isStreaming) return;
     const turnAskMode: AskQuestionMode =
-      askFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
+      effectiveAskFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
     setInputValue('');
     if (askFirstEnabled) {
       setAskFirstEnabled(false);
     }
     void chat.submitPrompt(trimmed, {askQuestionMode: turnAskMode});
-  }, [inputValue, chat.isStreaming, askFirstEnabled, focus, chat.submitPrompt]);
+  }, [
+    inputValue,
+    chat.isStreaming,
+    askFirstEnabled,
+    effectiveAskFirstEnabled,
+    focus,
+    chat.submitPrompt,
+  ]);
 
   const handleComposerKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -561,7 +578,8 @@ export function AiAssistantSidebar({
             briefHasContent={briefCtrl.briefHasContent}
             briefIsActive={briefCtrl.briefIsActive}
             briefSummaryLabel={briefCtrl.briefSummaryLabel}
-            askFirstEnabled={askFirstEnabled}
+            askFirstEnabled={effectiveAskFirstEnabled}
+            askFirstDisabled={isAskQuestionToolDisabled}
             showEstimatedCost={settings.showEstimatedCost}
             sessionCostTurnCount={sessionCost.turnCount}
             formattedSessionCost={formattedSessionCost}
@@ -636,6 +654,7 @@ export function AiAssistantSidebar({
             composedContext={previewComposedContext}
             skillsState={aiSkills.skillsState}
             customizationCount={aiSkills.customizationCount}
+            toolCustomizationCount={aiSkills.toolCustomizationCount}
             hasUpstreamUpdate={aiSkills.hasUpstreamUpdate}
             onSetFoundationalCraft={aiSkills.setFoundationalCraft}
             onSetPinMode={aiSkills.setPinMode}
@@ -644,6 +663,14 @@ export function AiAssistantSidebar({
             onResetSkill={aiSkills.resetSkill}
             onSaveCustomSkill={aiSkills.saveCustomSkill}
             onDeleteCustomSkill={aiSkills.removeCustomSkill}
+            onSetToolProtocol={aiSkills.setToolProtocol}
+            onSetEnforceLinterGate={aiSkills.setEnforceLinterGate}
+            onSetToolMode={aiSkills.setToolMode}
+            onSetAllToolModes={aiSkills.setAllToolModes}
+            onSetToolDescription={aiSkills.setToolDescription}
+            onSetToolGuidance={aiSkills.setToolGuidance}
+            onResetTool={aiSkills.resetTool}
+            onResetAllTools={aiSkills.resetAllTools}
             onReplaceSkillsState={aiSkills.replaceSkillsState}
             onResetAll={aiSkills.resetAll}
             onAcknowledgeUpdate={aiSkills.acknowledgeUpdate}

@@ -173,8 +173,12 @@ export const AI_LABELS = {
     askFirstToggle: 'Ask First',
     askFirstTitle:
       'Have the assistant ask multi-select clarifying questions before drafting or editing (resets after sending)',
-    askFirstAria: (enabled: boolean) =>
-      `Ask clarifying questions first (${enabled ? 'on for next send' : 'off'})`,
+    askFirstDisabledTitle:
+      'Clarifying questions (ask_question) is disabled in Context → Function Tools',
+    askFirstAria: (enabled: boolean, disabled = false) =>
+      disabled
+        ? 'Ask clarifying questions first (disabled in Context → Function Tools)'
+        : `Ask clarifying questions first (${enabled ? 'on for next send' : 'off'})`,
     askFirstBadge: 'Ask First',
     briefTray: {
       dialogAria: 'Scene Brief & References',
@@ -442,7 +446,83 @@ export const AI_LABELS = {
       tabPreview: 'Live Prompt Preview',
       tabCraft: 'Foundational Craft',
       tabSkills: 'Skills & Extensions',
+      tabTools: 'Function Tools',
       tabQuickScan: 'Quick Scan Rules',
+      functionTools: {
+        summary: (active: number, inactive: number, disabled: number) =>
+          disabled > 0
+            ? `${active} active · ${inactive} inactive · ${disabled} disabled`
+            : `${active} active · ${inactive} inactive`,
+        autoAllButton: 'Auto all',
+        disableAllButton: 'Disable all',
+        autoAllAria: 'Set all function tools to Auto activation mode',
+        disableAllAria: 'Disable all function tools for pure conversation mode',
+        linterGateHeading: 'Enforce Linter Gate on Staged Proposals',
+        linterGateDesc:
+          'When enabled, mutation tools reject proposals that introduce deterministic Script Supervisor errors so the assistant self-repairs before staging. AST schema and expectedSnapshotHash concurrency checks always remain active.',
+        linterGateToggleAria: 'Enforce deterministic Script Supervisor linter gate on staged proposals',
+        linterGateActiveBadge: 'Enforced',
+        linterGateBypassedBadge: 'Bypassed',
+        coreProtocolHeading: 'Core Tool & Safety Protocol',
+        coreProtocolDesc:
+          'Foundational tool-use safety rules injected into Section 6 whenever at least one tool is active. Live focus, allowed tools, and expectedSnapshotHash stay auto-synced below.',
+        coreProtocolRuntimeHeaderLabel: 'Auto-Synced Runtime Header (Live Preview)',
+        coreProtocolTextareaAria: 'Core Tool and Safety Protocol instructions',
+        pureChatNotice:
+          'All tools are currently inactive or disabled — the next turn runs in Pure Conversation Mode with zero tool schemas sent.',
+        toolsListHeading: 'Function Tools',
+        toolsListDesc:
+          'Control per-tool activation (Auto follows Focus & Ask First, Always On forces exposure, Disabled removes schema & guidance) and customize each tool’s prompt guidance or API description.',
+        activationModeGroupAria: (label: string) => `Activation mode for ${label}`,
+        activationModes: {
+          auto: 'Auto',
+          enabled: 'Always On',
+          disabled: 'Disabled',
+        } as const,
+        categories: {
+          inspect: 'Read-Only',
+          mutation: 'Staged Edit',
+          audit: 'Audit',
+          workflow: 'Workflow',
+        } as const,
+        statusActiveAuto: 'Active · Auto',
+        statusActiveForced: 'Active · Always On',
+        statusInactiveFocus: (focusLabel: string) => `Inactive in ${focusLabel}`,
+        statusInactiveNoSkills: 'Inactive · No available skills',
+        statusDisabled: 'Disabled',
+        expandToolAria: (label: string) => `Inspect or customize ${label}`,
+        collapseToolAria: (label: string) => `Collapse ${label} settings`,
+        guidanceFieldLabel: 'Protocol Guidance Bullet (Injected When Active)',
+        guidanceFieldAria: (label: string) => `Protocol guidance bullet for ${label}`,
+        descriptionFieldLabel: 'API FunctionDeclaration Description',
+        descriptionFieldAria: (label: string) => `API description for ${label}`,
+        schemaToggleShow: 'Show JSON Schema parameters',
+        schemaToggleHide: 'Hide JSON Schema parameters',
+        schemaReadOnlyBadge: 'Read-Only Schema',
+        resetToolButton: 'Reset tool',
+        resetAllToolsButton: 'Reset tools & protocol',
+        confirmResetAllToolsTitle: 'Reset all function tool & protocol overrides?',
+        confirmResetAllToolsDesc: (
+          hasCoreOverride: boolean,
+          linterBypassed: boolean,
+          toolOverrideCount: number
+        ) => {
+          const parts: string[] = [];
+          if (hasCoreOverride) parts.push('revert your Core Protocol edit');
+          if (linterBypassed) parts.push('re-enable the deterministic Linter Gate');
+          if (toolOverrideCount > 0) {
+            parts.push(
+              `reset ${toolOverrideCount} function tool ${
+                toolOverrideCount === 1 ? 'override' : 'overrides'
+              }`
+            );
+          }
+          const summary =
+            parts.length > 0 ? parts.join(', ') : 'restore all function tool and protocol defaults';
+          return `This will ${summary} stored in this browser. Your Foundational Craft and Skills stay untouched.`;
+        },
+        confirmResetAllToolsAction: 'Reset Tools',
+      },
       quickScanRules: {
         upstreamUpdateTitle: 'Built-in Quick Scan rules updated',
         upstreamUpdateDesc:
@@ -540,6 +620,9 @@ export const AI_LABELS = {
       summaryTopology: 'Topology',
       summarySnapshot: 'Snapshot',
       summaryTools: 'Tools',
+      summaryToolsNone: 'none (pure conversation mode)',
+      summaryToolsJumpTitle: 'Open Function Tools tab to configure active tools',
+      sectionJumpTitle: (tabLabel: string) => `Open ${tabLabel} tab to edit`,
       summaryChangedBadge: 'changed',
       charsCount: (count: number) => `${count.toLocaleString()} chars`,
       copyPromptButton: 'Copy Prompt',
@@ -562,7 +645,7 @@ export const AI_LABELS = {
       emptyAvailableSkills: 'All non-muted skills are currently preloaded.',
       foundationalCraftHeading: 'Foundational Auteur Craft',
       foundationalCraftDesc:
-        'Directorial rules sent on every turn. Tool safety and snapshot verification remain code-owned and cannot be disabled here.',
+        'Directorial rules sent on every turn. Customize Tool & Safety Protocol and tool activation in the Function Tools tab.',
       foundationalCraftAria: 'Foundational Auteur Craft instructions',
       resetToDefaultButton: 'Reset to default',
       skillsSummary: (active: number, available: number, muted: number) =>
@@ -620,7 +703,8 @@ export const AI_LABELS = {
       confirmResetAllDetailedDesc: (
         hasCraftOverride: boolean,
         customSkillCount: number,
-        overrideCount: number
+        overrideCount: number,
+        toolOverrideCount = 0
       ) => {
         const parts: string[] = [];
         if (customSkillCount > 0) {
@@ -636,10 +720,15 @@ export const AI_LABELS = {
             `reset ${overrideCount} built-in skill ${overrideCount === 1 ? 'override' : 'overrides'}`
           );
         }
+        if (toolOverrideCount > 0) {
+          parts.push(
+            `reset ${toolOverrideCount} tool/protocol ${toolOverrideCount === 1 ? 'customization' : 'customizations'}`
+          );
+        }
         const actionSummary =
           parts.length > 0
             ? parts.join(', ')
-            : 'restore built-in Foundational Craft and skill defaults';
+            : 'restore built-in Foundational Craft, skill, and function tool defaults';
         return `This will ${actionSummary} stored in this browser. Custom skills cannot be recovered after reset — export your Agent Context first if you want a backup.`;
       },
       confirmResetAllAction: 'Reset All',
@@ -673,10 +762,10 @@ export const AI_LABELS = {
           'Replace each checked section below with only the selected items. Local custom items and overrides in checked sections not selected here will be removed.',
         selectAllButton: 'Select all',
         selectNoneButton: 'None',
-        domainSkillsTitle: 'Foundational Craft & Skills',
-        domainSkillsToggleAria: 'Include Foundational Craft & Skills section in import',
+        domainSkillsTitle: 'Foundational Craft, Skills & Tools',
+        domainSkillsToggleAria: 'Include Foundational Craft, Skills & Function Tools section in import',
         domainSkillsEmptyNote:
-          'This file contains no Foundational Craft or Skill customizations (default baseline).',
+          'This file contains no Foundational Craft, Skill, or Function Tool customizations (default baseline).',
         domainQuickScanTitle: 'Quick Scan Rules',
         domainQuickScanToggleAria: 'Include Quick Scan Rules section in import',
         domainQuickScanEmptyNote:
@@ -684,11 +773,16 @@ export const AI_LABELS = {
         groupFoundationalCraft: 'Foundational Craft Override',
         groupBuiltInSkillOverrides: (count: number) => `Built-in Skill Overrides (${count})`,
         groupCustomSkills: (count: number) => `Custom Skills (${count})`,
+        groupToolProtocol: 'Tool & Safety Protocol Override',
+        groupToolOverrides: (count: number) => `Function Tool Overrides (${count})`,
         groupBuiltInRuleOverrides: (count: number) => `Built-in Rule Overrides (${count})`,
         groupCustomRules: (count: number) => `Custom Quick Scan Rules (${count})`,
         badgeNew: 'New',
         badgeOverwrites: 'Overwrites local',
         badgeEditedBody: 'Edited body',
+        badgeEditedDesc: 'Edited description',
+        badgeEditedGuidance: 'Edited guidance',
+        badgeLinterBypassed: 'Linter bypassed',
         badgeEnabled: 'Enabled',
         badgeDisabled: 'Disabled',
         badgeEditedCriteria: 'Edited criteria',
