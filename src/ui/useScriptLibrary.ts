@@ -29,8 +29,12 @@ import {
   type ActiveScriptRef,
 } from './scriptLibraryView.ts';
 import type {ScriptSnapshot, SnapshotTrigger} from './scriptSnapshots.ts';
+import type {AnalyzedBackupScriptItem} from './scriptFileIO.ts';
 import {mirrorActiveScriptToLocalStorage} from './scriptStorage.ts';
-import {useLibraryFileIO} from './library/useLibraryFileIO.ts';
+import {
+  useLibraryFileIO,
+  type SingleScriptImportCommitOptions,
+} from './library/useLibraryFileIO.ts';
 import {
   reconcileHydratedScript,
   resolveInitialEditorState,
@@ -131,6 +135,11 @@ export interface UseScriptLibraryResult {
   handleDownloadTagless: () => void;
   handleDownloadJsonEnvelope: () => void;
   handleBackupAll: () => Promise<void>;
+  handleCommitSingleScriptImport: (options: SingleScriptImportCommitOptions) => Promise<void>;
+  handleCommitLibraryBackupImport: (
+    items: readonly AnalyzedBackupScriptItem[],
+    selectedIds: ReadonlySet<string>
+  ) => Promise<void>;
   handleTriggerImportFile: () => void;
   handleTriggerRestoreBackup: () => void;
   handleImportFileChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
@@ -267,6 +276,8 @@ export function useScriptLibrary({
     handleDownloadTagless,
     handleDownloadJsonEnvelope,
     handleBackupAll,
+    handleCommitSingleScriptImport,
+    handleCommitLibraryBackupImport,
     handleTriggerImportFile,
     handleTriggerRestoreBackup,
     handleImportFileChange,
@@ -280,6 +291,9 @@ export function useScriptLibrary({
     sceneTitleRef,
     customScriptsRef,
     setCustomScripts,
+    commitRawText,
+    onTitleChange: handleTitleChange,
+    onSwitchToLive,
     persistCurrentCustomIfDirty,
     activateCustomScript,
     onToast,
@@ -807,6 +821,8 @@ export function useScriptLibrary({
     handleDownloadTagless,
     handleDownloadJsonEnvelope,
     handleBackupAll,
+    handleCommitSingleScriptImport,
+    handleCommitLibraryBackupImport,
     handleTriggerImportFile,
     handleTriggerRestoreBackup,
     handleImportFileChange,

@@ -24,13 +24,16 @@ import {
 import {
   AUTEUR_LIBRARY_BACKUP_FORMAT,
   AUTEUR_LIBRARY_BACKUP_VERSION,
+  applySelectedLibraryBackup,
   buildCanonicalTxtExport,
   buildJsonEnvelopeExport,
   buildLibraryBackupExport,
   buildTaglessTxtExport,
   createLibraryBackup,
   deriveTitleFromFilename,
+  evaluateScriptFit,
   formatExportTimestamp,
+  inspectImportedFile,
   mergeLibraryBackup,
   parseImportedFile,
   parseLibraryBackup,
@@ -1659,5 +1662,154 @@ describe('Persistence hardening: IndexedDB retry, fallback reconciliation & hydr
     });
   });
 });
+
+describe('Unified Import Pre-Flight & Content Duplicate Detection', () => {
+  const sampleRaw = SCRIPT_PRESETS[0].content;
+
+  it('reports v0.4.0 fitStatus=ready for valid canonical scripts and detects tagless, legacy, and unstructured text', () => {
+    const clean = evaluateScriptFit(sampleRaw, 'interrogation-room-coverage-20261123-083640-deadbeef.txt');
+    expect(clean.fitStatus).toBe('ready');
+    expect(clean.errorCount).toBe(0);
+    expect(clean.warningCount).toBe(0);
+    expect(clean.compatibilityNotes).toEqual([]);
+    expect(clean.snapshotHash).toBe(computeSnapshotHash(exportPlainText(sampleRaw)));
+
+    const tagless = evaluateScriptFit(
+      exportTagless(sampleRaw),
+      'interrogation-room-coverage-20261123-083640-deadbeef-tagless.txt'
+    );
+    expect(tagless.fitStatus).toBe('warnings');
+    expect(tagless.compatibilityNotes.some((n) => n.kind === 'tagless_export')).toBe(true);
+
+    const legacy = evaluateScriptFit(
+      '[INTENT]\nLegacy test.\n\n[EXECUTION]\n[CAM 01] MS -> [DIAL] Ada says "Watch out" -> [AUDIO] thunder'
+    );
+    expect(legacy.fitStatus).toBe('warnings');
+    expect(legacy.compatibilityNotes.some((n) => n.kind === 'legacy_syntax')).toBe(true);
+
+    const unstructured = evaluateScriptFit('Just some loose prose notes without any Macro-Blocks.');
+    expect(unstructured.fitStatus).toBe('unstructured');
+    expect(unstructured.compatibilityNotes.some((n) => n.kind === 'unstructured_text')).toBe(true);
+  });
+
+  it('detects single-script content-hash duplicates against custom scripts and bundled examples even when filenames differ', () => {
+    const customScripts: ScriptRecord[] = [
+      {
+        id: 'script-existing',
+        title: 'My Saved Interrogation',
+        rawText: sampleRaw,
+        createdAt: 1000,
+        updatedAt: 2000,
+      },
+    ];
+
+    const inspected = inspectImportedFile('completely-different-name.txt', `${sampleRaw}\r\n`, {
+      customScripts,
+      examples: BUNDLED_EXAMPLES,
+      activeScript: {kind: 'custom', id: 'script-existing'},
+    });
+
+    expect(inspected.kind).toBe('single-script');
+    if (inspected.kind !== 'single-script') return;
+    expect(inspected.suggestedTitle).toBe('Completely Different Name');
+    expect(inspected.hasTitleCollision).toBe(false);
+    expect(inspected.contentDuplicates).toEqual([
+      {kind: 'custom', id: 'script-existing', title: 'My Saved Interrogation', isActive: true},
+      {kind: 'example', id: SCRIPT_PRESETS[0].id, title: SCRIPT_PRESETS[0].title, isActive: false},
+    ]);
+  });
+
+  it('flags library backup scripts with matching content hashes (even with different IDs) as duplicate_content and excludes them by default', () => {
+    const existing: ScriptRecord[] = [
+      {
+        id: 'local-1',
+        title: 'Local Harbor Scene',
+        rawText: '[INTENT]\nHarbor scene at dawn.',
+        createdAt: 1000,
+        updatedAt: 2000,
+      },
+      {
+        id: 'local-2',
+        title: 'Rooftop Chase',
+        rawText: '[INTENT]\nOriginal rooftop draft.',
+        createdAt: 1000,
+        updatedAt: 2500,
+      },
+    ];
+
+    const backup = createLibraryBackup(
+      [
+        // Different ID, different title, IDENTICAL canonical content -> duplicate_content (unchecked by default)
+        {
+          id: 'remote-copy-of-1',
+          title: 'Harbor Copy From Laptop',
+          rawText: '[INTENT]\r\nHarbor scene at dawn.   ',
+          createdAt: 1000,
+          updatedAt: 3000,
+        },
+        // Same ID as local-2, DIFFERENT content -> modified_conflict (checked by default)
+        {
+          id: 'local-2',
+          title: 'Rooftop Chase',
+          rawText: '[INTENT]\nRevised rooftop draft in heavy rain.',
+          createdAt: 1000,
+          updatedAt: 4000,
+        },
+        // Brand new ID and unique content -> new (checked by default)
+        {
+          id: 'remote-new-3',
+          title: 'Subway Tunnel',
+          rawText: '[INTENT]\nSubway tunnel tension.',
+          createdAt: 1500,
+          updatedAt: 5000,
+        },
+      ],
+      {exportedAt: '2026-11-23T09:00:00.000Z'}
+    );
+
+    const inspected = inspectImportedFile(
+      'auteur-library-backup-20261123-090000-abcdef12.json',
+      JSON.stringify(backup),
+      {customScripts: existing, examples: BUNDLED_EXAMPLES}
+    );
+
+    expect(inspected.kind).toBe('library-backup');
+    if (inspected.kind !== 'library-backup') return;
+    expect(inspected.newCount).toBe(1);
+    expect(inspected.modifiedCount).toBe(1);
+    expect(inspected.duplicateContentCount).toBe(1);
+
+    const dupItem = inspected.items.find((i) => i.record.id === 'remote-copy-of-1')!;
+    expect(dupItem.status).toBe('duplicate_content');
+    expect(dupItem.defaultSelected).toBe(false);
+    expect(dupItem.matchedExisting).toEqual({
+      kind: 'custom',
+      id: 'local-1',
+      title: 'Local Harbor Scene',
+      sameId: false,
+    });
+
+    const modItem = inspected.items.find((i) => i.record.id === 'local-2')!;
+    expect(modItem.status).toBe('modified_conflict');
+    expect(modItem.defaultSelected).toBe(true);
+    expect(modItem.disambiguatedTitle).toBe('Rooftop Chase (Imported)');
+
+    const newItem = inspected.items.find((i) => i.record.id === 'remote-new-3')!;
+    expect(newItem.status).toBe('new');
+    expect(newItem.defaultSelected).toBe(true);
+
+    // Default selection applies only new + modified_conflict, skipping duplicate_content
+    const defaultSelectedIds = new Set(
+      inspected.items.filter((i) => i.defaultSelected).map((i) => i.record.id)
+    );
+    const defaultResult = applySelectedLibraryBackup(existing, inspected.items, defaultSelectedIds, {
+      generateId: () => 'forked-local-2',
+    });
+    expect(defaultResult.added.map((r) => r.id)).toEqual(['remote-new-3']);
+    expect(defaultResult.forked.map((f) => f.forkedRecord.id)).toEqual(['forked-local-2']);
+    expect(defaultResult.merged).toHaveLength(4);
+  });
+});
+
 
 

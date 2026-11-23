@@ -6,9 +6,10 @@ import {
   type RefObject,
   type SetStateAction,
 } from 'react';
-import type {LintRuleOverrides} from '../../core/index.ts';
+import type {HistoryCommitOptions, LintRuleOverrides} from '../../core/index.ts';
 import {UI_LABELS} from '../labels.ts';
 import {
+  applySelectedLibraryBackup,
   downloadCanonicalTxt,
   downloadJsonEnvelope,
   downloadLibraryBackup,
@@ -16,11 +17,22 @@ import {
   mergeLibraryBackup,
   parseLibraryBackup,
   readAndParseBrowserFile,
+  type AnalyzedBackupScriptItem,
   type AuteurLibraryBackup,
 } from '../scriptFileIO.ts';
 import {createScriptId, scriptLibraryDb, type ScriptRecord} from '../scriptLibraryDb.ts';
 import type {ActiveScriptRef} from '../scriptLibraryView.ts';
-import {upsertSortedScript} from './useLibraryPersistence.ts';
+import {
+  upsertSortedScript,
+  type PersistCurrentCustomOverride,
+} from './useLibraryPersistence.ts';
+
+export interface SingleScriptImportCommitOptions {
+  title: string;
+  rawText: string;
+  mode: 'new' | 'replace';
+  updateTitleOnReplace?: boolean;
+}
 
 export interface UseLibraryFileIOOptions {
   sceneTitle: string;
@@ -31,7 +43,15 @@ export interface UseLibraryFileIOOptions {
   sceneTitleRef: RefObject<string>;
   customScriptsRef: RefObject<ScriptRecord[]>;
   setCustomScripts: Dispatch<SetStateAction<ScriptRecord[]>>;
-  persistCurrentCustomIfDirty: () => Promise<ScriptRecord | null>;
+  commitRawText: (
+    updater: string | ((prev: string) => string),
+    options?: Omit<HistoryCommitOptions, 'timestamp'>
+  ) => void;
+  onTitleChange: (nextTitle: string) => void;
+  onSwitchToLive: () => void;
+  persistCurrentCustomIfDirty: (
+    override?: PersistCurrentCustomOverride
+  ) => Promise<ScriptRecord | null>;
   activateCustomScript: (record: ScriptRecord, options?: {switchToLive?: boolean}) => void;
   onToast: (message: string) => void;
 }
@@ -45,6 +65,11 @@ export interface UseLibraryFileIOResult {
   handleDownloadTagless: () => void;
   handleDownloadJsonEnvelope: () => void;
   handleBackupAll: () => Promise<void>;
+  handleCommitSingleScriptImport: (options: SingleScriptImportCommitOptions) => Promise<void>;
+  handleCommitLibraryBackupImport: (
+    items: readonly AnalyzedBackupScriptItem[],
+    selectedIds: ReadonlySet<string>
+  ) => Promise<void>;
   handleTriggerImportFile: () => void;
   handleTriggerRestoreBackup: () => void;
   handleImportFileChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
@@ -64,6 +89,9 @@ export function useLibraryFileIO({
   sceneTitleRef,
   customScriptsRef,
   setCustomScripts,
+  commitRawText,
+  onTitleChange,
+  onSwitchToLive,
   persistCurrentCustomIfDirty,
   activateCustomScript,
   onToast,
@@ -152,6 +180,93 @@ export function useLibraryFileIO({
     onToast(UI_LABELS.toasts.backupExported(latestRecords.length));
   }, [persistCurrentCustomIfDirty, setCustomScripts, customScriptsRef, activeScriptRef, onToast]);
 
+  const handleCommitSingleScriptImport = useCallback(
+    async (options: SingleScriptImportCommitOptions) => {
+      const trimmedTitle = options.title.trim() || UI_LABELS.importModal.sceneTitlePlaceholder;
+
+      if (options.mode === 'replace') {
+        const current = activeScriptRef.current;
+        if (current.kind !== 'custom') return;
+
+        const beforeText = rawTextRef.current;
+        const beforeTitle = sceneTitleRef.current;
+        const nextTitle = options.updateTitleOnReplace ? trimmedTitle : beforeTitle;
+
+        if (beforeText.trim().length > 0 && beforeText !== options.rawText) {
+          await scriptLibraryDb.saveSnapshot({
+            scriptId: current.id,
+            trigger: 'pre_restore',
+            label: `Before import: ${trimmedTitle}`,
+            rawText: beforeText,
+          });
+        }
+
+        commitRawText(options.rawText, {mode: 'checkpoint'});
+        if (options.updateTitleOnReplace && nextTitle !== beforeTitle) {
+          onTitleChange(nextTitle);
+        }
+        await persistCurrentCustomIfDirty({
+          rawText: options.rawText,
+          title: nextTitle,
+        });
+        onSwitchToLive();
+        onToast(UI_LABELS.toasts.replacedCurrentScriptFromImport(nextTitle));
+        return;
+      }
+
+      await persistCurrentCustomIfDirty();
+      const now = Date.now();
+      const importedRecord: ScriptRecord = {
+        id: createScriptId('script'),
+        title: trimmedTitle,
+        rawText: options.rawText,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const saved = await scriptLibraryDb.put(importedRecord);
+      customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
+      setCustomScripts((prev) => upsertSortedScript(prev, saved));
+      activateCustomScript(saved, {switchToLive: true});
+      onToast(UI_LABELS.toasts.importedScript(saved.title));
+    },
+    [
+      activeScriptRef,
+      rawTextRef,
+      sceneTitleRef,
+      commitRawText,
+      onTitleChange,
+      persistCurrentCustomIfDirty,
+      onSwitchToLive,
+      customScriptsRef,
+      setCustomScripts,
+      activateCustomScript,
+      onToast,
+    ]
+  );
+
+  const handleCommitLibraryBackupImport = useCallback(
+    async (items: readonly AnalyzedBackupScriptItem[], selectedIds: ReadonlySet<string>) => {
+      if (selectedIds.size === 0) return;
+      await persistCurrentCustomIfDirty();
+      const existing = await scriptLibraryDb.list();
+      const mergeResult = applySelectedLibraryBackup(existing, items, selectedIds);
+      if (mergeResult.recordsToWrite.length > 0) {
+        await scriptLibraryDb.bulkPut(mergeResult.recordsToWrite);
+      }
+      setCustomScripts(mergeResult.merged);
+      customScriptsRef.current = mergeResult.merged;
+      const skippedCount = items.length - selectedIds.size + mergeResult.skipped.length;
+      onToast(
+        UI_LABELS.toasts.backupRestored(
+          mergeResult.added.length,
+          mergeResult.forked.length,
+          skippedCount
+        )
+      );
+    },
+    [persistCurrentCustomIfDirty, setCustomScripts, customScriptsRef, onToast]
+  );
+
   const handleTriggerImportFile = useCallback(() => {
     importFileInputRef.current?.click();
   }, []);
@@ -235,6 +350,8 @@ export function useLibraryFileIO({
     handleDownloadTagless,
     handleDownloadJsonEnvelope,
     handleBackupAll,
+    handleCommitSingleScriptImport,
+    handleCommitLibraryBackupImport,
     handleTriggerImportFile,
     handleTriggerRestoreBackup,
     handleImportFileChange,

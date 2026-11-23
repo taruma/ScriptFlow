@@ -17,7 +17,7 @@ export const EDITOR_LABELS = {
     fileMenuScriptHeader: 'Script & History',
     fileMenuNewBlank: 'New Blank Script',
     fileMenuDuplicateScript: 'Duplicate Script',
-    fileMenuImportFile: 'Import File...',
+    fileMenuImportFile: 'Import / Restore...',
     fileMenuFormatScript: 'Format Script',
     fileMenuFormatReadOnlyTitle: 'Bundled examples are read-only — fork to edit before formatting',
     fileMenuVersionHistory: 'Version History...',
@@ -373,6 +373,8 @@ export const EDITOR_LABELS = {
     branchedScript: (title: string) => `Branched "${title}"`,
     createdBlankScript: 'Created new blank script',
     importedScript: (title: string) => `Imported "${title}"`,
+    replacedCurrentScriptFromImport: (title: string) =>
+      `Replaced "${title}" with imported script — press Undo to revert`,
     renamedScript: (title: string) => `Renamed to "${title}"`,
     deletedScript: (title: string) => `Deleted "${title}"`,
     deletedMultipleScripts: (count: number) =>

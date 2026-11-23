@@ -50,12 +50,19 @@ const AppInfoModal = lazy(() =>
   }))
 );
 
+const ScriptImportModal = lazy(() =>
+  import('./components/ScriptImportModal.tsx').then((mod) => ({
+    default: mod.ScriptImportModal,
+  }))
+);
+
 export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const {settings, updateSettings} = useEditorSettings();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
   const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
@@ -106,6 +113,7 @@ export default function App() {
     if (!isNarrow) return;
     setIsAiOpen(false);
     setIsDebugOpen(false);
+    setIsImportModalOpen(false);
     setIsInfoOpen(false);
     setIsVersionHistoryOpen(false);
   }, [isNarrow]);
@@ -140,8 +148,6 @@ export default function App() {
     isReadOnly,
     sceneTitle,
     customScripts,
-    importFileInputRef,
-    restoreBackupInputRef,
     commitRawText,
     handleTitleChange,
     handleUndo,
@@ -212,6 +218,7 @@ export default function App() {
     isDebugOpen ||
     confirmRequest !== null ||
     isLibraryOpen ||
+    isImportModalOpen ||
     isVersionHistoryOpen ||
     isInfoOpen;
 
@@ -307,14 +314,13 @@ export default function App() {
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
         onDuplicateScript={() => void library.handleDuplicateActiveScript()}
-        onImportFile={library.handleTriggerImportFile}
+        onImportFile={() => setIsImportModalOpen(true)}
         onFormatScript={mutations.handleFormatScript}
         onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
         onDownloadCanonical={library.handleDownloadCanonical}
         onDownloadTagless={library.handleDownloadTagless}
         onDownloadJsonEnvelope={library.handleDownloadJsonEnvelope}
         onBackupAll={() => void library.handleBackupAll()}
-        onRestoreBackup={library.handleTriggerRestoreBackup}
         onOpenLibrary={() => setIsLibraryOpen(true)}
         isLibraryOpen={isLibraryOpen}
         settings={settings}
@@ -424,26 +430,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Hidden File Pickers for Import (.txt / .md / .json) & Restore Backup (.json) */}
-      <input
-        ref={importFileInputRef}
-        type="file"
-        accept=".txt,.md,.markdown,.json"
-        onChange={(e) => void library.handleImportFileChange(e)}
-        className="hidden"
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-      <input
-        ref={restoreBackupInputRef}
-        type="file"
-        accept=".json"
-        onChange={(e) => void library.handleRestoreBackupChange(e)}
-        className="hidden"
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-
       {isLibraryOpen && (
         <ScriptLibraryModal
           isOpen={isLibraryOpen}
@@ -457,7 +443,7 @@ export default function App() {
           onOpenExample={(example) => void library.handleOpenExample(example)}
           onForkExample={(example) => void library.handleForkExample(example)}
           onNewBlank={() => void library.handleNewBlank()}
-          onImportFile={library.handleTriggerImportFile}
+          onImportFile={() => setIsImportModalOpen(true)}
           onDuplicateScript={(record) => void library.handleDuplicateScript(record)}
           onRenameScript={(record, nextTitle) =>
             void library.handleRenameScript(record, nextTitle)
@@ -516,6 +502,24 @@ export default function App() {
             readOnly={isReadOnly}
             ruleOverrides={settings.lintRuleOverrides}
             onCommitRawText={mutations.handleCommitFromDebug}
+          />
+        </Suspense>
+      )}
+
+      {!isNarrow && isImportModalOpen && (
+        <Suspense fallback={null}>
+          <ScriptImportModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            activeScript={activeScript}
+            activeSceneTitle={sceneTitle}
+            customScripts={customScripts}
+            examples={BUNDLED_EXAMPLES}
+            ruleOverrides={settings.lintRuleOverrides}
+            onOpenExistingCustomScript={library.handleOpenCustomScript}
+            onForkExample={library.handleForkExample}
+            onCommitSingleScript={library.handleCommitSingleScriptImport}
+            onCommitLibraryBackup={library.handleCommitLibraryBackupImport}
           />
         </Suspense>
       )}

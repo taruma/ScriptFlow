@@ -1,7 +1,6 @@
 import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {
   AlignLeft,
-  ArchiveRestore,
   BookOpen,
   Braces,
   ChevronDown,
@@ -33,7 +32,7 @@ export interface FileMenuDropdownProps {
   onDownloadTagless: () => void;
   onDownloadJsonEnvelope: () => void;
   onBackupAll: () => void;
-  onRestoreBackup: () => void;
+  onRestoreBackup?: () => void;
   onBrowseLibrary: () => void;
   onOpenDebug?: () => void;
   onOpenSettings: () => void;
@@ -124,7 +123,6 @@ export function FileMenuDropdown({
   onDownloadTagless,
   onDownloadJsonEnvelope,
   onBackupAll,
-  onRestoreBackup,
   onBrowseLibrary,
   onOpenDebug,
   onOpenSettings,
@@ -291,12 +289,6 @@ export function FileMenuDropdown({
               label={UI_LABELS.topBar.fileMenuBackupAll}
               tag={UI_LABELS.topBar.fileMenuTagJson}
               onClick={runAndClose(onBackupAll)}
-            />
-            <MenuRow
-              icon={<ArchiveRestore className="h-3.5 w-3.5 text-teal-500 shrink-0" />}
-              label={UI_LABELS.topBar.fileMenuRestoreBackup}
-              tag={UI_LABELS.topBar.fileMenuTagJson}
-              onClick={runAndClose(onRestoreBackup)}
             />
             <MenuRow
               icon={<BookOpen className="h-3.5 w-3.5 text-amber-500 shrink-0" />}

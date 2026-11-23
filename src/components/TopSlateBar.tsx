@@ -49,7 +49,7 @@ interface TopSlateBarProps {
   onDownloadTagless: () => void;
   onDownloadJsonEnvelope: () => void;
   onBackupAll: () => void;
-  onRestoreBackup: () => void;
+  onRestoreBackup?: () => void;
   onOpenLibrary: () => void;
   isLibraryOpen?: boolean;
   settings: EditorSettings;

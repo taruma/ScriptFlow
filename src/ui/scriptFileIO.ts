@@ -34,6 +34,23 @@ export {
   type ParsedImportSourceFormat,
   type ParseLibraryBackupResult,
 } from './scriptLibraryCodec.ts';
+export {
+  applySelectedLibraryBackup,
+  evaluateScriptFit,
+  inspectImportedFile,
+  type AnalyzedBackupScriptItem,
+  type BackupScriptImportStatus,
+  type ContentDuplicateMatch,
+  type ErrorImportPreflight,
+  type ImportCompatibilityNote,
+  type ImportCompatibilityNoteKind,
+  type ImportFitStatus,
+  type ImportPreflightResult,
+  type InspectImportedFileOptions,
+  type LibraryBackupImportPreflight,
+  type SingleScriptImportPreflight,
+  type SingleScriptValidationSummary,
+} from './library/importPreflight.ts';
 
 /**
  * Triggers a client-side browser file download using a temporary object URL.

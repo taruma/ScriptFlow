@@ -211,4 +211,113 @@ export const LIBRARY_LABELS = {
     lineageBranchFromHere: 'Branch from Here',
     lineageKeyboardHint: '↑↓ select branch · Enter switch · Esc close',
   },
+
+  importModal: {
+    dialogAria: 'Import Script or Library Backup',
+    title: 'Import Script or Backup',
+    subtitle: 'Pre-flight v0.4.0 syntax check, duplicate detection & preview before saving',
+    closeAria: 'Close Import modal',
+    dropOverlayTitle: 'Drop file anywhere to inspect',
+    dropOverlayDesc: 'Supports .txt, .md, .markdown, and .json (scripts or library backups)',
+    dropzoneTitle: 'Drop a script or backup file here',
+    dropzoneNote: 'You can drag and drop .txt, .md, or .json files anywhere into this modal.',
+    chooseFileButton: 'Choose File…',
+    chooseAnotherFileButton: 'Choose Another File…',
+    supportedFormatsHeading: 'Supported Formats',
+    supportedFormats: [
+      {
+        title: 'Canonical Script (.txt, .md)',
+        desc: 'Plain-text v0.4.0 Auteur Script or Tagless export',
+      },
+      {
+        title: 'Programmatic JSON (.json)',
+        desc: 'AuteurEnvelope, AuteurScriptIR, or AuteurScriptDraft',
+      },
+      {
+        title: 'Library Backup (.json)',
+        desc: 'Multi-script backup with content-hash duplicate filtering',
+      },
+    ] as const,
+    errorHeading: 'Unable to Inspect File',
+    errorHint: 'Fix the file or drop / choose another .txt, .md, or .json file.',
+    sourceFormatLabels: {
+      'plain-text': 'Plain Text',
+      'auteur-envelope': 'JSON Envelope',
+      'auteur-ir': 'Script IR',
+      'auteur-draft': 'Script Draft',
+    } as const,
+    fitBadges: {
+      ready: 'v0.4.0 Fit · Lint Clean',
+      warnings: 'v0.4.0 Fit · Needs Attention',
+      unstructured: 'Unstructured Plain Text',
+    } as const,
+    metricsTopology: 'Topology',
+    metricsStaging: 'Staging',
+    metricsMacroStates: 'Macro-States',
+    metricsSubStates: 'Sub-States',
+    metricsCast: 'Cast',
+    metricsTokens: 'Tokens',
+    compatibilityHeading: 'Compatibility Notes',
+    diagnosticsHeading: (errors: number, warnings: number) => {
+      const parts: string[] = [];
+      if (errors > 0) parts.push(`${errors} ${errors === 1 ? 'error' : 'errors'}`);
+      if (warnings > 0) parts.push(`${warnings} ${warnings === 1 ? 'warning' : 'warnings'}`);
+      return `Script Supervisor (${parts.join(' · ')})`;
+    },
+    duplicateContentTitle: 'Duplicate content already in library',
+    duplicateContentDesc: (titles: string, isExampleOnly: boolean) =>
+      isExampleOnly
+        ? `Identical canonical content matches bundled example ${titles}.`
+        : `Identical canonical content already exists in your library as ${titles}.`,
+    openExistingButton: 'Open Existing Script',
+    forkExampleButton: 'Fork Example Instead',
+    importModeHeading: 'Import Destination',
+    modeNewTitle: 'Import as New Script',
+    modeNewDesc: 'Create a new script in My Scripts and open it in Live Mode.',
+    modeReplaceTitle: 'Replace Current Script',
+    modeReplaceDesc: (title: string) =>
+      `Saves a Version History checkpoint of "${title}" first, then replaces its content (undoable with Cmd/Ctrl+Z).`,
+    modeReplaceDisabledDesc:
+      'Bundled reference examples are read-only — switch to a custom script to replace.',
+    sceneTitleLabel: 'Scene Title',
+    sceneTitlePlaceholder: 'Untitled Scene',
+    sceneTitleAria: 'Imported scene title',
+    titleCollisionNote: (disambiguated: string) =>
+      `Another script in your library already uses this title.`,
+    useSuggestedTitleButton: (disambiguated: string) => `Use "${disambiguated}"`,
+    updateTitleOnReplaceLabel: 'Also update current Scene Title to match imported file',
+    previewHeading: 'Script Preview',
+    previewShow: 'Show preview',
+    previewHide: 'Hide preview',
+    previewEmpty: '(empty script)',
+    backupSummaryHeading: 'Library Backup Summary',
+    backupExportedLabel: (dateStr: string) => `Exported ${dateStr}`,
+    backupCountNew: (count: number) => `${count} New`,
+    backupCountModified: (count: number) => `${count} Modified`,
+    backupCountDuplicate: (count: number) => `${count} Duplicate Content`,
+    backupDuplicateBanner: (count: number) =>
+      `${count} ${count === 1 ? 'script matches' : 'scripts match'} existing content in your library (by hash) and ${count === 1 ? 'is' : 'are'} unchecked by default to avoid duplicates.`,
+    backupSelectDefaults: 'New & Modified',
+    backupSelectAll: 'Select All',
+    backupClearSelection: 'Clear',
+    backupStatusBadges: {
+      new: 'New',
+      modified_conflict: 'Modified · Will Fork',
+      duplicate_content: 'Duplicate Content',
+    } as const,
+    backupMatchedExisting: (title: string) => `Matches "${title}"`,
+    backupForkTitleHint: (title: string) => `Imports as "${title}"`,
+    backupLintClean: 'Clean',
+    backupLintIssues: (errors: number, warnings: number) =>
+      `${errors} err · ${warnings} warn`,
+    cancelButton: 'Cancel',
+    confirmNewButton: 'Import as New Script',
+    confirmNewDuplicateButton: 'Import as Copy Anyway',
+    confirmReplaceButton: 'Replace Current Script',
+    confirmBackupButton: (count: number) =>
+      count === 0
+        ? 'Select Scripts to Import'
+        : `Import Selected (${count})`,
+    footerDropHint: 'Drop another file anytime to re-inspect · Esc to close',
+  },
 } as const;
