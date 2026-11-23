@@ -8,12 +8,12 @@ import {
   parseExecutionLine,
   parseSubState,
 } from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script v0.4.0 Parser', () => {
   it('parses all bundled presets and canonical craft exemplars with lossless raw round-tripping', () => {
-    for (const exemplar of Object.values(BUNDLED_CRAFT_EXEMPLARS)) {
+    for (const exemplar of Object.values(TEST_CRAFT_EXEMPLARS)) {
       const doc = parseAuteurScript(exemplar.content);
       expect(doc.stagingBlocks.map((b) => b.name)).toEqual([
         'INTENT',

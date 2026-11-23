@@ -1,9 +1,5 @@
-import {
-  BUNDLED_CRAFT_EXEMPLARS,
-  BUNDLED_KNOWLEDGE_SKILLS,
-  FOUNDATIONAL_CRAFT_MD,
-  type CraftExemplarEntry,
-} from '../../data/knowledge/index.ts';
+import {BUNDLED_EXAMPLES} from '../../data/examples/index.ts';
+import {BUNDLED_KNOWLEDGE_SKILLS, FOUNDATIONAL_CRAFT_MD} from '../../data/knowledge/index.ts';
 import type {
   AskQuestionMode,
   AssistantFocus,
@@ -23,8 +19,12 @@ export const DEFAULT_FOUNDATIONAL_CRAFT = FOUNDATIONAL_CRAFT_MD;
 // Built-in Extension Skills Registry (Loaded from src/data/knowledge/skills/)
 // ---------------------------------------------------------------------------
 
-export function formatCuratedExample(exampleId: CraftExemplarEntry['id']): string {
-  const found = BUNDLED_CRAFT_EXEMPLARS[exampleId];
+const DRAFT_CRAFT_ONER_ID = 'script-cbd82a05-d987-4d9a-aa42-5bfb11f996af';
+const DRAFT_CRAFT_COVERAGE_ID = 'script-7a1b8107-26df-45d8-b09f-9a10b85a0f87';
+const DRAFT_CRAFT_MONTAGE_ID = 'script-9e58b61c-7652-4472-b1a7-1685bcea812a';
+
+export function formatCuratedExample(exampleId: string): string {
+  const found = BUNDLED_EXAMPLES.find((ex) => ex.id === exampleId);
   if (!found) return '';
   return [`### Curated Example — ${found.title} (${found.topology})`, found.content].join('\n');
 }
@@ -32,12 +32,12 @@ export function formatCuratedExample(exampleId: CraftExemplarEntry['id']): strin
 export function buildDraftCraftBody(coreRules: string, includeMontageExample: boolean): string {
   const sections: string[] = [
     coreRules,
-    formatCuratedExample('forest-pov-horror'),
-    formatCuratedExample('interrogation-coverage'),
+    formatCuratedExample(DRAFT_CRAFT_ONER_ID),
+    formatCuratedExample(DRAFT_CRAFT_COVERAGE_ID),
   ];
 
   if (includeMontageExample) {
-    sections.push(formatCuratedExample('heist-montage'));
+    sections.push(formatCuratedExample(DRAFT_CRAFT_MONTAGE_ID));
   }
 
   return sections.filter((section) => section.length > 0).join('\n\n');

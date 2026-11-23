@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
   BUILTIN_AUTEUR_SKILLS,
@@ -28,8 +28,8 @@ import {
 } from '../../src/services/scriptTools.ts';
 import {asAsyncStream} from './aiTestFixtures.ts';
 describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & Dynamic Skills', () => {
-  const MONTAGE_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['heist-montage'].content;
-  const INTERROGATION_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+  const MONTAGE_SCRIPT = TEST_CRAFT_EXEMPLARS['heist-montage'].content;
+  const INTERROGATION_SCRIPT = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
   it('prunes allowed tools by focus and editor emptiness without triple write-schema bloat', () => {
     expect(assistantModeToFocus('check')).toBe('audit');
@@ -227,14 +227,14 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     const emptyDraftCtx = composeAgentContext({focus: 'auto', rawText: ''});
     const emptyDraftSkill = emptyDraftCtx.activeSkills.find((s) => s.id === 'draft_craft')!;
     expect(emptyDraftSkill).toBeDefined();
-    expect(emptyDraftSkill.body).toContain('POV Forest Horror');
-    expect(emptyDraftSkill.body).toContain('Interrogation Room Coverage');
+    expect(emptyDraftSkill.body).toContain("Robert's Machu Picchu Trail Dispatch");
+    expect(emptyDraftSkill.body).toContain('Cappadocia Balloon Panic');
     expect(emptyDraftSkill.body).not.toContain('Discontinuous Montage');
 
     const montageDraftCtx = composeAgentContext({focus: 'draft', rawText: MONTAGE_SCRIPT});
     const montageDraftSkill = montageDraftCtx.activeSkills.find((s) => s.id === 'draft_craft')!;
     expect(montageDraftSkill.body).toContain('Discontinuous Montage');
-    expect(montageDraftSkill.body).toContain('safecracker');
+    expect(montageDraftSkill.body).toContain('The Grand Continental');
   });
 
   it('keeps editable foundational craft separate from code-owned toolProtocol and injects Live Editor State up front', () => {

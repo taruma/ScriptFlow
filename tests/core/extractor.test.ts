@@ -4,7 +4,7 @@ import {
   inferSceneTopologyFromDocument,
   parseAuteurScript,
 } from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script Metadata & Continuity Extractor', () => {
@@ -62,7 +62,7 @@ Wardrobe Mapping: Evan in mustard yellow track jacket → EV01`;
   it('tracks camera HOLD, CUT, RECALL, and MONTAGE transitions across beats', () => {
     // Interrogation Coverage: CAM 01 -> CAM 02 (CUT) -> CAM 01 (RECALL)
     const coverageMeta = extractMetadata(
-      parseAuteurScript(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content)
+      parseAuteurScript(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content)
     );
     expect(coverageMeta.beatLinks.map((l) => l.transition)).toEqual([
       'ESTABLISH',

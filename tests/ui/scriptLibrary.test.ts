@@ -1664,6 +1664,19 @@ describe('Persistence hardening: IndexedDB retry, fallback reconciliation & hydr
       },
     });
     expect(fallbackExample).toEqual({kind: 'example', example: DEFAULT_PRESET});
+
+    // 6. Retired bundled example IDs in localStorage never resurrect as custom scripts
+    const retiredExampleFallback = reconcileHydratedScript({
+      loadedRecords: [idbRecord],
+      targetId: 'interrogation-coverage',
+      mirror: {
+        activeScriptId: 'interrogation-coverage',
+        rawText: '[INTENT]\nOld starter example.',
+        title: 'Interrogation Room Coverage',
+        updatedAt: 4200,
+      },
+    });
+    expect(retiredExampleFallback).toEqual({kind: 'example', example: DEFAULT_PRESET});
   });
 
   it('persists and clears mirrorActiveScriptToLocalStorage timestamps cleanly', () => {

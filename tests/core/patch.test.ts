@@ -4,9 +4,9 @@ import {
   projectAuteurPatchPreview,
   toAuteurEnvelope,
 } from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 
-const INTERROGATION = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+const INTERROGATION = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
 describe('Auteur Script Transactional Patch Engine', () => {
   it('executes multi-op batches by snapshot ID without index drift', () => {

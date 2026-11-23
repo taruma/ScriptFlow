@@ -1,4 +1,4 @@
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import type {InteractionStreamEventLike} from '../../src/services/geminiInteractions.ts';
 import type {KeyValueStorageLike} from '../../src/ui/aiSettings.ts';
 
@@ -24,4 +24,4 @@ export async function* asAsyncStream(
   }
 }
 
-export const SAMPLE_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+export const SAMPLE_SCRIPT = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;

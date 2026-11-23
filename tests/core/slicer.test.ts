@@ -4,10 +4,10 @@ import {
   sliceAuteurScript,
   validateAuteurReview,
 } from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 
-const INTERROGATION = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
-const POV_ONER = BUNDLED_CRAFT_EXEMPLARS['forest-pov-horror'].content;
+const INTERROGATION = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+const POV_ONER = TEST_CRAFT_EXEMPLARS['forest-pov-horror'].content;
 
 describe('Auteur Script Composable Lens Slicer & Review Validator', () => {
   it('isolates [ACT] only alongside deterministically resolved [CAM] framing', () => {

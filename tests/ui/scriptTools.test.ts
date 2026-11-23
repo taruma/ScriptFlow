@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {projectAuteurPatchPreview, toAuteurEnvelope} from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {BUILTIN_SCRIPT_TOOLS, composeAgentContext} from '../../src/services/auteurKnowledge.ts';
 import {
   buildLineDiff,
@@ -554,7 +554,7 @@ describe('Phase 3A hardening: JSON Schema sanitization & lint-gated draft stagin
 });
 
 describe('ask_question opt-in clarifying workflow', () => {
-  const sampleScript = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+  const sampleScript = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
   it('omits ask_question by default across all focuses and exposes it only when explicitly enabled outside Audit', () => {
     for (const focus of ['auto', 'draft', 'refine', 'audit'] as const) {

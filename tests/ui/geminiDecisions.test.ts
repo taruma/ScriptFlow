@@ -1,10 +1,10 @@
 import {describe, expect, it} from 'vitest';
 import {computeSnapshotHash} from '../../src/core/index.ts';
 import {
-  BUNDLED_CRAFT_EXEMPLARS,
   BUNDLED_QUICK_SCAN_RULES,
   resolveQuickScanRuleCatalog,
 } from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {
   buildQuickScanEscalationPrompt,
   buildQuickScanPayload,
@@ -19,8 +19,8 @@ import {getLatestActiveQuickScan, type AiChatMessage} from '../../src/ui/aiAssis
 import {buildLiveQuickScanIndicators} from '../../src/ui/quickScanIndicators.ts';
 import {stabilizeBeatQuickScanMap} from '../../src/ui/referenceStability.ts';
 
-const INTERROGATION_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
-const MONTAGE_SCRIPT = BUNDLED_CRAFT_EXEMPLARS['heist-montage'].content;
+const INTERROGATION_SCRIPT = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+const MONTAGE_SCRIPT = TEST_CRAFT_EXEMPLARS['heist-montage'].content;
 
 describe('Quick Scan declarative rule catalog & AST matrix builder', () => {
   it('loads and validates the bundled Quick Scan rules cleanly', () => {

@@ -11,13 +11,13 @@ import {
   toAuteurEnvelope,
   toAuteurIR,
 } from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {BLANK_SCRIPT_TEMPLATE, SCRIPT_PRESETS} from '../../src/data/presets.ts';
 
 describe('Auteur Script JSON IR Codec & Draft Compiler', () => {
   it('round-trips all canonical exemplars, bundled presets, and blank template cleanly', () => {
     const strictScripts = [
-      ...Object.values(BUNDLED_CRAFT_EXEMPLARS).map((p) => p.content),
+      ...Object.values(TEST_CRAFT_EXEMPLARS).map((p) => p.content),
       BLANK_SCRIPT_TEMPLATE,
     ];
     for (const raw of strictScripts) {
@@ -168,7 +168,7 @@ Continue seamlessly from @video1.
   });
 
   it('resolves inherited effectiveFraming across bare holds, recalls, and moving oner transitions', () => {
-    const coverageEnv = toAuteurEnvelope(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
+    const coverageEnv = toAuteurEnvelope(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     expect(coverageEnv.derived.sceneTopology).toBe('multi_camera_coverage');
     expect(coverageEnv.derived.cameraSlots['01']).toEqual({
       subStateTag: 'CAM',

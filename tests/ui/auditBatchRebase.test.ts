@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {applyAuteurPatch, toAuteurEnvelope, type AuteurPatch} from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {
   buildLineDiff,
   composeAuditFixesBatch,
@@ -9,7 +9,7 @@ import {
   type PatchSuggestion,
 } from '../../src/services/scriptTools.ts';
 
-const INTERROGATION = BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content;
+const INTERROGATION = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
 function makeFix(id: string, rawText: string, patch: AuteurPatch): PatchSuggestion {
   const before = toAuteurEnvelope(rawText);

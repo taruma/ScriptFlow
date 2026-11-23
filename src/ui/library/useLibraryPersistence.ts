@@ -31,6 +31,13 @@ import {
 
 const AUTOSAVE_DEBOUNCE_MS = 350;
 
+const RETIRED_BUNDLED_EXAMPLE_IDS = new Set([
+  'interrogation-coverage',
+  'subway-train-oner',
+  'forest-pov-horror',
+  'heist-montage',
+]);
+
 export interface InitialEditorState {
   activeScript: ActiveScriptRef;
   rawText: string;
@@ -127,7 +134,9 @@ export function reconcileHydratedScript({
 
     // Target is a custom ID missing from IndexedDB: rescue from the localStorage mirror
     // instead of silently discarding user work and falling back to a bundled example.
+    // Never rescue retired bundled example IDs into custom scripts.
     const canRescueFromMirror =
+      !RETIRED_BUNDLED_EXAMPLE_IDS.has(cleanTargetId) &&
       mirror.activeScriptId === cleanTargetId &&
       mirror.rawText !== null &&
       (mirror.rawText.trim().length > 0 || mirror.updatedAt !== null);
@@ -163,13 +172,15 @@ export function resolveInitialEditorState(): InitialEditorState {
       };
     }
 
-    const savedScript = readSavedScriptRaw();
-    if (savedScript !== null) {
-      return {
-        activeScript: {kind: 'custom', id: savedActiveId},
-        rawText: savedScript,
-        title: readSavedTitle() ?? APP_META.untitledScene,
-      };
+    if (!RETIRED_BUNDLED_EXAMPLE_IDS.has(savedActiveId)) {
+      const savedScript = readSavedScriptRaw();
+      if (savedScript !== null) {
+        return {
+          activeScript: {kind: 'custom', id: savedActiveId},
+          rawText: savedScript,
+          title: readSavedTitle() ?? APP_META.untitledScene,
+        };
+      }
     }
   }
 
@@ -326,7 +337,7 @@ export function useLibraryPersistence({
       if (options?.switchToLive) {
         onSwitchToLive();
       }
-      mirrorActiveScriptToLocalStorage(example.id, example.content, example.title);
+      mirrorActiveScriptToLocalStorage(example.id, example.content, example.title, null);
     },
     [
       cancelPendingSave,
@@ -502,7 +513,7 @@ export function useLibraryPersistence({
     if (!isLibraryHydratedRef.current) return;
 
     if (activeScript.kind !== 'custom') {
-      mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle);
+      mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle, null);
       return;
     }
 

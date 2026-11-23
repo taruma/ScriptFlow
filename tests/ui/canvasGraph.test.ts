@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {extractMetadata, parseAuteurScript} from '../../src/core/index.ts';
-import {BUNDLED_CRAFT_EXEMPLARS} from '../../src/data/knowledge/index.ts';
+import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {SCRIPT_PRESETS} from '../../src/data/presets.ts';
 import {
   buildCanvasLayout,
@@ -45,7 +45,7 @@ function makeLayoutOptions(overrides: Partial<GraphLayoutOptions> = {}): GraphLa
 describe('Graph View Pure Scene Model & Deterministic Layout', () => {
   it('derives clean models across canonical craft exemplars and bundled JSON presets with Shot Chambers and RECALL links', () => {
     // Interrogation Room Coverage (CAM 01 -> CAM 02 -> CAM 01 RECALL)
-    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
+    const coverage = buildModelFromRaw(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     expect(coverage.topology).toBe('multi_camera_coverage');
     expect(coverage.stagingBlocks.map((b) => b.name)).toEqual([
       'INTENT',
@@ -159,7 +159,7 @@ Evan stands in LOC01 wearing EV01 as rain taps the awning.
   });
 
   it('defaults to all Macro-States coupled with Raw Input branches collapsed', () => {
-    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
+    const coverage = buildModelFromRaw(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const defaults = createDefaultGraphExpansionState(coverage);
 
     expect(defaults.expandedIds.size).toBe(0);
@@ -265,7 +265,7 @@ Location: Rainy alley -> LOC01
 
     // Interrogation Coverage: at rest, RECALL shows cleanly on the spine (`RECALL CAM 01`) with zero lane clutter;
     // focusing CAM 01, isolating CAM, or toggling Show Threads reveals the stepped RECALL lane (`S1 -> S3`)
-    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
+    const coverage = buildModelFromRaw(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const restingCoverage = buildCanvasLayout(coverage, makeLayoutOptions());
     expect(restingCoverage.edges.some((e) => e.kind === 'recall')).toBe(false);
     expect(
@@ -403,7 +403,7 @@ Minimal scene.
   });
 
   it('preserves React Flow measured dimensions, selection, style identity, and active drag positions across layout merges', () => {
-    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
+    const coverage = buildModelFromRaw(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const layout1 = buildCanvasLayout(coverage, makeLayoutOptions());
     const initial = mergeLayoutIntoFlowNodes<FlowNodeLike>([], layout1.nodes, {});
 
@@ -1010,7 +1010,7 @@ Featuring @img1 as Detective.
   });
 
   it('detects modified Graph View state cleanly via isGraphViewModified across LR and TB defaults', () => {
-    const coverage = buildModelFromRaw(BUNDLED_CRAFT_EXEMPLARS['interrogation-coverage'].content);
+    const coverage = buildModelFromRaw(TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content);
     const aesBlock = coverage.stagingBlocks.find((b) => b.kind === 'AESTHETIC')!;
 
     // Resting defaults in LR and TB are unmodified
