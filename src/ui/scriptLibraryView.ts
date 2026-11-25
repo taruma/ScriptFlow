@@ -26,7 +26,7 @@ export {
 };
 
 export interface ActiveScriptRef {
-  kind: 'custom' | 'example';
+  kind: 'custom' | 'example' | 'remote';
   id: string;
 }
 

@@ -7,6 +7,7 @@
     "tags": ["montage", "lookbook-tokens", "onscreen-text", "comedy"],
     "overridesById": {
       "script-9e58b61c-7652-4472-b1a7-1685bcea812a": {
+        "slug": "the-grand-continental",
         "branchNote": "1850s caper montage · lookbook tokens (LOC/RS/EV/FN) & title card"
       }
     }
@@ -19,6 +20,7 @@
     "tags": ["oner", "2d-hybrid", "steadicam", "comedy"],
     "overridesById": {
       "script-7beb2aad-2a80-472d-b9e7-3f536b46bf51": {
+        "slug": "mark-and-lucas",
         "branchNote": "Live-action + 2D cel hybrid Steadicam oner · strict hand-prop tracking"
       }
     }
@@ -31,6 +33,7 @@
     "tags": ["multi-cam", "3d-clay-hybrid", "blocking", "comedy"],
     "overridesById": {
       "script-7a1b8107-26df-45d8-b09f-9a10b85a0f87": {
+        "slug": "balloon-panic",
         "branchNote": "Live-action + 3D clay hybrid · spatial [BLOCK], [LIGHT] & prop handoff"
       }
     }
@@ -43,6 +46,7 @@
     "tags": ["oner", "vlog-pov", "bilingual", "documentary"],
     "overridesById": {
       "script-cbd82a05-d987-4d9a-aa42-5bfb11f996af": {
+        "slug": "robert-machu-pichu",
         "branchNote": "Handheld vlog oner · English/Spanish bilingual dialogue & @image1"
       }
     }
@@ -55,19 +59,23 @@
     "summary": "4-part branched @video1 continuation drama at Cabo da Roca across 5 camera setups.",
     "overridesById": {
       "script-fe549d03-5c03-4ddd-be5f-312e315fd530": {
+        "slug": "three-years-late-part-1",
         "branchNote": "Part 1 · Cabo da Roca ensemble banter & initial 5-cam setup",
         "tags": ["multi-cam", "ensemble", "drama"]
       },
       "script-68ddf910-4548-43fd-a58c-6a790fae540c": {
+        "slug": "three-years-late-part-2",
         "branchNote": "Part 2 · @video1 continuation: deck banter shifts to quiet reflection",
         "tags": ["video-continuation", "multi-cam", "drama"]
       },
       "script-6c79bcf1-0d6f-4e16-9df2-d5c557759dec": {
+        "slug": "three-years-late-part-3",
         "title": "Three Years Late - Part 3",
         "branchNote": "Part 3 · @video1 continuation: ocean-rail confession & gratitude",
         "tags": ["video-continuation", "multi-cam", "drama"]
       },
       "script-49eeef60-77c6-410b-b949-55b99bc045e9": {
+        "slug": "three-years-late-part-4",
         "branchNote": "Part 4 · @video1 continuation: solitary birthday reveal",
         "tags": ["video-continuation", "multi-cam", "drama"]
       }
@@ -81,10 +89,12 @@
     "summary": "2-part branched @video1 continuation chamber drama featuring @voice bindings and metronome continuity.",
     "overridesById": {
       "script-782a0624-5756-418f-a780-c0c477e33c6f": {
+        "slug": "frequency-over-force-part-1",
         "branchNote": "Part 1 · Lecture hall debate & metronome anchor (with @voice refs)",
         "tags": ["multi-cam", "voice-refs", "drama"]
       },
       "script-02983927-2a85-4fee-ab6e-3befdc79c79b": {
+        "slug": "frequency-over-force-part-2",
         "branchNote": "Part 2 · @video1 continuation: resonance breakthrough",
         "tags": ["video-continuation", "voice-refs", "drama"]
       }

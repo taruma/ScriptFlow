@@ -1,6 +1,7 @@
 import catalogManifest from './catalog.json';
 
 export interface ExampleScriptOverride {
+  slug?: string;
   title?: string;
   topology?: string;
   summary?: string;
@@ -12,6 +13,7 @@ export interface ExampleScriptOverride {
 
 export interface ExampleCatalogEntry {
   file: string;
+  slug?: string;
   topology: string;
   summary: string;
   category?: string;
@@ -22,6 +24,7 @@ export interface ExampleCatalogEntry {
 
 export interface BundledExample {
   id: string;
+  slug: string;
   title: string;
   topology: string;
   summary: string;
@@ -53,6 +56,15 @@ const RAW_EXAMPLE_FILES = import.meta.glob<string>('./*.json', {
   eager: true,
   import: 'default',
 });
+
+function normalizeExampleSlug(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 function normalizeExampleContent(raw: string): string {
   return raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
@@ -157,6 +169,7 @@ export function resolveExampleCatalog(
   rawFiles: Readonly<Record<string, unknown>>
 ): BundledExample[] {
   const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
   const resolved: BundledExample[] = [];
 
   for (const entry of manifest) {
@@ -193,6 +206,16 @@ export function resolveExampleCatalog(
 
       const override = entry.overridesById?.[id];
       const title = (override?.title ?? rawScript.title ?? '').trim() || 'Untitled Example';
+      const rawSlug = override?.slug ?? (orderedScripts.length === 1 ? entry.slug : undefined) ?? title;
+      const slug = normalizeExampleSlug(rawSlug);
+      if (slug.length === 0) {
+        throw new Error(`Bundled example "${id}" in "${normalizedFile}" resolved to an empty slug.`);
+      }
+      if (seenSlugs.has(slug)) {
+        throw new Error(`Duplicate bundled example slug "${slug}" in "${normalizedFile}".`);
+      }
+      seenSlugs.add(slug);
+
       const topology = (override?.topology ?? entry.topology).trim();
       const summary = (override?.summary ?? entry.summary).trim();
       const category = (override?.category ?? entry.category)?.trim() || undefined;
@@ -215,6 +238,7 @@ export function resolveExampleCatalog(
 
       resolved.push({
         id,
+        slug,
         title,
         topology,
         summary,
@@ -244,4 +268,23 @@ export const BUNDLED_EXAMPLES: readonly BundledExample[] = resolveExampleCatalog
 
 export function getBundledExampleById(id: string): BundledExample | null {
   return BUNDLED_EXAMPLES.find((example) => example.id === id) ?? null;
+}
+
+/**
+ * Resolves a bundled example by exact `id` first, then case-insensitive readable `slug`.
+ */
+export function getBundledExampleByIdOrSlug(
+  identifier: string,
+  examples: readonly BundledExample[] = BUNDLED_EXAMPLES
+): BundledExample | null {
+  const trimmed = identifier.trim();
+  if (!trimmed) return null;
+
+  const byId = examples.find((example) => example.id === trimmed);
+  if (byId) return byId;
+
+  const normalizedSlug = normalizeExampleSlug(trimmed);
+  if (!normalizedSlug) return null;
+
+  return examples.find((example) => example.slug.toLowerCase() === normalizedSlug) ?? null;
 }

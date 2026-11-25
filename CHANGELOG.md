@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+- **URL Deep-Linking (`/?example=`, `/?url=`, `/?agents=`) & Readable Example Slugs**:
+  - Added readable `slug` identifiers in `src/data/examples/catalog.json` (`the-grand-continental`, `mark-and-lucas`, `balloon-panic`, `robert-machu-pichu`, `three-years-late-part-1`..`4`, `frequency-over-force-part-1`..`2`) and `getBundledExampleByIdOrSlug()` in `src/data/examples/index.ts`.
+  - Added `src/ui/urlLaunch.ts` enforcing mutually exclusive single-action URL parameters (`?example=`, `?url=`, `?agents=`), `http:`/`https:` validation, `history.replaceState` query cleanup, and CORS/size-bounded remote text fetching.
+  - On desktop (`>= 640px`), `/?url=<file-url>` fetches and pre-populates `ScriptImportModal` (pre-flight scorecard + Merge/New/Replace confirmation) and `/?agents=<json-url>` fetches and opens `AgentContextImportDialog` directly without auto-opening the AI sidebar.
+  - On narrow viewports (`< 640px`), modals are skipped: `/?example=` and `/?url=` (opening as a read-only `'remote'` preview without modifying IndexedDB or `localStorage`) are accepted, while `/?agents=` is ignored with a toast.
+
+---
+
 ## [1.0.0] - 2026-11-23
 
 Initial public release of **ScriptFlow** (`v1.0.0`) supporting **Auteur Script `v0.4.0`**.

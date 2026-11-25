@@ -1,5 +1,5 @@
-import {type ChangeEvent, type DragEvent, useEffect, useRef, useState} from 'react';
-import {AlertTriangle, FileUp, Upload, X} from 'lucide-react';
+import {type ChangeEvent, type DragEvent, useCallback, useEffect, useRef, useState} from 'react';
+import {AlertTriangle, FileUp, Loader2, Upload, X} from 'lucide-react';
 import type {LintRuleOverrides} from '../core/index.ts';
 import type {BundledExample} from '../data/examples/index.ts';
 import {UI_LABELS} from '../ui/labels.ts';
@@ -24,6 +24,8 @@ export interface ScriptImportModalProps {
   customScripts: readonly ScriptRecord[];
   examples: readonly BundledExample[];
   ruleOverrides?: LintRuleOverrides;
+  initialReport?: ImportPreflightResult | null;
+  remoteLoadingUrl?: string | null;
   onOpenExistingCustomScript: (record: ScriptRecord) => Promise<void> | void;
   onForkExample: (example: BundledExample) => Promise<void> | void;
   onCommitSingleScript: (options: {
@@ -50,6 +52,8 @@ function ScriptImportModalContent({
   customScripts,
   examples,
   ruleOverrides,
+  initialReport = null,
+  remoteLoadingUrl = null,
   onOpenExistingCustomScript,
   onForkExample,
   onCommitSingleScript,
@@ -60,12 +64,41 @@ function ScriptImportModalContent({
   const dragDepthRef = useRef(0);
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [report, setReport] = useState<ImportPreflightResult | null>(null);
-  const [draftTitle, setDraftTitle] = useState('');
+  const [report, setReport] = useState<ImportPreflightResult | null>(initialReport);
+  const [draftTitle, setDraftTitle] = useState(() =>
+    initialReport?.kind === 'single-script' ? initialReport.suggestedTitle : ''
+  );
   const [importMode, setImportMode] = useState<'new' | 'replace'>('new');
   const [updateTitleOnReplace, setUpdateTitleOnReplace] = useState(false);
-  const [selectedBackupIds, setSelectedBackupIds] = useState<Set<string>>(() => new Set());
+  const [selectedBackupIds, setSelectedBackupIds] = useState<Set<string>>(() =>
+    initialReport?.kind === 'library-backup'
+      ? new Set(
+          initialReport.items.filter((item) => item.defaultSelected).map((item) => item.record.id)
+        )
+      : new Set()
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const applyPreflightReport = useCallback((result: ImportPreflightResult) => {
+    setReport(result);
+    if (result.kind === 'single-script') {
+      setDraftTitle(result.suggestedTitle);
+      setImportMode('new');
+      setUpdateTitleOnReplace(false);
+    } else if (result.kind === 'library-backup') {
+      setSelectedBackupIds(
+        new Set(
+          result.items.filter((item) => item.defaultSelected).map((item) => item.record.id)
+        )
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialReport) {
+      applyPreflightReport(initialReport);
+    }
+  }, [initialReport, applyPreflightReport]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -87,19 +120,7 @@ function ScriptImportModalContent({
         activeScript,
         ruleOverrides,
       });
-      setReport(result);
-
-      if (result.kind === 'single-script') {
-        setDraftTitle(result.suggestedTitle);
-        setImportMode('new');
-        setUpdateTitleOnReplace(false);
-      } else if (result.kind === 'library-backup') {
-        setSelectedBackupIds(
-          new Set(
-            result.items.filter((item) => item.defaultSelected).map((item) => item.record.id)
-          )
-        );
-      }
+      applyPreflightReport(result);
     } catch {
       setReport({
         kind: 'error',
@@ -275,7 +296,21 @@ function ScriptImportModalContent({
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto auteur-pane-scroll p-5 space-y-4">
-          {!report && (
+          {!report && remoteLoadingUrl && (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border-main bg-surface-subtle/60 px-6 py-12 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+              <div className="space-y-1 max-w-md">
+                <div className="text-sm font-semibold text-text-main">
+                  {labels.loadingRemoteHeading}
+                </div>
+                <p className="text-xs text-text-muted break-all">
+                  {labels.loadingRemoteDesc(remoteLoadingUrl)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!report && !remoteLoadingUrl && (
             <div className="space-y-4">
               <div
                 onClick={() => fileInputRef.current?.click()}

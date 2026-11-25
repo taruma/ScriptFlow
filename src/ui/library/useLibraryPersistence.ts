@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type Dispatch,
   type RefObject,
   type SetStateAction,
@@ -160,7 +161,18 @@ export function reconcileHydratedScript({
   return {kind: 'example', example: defaultExample};
 }
 
-export function resolveInitialEditorState(): InitialEditorState {
+export function resolveInitialEditorState(initialExampleId?: string | null): InitialEditorState {
+  if (initialExampleId) {
+    const initialExample = getBundledExampleById(initialExampleId);
+    if (initialExample) {
+      return {
+        activeScript: {kind: 'example', id: initialExample.id},
+        rawText: initialExample.content,
+        title: initialExample.title,
+      };
+    }
+  }
+
   const savedActiveId = readActiveScriptId();
   if (savedActiveId) {
     const matchedExample = getBundledExampleById(savedActiveId);
@@ -224,6 +236,7 @@ export function upsertSortedScript(
 
 export interface UseLibraryPersistenceOptions {
   initial: InitialEditorState;
+  initialExampleId?: string | null;
   activeScript: ActiveScriptRef;
   rawText: string;
   sceneTitle: string;
@@ -239,8 +252,15 @@ export interface UseLibraryPersistenceOptions {
 }
 
 export interface UseLibraryPersistenceResult {
+  isHydrated: boolean;
   activateCustomScript: (record: ScriptRecord, options?: {switchToLive?: boolean}) => void;
   activateExample: (example: BundledExample, options?: {switchToLive?: boolean}) => void;
+  activateRemotePreview: (
+    title: string,
+    rawText: string,
+    remoteId: string,
+    options?: {switchToLive?: boolean}
+  ) => void;
   persistCurrentCustomIfDirty: (
     override?: PersistCurrentCustomOverride
   ) => Promise<ScriptRecord | null>;
@@ -255,6 +275,7 @@ export interface UseLibraryPersistenceResult {
  */
 export function useLibraryPersistence({
   initial,
+  initialExampleId,
   activeScript,
   rawText,
   sceneTitle,
@@ -269,6 +290,8 @@ export function useLibraryPersistence({
   onSwitchToLive,
 }: UseLibraryPersistenceOptions): UseLibraryPersistenceResult {
   const isLibraryHydratedRef = useRef<boolean>(false);
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const initialExampleIdRef = useRef<string | null | undefined>(initialExampleId);
   const saveTimerRef = useRef<number | null>(null);
   const lastSavedSnapshotRef = useRef<SavedScriptSnapshot | null>({
     id: initial.activeScript.id,
@@ -338,6 +361,43 @@ export function useLibraryPersistence({
         onSwitchToLive();
       }
       mirrorActiveScriptToLocalStorage(example.id, example.content, example.title, null);
+    },
+    [
+      cancelPendingSave,
+      activeScriptRef,
+      rawTextRef,
+      sceneTitleRef,
+      setActiveScript,
+      setHistory,
+      setSceneTitle,
+      onSwitchToLive,
+    ]
+  );
+
+  const activateRemotePreview = useCallback(
+    (
+      title: string,
+      nextRawText: string,
+      remoteId: string,
+      options?: {switchToLive?: boolean}
+    ) => {
+      cancelPendingSave();
+      const cleanTitle = title.trim() || APP_META.untitledScene;
+      const nextRef: ActiveScriptRef = {kind: 'remote', id: remoteId};
+      activeScriptRef.current = nextRef;
+      rawTextRef.current = nextRawText;
+      sceneTitleRef.current = cleanTitle;
+      lastSavedSnapshotRef.current = {
+        id: remoteId,
+        rawText: nextRawText,
+        title: cleanTitle,
+      };
+      setActiveScript(nextRef);
+      setHistory(createDocumentHistory(nextRawText));
+      setSceneTitle(cleanTitle);
+      if (options?.switchToLive) {
+        onSwitchToLive();
+      }
     },
     [
       cancelPendingSave,
@@ -442,7 +502,8 @@ export function useLibraryPersistence({
       let loadedRecords = await scriptLibraryDb.list();
       if (cancelled) return;
 
-      const targetId = migration.activeScriptId ?? initialMirror.activeScriptId;
+      const targetId =
+        initialExampleIdRef.current ?? migration.activeScriptId ?? initialMirror.activeScriptId;
       const resolution = reconcileHydratedScript({
         loadedRecords,
         targetId,
@@ -473,6 +534,7 @@ export function useLibraryPersistence({
       }
 
       isLibraryHydratedRef.current = true;
+      setIsHydrated(true);
     };
 
     void hydrate();
@@ -512,6 +574,10 @@ export function useLibraryPersistence({
   useEffect(() => {
     if (!isLibraryHydratedRef.current) return;
 
+    if (activeScript.kind === 'remote') {
+      return;
+    }
+
     if (activeScript.kind !== 'custom') {
       mirrorActiveScriptToLocalStorage(activeScript.id, rawText, sceneTitle, null);
       return;
@@ -547,8 +613,10 @@ export function useLibraryPersistence({
   }, [activeScript, rawText, sceneTitle, persistCurrentCustomIfDirty]);
 
   return {
+    isHydrated,
     activateCustomScript,
     activateExample,
+    activateRemotePreview,
     persistCurrentCustomIfDirty,
     cancelPendingSave,
     markSavedSnapshot,

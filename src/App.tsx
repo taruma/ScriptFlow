@@ -6,14 +6,40 @@ import {LiveDocument} from './components/LiveDocument.tsx';
 import {ScriptLibraryModal} from './components/ScriptLibraryModal.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
-import {BUNDLED_EXAMPLES} from './data/examples/index.ts';
+import {BUNDLED_EXAMPLES, getBundledExampleByIdOrSlug} from './data/examples/index.ts';
 import type {QuickScanResult} from './services/geminiDecisions.ts';
+import {
+  applyAgentContextImport,
+  buildAgentContextPackExport,
+  parseAgentContextPack,
+  type AgentContextImportMode,
+  type AgentContextImportSelection,
+  type AuteurAgentContextPack,
+} from './ui/agentContextCodec.ts';
 import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
+import {loadStoredAiSkills, saveStoredAiSkills, type AiSkillsState} from './ui/aiSkillsStore.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
 import type {ActiveAiPatchItem} from './ui/patchIndicators.ts';
+import {
+  loadStoredQuickScanRulesState,
+  saveStoredQuickScanRulesState,
+  type QuickScanRulesState,
+} from './ui/quickScanRulesStore.ts';
 import {stabilizeAestheticTokens} from './ui/referenceStability.ts';
+import {
+  inspectImportedFile,
+  parseImportedFile,
+  triggerTextFileDownload,
+  type ImportPreflightResult,
+} from './ui/scriptFileIO.ts';
 import {getScriptFamilyTree} from './ui/scriptLibraryView.ts';
+import {
+  clearUrlLaunchParamsFromLocation,
+  fetchRemoteTextFile,
+  parseUrlLaunchParams,
+  type UrlLaunchAction,
+} from './ui/urlLaunch.ts';
 import {useDocumentMutations} from './ui/useDocumentMutations.ts';
 import {useGlobalEditorShortcuts} from './ui/useGlobalEditorShortcuts.ts';
 import {resolveNarrowWorkspaceState, useNarrowViewport} from './ui/useNarrowViewport.ts';
@@ -56,13 +82,43 @@ const ScriptImportModal = lazy(() =>
   }))
 );
 
+const AgentContextImportDialog = lazy(() =>
+  import('./components/AgentContextImportDialog.tsx').then((mod) => ({
+    default: mod.AgentContextImportDialog,
+  }))
+);
+
+interface PendingAgentUrlImport {
+  filename: string;
+  pack: AuteurAgentContextPack;
+  warnings: string[];
+  currentSkills: AiSkillsState;
+  currentQuickScanRules: QuickScanRulesState;
+}
+
 export default function App() {
+  const initialUrlActionRef = useRef<UrlLaunchAction | null>(null);
+  if (initialUrlActionRef.current === null) {
+    initialUrlActionRef.current =
+      typeof window !== 'undefined'
+        ? parseUrlLaunchParams(window.location.search, window.location.href)
+        : {kind: 'none'};
+  }
+  const initialUrlAction = initialUrlActionRef.current;
+  const initialExampleMatch =
+    initialUrlAction.kind === 'example'
+      ? getBundledExampleByIdOrSlug(initialUrlAction.value)
+      : null;
+
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const {settings, updateSettings} = useEditorSettings();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [remoteImportUrl, setRemoteImportUrl] = useState<string | null>(null);
+  const [remoteImportReport, setRemoteImportReport] = useState<ImportPreflightResult | null>(null);
+  const [pendingAgentImport, setPendingAgentImport] = useState<PendingAgentUrlImport | null>(null);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
   const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
@@ -72,6 +128,8 @@ export default function App() {
   const [activeQuickScan, setActiveQuickScan] = useState<QuickScanResult | null>(null);
   const livePatchActionsRef = useRef<AiLivePatchActionHandlers | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
+  const handledUrlLaunchRef = useRef<boolean>(false);
+  const urlFetchAbortRef = useRef<AbortController | null>(null);
 
   const handleActiveAiPatchesChange = useCallback((next: ActiveAiPatchItem[]) => {
     setActiveAiPatches((prev) => (prev.length === 0 && next.length === 0 ? prev : next));
@@ -114,6 +172,9 @@ export default function App() {
     setIsAiOpen(false);
     setIsDebugOpen(false);
     setIsImportModalOpen(false);
+    setRemoteImportUrl(null);
+    setRemoteImportReport(null);
+    setPendingAgentImport(null);
     setIsInfoOpen(false);
     setIsVersionHistoryOpen(false);
   }, [isNarrow]);
@@ -133,11 +194,199 @@ export default function App() {
   }, []);
 
   const library = useScriptLibrary({
+    initialExampleId: initialExampleMatch?.id ?? null,
     ruleOverrides: settings.lintRuleOverrides,
     onSwitchToLive: handleSwitchToLive,
     onRequestConfirm: setConfirmRequest,
     onToast: setToastMessage,
   });
+
+  useEffect(() => {
+    if (handledUrlLaunchRef.current) return;
+    if (initialUrlAction.kind === 'none') {
+      handledUrlLaunchRef.current = true;
+      return;
+    }
+    if (initialUrlAction.kind === 'url' && !library.isHydrated) {
+      return;
+    }
+
+    handledUrlLaunchRef.current = true;
+    clearUrlLaunchParamsFromLocation();
+
+    if (initialUrlAction.kind === 'conflict') {
+      setToastMessage(UI_LABELS.toasts.urlLaunchConflict);
+      return;
+    }
+
+    if (initialUrlAction.kind === 'invalid_url') {
+      setToastMessage(
+        UI_LABELS.toasts.urlLaunchInvalidUrl(initialUrlAction.param, initialUrlAction.reason)
+      );
+      return;
+    }
+
+    if (initialUrlAction.kind === 'example') {
+      if (!initialExampleMatch) {
+        setToastMessage(UI_LABELS.toasts.urlLaunchExampleNotFound(initialUrlAction.value));
+      }
+      return;
+    }
+
+    if (initialUrlAction.kind === 'agents') {
+      if (isNarrow) {
+        setToastMessage(UI_LABELS.toasts.urlLaunchAgentsUnsupportedNarrow);
+        return;
+      }
+
+      const controller = new AbortController();
+      urlFetchAbortRef.current = controller;
+      let settled = false;
+
+      void (async () => {
+        const res = await fetchRemoteTextFile(initialUrlAction.resolvedUrl, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        settled = true;
+
+        if (!res.ok) {
+          setToastMessage(UI_LABELS.toasts.urlLaunchFetchFailed(res.error));
+          return;
+        }
+
+        const parsed = parseAgentContextPack(res.content);
+        if (!parsed.ok) {
+          setToastMessage(UI_LABELS.toasts.urlLaunchFetchFailed(parsed.error));
+          return;
+        }
+
+        setPendingAgentImport({
+          filename: initialUrlAction.filename,
+          pack: parsed.pack,
+          warnings: parsed.warnings,
+          currentSkills: loadStoredAiSkills(),
+          currentQuickScanRules: loadStoredQuickScanRulesState(),
+        });
+      })();
+
+      return () => {
+        if (!settled) {
+          controller.abort();
+          handledUrlLaunchRef.current = false;
+        }
+      };
+    }
+
+    // initialUrlAction.kind === 'url'
+    const controller = new AbortController();
+    urlFetchAbortRef.current = controller;
+    let settled = false;
+
+    if (isNarrow) {
+      void (async () => {
+        const res = await fetchRemoteTextFile(initialUrlAction.resolvedUrl, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        settled = true;
+
+        if (!res.ok) {
+          setToastMessage(UI_LABELS.toasts.urlLaunchFetchFailed(res.error));
+          return;
+        }
+
+        const parsed = parseImportedFile(initialUrlAction.filename, res.content);
+        if (!parsed.ok) {
+          setToastMessage(UI_LABELS.toasts.urlLaunchFetchFailed(parsed.error));
+          return;
+        }
+
+        if (parsed.kind === 'single-script') {
+          await library.handleOpenRemotePreview(
+            parsed.title,
+            parsed.rawText,
+            initialUrlAction.resolvedUrl
+          );
+          setToastMessage(UI_LABELS.toasts.urlLaunchRemoteLoaded(parsed.title));
+          return;
+        }
+
+        const first = parsed.backup.scripts[0];
+        if (!first) {
+          setToastMessage(
+            UI_LABELS.toasts.urlLaunchFetchFailed('Backup JSON contains no scripts.')
+          );
+          return;
+        }
+        await library.handleOpenRemotePreview(
+          first.title,
+          first.rawText,
+          initialUrlAction.resolvedUrl
+        );
+        setToastMessage(
+          UI_LABELS.toasts.urlLaunchRemoteLoadedFromBundle(
+            first.title,
+            parsed.backup.scripts.length
+          )
+        );
+      })();
+
+      return () => {
+        if (!settled) {
+          controller.abort();
+          handledUrlLaunchRef.current = false;
+        }
+      };
+    }
+
+    setRemoteImportReport(null);
+    setRemoteImportUrl(initialUrlAction.rawUrl);
+    setIsImportModalOpen(true);
+
+    void (async () => {
+      const res = await fetchRemoteTextFile(initialUrlAction.resolvedUrl, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      settled = true;
+      setRemoteImportUrl(null);
+
+      if (!res.ok) {
+        setRemoteImportReport({
+          kind: 'error',
+          filename: initialUrlAction.filename,
+          error: res.error,
+        });
+        return;
+      }
+
+      setRemoteImportReport(
+        inspectImportedFile(initialUrlAction.filename, res.content, {
+          customScripts: library.customScripts,
+          examples: BUNDLED_EXAMPLES,
+          activeScript: library.activeScript,
+          ruleOverrides: settings.lintRuleOverrides,
+        })
+      );
+    })();
+
+    return () => {
+      if (!settled) {
+        controller.abort();
+        handledUrlLaunchRef.current = false;
+      }
+    };
+  }, [
+    initialUrlAction,
+    initialExampleMatch,
+    isNarrow,
+    library.isHydrated,
+    library.customScripts,
+    library.activeScript,
+    library.handleOpenRemotePreview,
+    settings.lintRuleOverrides,
+  ]);
 
   const {
     history,
@@ -220,6 +469,7 @@ export default function App() {
     confirmRequest !== null ||
     isLibraryOpen ||
     isImportModalOpen ||
+    pendingAgentImport !== null ||
     isVersionHistoryOpen ||
     isInfoOpen;
 
@@ -300,6 +550,55 @@ export default function App() {
     [updateSettings]
   );
 
+  const handleOpenManualImportModal = useCallback(() => {
+    urlFetchAbortRef.current?.abort();
+    setRemoteImportUrl(null);
+    setRemoteImportReport(null);
+    setIsImportModalOpen(true);
+  }, []);
+
+  const handleCloseImportModal = useCallback(() => {
+    urlFetchAbortRef.current?.abort();
+    setRemoteImportUrl(null);
+    setRemoteImportReport(null);
+    setIsImportModalOpen(false);
+  }, []);
+
+  const handleExportAgentBackup = useCallback((): boolean => {
+    if (!pendingAgentImport) return false;
+    const exported = buildAgentContextPackExport(
+      pendingAgentImport.currentSkills,
+      pendingAgentImport.currentQuickScanRules
+    );
+    return triggerTextFileDownload(exported.filename, exported.content, exported.mimeType);
+  }, [pendingAgentImport]);
+
+  const handleConfirmAgentUrlImport = useCallback(
+    (
+      selection: AgentContextImportSelection,
+      mode: AgentContextImportMode,
+      impactSummaryText: string
+    ) => {
+      if (!pendingAgentImport) return;
+      const applied = applyAgentContextImport(
+        pendingAgentImport.pack,
+        selection,
+        mode,
+        pendingAgentImport.currentSkills,
+        pendingAgentImport.currentQuickScanRules
+      );
+      if (applied.skillsChanged) {
+        saveStoredAiSkills(applied.skills);
+      }
+      if (applied.quickScanChanged) {
+        saveStoredQuickScanRulesState(applied.quickScanRules);
+      }
+      setPendingAgentImport(null);
+      setToastMessage(UI_LABELS.toasts.urlLaunchAgentsImported(impactSummaryText));
+    },
+    [pendingAgentImport]
+  );
+
   return (
     <div className="min-h-screen lg:h-dvh lg:overflow-hidden bg-app text-text-main flex flex-col">
       <TopSlateBar
@@ -315,7 +614,7 @@ export default function App() {
         onViewModeChange={handleViewModeChange}
         onNewBlank={() => void library.handleNewBlank()}
         onDuplicateScript={() => void library.handleDuplicateActiveScript()}
-        onImportFile={() => setIsImportModalOpen(true)}
+        onImportFile={handleOpenManualImportModal}
         onFormatScript={mutations.handleFormatScript}
         onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
         onDownloadCanonical={library.handleDownloadCanonical}
@@ -445,7 +744,7 @@ export default function App() {
           onOpenExample={(example) => void library.handleOpenExample(example)}
           onForkExample={(example) => void library.handleForkExample(example)}
           onNewBlank={() => void library.handleNewBlank()}
-          onImportFile={() => setIsImportModalOpen(true)}
+          onImportFile={handleOpenManualImportModal}
           onDuplicateScript={(record) => void library.handleDuplicateScript(record)}
           onRenameScript={(record, nextTitle) =>
             void library.handleRenameScript(record, nextTitle)
@@ -513,16 +812,33 @@ export default function App() {
         <Suspense fallback={null}>
           <ScriptImportModal
             isOpen={isImportModalOpen}
-            onClose={() => setIsImportModalOpen(false)}
+            onClose={handleCloseImportModal}
             activeScript={activeScript}
             activeSceneTitle={sceneTitle}
             customScripts={customScripts}
             examples={BUNDLED_EXAMPLES}
             ruleOverrides={settings.lintRuleOverrides}
+            initialReport={remoteImportReport}
+            remoteLoadingUrl={remoteImportUrl}
             onOpenExistingCustomScript={library.handleOpenCustomScript}
             onForkExample={library.handleForkExample}
             onCommitSingleScript={library.handleCommitSingleScriptImport}
             onCommitLibraryBackup={library.handleCommitLibraryBackupImport}
+          />
+        </Suspense>
+      )}
+
+      {!isNarrow && pendingAgentImport && (
+        <Suspense fallback={null}>
+          <AgentContextImportDialog
+            filename={pendingAgentImport.filename}
+            pack={pendingAgentImport.pack}
+            warnings={pendingAgentImport.warnings}
+            currentSkills={pendingAgentImport.currentSkills}
+            currentQuickScanRules={pendingAgentImport.currentQuickScanRules}
+            onExportCurrentBackup={handleExportAgentBackup}
+            onConfirm={handleConfirmAgentUrlImport}
+            onClose={() => setPendingAgentImport(null)}
           />
         </Suspense>
       )}

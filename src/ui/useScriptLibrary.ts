@@ -48,7 +48,7 @@ import {
 } from './library/useLibraryPersistence.ts';
 import {useLibrarySnapshots} from './library/useLibrarySnapshots.ts';
 
-export {reconcileHydratedScript};
+export {reconcileHydratedScript, resolveInitialEditorState};
 export type {
   HydratedScriptResolution,
   HydrationMirrorState,
@@ -57,6 +57,7 @@ export type {
 };
 
 export interface UseScriptLibraryOptions {
+  initialExampleId?: string | null;
   ruleOverrides?: LintRuleOverrides;
   onSwitchToLive: () => void;
   onRequestConfirm: (request: ConfirmDialogRequest) => void;
@@ -64,6 +65,7 @@ export interface UseScriptLibraryOptions {
 }
 
 export interface UseScriptLibraryResult {
+  isHydrated: boolean;
   history: DocumentHistoryState;
   rawText: string;
   canUndo: boolean;
@@ -84,6 +86,11 @@ export interface UseScriptLibraryResult {
   breakCoalescing: () => void;
   handleOpenCustomScript: (record: ScriptRecord) => Promise<void>;
   handleOpenExample: (example: BundledExample) => Promise<void>;
+  handleOpenRemotePreview: (
+    title: string,
+    nextRawText: string,
+    remoteId?: string
+  ) => Promise<void>;
   handleForkExample: (example: BundledExample) => Promise<void>;
   handleForkCurrentExample: () => void;
   handleForkCurrentExampleWithContent: (
@@ -157,6 +164,7 @@ export interface UseScriptLibraryResult {
  * - Single-script downloads, smart import (.txt/.md/.json), and non-destructive full-library backup/restore
  */
 export function useScriptLibrary({
+  initialExampleId,
   ruleOverrides,
   onSwitchToLive,
   onRequestConfirm,
@@ -164,7 +172,7 @@ export function useScriptLibrary({
 }: UseScriptLibraryOptions): UseScriptLibraryResult {
   const initialStateRef = useRef<InitialEditorState | null>(null);
   if (!initialStateRef.current) {
-    initialStateRef.current = resolveInitialEditorState();
+    initialStateRef.current = resolveInitialEditorState(initialExampleId);
   }
   const initial = initialStateRef.current;
 
@@ -179,7 +187,7 @@ export function useScriptLibrary({
   const [sceneTitle, setSceneTitle] = useState<string>(initial.title);
   const [customScripts, setCustomScripts] = useState<ScriptRecord[]>([]);
 
-  const isReadOnly = activeScript.kind === 'example';
+  const isReadOnly = activeScript.kind !== 'custom';
 
   // Refs for synchronous access inside debounced autosave, flush events, and read-only guards
   const activeScriptRef = useRef<ActiveScriptRef>(activeScript);
@@ -193,13 +201,16 @@ export function useScriptLibrary({
   customScriptsRef.current = customScripts;
 
   const {
+    isHydrated,
     activateCustomScript,
     activateExample,
+    activateRemotePreview,
     persistCurrentCustomIfDirty,
     cancelPendingSave,
     markSavedSnapshot,
   } = useLibraryPersistence({
     initial,
+    initialExampleId,
     activeScript,
     rawText,
     sceneTitle,
@@ -220,7 +231,7 @@ export function useScriptLibrary({
       updater: string | ((prev: string) => string),
       options: Omit<HistoryCommitOptions, 'timestamp'> = {mode: 'checkpoint'}
     ) => {
-      if (activeScriptRef.current.kind === 'example') return;
+      if (activeScriptRef.current.kind !== 'custom') return;
       setHistory((prev) => {
         const nextText = typeof updater === 'function' ? updater(prev.present) : updater;
         return commitDocumentHistory(prev, nextText, {
@@ -233,17 +244,17 @@ export function useScriptLibrary({
   );
 
   const handleTitleChange = useCallback((nextTitle: string) => {
-    if (activeScriptRef.current.kind === 'example') return;
+    if (activeScriptRef.current.kind !== 'custom') return;
     setSceneTitle(nextTitle);
   }, []);
 
   const handleUndo = useCallback(() => {
-    if (activeScriptRef.current.kind === 'example') return;
+    if (activeScriptRef.current.kind !== 'custom') return;
     setHistory((prev) => undoDocumentHistory(prev));
   }, []);
 
   const handleRedo = useCallback(() => {
-    if (activeScriptRef.current.kind === 'example') return;
+    if (activeScriptRef.current.kind !== 'custom') return;
     setHistory((prev) => redoDocumentHistory(prev));
   }, []);
 
@@ -317,6 +328,14 @@ export function useScriptLibrary({
     [persistCurrentCustomIfDirty, activateExample]
   );
 
+  const handleOpenRemotePreview = useCallback(
+    async (title: string, nextRawText: string, remoteId = 'remote-preview') => {
+      await persistCurrentCustomIfDirty();
+      activateRemotePreview(title, nextRawText, remoteId, {switchToLive: true});
+    },
+    [persistCurrentCustomIfDirty, activateRemotePreview]
+  );
+
   const handleForkExample = useCallback(
     async (example: BundledExample) => {
       await persistCurrentCustomIfDirty();
@@ -343,10 +362,32 @@ export function useScriptLibrary({
 
   const handleForkCurrentExample = useCallback(() => {
     const current = activeScriptRef.current;
-    if (current.kind !== 'example') return;
-    const example = getBundledExampleById(current.id) ?? DEFAULT_PRESET;
-    void handleForkExample(example);
-  }, [handleForkExample]);
+    if (current.kind === 'example') {
+      const example = getBundledExampleById(current.id) ?? DEFAULT_PRESET;
+      void handleForkExample(example);
+      return;
+    }
+    if (current.kind === 'remote') {
+      void (async () => {
+        await persistCurrentCustomIfDirty();
+        const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
+        const forked = buildDuplicatedScriptRecord({
+          id: createScriptId('script'),
+          sourceId: current.id,
+          sourceTitle: sceneTitleRef.current.trim() || APP_META.untitledScene,
+          rawText: rawTextRef.current,
+          existingTitles,
+          now: Date.now(),
+          suffix: 'Fork',
+        });
+        const saved = await scriptLibraryDb.put(forked);
+        customScriptsRef.current = upsertSortedScript(customScriptsRef.current, saved);
+        setCustomScripts((prev) => upsertSortedScript(prev, saved));
+        activateCustomScript(saved);
+        onToast(UI_LABELS.toasts.forkedExample(saved.title));
+      })();
+    }
+  }, [handleForkExample, persistCurrentCustomIfDirty, activateCustomScript, onToast]);
 
   const handleForkCurrentExampleWithContent = useCallback(
     async (
@@ -362,23 +403,30 @@ export function useScriptLibrary({
       }
     ): Promise<boolean> => {
       const current = activeScriptRef.current;
-      if (current.kind !== 'example') return false;
+      if (current.kind === 'custom') return false;
       await persistCurrentCustomIfDirty();
 
-      const example = getBundledExampleById(current.id) ?? DEFAULT_PRESET;
+      const example =
+        current.kind === 'example' ? (getBundledExampleById(current.id) ?? DEFAULT_PRESET) : null;
+      const sourceId = example ? example.id : current.id;
+      const sourceTitle = example
+        ? example.title
+        : sceneTitleRef.current.trim() || APP_META.untitledScene;
+      const beforeContent = example ? example.content : rawTextRef.current;
+
       const existingTitles = new Set(customScriptsRef.current.map((s) => s.title));
       const requestedTitle = options?.title?.trim();
 
       const now = Date.now();
       const forked = buildDuplicatedScriptRecord({
         id: createScriptId('script'),
-        sourceId: example.id,
-        sourceTitle: example.title,
+        sourceId,
+        sourceTitle,
         rawText: nextRawText,
         existingTitles,
         now,
-        folder: example.folder,
-        tags: example.tags,
+        folder: example?.folder,
+        tags: example?.tags,
         explicitTitle: requestedTitle || undefined,
         suffix: requestedTitle ? 'Copy' : 'Fork',
       });
@@ -387,12 +435,12 @@ export function useScriptLibrary({
       setCustomScripts((prev) => upsertSortedScript(prev, saved));
 
       if (options?.snapshotMeta) {
-        if (example.content.trim().length > 0 && example.content !== nextRawText) {
+        if (beforeContent.trim().length > 0 && beforeContent !== nextRawText) {
           await scriptLibraryDb.saveSnapshot({
             scriptId: saved.id,
             trigger: options.snapshotMeta.trigger,
             label: options.snapshotMeta.beforeLabel,
-            rawText: example.content,
+            rawText: beforeContent,
             createdAt: now,
           });
         }
@@ -420,7 +468,7 @@ export function useScriptLibrary({
       setActiveScript(nextRef);
       setSceneTitle(saved.title);
       setHistory(() =>
-        commitDocumentHistory(createDocumentHistory(example.content), saved.rawText, {
+        commitDocumentHistory(createDocumentHistory(beforeContent), saved.rawText, {
           mode: 'checkpoint',
           timestamp: null,
         })
@@ -782,6 +830,7 @@ export function useScriptLibrary({
   );
 
   return {
+    isHydrated,
     history,
     rawText,
     canUndo,
@@ -799,6 +848,7 @@ export function useScriptLibrary({
     breakCoalescing,
     handleOpenCustomScript,
     handleOpenExample,
+    handleOpenRemotePreview,
     handleForkExample,
     handleForkCurrentExample,
     handleForkCurrentExampleWithContent,

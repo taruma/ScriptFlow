@@ -14,6 +14,7 @@ import {
   BUNDLED_EXAMPLES,
   EXAMPLE_CATALOG_MANIFEST,
   getBundledExampleById,
+  getBundledExampleByIdOrSlug,
   resolveExampleCatalog,
 } from '../../src/data/examples/index.ts';
 import {
@@ -55,7 +56,10 @@ import {
   readSavedTitle,
   writeMirrorUpdatedAt,
 } from '../../src/ui/scriptStorage.ts';
-import {reconcileHydratedScript} from '../../src/ui/useScriptLibrary.ts';
+import {
+  reconcileHydratedScript,
+  resolveInitialEditorState,
+} from '../../src/ui/useScriptLibrary.ts';
 import {
   buildDuplicatedScriptRecord,
   buildFolderPickerOptions,
@@ -127,12 +131,30 @@ describe('File-Based Bundled Example Catalog (src/data/examples/)', () => {
 
     for (const example of BUNDLED_EXAMPLES) {
       expect(example.file.endsWith('.json')).toBe(true);
+      expect(example.slug.length).toBeGreaterThan(0);
       expect(example.content.length).toBeGreaterThan(100);
       expect(example.content.endsWith('\n')).toBe(false);
       expect(getBundledExampleById(example.id)).toEqual(example);
+      expect(getBundledExampleByIdOrSlug(example.id)).toEqual(example);
+      expect(getBundledExampleByIdOrSlug(example.slug)).toEqual(example);
+      expect(getBundledExampleByIdOrSlug(example.slug.toUpperCase())).toEqual(example);
       expect(example.branchNote?.length).toBeGreaterThan(0);
       expect(example.tags?.length).toBeGreaterThan(0);
     }
+
+    // Readable slug uniqueness & specific slug checks
+    expect(new Set(BUNDLED_EXAMPLES.map((e) => e.slug)).size).toBe(BUNDLED_EXAMPLES.length);
+    expect(getBundledExampleByIdOrSlug('the-grand-continental')?.title).toBe(
+      'The Grand Continental'
+    );
+    expect(getBundledExampleByIdOrSlug('three-years-late-part-3')?.title).toBe(
+      'Three Years Late - Part 3'
+    );
+    expect(getBundledExampleByIdOrSlug('nonexistent-slug')).toBeNull();
+    expect(resolveInitialEditorState(BUNDLED_EXAMPLES[1].id).activeScript).toEqual({
+      kind: 'example',
+      id: BUNDLED_EXAMPLES[1].id,
+    });
 
     // Standalone 4 remain unfoldered; the 2 branched continuation series share "Video Continuation"
     expect(DEFAULT_PRESET.folder).toBeUndefined();
@@ -221,6 +243,19 @@ describe('File-Based Bundled Example Catalog (src/data/examples/)', () => {
         }
       )
     ).toThrow(/Duplicate bundled example id/);
+
+    expect(() =>
+      resolveExampleCatalog(
+        [
+          {topology: 'T', summary: 'S', file: 'a.json', slug: 'same-slug'},
+          {topology: 'T', summary: 'S', file: 'b.json', slug: 'same-slug'},
+        ],
+        {
+          './a.json': {scripts: [{id: 'id-1', title: 'A', rawText: '[INTENT]\nHello'}]},
+          './b.json': {scripts: [{id: 'id-2', title: 'B', rawText: '[INTENT]\nWorld'}]},
+        }
+      )
+    ).toThrow(/Duplicate bundled example slug/);
   });
 });
 

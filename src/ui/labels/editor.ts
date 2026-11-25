@@ -420,6 +420,19 @@ export const EDITOR_LABELS = {
         ? `Replaced Source with "${title}" (1 of ${total} in backup) — press Undo to revert`
         : `Replaced Source with "${title}" — press Undo to revert`,
     sourceFileDropUnchanged: 'Dropped file matches current Source content',
+    urlLaunchConflict:
+      'Only one URL parameter can be used at a time (?example, ?url, or ?agents)',
+    urlLaunchInvalidUrl: (param: string, reason: string) => `Invalid ?${param}= URL: ${reason}`,
+    urlLaunchExampleNotFound: (value: string) => `Example "${value}" was not found`,
+    urlLaunchAgentsUnsupportedNarrow:
+      'Agent Context Pack import (?agents=) requires a desktop viewport',
+    urlLaunchRemoteLoaded: (title: string) => `Opened "${title}" (read-only preview)`,
+    urlLaunchRemoteLoadedFromBundle: (title: string, total: number) =>
+      total > 1
+        ? `Opened "${title}" (1 of ${total} in backup · read-only preview)`
+        : `Opened "${title}" (read-only preview)`,
+    urlLaunchFetchFailed: (detail: string) => `Unable to load URL: ${detail}`,
+    urlLaunchAgentsImported: (summary: string) => `Imported Agent Context Pack: ${summary}`,
   },
 
   patchIndicators: {

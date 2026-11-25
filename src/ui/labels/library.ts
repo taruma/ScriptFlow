@@ -252,6 +252,8 @@ export const LIBRARY_LABELS = {
     ] as const,
     errorHeading: 'Unable to Inspect File',
     errorHint: 'Fix the file or drop / choose another .txt, .md, or .json file.',
+    loadingRemoteHeading: 'Loading Remote File',
+    loadingRemoteDesc: (url: string) => `Fetching ${url}…`,
     sourceFormatLabels: {
       'plain-text': 'Plain Text',
       'auteur-envelope': 'JSON Envelope',
