@@ -7,10 +7,18 @@ import type {GeminiModelId} from '../aiSettings.ts';
 import type {ScriptRecord} from '../library/dbTypes.ts';
 import {formatExportTimestamp, slugifyFilename} from '../scriptLibraryCodec.ts';
 import {formatAttachmentTag, formatSceneBriefContext} from './draftBrief.ts';
-import {EMPTY_DRAFT_BRIEF, type AiChatMessage, type DraftBriefState, type ReferenceEntry} from './types.ts';
+import {
+  EMPTY_DRAFT_BRIEF,
+  type AiChatMessage,
+  type AiLoadedSkillItem,
+  type DraftBriefState,
+  type QuestionResponseRecord,
+  type ReferenceEntry,
+} from './types.ts';
 
 export const AI_SESSION_SCHEMA_VERSION = 1;
 export const AI_SESSION_EXPORT_FORMAT = 'auteur-ai-session-export';
+export const AI_SESSION_CONVERSATION_EXPORT_FORMAT = 'auteur-ai-conversation-export';
 export const AI_SESSION_EXPORT_VERSION = 1;
 export const MAX_AUTO_AI_SESSIONS = 100;
 export const RECENT_AI_SESSIONS_LIMIT = 5;
@@ -777,6 +785,230 @@ export function buildAiSessionJsonExport(
   const stamp = formatExportTimestamp(now);
   return {
     filename: `${slug}-ai-session-${stamp}.json`,
+    content: `${JSON.stringify(payload, null, 2)}\n`,
+    mimeType: 'application/json;charset=utf-8',
+  };
+}
+
+export interface AiSessionConversationTurnSuggestion {
+  kind: StagedSuggestion['kind'];
+  summary: string;
+  status: 'applied' | 'dismissed' | 'staged' | 'answered' | 'skipped';
+  questionResponse?: QuestionResponseRecord;
+}
+
+export interface AiSessionConversationTurn {
+  role: 'user' | 'assistant';
+  focus: AssistantFocus;
+  text: string;
+  scopeLabel?: string;
+  briefSummary?: string;
+  askFirst?: boolean;
+  thoughtSummary?: string;
+  skillsLoaded?: AiLoadedSkillItem[];
+  toolCalls?: Array<{
+    name: string;
+    status: 'ok' | 'error' | 'stopped' | 'running';
+    arguments: Record<string, unknown>;
+  }>;
+  suggestions?: AiSessionConversationTurnSuggestion[];
+  quickScan?: {
+    flaggedCount: number;
+    borderlineCount: number;
+    cleanCount: number;
+    totalQuestions: number;
+    suspectBeatCount: number;
+  };
+  bridgedFromHistory?: 'expired_chain' | 'cross_script';
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface AiSessionConversationJsonPayload {
+  format: typeof AI_SESSION_CONVERSATION_EXPORT_FORMAT;
+  exportVersion: typeof AI_SESSION_EXPORT_VERSION;
+  exportedAt: string;
+  session: {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    scriptTitleSnapshot: string;
+    resolvedScriptTitle?: string;
+    scriptStatus?: AiSessionScriptStatus;
+    focus: AssistantFocus;
+    model: GeminiModelId;
+    turnCount: number;
+    estimatedCostUsd: number;
+    hasOmittedMedia?: boolean;
+  };
+  brief: DraftBriefState;
+  skillsUsed: AiLoadedSkillItem[];
+  toolsUsed: AiSessionToolUsageStat[];
+  conversation: AiSessionConversationTurn[];
+}
+
+/**
+ * Exports a clean, human-readable JSON focused on the conversation, text-only Brief,
+ * loaded skills, and invoked tools (with arguments/status), omitting raw API trace
+ * rounds, frozen system instructions, and continuity internals.
+ */
+export function buildAiSessionConversationJsonExport(
+  session: AiSessionRecord,
+  options?: {
+    scriptStatus?: AiSessionScriptStatus;
+    resolvedScriptTitle?: string;
+    now?: Date;
+  }
+): BuiltAiSessionExport {
+  const now = options?.now ?? new Date();
+  const hydrated = hydrateSessionFromStorage(sanitizeAiSessionRecord(session));
+  const {brief: cleanBrief, hadMedia} = stripBriefMediaForStorage(hydrated.brief);
+  const normalizedMessages = normalizeMessagesForStorage(hydrated.messages);
+
+  const skillsMap = new Map<string, AiLoadedSkillItem>();
+  const toolStats = new Map<string, AiSessionToolUsageStat>();
+
+  const recordToolStat = (name: string, ok: boolean) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    const prev = toolStats.get(cleanName) ?? {
+      name: cleanName,
+      calls: 0,
+      okCount: 0,
+      errorCount: 0,
+    };
+    prev.calls += 1;
+    if (ok) prev.okCount += 1;
+    else prev.errorCount += 1;
+    toolStats.set(cleanName, prev);
+  };
+
+  const conversation: AiSessionConversationTurn[] = normalizedMessages.map((msg) => {
+    if (msg.role === 'user') {
+      return {
+        role: 'user',
+        focus: msg.focus,
+        text: msg.text,
+        ...(msg.scopeLabel ? {scopeLabel: msg.scopeLabel} : {}),
+        ...(msg.briefSummary ? {briefSummary: msg.briefSummary} : {}),
+        ...(msg.askFirst ? {askFirst: true} : {}),
+      };
+    }
+
+    if (msg.loadedSkills) {
+      for (const skill of msg.loadedSkills) {
+        if (!skillsMap.has(skill.id)) {
+          skillsMap.set(skill.id, skill);
+        }
+      }
+    }
+
+    const turnToolCalls: NonNullable<AiSessionConversationTurn['toolCalls']> = [];
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      for (const call of msg.toolCalls) {
+        recordToolStat(call.name, call.status === 'ok');
+        turnToolCalls.push({
+          name: call.name,
+          status: call.status,
+          arguments: call.arguments,
+        });
+      }
+    } else if (msg.trace?.rounds) {
+      for (const round of msg.trace.rounds) {
+        for (const call of round.toolCalls ?? []) {
+          recordToolStat(call.name, call.ok);
+          turnToolCalls.push({
+            name: call.name,
+            status: call.ok ? 'ok' : 'error',
+            arguments: call.arguments,
+          });
+        }
+      }
+    }
+
+    const applied = new Set(msg.appliedSuggestionIds ?? []);
+    const dismissed = new Set(msg.dismissedSuggestionIds ?? []);
+    const turnSuggestions: AiSessionConversationTurnSuggestion[] = (msg.suggestions ?? []).map(
+      (s) => {
+        const qResp = s.kind === 'question' ? msg.questionResponses?.[s.id] : undefined;
+        const status: AiSessionConversationTurnSuggestion['status'] = qResp
+          ? qResp.status
+          : applied.has(s.id)
+            ? 'applied'
+            : dismissed.has(s.id)
+              ? 'dismissed'
+              : 'staged';
+        return {
+          kind: s.kind,
+          summary: describeStagedSuggestion(s),
+          status,
+          ...(qResp ? {questionResponse: qResp} : {}),
+        };
+      }
+    );
+
+    const thoughtText = msg.thoughtSummary?.trim() ?? '';
+    return {
+      role: 'assistant',
+      focus: msg.focus,
+      text: msg.text,
+      ...(thoughtText.length > 0 ? {thoughtSummary: thoughtText} : {}),
+      ...(msg.loadedSkills && msg.loadedSkills.length > 0
+        ? {skillsLoaded: msg.loadedSkills}
+        : {}),
+      ...(turnToolCalls.length > 0 ? {toolCalls: turnToolCalls} : {}),
+      ...(turnSuggestions.length > 0 ? {suggestions: turnSuggestions} : {}),
+      ...(msg.quickScan
+        ? {
+            quickScan: {
+              flaggedCount: msg.quickScan.flaggedCount,
+              borderlineCount: msg.quickScan.borderlineCount,
+              cleanCount: msg.quickScan.cleanCount,
+              totalQuestions: msg.quickScan.totalQuestions,
+              suspectBeatCount: msg.quickScan.suspectBeats.length,
+            },
+          }
+        : {}),
+      ...(msg.bridgedFromHistory ? {bridgedFromHistory: msg.bridgedFromHistory} : {}),
+      ...(msg.error ? {error: {code: msg.error.code, message: msg.error.message}} : {}),
+    };
+  });
+
+  const costSummary = aggregateSessionCost(normalizedMessages);
+  const turnCount = normalizedMessages.filter((m) => m.role === 'user').length;
+  const hasOmittedMedia = Boolean(hydrated.hasOmittedMedia || hadMedia);
+
+  const payload: AiSessionConversationJsonPayload = {
+    format: AI_SESSION_CONVERSATION_EXPORT_FORMAT,
+    exportVersion: AI_SESSION_EXPORT_VERSION,
+    exportedAt: now.toISOString(),
+    session: {
+      id: hydrated.id,
+      title: hydrated.title,
+      createdAt: new Date(hydrated.createdAt).toISOString(),
+      updatedAt: new Date(hydrated.updatedAt).toISOString(),
+      scriptTitleSnapshot: hydrated.scriptTitleSnapshot,
+      ...(options?.resolvedScriptTitle ? {resolvedScriptTitle: options.resolvedScriptTitle} : {}),
+      ...(options?.scriptStatus ? {scriptStatus: options.scriptStatus} : {}),
+      focus: hydrated.focus,
+      model: hydrated.model,
+      turnCount: turnCount > 0 ? turnCount : costSummary.turnCount,
+      estimatedCostUsd: costSummary.totalCostUsd,
+      ...(hasOmittedMedia ? {hasOmittedMedia: true} : {}),
+    },
+    brief: cleanBrief,
+    skillsUsed: Array.from(skillsMap.values()),
+    toolsUsed: Array.from(toolStats.values()).sort((a, b) => a.name.localeCompare(b.name)),
+    conversation,
+  };
+
+  const slug = slugifyFilename(hydrated.title || hydrated.scriptTitleSnapshot || 'ai-conversation');
+  const stamp = formatExportTimestamp(now);
+  return {
+    filename: `${slug}-ai-conversation-${stamp}.json`,
     content: `${JSON.stringify(payload, null, 2)}\n`,
     mimeType: 'application/json;charset=utf-8',
   };

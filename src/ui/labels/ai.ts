@@ -967,6 +967,8 @@ export const AI_LABELS = {
       downloadMenuAria: 'Choose download format',
       downloadConversationLabel: 'Conversation',
       downloadConversationDesc: 'Prompts, replies, Brief & outcomes',
+      downloadFullConversationJsonLabel: 'Full Conversation',
+      downloadFullConversationJsonDesc: 'Conversation, Brief, skills & tools used',
       downloadFullJsonLabel: 'Full Payload',
       downloadFullJsonDesc: 'Traces, tools & system instructions',
       downloadTagMd: '.MD',

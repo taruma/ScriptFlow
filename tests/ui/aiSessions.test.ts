@@ -8,9 +8,11 @@ import {
   type DraftBriefState,
 } from '../../src/ui/aiAssistant.ts';
 import {
+  AI_SESSION_CONVERSATION_EXPORT_FORMAT,
   AI_SESSION_EXPORT_FORMAT,
   AI_SESSION_EXPORT_VERSION,
   AI_SESSION_SCHEMA_VERSION,
+  buildAiSessionConversationJsonExport,
   buildAiSessionJsonExport,
   buildAiSessionMarkdownExport,
   compactSessionForStorage,
@@ -22,6 +24,7 @@ import {
   selectAiSessionsToPrune,
   selectRecentSessionsForScript,
   stripBriefMediaForStorage,
+  type AiSessionConversationJsonPayload,
   type AiSessionJsonExportPayload,
   type AiSessionRecord,
 } from '../../src/ui/aiSessions.ts';
@@ -431,5 +434,88 @@ describe('aiSessions domain & storage codec', () => {
     expect(firstAssistant.trace.rounds[0].request.systemInstruction).toBeUndefined();
     expect(firstAssistant.trace.rounds[0].request.systemInstructionRef).toBe('sys_0');
     expect(firstAssistant.trace.rounds[1].request.systemInstructionRef).toBe('sys_0');
+  });
+
+  it('builds Full Conversation JSON exports with skillsUsed and toolsUsed while omitting raw trace payloads', () => {
+    const trace = makeSampleTrace('FROZEN SYSTEM PROMPT '.repeat(12), 'int-conv-1');
+    const session = makeSampleSession({
+      id: 'conv-json-1',
+      title: 'Pier Lighting Polish',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          mode: 'refine',
+          focus: 'refine',
+          scopeLabel: 'S1',
+          text: 'Sharpen the sodium lamp reflection.',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          mode: 'refine',
+          focus: 'refine',
+          thoughtSummary: 'Checking S1 lookbook references.',
+          text: 'Updated S1 with amber reflections.',
+          loadedSkills: [{id: 'token_mapping', name: 'Token Mapping', source: 'tool'}],
+          toolCalls: [
+            {
+              callId: 'call-1',
+              name: 'propose_script_patch',
+              arguments: {ops: [{op: 'replace_sub_state'}]},
+              status: 'ok',
+            },
+          ],
+          appliedSuggestionIds: ['sug-1'],
+          suggestions: [
+            {
+              id: 'sug-1',
+              kind: 'title',
+              title: 'Amber Pier',
+              baseSnapshotHash: 'h1',
+            },
+          ],
+          trace,
+        },
+      ],
+    });
+
+    const fixedNow = new Date(2026, 10, 26, 11, 50, 15);
+    const convExport = buildAiSessionConversationJsonExport(session, {
+      scriptStatus: 'current',
+      resolvedScriptTitle: 'Rooftop Scene',
+      now: fixedNow,
+    });
+
+    expect(convExport.filename).toBe('pier-lighting-polish-ai-conversation-20261126-115015.json');
+    expect(convExport.mimeType).toBe('application/json;charset=utf-8');
+
+    const parsed = JSON.parse(convExport.content) as AiSessionConversationJsonPayload & {
+      systemInstructions?: unknown;
+      continuity?: unknown;
+    };
+    expect(parsed.format).toBe(AI_SESSION_CONVERSATION_EXPORT_FORMAT);
+    expect(parsed.exportVersion).toBe(AI_SESSION_EXPORT_VERSION);
+    expect(parsed.systemInstructions).toBeUndefined();
+    expect(parsed.continuity).toBeUndefined();
+    expect(parsed.skillsUsed).toEqual([
+      {id: 'token_mapping', name: 'Token Mapping', source: 'tool'},
+    ]);
+    expect(parsed.toolsUsed).toEqual([
+      {name: 'propose_script_patch', calls: 1, okCount: 1, errorCount: 0},
+    ]);
+    expect(parsed.conversation).toHaveLength(2);
+    expect(parsed.conversation[0]).toMatchObject({
+      role: 'user',
+      scopeLabel: 'S1',
+      text: 'Sharpen the sodium lamp reflection.',
+    });
+    expect(parsed.conversation[1]).toMatchObject({
+      role: 'assistant',
+      thoughtSummary: 'Checking S1 lookbook references.',
+      text: 'Updated S1 with amber reflections.',
+      suggestions: [{kind: 'title', summary: 'Amber Pier', status: 'applied'}],
+    });
+    expect((parsed.conversation[1] as {trace?: unknown}).trace).toBeUndefined();
   });
 });

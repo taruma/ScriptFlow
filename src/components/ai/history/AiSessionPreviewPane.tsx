@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  FileCode2,
   FileText,
   History,
   Pencil,
@@ -27,6 +28,7 @@ import {
 import {estimateTraceCost, formatEstimatedUsd} from '../../../ui/aiPricing.ts';
 import {getGeminiModelOption} from '../../../ui/aiSettings.ts';
 import {
+  buildAiSessionConversationJsonExport,
   buildAiSessionJsonExport,
   buildAiSessionMarkdownExport,
   describeStagedSuggestion,
@@ -408,6 +410,35 @@ export function AiSessionPreviewPane({
                   </span>
                   <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
                     {labels.downloadTagMd}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsDownloadOpen(false);
+                    const exp = buildAiSessionConversationJsonExport(session, {
+                      scriptStatus: summary.scriptStatus,
+                      resolvedScriptTitle: summary.resolvedScriptTitle,
+                    });
+                    triggerTextFileDownload(exp.filename, exp.content, exp.mimeType);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-subtle transition-colors cursor-pointer"
+                >
+                  <span className="flex items-start gap-2 min-w-0">
+                    <FileCode2 className="h-3.5 w-3.5 text-sky-500 shrink-0 mt-0.5" />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-text-main">
+                        {labels.downloadFullConversationJsonLabel}
+                      </span>
+                      <span className="block text-[10px] text-text-muted">
+                        {labels.downloadFullConversationJsonDesc}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
+                    {labels.downloadTagJson}
                   </span>
                 </button>
 
