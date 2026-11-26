@@ -343,6 +343,13 @@ export const AI_LABELS = {
       questionPerQuestionSingleTag: 'Single',
       questionPerQuestionMultiTag: 'Multi',
       questionCount: (count: number) => `${count} ${count === 1 ? 'question' : 'questions'}`,
+      questionStepProgress: (current: number, total: number) => `${current} / ${total}`,
+      questionStepPillAria: (index: number, answered: boolean) =>
+        `Question ${index + 1}${answered ? ' (answered)' : ''}`,
+      questionBackButton: 'Back',
+      questionNextButton: 'Next',
+      questionSkipStepButton: 'Skip',
+      questionSkipAllButton: 'Skip all',
       questionCommentPlaceholder: 'Add optional note or detail to your pick...',
       questionCommentAria: (index: number) => `Optional note for question ${index + 1}`,
       questionSubmitButton: 'Submit Answers',
