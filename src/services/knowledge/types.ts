@@ -137,6 +137,7 @@ export interface LiveEditorStateSummary {
   sceneTitle?: string;
   snapshotHash: string;
   changedSinceLastTurn: boolean;
+  changedTargetIds?: string[];
   recentEditSummary?: string;
   sceneTopology: SceneTopology;
   hasContinuationContext: boolean;

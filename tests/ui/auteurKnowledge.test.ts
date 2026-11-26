@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest';
+import {toAuteurEnvelope} from '../../src/core/index.ts';
 import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {
   AUTEUR_KNOWLEDGE_VERSION,
@@ -986,5 +987,60 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(pureChatCtx.sections.toolProtocol.text).toContain('pure conversation mode');
     expect(BUILTIN_AUTEUR_SKILLS.some((skill) => skill.id === 'draft_interview')).toBe(true);
     expect(AUTEUR_KNOWLEDGE_VERSION).toBe('0.4.0-k5');
+  });
+
+  it('tracks changedTargetIds on manual edits, keeps them undefined when unchanged, and includes read-before-write guidance in toolProtocol', () => {
+    const baseScript = [
+      '[INTENT]',
+      'Create a corridor beat with @image1 as Elena.',
+      '',
+      '[OPENING]',
+      'MS eye level. Frame-left, Elena stands facing screen-right.',
+      '',
+      '[EXECUTION]',
+      '[CAM 01] MS eye level -> [ACT] Elena pauses -> <door hum>',
+      '[CAM 01] MS eye level -> [ACT] Elena turns -> <footstep>',
+    ].join('\n');
+
+    const unchangedCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: baseScript,
+      hasPreviousInteraction: true,
+      previousSnapshotHash: toAuteurEnvelope(baseScript).snapshotHash,
+      previousRawText: baseScript,
+    });
+    expect(unchangedCtx.editorState.changedSinceLastTurn).toBe(false);
+    expect(unchangedCtx.editorState.changedTargetIds).toBeUndefined();
+
+    const manuallyEditedScript = [
+      '[INTENT]',
+      'Create a tense corridor beat with @image1 as Elena.',
+      '',
+      '[OPENING]',
+      'MS eye level. Frame-left, Elena stands facing screen-right.',
+      '',
+      '[EXECUTION]',
+      '[CAM 01] MS eye level -> [ACT] Elena pauses -> <door hum>',
+      '[CAM 01] MS eye level -> [ACT] Elena whispers and checks the lock -> <latch click>',
+      '[CAM 01] MS eye level -> [ACT] Elena steps backward -> <boot scrape>',
+    ].join('\n');
+
+    const changedCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: manuallyEditedScript,
+      hasPreviousInteraction: true,
+      previousSnapshotHash: toAuteurEnvelope(baseScript).snapshotHash,
+      previousRawText: baseScript,
+    });
+
+    expect(changedCtx.editorState.changedSinceLastTurn).toBe(true);
+    expect(changedCtx.editorState.changedTargetIds).toEqual(['MB0', 'S2', 'S3']);
+    expect(changedCtx.turnContext.liveEditorStateText).toContain('call get_script_source before editing');
+    expect(changedCtx.sections.toolProtocol.text).toContain('Read-before-write on changed scripts');
+    expect(changedCtx.sections.toolProtocol.text).toContain('fresh-read rule');
+    expect(changedCtx.systemInstruction).toBe(unchangedCtx.systemInstruction);
+    expect(JSON.stringify(buildToolDeclarationsForContext(changedCtx))).toBe(
+      JSON.stringify(buildToolDeclarationsForContext(unchangedCtx))
+    );
   });
 });

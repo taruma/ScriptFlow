@@ -115,16 +115,24 @@ function truncateDiffLine(text: string): string {
   return `${text.slice(0, MAX_DIFF_LINE_CHARS - 1)}…`;
 }
 
+interface RecentEditDelta {
+  summary?: string;
+  changedTargetIds: string[];
+}
+
 /**
  * Computes a compact, bounded summary of manual user edits between the previous turn's
- * script and the current script (affected MB# / S# IDs plus up to 12 changed lines).
+ * script and the current script (affected MB# / S# IDs plus up to 12 changed lines), along
+ * with the deduplicated ordered list of existing MB# / S# target IDs that changed or were added.
  */
-function buildRecentEditSummary(
+function computeRecentEditDelta(
   previousRawText: string,
   currentRawText: string,
   currentEnvelope?: AuteurEnvelope
-): string | undefined {
-  if (previousRawText === currentRawText) return undefined;
+): RecentEditDelta {
+  if (previousRawText === currentRawText) {
+    return {summary: undefined, changedTargetIds: []};
+  }
 
   const prevEnv = toAuteurEnvelope(previousRawText);
   const currEnv = currentEnvelope ?? toAuteurEnvelope(currentRawText);
@@ -171,6 +179,15 @@ function buildRecentEditSummary(
     }
   }
 
+  const changedTargetIds: string[] = [];
+  const seenTargets = new Set<string>();
+  for (const id of [...modifiedIds, ...addedIds]) {
+    if (!seenTargets.has(id)) {
+      seenTargets.add(id);
+      changedTargetIds.push(id);
+    }
+  }
+
   const diff = buildLineDiff(previousRawText, currentRawText);
   const changedLines = diff.lines.filter((line) => line.type !== 'context');
 
@@ -180,7 +197,7 @@ function buildRecentEditSummary(
     removedIds.length === 0 &&
     changedLines.length === 0
   ) {
-    return undefined;
+    return {summary: undefined, changedTargetIds: []};
   }
 
   const summaryParts: string[] = [];
@@ -203,7 +220,19 @@ function buildRecentEditSummary(
     lines.push(`  - (+${omittedCount} more changed ${omittedCount === 1 ? 'line' : 'lines'})`);
   }
 
-  return lines.join('\n');
+  return {summary: lines.join('\n'), changedTargetIds};
+}
+
+/**
+ * Computes a compact, bounded summary of manual user edits between the previous turn's
+ * script and the current script (affected MB# / S# IDs plus up to 12 changed lines).
+ */
+function buildRecentEditSummary(
+  previousRawText: string,
+  currentRawText: string,
+  currentEnvelope?: AuteurEnvelope
+): string | undefined {
+  return computeRecentEditDelta(previousRawText, currentRawText, currentEnvelope).summary;
 }
 
 function computeDiagnosticsFingerprint(
@@ -233,7 +262,7 @@ function buildLiveEditorStateText(
     '## Live Editor State (Authoritative Current Snapshot)',
     ...(state.sceneTitle ? [`- Scene title: "${state.sceneTitle}"`] : []),
     `- Empty document: ${state.isEmpty ? 'yes' : 'no'}`,
-    `- Snapshot hash / expectedSnapshotHash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — do not rely on prior turn memory for IDs or lines' : 'current'})`,
+    `- Snapshot hash / expectedSnapshotHash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — call get_script_source before editing; do not rely on prior turn memory for IDs or lines' : 'current'})`,
     ...(state.recentEditSummary
       ? [`- Recent user edits since last turn:\n${state.recentEditSummary}`]
       : []),
@@ -565,9 +594,14 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
       (options.previousRawText !== undefined && options.previousRawText !== options.rawText)
   );
   const trimmedTitle = options.sceneTitle?.trim();
-  const recentEditSummary =
+  const recentEditDelta =
     changedSinceLastTurn && options.previousRawText !== undefined
-      ? buildRecentEditSummary(options.previousRawText, options.rawText, envelope)
+      ? computeRecentEditDelta(options.previousRawText, options.rawText, envelope)
+      : undefined;
+  const recentEditSummary = recentEditDelta?.summary;
+  const changedTargetIds =
+    changedSinceLastTurn && options.previousRawText !== undefined
+      ? (recentEditDelta?.changedTargetIds ?? [])
       : undefined;
 
   const editorState: LiveEditorStateSummary = {
@@ -575,6 +609,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     ...(trimmedTitle ? {sceneTitle: trimmedTitle} : {}),
     snapshotHash: envelope.snapshotHash,
     changedSinceLastTurn,
+    ...(changedTargetIds !== undefined ? {changedTargetIds} : {}),
     ...(recentEditSummary ? {recentEditSummary} : {}),
     sceneTopology: derived.sceneTopology,
     hasContinuationContext: derived.hasContinuationContext,

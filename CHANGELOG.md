@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Replaced the multi-row wrapping skill/tool pill cloud with a quiet two-row disclosure layout: a borderless **Thinking** header (`Thinking…` while streaming, `Thought for Xs` when complete, with turn cost badge and `Inspect` button) that expands on an indented left rail once thought tokens arrive, plus a **collapsed-by-default** turn activity row (`N skills · M tools`, or the active running tool while streaming) that expands into an indented vertical timeline with hover tooltips.
   - Folded completed `load_auteur_skill` calls into their resolved `Loaded` skill entries (`dedupeTurnToolCalls`) and ordered turn-loaded/auto skills ahead of `Pinned` skills (`summarizeTurnActivity`) so each turn stays compact without hiding live loading or retry states.
 
+### Fixed
+- **Read-Before-Write Guard on Manually Edited & Recap-Bridged Scripts (`src/services/tools/readGuard.ts`, `src/services/geminiInteractions.ts`, `src/services/auteurKnowledge.ts`, `src/services/knowledge/protocol.ts`)**:
+  - Added round-boundary read tracking (`turnReadState`) and `checkReadBeforeWriteGuard()` (`STALE_CONTEXT_READ_REQUIRED`) so `propose_script_patch`, `propose_text_replace`, `propose_script_draft`, and `report_audit_review` cannot overwrite manual user edits from prior-turn conversation memory—even when the model reads the updated `expectedSnapshotHash` from `<live_editor_state>` or runs a parallel read + write in the same round—until `get_script_source` (or `inspect_lens_slice` where applicable) returns the updated script text in an earlier round.
+  - Added `changedTargetIds` tracking to `LiveEditorStateSummary` and tightened `<live_editor_state>` plus `DEFAULT_TOOL_PROTOCOL_CORE` / `buildToolProtocolRuntimeHeader()` to instruct the model to re-read changed scripts via `get_script_source` before staging edits.
+
 ---
 
 ## [1.1.0] - 2026-11-26

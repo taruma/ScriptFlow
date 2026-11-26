@@ -62,6 +62,7 @@ export const BUILTIN_AUTEUR_SKILLS: readonly AuteurSkillDefinition[] =
 
 export const DEFAULT_TOOL_PROTOCOL_CORE = [
   '- Staging-first safety: never assume editor text has changed until the user applies a staged suggestion. Every edit, draft, or audit review must be staged through its dedicated tool.',
+  '- Read-before-write on changed scripts: whenever `<live_editor_state>` indicates the live script changed since the prior turn or after a `<prior_session_recap>` bridge on a non-empty script, call `get_script_source` (targeting the changed/affected `MB#` / `S#` IDs or omitting `targetIds` for full source) before calling `propose_script_patch`, `propose_text_replace`, or `propose_script_draft`—never reconstruct text from prior-turn memory.',
   '- Self-repair on tool errors: whenever a tool returns `is_error: true` (`ok: false`), inspect `errors`, `introducedErrors`, `diagnostics`, and `repairHint`, fix the issue, and retry before giving your final reply.',
 ].join('\n');
 
@@ -82,7 +83,7 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
     defaultDescription:
       'Reads the current Auteur Script—or a targeted subset via targetIds (MB#, header names like AESTHETIC/EXECUTION, or S#)—as compact canonical v0.4.0 plain text with optional ID annotations.',
     defaultProtocolGuidance:
-      '- `get_script_source`: for localized edits—especially when `Recent user edits` or `[Target Scope: ...]` already identifies the target—prefer `targetIds` (e.g., `["MB0", "S3", "S4"]`) instead of reading the whole script; omit `targetIds` when you need the complete compact `v0.4.0` plain text.',
+      '- `get_script_source`: whenever `<live_editor_state>` indicates the script changed since the prior turn, call `get_script_source` before editing (preferring `targetIds`, e.g., `["MB0", "S3", "S4"]`, for localized edits; omit `targetIds` when you need the complete compact `v0.4.0` plain text).',
   },
   {
     name: 'inspect_lens_slice',
@@ -194,7 +195,7 @@ export function buildToolProtocolRuntimeHeader(
     hasTool('report_audit_review')
   ) {
     lines.push(
-      '- Optimistic concurrency: always pass the latest `expectedSnapshotHash` from `<live_editor_state>` (or `get_script_overview`) on `propose_script_patch`, `propose_text_replace`, and any embedded `suggestedPatch` inside `report_audit_review`.'
+      '- Optimistic concurrency & fresh-read rule: always pass the latest `expectedSnapshotHash` from `<live_editor_state>` (or `get_script_overview`) on `propose_script_patch`, `propose_text_replace`, and any embedded `suggestedPatch` inside `report_audit_review`; whenever `<live_editor_state>` indicates edits since the prior turn, read updated source via `get_script_source` before proposing changes.'
     );
   }
 

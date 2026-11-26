@@ -18,9 +18,13 @@ import {
   runProposeTextReplace,
   runReportAuditReview,
 } from './tools/handlers/mutationHandlers.ts';
+import {
+  checkReadBeforeWriteGuard,
+  type ScriptToolReadState,
+} from './tools/readGuard.ts';
 import {runAskQuestion, runLoadAuteurSkill} from './tools/handlers/workflowHandlers.ts';
 
-export type {AssistantFocus, AssistantMode, ScriptToolName};
+export type {AssistantFocus, AssistantMode, ScriptToolName, ScriptToolReadState};
 
 export {
   MODE_TOOL_NAMES,
@@ -98,6 +102,16 @@ export function executeScriptToolCall(
     call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments)
       ? call.arguments
       : {};
+
+  const readGuardFailure = checkReadBeforeWriteGuard(
+    call.name as ScriptToolName,
+    args,
+    context,
+    allowedTools
+  );
+  if (readGuardFailure) {
+    return readGuardFailure;
+  }
 
   switch (call.name as ScriptToolName) {
     case 'get_script_overview':

@@ -39,6 +39,7 @@ import {
   upsertStagedSuggestion,
   type GeminiFunctionToolDeclaration,
   type ScriptToolExecutionResult,
+  type ScriptToolReadState,
   type StagedSuggestion,
 } from './scriptTools.ts';
 
@@ -381,6 +382,20 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   let stagedSuggestions: StagedSuggestion[] = [];
   let activeRound: AgentRoundTrace | null = null;
   let activeRoundStartMs = 0;
+  const readSourceTargetIds = new Set<string>();
+  const turnReadState: ScriptToolReadState = {
+    requiresFreshRead:
+      !composedContext.editorState.isEmpty &&
+      (composedContext.editorState.changedSinceLastTurn || recapPreamble.length > 0),
+    changedTargetIds:
+      recapPreamble.length > 0
+        ? undefined
+        : composedContext.editorState.changedTargetIds,
+    readFullSource: false,
+    hasReadSource: false,
+    hasInspectedSlice: false,
+    readSourceTargetIds,
+  };
 
   try {
     while (true) {
@@ -509,6 +524,10 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
 
       const functionResultSteps: PendingToolResultStep[] = [];
       let pausedQuestion: PendingQuestionPause | undefined;
+      let roundReadFullSource = false;
+      let roundHasReadSource = false;
+      let roundHasInspectedSlice = false;
+      const roundMatchedIds: string[] = [];
 
       for (const call of outcome.functionCalls) {
         if (options.signal?.aborted) {
@@ -533,6 +552,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
             ruleOverrides: options.ruleOverrides,
             askQuestionMode: options.askQuestionMode,
             composedContext,
+            readState: turnReadState,
             createSuggestionId: options.createSuggestionId,
             onStageSuggestion: (suggestion) => {
               stagedSuggestions = upsertStagedSuggestion(stagedSuggestions, suggestion);
@@ -546,6 +566,23 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
             },
           }
         );
+
+        if (execResult.ok) {
+          if (call.name === 'get_script_source') {
+            roundHasReadSource = true;
+            if (execResult.result.filtered === false) {
+              roundReadFullSource = true;
+            } else if (Array.isArray(execResult.result.matchedIds)) {
+              for (const id of execResult.result.matchedIds) {
+                if (typeof id === 'string' && id.length > 0) {
+                  roundMatchedIds.push(id);
+                }
+              }
+            }
+          } else if (call.name === 'inspect_lens_slice') {
+            roundHasInspectedSlice = true;
+          }
+        }
 
         const trace: AgentToolCallTrace = {
           callId: call.id,
@@ -587,6 +624,21 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         } else {
           functionResultSteps.push(resultStep);
         }
+      }
+
+      // Commit successful reads at round boundary so same-round parallel mutations
+      // must wait until the model receives the freshly returned source text.
+      if (roundHasReadSource) {
+        turnReadState.hasReadSource = true;
+      }
+      if (roundReadFullSource) {
+        turnReadState.readFullSource = true;
+      }
+      if (roundHasInspectedSlice) {
+        turnReadState.hasInspectedSlice = true;
+      }
+      for (const id of roundMatchedIds) {
+        readSourceTargetIds.add(id);
       }
 
       activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);

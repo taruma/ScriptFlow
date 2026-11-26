@@ -949,4 +949,319 @@ describe('geminiInteractions streaming agent client', () => {
     expect(String(capturedRequests[1].input)).toContain('<prior_session_recap>');
     expect(String(capturedRequests[1].input)).toContain('Continue rain idea');
   });
+
+  it('enforces read-before-write at round boundaries after manual edits even when the model knows the new snapshotHash', async () => {
+    const priorScript = [
+      '[INTENT]',
+      'Create a corridor beat with @image1 as Nadia.',
+      '',
+      '[OPENING]',
+      'MS eye level. Frame-left, Nadia stands facing screen-right.',
+      '',
+      '[EXECUTION]',
+      '[CAM 01] MS eye level -> [ACT] Nadia opens the old wooden door -> <latch click>',
+    ].join('\n');
+
+    const manuallyEditedScript = [
+      '[INTENT]',
+      'Create a corridor beat with @image1 as Nadia.',
+      '',
+      '[OPENING]',
+      'MS eye level. Frame-left, Nadia stands facing screen-right.',
+      '',
+      '[EXECUTION]',
+      '[CAM 01] MS eye level -> [ACT] Nadia unlocks the steel hatch carefully -> <deadbolt slide>',
+    ].join('\n');
+
+    const priorHash = toAuteurEnvelope(priorScript).snapshotHash;
+    const editedHash = toAuteurEnvelope(manuallyEditedScript).snapshotHash;
+    const capturedRequests: Array<Record<string, unknown>> = [];
+
+    const roundStreams: InteractionStreamEventLike[][] = [
+      // Round 1: model calls get_script_overview + propose_script_patch directly with the new hash
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-rbw-1', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-overview-1',
+            name: 'get_script_overview',
+            arguments: {},
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'step.start',
+          index: 1,
+          step: {
+            type: 'function_call',
+            id: 'call-patch-premature-1',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: editedHash,
+              summary: 'Stale memory rewrite',
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.2',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Nadia opens the old wooden door quietly',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 1},
+        {event_type: 'interaction.completed', interaction: {id: 'int-rbw-1', status: 'requires_action'}},
+      ],
+      // Round 2: model calls get_script_source AND tries to patch in the same parallel round
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-rbw-2', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-source-2',
+            name: 'get_script_source',
+            arguments: {targetIds: ['S1']},
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'step.start',
+          index: 1,
+          step: {
+            type: 'function_call',
+            id: 'call-patch-parallel-2',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: editedHash,
+              summary: 'Same-round parallel patch',
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.2',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Nadia opens the old wooden door quietly',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 1},
+        {event_type: 'interaction.completed', interaction: {id: 'int-rbw-2', status: 'requires_action'}},
+      ],
+      // Round 3: after seeing fresh source, model patches while preserving the user's steel hatch edit
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-rbw-3', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-patch-clean-3',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: editedHash,
+              summary: 'Tighten steel hatch action',
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.2',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Nadia unlocks the heavy steel hatch',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {event_type: 'interaction.completed', interaction: {id: 'int-rbw-3', status: 'requires_action'}},
+      ],
+      // Round 4: final summary
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-rbw-4', status: 'in_progress'}},
+        {
+          event_type: 'step.delta',
+          index: 0,
+          delta: {type: 'text', text: 'Updated S1 after reading your latest edits.'},
+        },
+        {event_type: 'interaction.completed', interaction: {id: 'int-rbw-4', status: 'completed'}},
+      ],
+    ];
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async (params) => {
+          capturedRequests.push(params);
+          return asAsyncStream(roundStreams.shift() ?? []);
+        },
+      },
+    };
+
+    const result = await runGeminiAgentTurn({
+      apiKey: 'AIza-rbw-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Tighten the action slightly.',
+      rawText: manuallyEditedScript,
+      previousInteractionId: 'int-before-edit',
+      previousSnapshotHash: priorHash,
+      previousRawText: priorScript,
+      createClient: () => fakeClient,
+    });
+
+    expect(capturedRequests).toHaveLength(4);
+    expect(result.toolTraces).toHaveLength(5);
+    // Round 1: overview succeeds, premature patch fails with STALE_CONTEXT_READ_REQUIRED
+    expect(result.toolTraces[0].name).toBe('get_script_overview');
+    expect(result.toolTraces[0].ok).toBe(true);
+    expect(result.toolTraces[1].name).toBe('propose_script_patch');
+    expect(result.toolTraces[1].ok).toBe(false);
+    expect((result.toolTraces[1].result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+    // Round 2: get_script_source returns manual edit, same-round parallel patch still blocked
+    expect(result.toolTraces[2].name).toBe('get_script_source');
+    expect(result.toolTraces[2].ok).toBe(true);
+    expect(String(result.toolTraces[2].result.sourceText)).toContain('steel hatch');
+    expect(result.toolTraces[3].name).toBe('propose_script_patch');
+    expect(result.toolTraces[3].ok).toBe(false);
+    expect((result.toolTraces[3].result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+    // Round 3: patch succeeds and preserves user's manual edits (<deadbolt slide>)
+    expect(result.toolTraces[4].name).toBe('propose_script_patch');
+    expect(result.toolTraces[4].ok).toBe(true);
+    expect(result.stagedSuggestions).toHaveLength(1);
+    const stagedPatch = result.stagedSuggestions[0] as PatchSuggestion;
+    expect(stagedPatch.candidateRawText).toContain('heavy steel hatch');
+    expect(stagedPatch.candidateRawText).toContain('<deadbolt slide>');
+  });
+
+  it('requires a fresh read before patching when a turn is seeded by priorSessionRecap on a non-empty script', async () => {
+    const scriptHash = toAuteurEnvelope(SAMPLE_SCRIPT).snapshotHash;
+    const roundStreams: InteractionStreamEventLike[][] = [
+      // Round 1: premature patch without reading
+      [
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-recap-patch-1',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: scriptHash,
+              summary: 'Premature recap patch',
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.2',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Miller leans forward across the metal desk',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {event_type: 'interaction.completed', interaction: {id: 'int-recap-r1', status: 'requires_action'}},
+      ],
+      // Round 2: read full script source
+      [
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-recap-source-2',
+            name: 'get_script_source',
+            arguments: {},
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {event_type: 'interaction.completed', interaction: {id: 'int-recap-r2', status: 'requires_action'}},
+      ],
+      // Round 3: patch succeeds
+      [
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-recap-patch-3',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: scriptHash,
+              summary: 'Adjust S1 action after read',
+              ops: [
+                {
+                  op: 'replace_sub_state',
+                  subStateId: 'S1.2',
+                  subState: {
+                    dimension: 'action',
+                    subStateTag: 'ACT',
+                    content: 'Miller leans forward across the metal desk',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {event_type: 'interaction.completed', interaction: {id: 'int-recap-r3', status: 'requires_action'}},
+      ],
+      // Round 4: final text
+      [
+        {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Done.'}},
+        {event_type: 'interaction.completed', interaction: {id: 'int-recap-r4', status: 'completed'}},
+      ],
+    ];
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async () => asAsyncStream(roundStreams.shift() ?? []),
+      },
+    };
+
+    const result = await runGeminiAgentTurn({
+      apiKey: 'AIza-recap-rbw-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Adjust Miller action.',
+      rawText: SAMPLE_SCRIPT,
+      priorSessionRecap: '<prior_session_recap>\nEarlier session summary.\n</prior_session_recap>',
+      createClient: () => fakeClient,
+    });
+
+    expect(result.toolTraces[0].ok).toBe(false);
+    expect((result.toolTraces[0].result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+    expect(result.toolTraces[1].name).toBe('get_script_source');
+    expect(result.toolTraces[1].ok).toBe(true);
+    expect(result.toolTraces[2].name).toBe('propose_script_patch');
+    expect(result.toolTraces[2].ok).toBe(true);
+    expect(result.stagedSuggestions).toHaveLength(1);
+  });
 });

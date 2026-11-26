@@ -16,6 +16,7 @@ import {
   type DraftSuggestion,
   type PatchSuggestion,
   type QuestionSuggestion,
+  type ScriptToolReadState,
   type StagedSuggestion,
   type TitleSuggestion,
 } from '../../src/services/scriptTools.ts';
@@ -1245,5 +1246,295 @@ describe('get_script_source, propose_text_replace, and propose_script_title tool
 
     const dismissedPayload = buildQuestionToolResultPayload(qCard, {}, 'dismissed');
     expect(dismissedPayload).toMatchObject({ok: true, status: 'dismissed'});
+  });
+});
+
+describe('read-before-write guard on changed scripts', () => {
+  const SCRIPT_WITH_TWO_BEATS = [
+    '[INTENT]',
+    'Create a quiet office check-in with @image1 as Elena.',
+    '',
+    '[OPENING]',
+    'MS at eye level. Frame-left, Elena sits facing screen-right.',
+    '',
+    '[EXECUTION]',
+    '[CAM 01] MS eye level -> [ACT] Elena sets down her coffee -> <cup clink>',
+    '[CAM 01] MS eye level -> [ACT] Elena opens the manila folder -> <paper rustle>',
+  ].join('\n');
+
+  const HASH = toAuteurEnvelope(SCRIPT_WITH_TWO_BEATS).snapshotHash;
+
+  function makeReadState(overrides: Partial<ScriptToolReadState> = {}): ScriptToolReadState {
+    return {
+      requiresFreshRead: true,
+      changedTargetIds: ['S2'],
+      readFullSource: false,
+      hasReadSource: false,
+      hasInspectedSlice: false,
+      readSourceTargetIds: new Set<string>(),
+      ...overrides,
+    };
+  }
+
+  it('blocks mutation and audit tools until a fresh read occurs, while allowing title/read/workflow tools', () => {
+    const unreadState = makeReadState();
+
+    const patchBlocked = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: HASH,
+          summary: 'Edit S2',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S2.2',
+              subState: {dimension: 'action', subStateTag: 'ACT', content: 'Elena closes the folder'},
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(patchBlocked.ok).toBe(false);
+    expect((patchBlocked.result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+    expect(String(patchBlocked.result.repairHint)).toContain('get_script_source');
+
+    const replaceBlocked = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: HASH,
+          summary: 'Rename Elena',
+          replacements: [{find: 'Elena', replace: 'Mara'}],
+        },
+      },
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(replaceBlocked.ok).toBe(false);
+    expect((replaceBlocked.result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+
+    const draftBlocked = executeScriptToolCall(
+      {
+        name: 'propose_script_draft',
+        arguments: {
+          draft: {
+            stagingMacroBlocks: [{header: 'OPENING', format: 'prose', body: 'Empty room.'}],
+            executionMacroBlock: {
+              header: 'EXECUTION',
+              macroStates: [
+                {
+                  subStates: [
+                    {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS'},
+                    {dimension: 'action', subStateTag: 'ACT', content: 'Door opens'},
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {mode: 'draft', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(draftBlocked.ok).toBe(false);
+    expect((draftBlocked.result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+
+    const auditBlocked = executeScriptToolCall(
+      {
+        name: 'report_audit_review',
+        arguments: {
+          overallSummary: 'Quick check',
+          issues: [
+            {
+              lens: 'Lens 1: Spatial & Optics',
+              severity: 'warning',
+              targetLevel: 'macro_state',
+              targetId: 'S2',
+              message: 'Check blocking.',
+              rationale: 'Verify eyeline.',
+              repairHint: 'Adjust eyeline.',
+            },
+          ],
+        },
+      },
+      {mode: 'check', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(auditBlocked.ok).toBe(false);
+    expect((auditBlocked.result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+
+    // Non-gated tools remain available
+    const titleOk = executeScriptToolCall(
+      {name: 'propose_script_title', arguments: {title: 'The Manila Folder'}},
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(titleOk.ok).toBe(true);
+
+    const overviewOk = executeScriptToolCall(
+      {name: 'get_script_overview', arguments: {}},
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(overviewOk.ok).toBe(true);
+
+    const sourceOk = executeScriptToolCall(
+      {name: 'get_script_source', arguments: {targetIds: ['S2']}},
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: unreadState}
+    );
+    expect(sourceOk.ok).toBe(true);
+  });
+
+  it('rejects patching an unread changed target after reading an unrelated target, then allows once read', () => {
+    const readOnlyMb0 = makeReadState({
+      changedTargetIds: ['S2'],
+      hasReadSource: true,
+      readSourceTargetIds: new Set(['MB0']),
+    });
+
+    const stillBlocked = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: HASH,
+          summary: 'Edit S2 without reading S2',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S2.2',
+              subState: {dimension: 'action', subStateTag: 'ACT', content: 'Elena closes the folder'},
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: readOnlyMb0}
+    );
+    expect(stillBlocked.ok).toBe(false);
+    expect((stillBlocked.result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
+    expect(String(stillBlocked.result.repairHint)).toContain('S2');
+
+    // Reading S2 specifically unlocks patching S2
+    const readS2 = makeReadState({
+      changedTargetIds: ['S2'],
+      hasReadSource: true,
+      readSourceTargetIds: new Set(['MB0', 'S2']),
+    });
+    const allowedAfterS2 = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: HASH,
+          summary: 'Edit S2 after reading S2',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S2.2',
+              subState: {dimension: 'action', subStateTag: 'ACT', content: 'Elena closes the folder'},
+            },
+          ],
+        },
+      },
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: readS2}
+    );
+    expect(allowedAfterS2.ok).toBe(true);
+
+    // Global replace and draft also unlock once all changedTargetIds (or full source) are read
+    const globalReplaceAfterS2 = executeScriptToolCall(
+      {
+        name: 'propose_text_replace',
+        arguments: {
+          expectedSnapshotHash: HASH,
+          summary: 'Rename Elena to Mara',
+          replacements: [{find: 'Elena', replace: 'Mara'}],
+        },
+      },
+      {mode: 'refine', rawText: SCRIPT_WITH_TWO_BEATS, readState: readS2}
+    );
+    expect(globalReplaceAfterS2.ok).toBe(true);
+
+    const draftAfterFull = executeScriptToolCall(
+      {
+        name: 'propose_script_draft',
+        arguments: {
+          draft: {
+            stagingMacroBlocks: [{header: 'OPENING', format: 'prose', body: 'Empty room.'}],
+            executionMacroBlock: {
+              header: 'EXECUTION',
+              macroStates: [
+                {
+                  subStates: [
+                    {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS'},
+                    {dimension: 'action', subStateTag: 'ACT', content: 'Door opens'},
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {
+        mode: 'draft',
+        rawText: SCRIPT_WITH_TWO_BEATS,
+        readState: makeReadState({hasReadSource: true, readFullSource: true}),
+      }
+    );
+    expect(draftAfterFull.ok).toBe(true);
+  });
+
+  it('bypasses guard cleanly on empty scripts or when all read tools are disabled', () => {
+    const emptyBypass = executeScriptToolCall(
+      {
+        name: 'propose_script_draft',
+        arguments: {
+          draft: {
+            stagingMacroBlocks: [{header: 'OPENING', format: 'prose', body: 'Empty room.'}],
+            executionMacroBlock: {
+              header: 'EXECUTION',
+              macroStates: [
+                {
+                  subStates: [
+                    {dimension: 'camera', subStateTag: 'CAM', identifier: '01', content: 'MS'},
+                    {dimension: 'action', subStateTag: 'ACT', content: 'Door opens'},
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      {mode: 'draft', rawText: '', readState: makeReadState()}
+    );
+    expect(emptyBypass.ok).toBe(true);
+
+    const disabledReadsBypass = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {
+          expectedSnapshotHash: HASH,
+          summary: 'Edit S2 when read tools are disabled',
+          ops: [
+            {
+              op: 'replace_sub_state',
+              subStateId: 'S2.2',
+              subState: {dimension: 'action', subStateTag: 'ACT', content: 'Elena closes the folder'},
+            },
+          ],
+        },
+      },
+      {
+        mode: 'refine',
+        rawText: SCRIPT_WITH_TWO_BEATS,
+        allowedTools: ['propose_script_patch'],
+        readState: makeReadState(),
+      }
+    );
+    expect(disabledReadsBypass.ok).toBe(true);
   });
 });

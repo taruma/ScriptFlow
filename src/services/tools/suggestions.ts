@@ -19,6 +19,7 @@ import type {
   ScriptToolName,
 } from '../auteurKnowledge.ts';
 import {buildLineDiff, type ScriptLineDiff} from './lineDiff.ts';
+import type {ScriptToolReadState} from './readGuard.ts';
 
 // ---------------------------------------------------------------------------
 // Staged Reviewable Suggestions (Zero Direct rawText Mutation)
@@ -167,6 +168,7 @@ export interface ScriptToolContext {
   askQuestionMode?: AskQuestionMode;
   composedContext?: ComposedAgentContext;
   allowedTools?: readonly ScriptToolName[];
+  readState?: ScriptToolReadState;
   createSuggestionId?: () => string;
   onStageSuggestion?: (suggestion: StagedSuggestion) => void;
   onSkillLoaded?: (event: {id: string; name: string; source: 'tool'}) => void;
