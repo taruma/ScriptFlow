@@ -134,8 +134,14 @@ export function AiAssistantSidebar({
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
   const [contextInitialTab, setContextInitialTab] = useState<ContextInspectorTabId>('preview');
   const [inspectedTrace, setInspectedTrace] = useState<AiInspectableTrace | null>(null);
+  const [hasActiveInteraction, setHasActiveInteraction] = useState<boolean>(false);
   const [lastTurnSnapshotHash, setLastTurnSnapshotHash] = useState<string | undefined>(undefined);
   const [lastTurnRawText, setLastTurnRawText] = useState<string | undefined>(undefined);
+  const [lastTurnSceneTitle, setLastTurnSceneTitle] = useState<string | undefined>(undefined);
+  const [lastTurnDiagnosticsFingerprint, setLastTurnDiagnosticsFingerprint] = useState<
+    string | undefined
+  >(undefined);
+  const [lastTurnBriefContext, setLastTurnBriefContext] = useState<string | undefined>(undefined);
   const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
   const [sessionCostTooltip, setSessionCostTooltip] = useState<ActivityHoverTooltip | null>(null);
 
@@ -164,8 +170,12 @@ export function AiAssistantSidebar({
             rawText,
             sceneTitle,
             ruleOverrides,
+            hasPreviousInteraction: hasActiveInteraction,
             previousSnapshotHash: lastTurnSnapshotHash,
             previousRawText: lastTurnRawText,
+            previousSceneTitle: lastTurnSceneTitle,
+            previousDiagnosticsFingerprint: lastTurnDiagnosticsFingerprint,
+            previousBriefContext: lastTurnBriefContext,
             foundationalCraftOverride: aiSkills.skillsState.foundationalCraftOverride ?? undefined,
             skillOverrides: aiSkills.skillsState.skillOverrides,
             customSkills: aiSkills.skillsState.customSkills,
@@ -183,8 +193,12 @@ export function AiAssistantSidebar({
       rawText,
       sceneTitle,
       ruleOverrides,
+      hasActiveInteraction,
       lastTurnSnapshotHash,
       lastTurnRawText,
+      lastTurnSceneTitle,
+      lastTurnDiagnosticsFingerprint,
+      lastTurnBriefContext,
       aiSkills.skillsState.foundationalCraftOverride,
       aiSkills.skillsState.skillOverrides,
       aiSkills.skillsState.customSkills,
@@ -199,6 +213,8 @@ export function AiAssistantSidebar({
 
   const isEmpty = previewComposedContext?.editorState.isEmpty ?? rawText.trim().length === 0;
   const currentSnapshotHash = previewComposedContext?.editorState.snapshotHash ?? '';
+  const currentDiagnosticsFingerprint =
+    previewComposedContext?.editorState.diagnosticsFingerprint ?? 'clean';
 
   const targetOptions = useMemo(
     () => buildAiTargetOptions(doc, UI_LABELS.ai.refineWholeScript),
@@ -256,6 +272,7 @@ export function AiAssistantSidebar({
     focus,
     isEmpty,
     currentSnapshotHash,
+    currentDiagnosticsFingerprint,
     activeTarget,
     brief: briefCtrl.brief,
     briefIsActive: briefCtrl.briefIsActive,
@@ -275,8 +292,12 @@ export function AiAssistantSidebar({
     onActivePatchesChange,
     onActiveQuickScanChange,
     onRegisterLivePatchActions,
+    onHasActiveInteractionChange: setHasActiveInteraction,
     onLastTurnSnapshotHashChange: setLastTurnSnapshotHash,
     onLastTurnRawTextChange: setLastTurnRawText,
+    onLastTurnSceneTitleChange: setLastTurnSceneTitle,
+    onLastTurnDiagnosticsFingerprintChange: setLastTurnDiagnosticsFingerprint,
+    onLastTurnBriefContextChange: setLastTurnBriefContext,
     onOpenSettings: handleOpenSettings,
     onStreamStart: handleStreamStart,
     onResetChatUi: handleResetChatUi,

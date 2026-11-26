@@ -414,7 +414,7 @@ describe('Phase 3 unified Focus & mode-agnostic Scene Brief / References helpers
     expect(partial).not.toContain('Subtext & Additional Instructions');
   });
 
-  it('injects Scene Brief into system_instruction across all focus modes when provided and omits it when empty', () => {
+  it('injects Scene Brief into turnContext across all focus modes while keeping systemInstruction cache-stable', () => {
     const briefContext = formatSceneBriefContext({
       enabled: true,
       references: [{id: 'r1', handle: '@image1', kind: 'text', label: 'Mark'}],
@@ -430,46 +430,60 @@ describe('Phase 3 unified Focus & mode-agnostic Scene Brief / References helpers
         referenceHandles: ['@image1'],
       });
       expect(withBrief.sections.sceneBrief.isActive).toBe(true);
+      expect(withBrief.sections.sceneBrief.delivery).toBe('full');
       expect(withBrief.sections.sceneBrief.text).toContain('Scene Brief & References');
       expect(withBrief.sections.sceneBrief.text).toContain('@image1 as Mark');
       expect(withBrief.sections.sceneBrief.text).toContain('Robert only speaks once');
-      expect(withBrief.systemInstruction).toContain(withBrief.sections.sceneBrief.text);
-      expect(withBrief.activeSkills.map((s) => s.id)).toContain('character_reference');
+      expect(withBrief.turnContext.text).toContain(withBrief.sections.sceneBrief.text);
+      expect(withBrief.systemInstruction).not.toContain('Scene Brief & References');
 
       const withoutBrief = composeAgentContext({
         focus,
         rawText: '[OPENING]\nRainy cafe.\n\n[EXECUTION]\n1. Mark waits.',
       });
       expect(withoutBrief.sections.sceneBrief.isActive).toBe(false);
+      expect(withoutBrief.sections.sceneBrief.delivery).toBe('none');
       expect(withoutBrief.sections.sceneBrief.text).toBe('');
-      expect(withoutBrief.systemInstruction).not.toContain('Scene Brief & References');
+      expect(withoutBrief.turnContext.text).not.toContain('Scene Brief & References');
+      expect(withBrief.systemInstruction).toBe(withoutBrief.systemInstruction);
     }
   });
 
-  it('passively activates video_continuation and character_reference from referenceHandles on an empty script while respecting muted overrides', () => {
+  it('keeps skills strictly On-Demand unless explicitly Pinned or Muted and normalizes on_demand alias', () => {
     const composed = composeAgentContext({
       focus: 'auto',
       rawText: '',
       referenceHandles: ['@video1', '@image1'],
     });
 
-    const activeIds = composed.activeSkills.map((s) => s.id);
-    expect(activeIds).toContain('draft_craft');
-    expect(activeIds).toContain('video_continuation');
-    expect(activeIds).toContain('character_reference');
+    expect(composed.activeSkills).toEqual([]);
+    expect(composed.availableSkills.map((s) => s.id)).toEqual(
+      expect.arrayContaining(['draft_craft', 'video_continuation', 'character_reference'])
+    );
 
-    // Muted override must suppress passive activation even when handle is declared
-    const muted = composeAgentContext({
+    const pinnedAndMuted = composeAgentContext({
       focus: 'auto',
       rawText: '',
       referenceHandles: ['@video1', '@image1'],
       skillOverrides: {
+        character_reference: {pinMode: 'pinned'},
         video_continuation: {pinMode: 'muted'},
       },
     });
-    expect(muted.activeSkills.map((s) => s.id)).not.toContain('video_continuation');
-    expect(muted.mutedSkills.map((s) => s.id)).toContain('video_continuation');
-    expect(muted.activeSkills.map((s) => s.id)).toContain('character_reference');
+    expect(pinnedAndMuted.activeSkills.map((s) => s.id)).toEqual(['character_reference']);
+    expect(pinnedAndMuted.mutedSkills.map((s) => s.id)).toEqual(['video_continuation']);
+    expect(pinnedAndMuted.availableSkills.map((s) => s.id)).not.toContain('video_continuation');
+
+    const normalized = sanitizeAiSkillsState({
+      skillOverrides: {
+        draft_craft: {pinMode: 'on_demand'},
+        temporal_calibration: {pinMode: 'on_demand', bodyOverride: 'Tight 3s pacing.'},
+      },
+    });
+    expect(normalized.skillOverrides.draft_craft).toBeUndefined();
+    expect(normalized.skillOverrides.temporal_calibration).toEqual({
+      bodyOverride: 'Tight 3s pacing.',
+    });
   });
 
   it('keeps Phase 2/3 craft prompts and UI labels 100% platform- and model-agnostic', () => {

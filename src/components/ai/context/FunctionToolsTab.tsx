@@ -129,13 +129,11 @@ export function FunctionToolsTab({
       buildToolProtocolRuntimeHeader({
         focus: composedContext.focus,
         allowedToolNames: composedContext.allowedToolNames,
-        snapshotHash: composedContext.editorState.snapshotHash,
         enforceToolLinterGate: composedContext.enforceToolLinterGate,
       }).join('\n'),
     [
       composedContext.focus,
       composedContext.allowedToolNames,
-      composedContext.editorState.snapshotHash,
       composedContext.enforceToolLinterGate,
     ]
   );

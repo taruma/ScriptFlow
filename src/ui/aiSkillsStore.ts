@@ -181,10 +181,13 @@ export function validateCustomSkillInput(
 function normalizeSkillOverride(skillId: string, raw: unknown): SkillOverride | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
-  const pinMode =
-    typeof record.pinMode === 'string' && VALID_PIN_MODES.has(record.pinMode as SkillPinMode)
-      ? (record.pinMode as SkillPinMode)
-      : undefined;
+  const rawPinMode = typeof record.pinMode === 'string' ? record.pinMode.trim().toLowerCase() : undefined;
+  const pinMode: SkillPinMode | undefined =
+    rawPinMode === 'on_demand'
+      ? 'auto'
+      : rawPinMode && VALID_PIN_MODES.has(rawPinMode as SkillPinMode)
+        ? (rawPinMode as SkillPinMode)
+        : undefined;
 
   const builtInDefaultBody = BUILTIN_SKILL_BY_ID.get(skillId)?.body;
   let bodyOverride: string | undefined;

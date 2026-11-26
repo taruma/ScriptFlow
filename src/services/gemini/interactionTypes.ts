@@ -145,6 +145,9 @@ export interface RunAgentTurnOptions {
   previousInteractionId?: string;
   previousSnapshotHash?: string;
   previousRawText?: string;
+  previousSceneTitle?: string;
+  previousDiagnosticsFingerprint?: string;
+  previousBriefContext?: string;
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];

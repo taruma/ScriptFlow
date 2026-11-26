@@ -1,4 +1,10 @@
-import {assistantModeToFocus, composeAgentContext} from '../../auteurKnowledge.ts';
+import {toAuteurEnvelope} from '../../../core/index.ts';
+import {
+  assistantModeToFocus,
+  buildDraftCraftBody,
+  composeAgentContext,
+  DRAFT_CRAFT_CORE_RULES,
+} from '../../auteurKnowledge.ts';
 import type {
   ClarifyingQuestionItem,
   QuestionSuggestion,
@@ -89,6 +95,14 @@ export function runLoadAuteurSkill(
     source: 'tool',
   });
 
+  const content =
+    skill.id === 'draft_craft' &&
+    !skill.isBodyOverridden &&
+    toAuteurEnvelope(context.rawText, context.ruleOverrides).derived.sceneTopology ===
+      'discontinuous_montage'
+      ? buildDraftCraftBody(DRAFT_CRAFT_CORE_RULES, true)
+      : skill.body;
+
   return {
     ok: true,
     toolName: 'load_auteur_skill',
@@ -96,7 +110,7 @@ export function runLoadAuteurSkill(
       ok: true,
       skillId: skill.id,
       name: skill.name,
-      content: skill.body,
+      content,
     },
   };
 }
@@ -106,6 +120,20 @@ export function runAskQuestion(
   context: ScriptToolContext,
   nextId: () => string
 ): ScriptToolExecutionResult {
+  const askTool = context.composedContext?.resolvedTools.find((t) => t.name === 'ask_question');
+  if ((context.askQuestionMode ?? 'off') === 'off' && askTool?.reason !== 'forced_on') {
+    return {
+      ok: false,
+      toolName: 'ask_question',
+      result: {
+        ok: false,
+        error: 'ask_question is OFF for this turn (Ask First is not enabled).',
+        repairHint:
+          'Do not call ask_question on this turn. Proceed directly with drafting, editing, auditing, or answering in prose.',
+      },
+    };
+  }
+
   const rawQuestions = args.questions;
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
     return {

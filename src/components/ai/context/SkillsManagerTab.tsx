@@ -39,15 +39,10 @@ export function getSkillStatusBadge(skill: ResolvedAuteurSkill): {
     };
   }
   if (skill.status === 'active') {
-    return skill.reason === 'pinned'
-      ? {
-          label: labels.statusActivePinned,
-          className: 'auteur-phase-continuity',
-        }
-      : {
-          label: labels.statusActivePassive,
-          className: 'auteur-phase-aesthetic',
-        };
+    return {
+      label: labels.statusActivePinned,
+      className: 'auteur-phase-continuity',
+    };
   }
   return {
     label: labels.statusAvailable,

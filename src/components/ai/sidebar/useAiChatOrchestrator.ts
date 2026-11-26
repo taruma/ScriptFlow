@@ -80,6 +80,7 @@ export interface UseAiChatOrchestratorOptions {
   focus: AssistantFocus;
   isEmpty: boolean;
   currentSnapshotHash: string;
+  currentDiagnosticsFingerprint: string;
   activeTarget: AiTargetScope;
   brief: DraftBriefState;
   briefIsActive: boolean;
@@ -103,8 +104,12 @@ export interface UseAiChatOrchestratorOptions {
   onActivePatchesChange?: (patches: ActiveAiPatchItem[]) => void;
   onActiveQuickScanChange?: (quickScan: QuickScanResult | null) => void;
   onRegisterLivePatchActions?: (actions: AiLivePatchActionHandlers | null) => void;
+  onHasActiveInteractionChange: (active: boolean) => void;
   onLastTurnSnapshotHashChange: (hash: string | undefined) => void;
   onLastTurnRawTextChange: (rawText: string | undefined) => void;
+  onLastTurnSceneTitleChange: (sceneTitle: string | undefined) => void;
+  onLastTurnDiagnosticsFingerprintChange: (fingerprint: string | undefined) => void;
+  onLastTurnBriefContextChange: (briefContext: string | undefined) => void;
   onOpenSettings: () => void;
   onStreamStart: () => void;
   onResetChatUi: () => void;
@@ -157,6 +162,7 @@ export function useAiChatOrchestrator({
   focus,
   isEmpty,
   currentSnapshotHash,
+  currentDiagnosticsFingerprint,
   activeTarget,
   brief,
   briefIsActive,
@@ -176,8 +182,12 @@ export function useAiChatOrchestrator({
   onActivePatchesChange,
   onActiveQuickScanChange,
   onRegisterLivePatchActions,
+  onHasActiveInteractionChange,
   onLastTurnSnapshotHashChange,
   onLastTurnRawTextChange,
+  onLastTurnSceneTitleChange,
+  onLastTurnDiagnosticsFingerprintChange,
+  onLastTurnBriefContextChange,
   onOpenSettings,
   onStreamStart,
   onResetChatUi,
@@ -191,6 +201,9 @@ export function useAiChatOrchestrator({
   const lastInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
   const lastTurnRawTextRef = useRef<string | undefined>(undefined);
+  const lastTurnSceneTitleRef = useRef<string | undefined>(undefined);
+  const lastTurnDiagnosticsFingerprintRef = useRef<string | undefined>(undefined);
+  const lastTurnBriefContextRef = useRef<string | undefined>(undefined);
   const sentAttachmentFingerprintsRef = useRef<Set<string>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
@@ -240,12 +253,27 @@ export function useAiChatOrchestrator({
     lastInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
     lastTurnRawTextRef.current = undefined;
+    lastTurnSceneTitleRef.current = undefined;
+    lastTurnDiagnosticsFingerprintRef.current = undefined;
+    lastTurnBriefContextRef.current = undefined;
     sentAttachmentFingerprintsRef.current.clear();
+    onHasActiveInteractionChange(false);
     onLastTurnSnapshotHashChange(undefined);
     onLastTurnRawTextChange(undefined);
+    onLastTurnSceneTitleChange(undefined);
+    onLastTurnDiagnosticsFingerprintChange(undefined);
+    onLastTurnBriefContextChange(undefined);
     onResetChatUi();
     setMessages([]);
-  }, [onLastTurnSnapshotHashChange, onLastTurnRawTextChange, onResetChatUi]);
+  }, [
+    onHasActiveInteractionChange,
+    onLastTurnSnapshotHashChange,
+    onLastTurnRawTextChange,
+    onLastTurnSceneTitleChange,
+    onLastTurnDiagnosticsFingerprintChange,
+    onLastTurnBriefContextChange,
+    onResetChatUi,
+  ]);
 
   // Reset in-memory chat, interaction chain, and brief tray automatically when switching scripts
   useEffect(() => {
@@ -315,6 +343,9 @@ export function useAiChatOrchestrator({
 
       const turnSnapshotHash = currentSnapshotHash;
       const turnRawText = rawText;
+      const turnSceneTitle = sceneTitle;
+      const turnDiagnosticsFingerprint = currentDiagnosticsFingerprint;
+      const turnBriefContext = activeBriefContext ?? '';
 
       const initialAssistantMessage: AiChatMessage = {
         id: assistantMessageId,
@@ -353,6 +384,9 @@ export function useAiChatOrchestrator({
           previousInteractionId: lastInteractionIdRef.current,
           previousSnapshotHash: lastTurnSnapshotHashRef.current,
           previousRawText: lastTurnRawTextRef.current,
+          previousSceneTitle: lastTurnSceneTitleRef.current,
+          previousDiagnosticsFingerprint: lastTurnDiagnosticsFingerprintRef.current,
+          previousBriefContext: lastTurnBriefContextRef.current,
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
@@ -368,6 +402,7 @@ export function useAiChatOrchestrator({
             onInteractionId: (interactionId) => {
               if (activeRunIdRef.current !== runId) return;
               lastInteractionIdRef.current = interactionId;
+              onHasActiveInteractionChange(true);
             },
             onThoughtSummaryDelta: (delta) => {
               if (activeRunIdRef.current !== runId) return;
@@ -408,14 +443,21 @@ export function useAiChatOrchestrator({
 
         if (result.interactionId) {
           lastInteractionIdRef.current = result.interactionId;
+          onHasActiveInteractionChange(true);
           for (const att of pendingAttachments) {
             sentAttachmentFingerprintsRef.current.add(att.fingerprint);
           }
         }
         lastTurnSnapshotHashRef.current = turnSnapshotHash;
         lastTurnRawTextRef.current = turnRawText;
+        lastTurnSceneTitleRef.current = turnSceneTitle;
+        lastTurnDiagnosticsFingerprintRef.current = turnDiagnosticsFingerprint;
+        lastTurnBriefContextRef.current = turnBriefContext;
         onLastTurnSnapshotHashChange(turnSnapshotHash);
         onLastTurnRawTextChange(turnRawText);
+        onLastTurnSceneTitleChange(turnSceneTitle);
+        onLastTurnDiagnosticsFingerprintChange(turnDiagnosticsFingerprint);
+        onLastTurnBriefContextChange(turnBriefContext);
 
         setMessages((prev) =>
           completeAssistantTurnInMessages(prev, assistantMessageId, {
@@ -461,6 +503,7 @@ export function useAiChatOrchestrator({
       hasApiKey,
       activeTarget,
       currentSnapshotHash,
+      currentDiagnosticsFingerprint,
       apiKey,
       model,
       reasoningLevel,
@@ -475,8 +518,12 @@ export function useAiChatOrchestrator({
       skillsState.toolOverrides,
       onOpenSettings,
       onStreamStart,
+      onHasActiveInteractionChange,
       onLastTurnSnapshotHashChange,
       onLastTurnRawTextChange,
+      onLastTurnSceneTitleChange,
+      onLastTurnDiagnosticsFingerprintChange,
+      onLastTurnBriefContextChange,
     ]
   );
 

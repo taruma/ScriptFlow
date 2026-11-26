@@ -511,7 +511,7 @@ describe('geminiInteractions streaming agent client', () => {
     expect(trace.reasoningLevel).toBe('high');
     expect(trace.mode).toBe('refine');
     expect(trace.focus).toBe('refine');
-    expect(trace.activeSkillIds).toEqual(['character_reference']);
+    expect(trace.activeSkillIds).toEqual([]);
     expect(trace.loadedSkillIds).toEqual([]);
     expect(trace.startedAt).toBe('2026-11-20T10:00:00.025Z');
     expect(trace.durationMs).toBeGreaterThan(0);
@@ -533,9 +533,11 @@ describe('geminiInteractions streaming agent client', () => {
     expect(trace.rounds[0].request.previous_interaction_id).toBe('int-prev-0');
     expect(trace.rounds[0].request.toolNames).toEqual([
       ...MODE_TOOL_NAMES.refine,
+      'ask_question',
       'load_auteur_skill',
     ]);
-    expect(trace.rounds[0].request.input).toBe('Have Nadia cross the room.');
+    expect(String(trace.rounds[0].request.input)).toContain('<live_editor_state>');
+    expect(String(trace.rounds[0].request.input)).toContain('Have Nadia cross the room.');
     expect(trace.rounds[0].toolCalls).toHaveLength(1);
     expect(trace.rounds[0].toolCalls[0].ok).toBe(false);
     expect(typeof trace.rounds[0].toolCalls[0].result.repairHint).toBe('string');
@@ -681,5 +683,77 @@ describe('geminiInteractions streaming agent client', () => {
     expect('tools' in capturedRequests[0]).toBe(false);
     expect(String(capturedRequests[0].system_instruction)).toContain('pure conversation mode');
     expect(result.trace.rounds[0].request.toolNames).toEqual([]);
+  });
+
+  it('keeps system_instruction and tools byte-for-byte identical between Turn 1 and Turn 2 across script edits, Brief changes, and Ask First toggles', async () => {
+    const capturedRequests: Array<Record<string, unknown>> = [];
+    let turnCounter = 0;
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async (params) => {
+          capturedRequests.push(params);
+          turnCounter += 1;
+          return asAsyncStream([
+            {
+              event_type: 'interaction.created',
+              interaction: {id: `int-cache-${turnCounter}`, status: 'in_progress'},
+            },
+            {
+              event_type: 'step.delta',
+              index: 0,
+              delta: {type: 'text', text: `Reply ${turnCounter}.`},
+            },
+            {
+              event_type: 'interaction.completed',
+              interaction: {id: `int-cache-${turnCounter}`, status: 'completed'},
+            },
+          ]);
+        },
+      },
+    };
+
+    const turn1 = await runGeminiAgentTurn({
+      apiKey: 'AIza-cache-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'draft',
+      focus: 'auto',
+      prompt: 'Ask clarifying questions before drafting.',
+      rawText: '',
+      briefContext: '### Format & Specs\nSingle take.',
+      askQuestionMode: 'ask_first',
+      createClient: () => fakeClient,
+    });
+
+    const editedScript = SAMPLE_SCRIPT.replace('WAIT', 'PAUSE');
+    await runGeminiAgentTurn({
+      apiKey: 'AIza-cache-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Now apply the pacing edit.',
+      rawText: editedScript,
+      sceneTitle: 'Updated Scene',
+      previousInteractionId: turn1.interactionId ?? undefined,
+      previousSnapshotHash: toAuteurEnvelope('').snapshotHash,
+      previousRawText: '',
+      previousSceneTitle: '',
+      previousBriefContext: '### Format & Specs\nSingle take.',
+      briefContext: '### Format & Specs\nHandheld 35mm take.',
+      askQuestionMode: 'off',
+      createClient: () => fakeClient,
+    });
+
+    expect(capturedRequests).toHaveLength(2);
+    expect(capturedRequests[1].system_instruction).toBe(capturedRequests[0].system_instruction);
+    expect(JSON.stringify(capturedRequests[1].tools)).toBe(
+      JSON.stringify(capturedRequests[0].tools)
+    );
+    expect(String(capturedRequests[0].input)).toContain('[Ask First: ON]');
+    expect(String(capturedRequests[0].input)).toContain('<scene_brief>');
+    expect(String(capturedRequests[1].input)).toContain('<live_editor_state>');
+    expect(String(capturedRequests[1].input)).toContain('<scene_brief status="updated">');
+    expect(String(capturedRequests[1].input)).not.toContain('[Ask First: ON]');
   });
 });

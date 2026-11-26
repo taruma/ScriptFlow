@@ -13,6 +13,7 @@ import {
   type SceneTopology,
 } from '../../core/index.ts';
 import type {
+  AskQuestionMode,
   AssistantMode,
   ComposedAgentContext,
   ScriptToolName,
@@ -162,6 +163,7 @@ export interface ScriptToolContext {
   sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
   enforceToolLinterGate?: boolean;
+  askQuestionMode?: AskQuestionMode;
   composedContext?: ComposedAgentContext;
   allowedTools?: readonly ScriptToolName[];
   createSuggestionId?: () => string;

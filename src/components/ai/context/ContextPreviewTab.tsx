@@ -63,22 +63,24 @@ export interface ContextPreviewTabProps {
   onJumpToTab?: (tab: ContextPreviewJumpTarget) => void;
 }
 
+interface PreviewSectionItem {
+  key: string;
+  title: string;
+  editable: boolean;
+  jumpTab?: ContextPreviewJumpTarget;
+  jumpTabLabel?: string;
+  badgeLabel?: string;
+  badgeAccent?: boolean;
+  modified?: boolean;
+  body: string;
+  emptyNote?: string;
+}
+
 export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreviewTabProps) {
   const labels = UI_LABELS.ai.contextInspector;
   const focusLabel = UI_LABELS.ai.focusLabels[composedContext.focus];
 
-  const previewSections: Array<{
-    key: string;
-    title: string;
-    editable: boolean;
-    jumpTab?: ContextPreviewJumpTarget;
-    jumpTabLabel?: string;
-    badgeLabel?: string;
-    badgeAccent?: boolean;
-    modified?: boolean;
-    body: string;
-    emptyNote?: string;
-  }> = [
+  const systemInstructionSections: PreviewSectionItem[] = [
     {
       key: 'foundationalCraft',
       title: labels.sectionFoundationalCraft,
@@ -87,23 +89,6 @@ export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreview
       jumpTabLabel: labels.tabCraft,
       modified: composedContext.sections.foundationalCraft.isOverridden,
       body: composedContext.sections.foundationalCraft.text,
-    },
-    {
-      key: 'liveEditorState',
-      title: labels.sectionLiveEditorState,
-      editable: false,
-      body: composedContext.sections.liveEditorState.text,
-    },
-    {
-      key: 'sceneBrief',
-      title: labels.sectionSceneBrief,
-      editable: false,
-      badgeLabel: composedContext.sections.sceneBrief.isActive
-        ? labels.briefActiveBadge
-        : labels.briefInactiveBadge,
-      badgeAccent: composedContext.sections.sceneBrief.isActive,
-      body: composedContext.sections.sceneBrief.text,
-      emptyNote: labels.emptySceneBrief,
     },
     {
       key: 'activeSkills',
@@ -115,15 +100,6 @@ export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreview
       emptyNote: labels.emptyActiveSkills,
     },
     {
-      key: 'skillDirectory',
-      title: labels.sectionSkillDirectory,
-      editable: false,
-      jumpTab: 'skills',
-      jumpTabLabel: labels.tabSkills,
-      body: composedContext.sections.skillDirectory.text,
-      emptyNote: labels.emptyAvailableSkills,
-    },
-    {
       key: 'toolProtocol',
       title: labels.sectionToolProtocol,
       editable: true,
@@ -132,7 +108,119 @@ export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreview
       modified: composedContext.sections.toolProtocol.isOverridden,
       body: composedContext.sections.toolProtocol.text,
     },
+    {
+      key: 'skillDirectory',
+      title: labels.sectionSkillDirectory,
+      editable: false,
+      jumpTab: 'skills',
+      jumpTabLabel: labels.tabSkills,
+      body: composedContext.sections.skillDirectory.text,
+      emptyNote: labels.emptyAvailableSkills,
+    },
   ];
+
+  const briefBadge = (() => {
+    switch (composedContext.turnContext.briefDelivery) {
+      case 'full':
+        return {label: labels.briefActiveBadge, accent: true, empty: labels.emptySceneBrief};
+      case 'updated':
+        return {label: labels.briefUpdatedBadge, accent: true, empty: labels.emptySceneBrief};
+      case 'cleared':
+        return {label: labels.briefClearedBadge, accent: true, empty: labels.emptySceneBrief};
+      case 'unchanged':
+        return {label: labels.briefCachedBadge, accent: false, empty: labels.cachedSceneBrief};
+      case 'none':
+        return {label: labels.briefInactiveBadge, accent: false, empty: labels.emptySceneBrief};
+    }
+  })();
+
+  const turnContextSections: PreviewSectionItem[] = [
+    {
+      key: 'liveEditorState',
+      title: labels.sectionLiveEditorState,
+      editable: false,
+      badgeLabel:
+        composedContext.turnContext.liveEditorStateMode === 'full'
+          ? labels.liveStateFullBadge
+          : labels.liveStateUnchangedBadge,
+      badgeAccent: composedContext.turnContext.liveEditorStateMode === 'full',
+      body: composedContext.turnContext.liveEditorStateText,
+    },
+    {
+      key: 'sceneBrief',
+      title: labels.sectionSceneBrief,
+      editable: false,
+      badgeLabel: briefBadge.label,
+      badgeAccent: briefBadge.accent,
+      body: composedContext.turnContext.sceneBriefText,
+      emptyNote: briefBadge.empty,
+    },
+    {
+      key: 'turnDirective',
+      title: labels.sectionTurnDirective,
+      editable: false,
+      badgeLabel:
+        composedContext.turnContext.askDirectiveText.trim().length > 0
+          ? labels.turnDirectiveActiveBadge
+          : labels.turnDirectiveOffBadge,
+      badgeAccent: composedContext.turnContext.askDirectiveText.trim().length > 0,
+      body: composedContext.turnContext.askDirectiveText,
+      emptyNote: labels.emptyTurnDirective,
+    },
+  ];
+
+  const renderSectionCard = (section: PreviewSectionItem) => {
+    const badgeClassName = `inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] shrink-0 ${
+      section.editable || section.badgeAccent
+        ? 'auteur-phase-aesthetic'
+        : 'border-border-subtle bg-surface text-text-faint'
+    }`;
+
+    return (
+      <section
+        key={section.key}
+        className="rounded-xl border border-border-subtle bg-surface overflow-hidden"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle/60 px-3.5 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="text-xs font-semibold text-text-main truncate">{section.title}</h3>
+            {section.modified && (
+              <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
+                {labels.modifiedBadge}
+              </span>
+            )}
+          </div>
+          {onJumpToTab && section.jumpTab && section.editable ? (
+            <button
+              type="button"
+              onClick={() => onJumpToTab(section.jumpTab!)}
+              title={labels.sectionJumpTitle(section.jumpTabLabel ?? section.title)}
+              className={`${badgeClassName} hover:opacity-85 transition-opacity cursor-pointer`}
+            >
+              <span>{section.badgeLabel ?? labels.editableBadge}</span>
+            </button>
+          ) : (
+            <span className={badgeClassName}>
+              {!section.editable && !section.badgeLabel && <Lock className="h-2.5 w-2.5" />}
+              <span>
+                {section.badgeLabel ??
+                  (section.editable ? labels.editableBadge : labels.readOnlyBadge)}
+              </span>
+            </span>
+          )}
+        </div>
+        <div className="px-3.5 py-3">
+          {section.body.trim().length > 0 ? (
+            <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-text-body">
+              {section.body}
+            </pre>
+          ) : (
+            <p className="text-xs italic text-text-faint">{section.emptyNote}</p>
+          )}
+        </div>
+      </section>
+    );
+  };
 
   return (
     <>
@@ -215,61 +303,30 @@ export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreview
         </div>
       </div>
 
-      <div className="space-y-3">
-        {previewSections.map((section) => {
-          const badgeClassName = `inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] shrink-0 ${
-            section.editable || section.badgeAccent
-              ? 'auteur-phase-aesthetic'
-              : 'border-border-subtle bg-surface text-text-faint'
-          }`;
+      <div className="space-y-5">
+        <div className="space-y-2.5">
+          <div className="space-y-0.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+              {labels.groupSystemInstructionHeading}
+            </h3>
+            <p className="text-[11px] text-text-faint leading-relaxed">
+              {labels.groupSystemInstructionDesc}
+            </p>
+          </div>
+          <div className="space-y-3">{systemInstructionSections.map(renderSectionCard)}</div>
+        </div>
 
-          return (
-            <section
-              key={section.key}
-              className="rounded-xl border border-border-subtle bg-surface overflow-hidden"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle/60 px-3.5 py-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h3 className="text-xs font-semibold text-text-main truncate">
-                    {section.title}
-                  </h3>
-                  {section.modified && (
-                    <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] auteur-phase-intent">
-                      {labels.modifiedBadge}
-                    </span>
-                  )}
-                </div>
-                {onJumpToTab && section.jumpTab && section.editable ? (
-                  <button
-                    type="button"
-                    onClick={() => onJumpToTab(section.jumpTab!)}
-                    title={labels.sectionJumpTitle(section.jumpTabLabel ?? section.title)}
-                    className={`${badgeClassName} hover:opacity-85 transition-opacity cursor-pointer`}
-                  >
-                    <span>{section.badgeLabel ?? labels.editableBadge}</span>
-                  </button>
-                ) : (
-                  <span className={badgeClassName}>
-                    {!section.editable && !section.badgeLabel && <Lock className="h-2.5 w-2.5" />}
-                    <span>
-                      {section.badgeLabel ??
-                        (section.editable ? labels.editableBadge : labels.readOnlyBadge)}
-                    </span>
-                  </span>
-                )}
-              </div>
-              <div className="px-3.5 py-3">
-                {section.body.trim().length > 0 ? (
-                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-text-body">
-                    {section.body}
-                  </pre>
-                ) : (
-                  <p className="text-xs italic text-text-faint">{section.emptyNote}</p>
-                )}
-              </div>
-            </section>
-          );
-        })}
+        <div className="space-y-2.5">
+          <div className="space-y-0.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+              {labels.groupTurnContextHeading}
+            </h3>
+            <p className="text-[11px] text-text-faint leading-relaxed">
+              {labels.groupTurnContextDesc}
+            </p>
+          </div>
+          <div className="space-y-3">{turnContextSections.map(renderSectionCard)}</div>
+        </div>
       </div>
     </>
   );

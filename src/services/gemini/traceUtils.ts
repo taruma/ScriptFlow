@@ -6,16 +6,18 @@ import type {
 
 /**
  * Builds the Round 1 `input` payload for Gemini Interactions API (`v1`).
- * Returns the verbatim prompt string when no multimodal attachments need to be delivered,
- * or a `v1` `UserInputStep` array (`[{ type: 'user_input', content: [...] }]`) pairing each
- * `@handle` label with its inline image/text, Gemini Files API URI, or YouTube video URI.
+ * Prepends any delta-only `turnContextPreamble` (`<live_editor_state>`, `<scene_brief>`,
+ * `<turn_directive>`) to keep `system_instruction` and `previous_interaction_id` history cache-stable.
  */
 export function buildInitialInteractionInput(
   prompt: string,
-  attachments?: readonly AgentMediaAttachment[]
+  attachments?: readonly AgentMediaAttachment[],
+  turnContextPreamble?: string
 ): string | Array<{type: 'user_input'; content: Array<Record<string, unknown>>}> {
+  const preamble = turnContextPreamble?.trim() ?? '';
+
   if (!attachments || attachments.length === 0) {
-    return prompt;
+    return preamble.length > 0 ? `${preamble}\n\n${prompt}` : prompt;
   }
 
   const blocks: Array<Record<string, unknown>> = [];
@@ -90,9 +92,12 @@ export function buildInitialInteractionInput(
   }
 
   if (blocks.length === 0) {
-    return prompt;
+    return preamble.length > 0 ? `${preamble}\n\n${prompt}` : prompt;
   }
 
+  if (preamble.length > 0) {
+    blocks.push({type: 'text', text: preamble});
+  }
   blocks.push({type: 'text', text: prompt});
   return [{type: 'user_input', content: blocks}];
 }

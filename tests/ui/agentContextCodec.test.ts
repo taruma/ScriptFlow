@@ -568,4 +568,62 @@ describe('agentContextCodec', () => {
     expect(textMerged.skills.toolProtocolOverride).toBe('- Pack protocol text.');
     expect(textMerged.skills.enforceToolLinterGate).toBe(false);
   });
+
+  it('maintains backward compatibility when importing legacy k1-k3 packs and on_demand pinMode aliases', () => {
+    const legacyJson = JSON.stringify({
+      format: AUTEUR_AGENT_CONTEXT_PACK_FORMAT,
+      packVersion: 1,
+      skills: {
+        knowledgeVersion: '0.4.0-k1',
+        foundationalCraftOverride: 'Legacy noir craft.',
+        skillOverrides: {
+          [FIRST_BUILTIN_SKILL_ID]: {pinMode: 'auto', bodyOverride: 'Legacy skill override.'},
+          [SECOND_BUILTIN_SKILL_ID]: {pinMode: 'on_demand'},
+        },
+        customSkills: [
+          {
+            id: 'legacy_custom_skill',
+            name: 'Legacy Custom',
+            triggerHint: 'Legacy trigger hint.',
+            body: 'Legacy custom instructions.',
+          },
+        ],
+      },
+    });
+
+    const parsed = parseAgentContextPack(legacyJson);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.pack.skills?.enforceToolLinterGate).toBe(true);
+    expect(parsed.pack.skills?.toolProtocolOverride).toBeNull();
+    expect(parsed.pack.skills?.toolOverrides).toEqual({});
+    expect(parsed.pack.skills?.skillOverrides[FIRST_BUILTIN_SKILL_ID]).toEqual({
+      bodyOverride: 'Legacy skill override.',
+    });
+    expect(parsed.pack.skills?.skillOverrides[SECOND_BUILTIN_SKILL_ID]).toBeUndefined();
+
+    const analysis = analyzeAgentContextImport(
+      parsed.pack,
+      DEFAULT_AI_SKILLS_STATE,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    const applied = applyAgentContextImport(
+      parsed.pack,
+      createDefaultImportSelection(analysis),
+      'merge',
+      DEFAULT_AI_SKILLS_STATE,
+      DEFAULT_QUICK_SCAN_RULES_STATE
+    );
+    expect(applied.skillsChanged).toBe(true);
+    expect(applied.skills.foundationalCraftOverride).toBe('Legacy noir craft.');
+    expect(applied.skills.customSkills.map((s) => s.id)).toEqual(['legacy_custom_skill']);
+
+    const reExported = buildAgentContextPackExport(applied.skills, applied.quickScanRules, {
+      exportedAt: '2026-11-26T09:00:00.000Z',
+    });
+    expect(reExported.pack.packVersion).toBe(1);
+    expect(reExported.pack.skills?.knowledgeVersion).toBe('0.4.0-k4');
+  });
 });

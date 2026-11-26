@@ -1,4 +1,5 @@
 import {
+  computeSnapshotHash,
   renderStagingBlockBody,
   renderSubState,
   toAuteurEnvelope,
@@ -14,9 +15,11 @@ import {
   type AssistantMode,
   type AuteurSkillCategory,
   type AuteurSkillDefinition,
+  type BriefContextDelivery,
   type ComposeAgentContextOptions,
   type ComposedAgentContext,
   type ComposedSystemSections,
+  type ComposedTurnContext,
   type CustomAuteurSkill,
   type LensAuditChecklist,
   type LiveEditorDiagnosticItem,
@@ -55,12 +58,15 @@ export {
   BUILTIN_SCRIPT_TOOLS,
   DEFAULT_FOUNDATIONAL_CRAFT,
   DEFAULT_TOOL_PROTOCOL_CORE,
+  DRAFT_CRAFT_CORE_RULES,
   SCRIPT_TOOL_NAMES,
   assistantModeToFocus,
+  buildDraftCraftBody,
   buildRecentEditSummary,
   buildToolProtocolBlock,
   buildToolProtocolRuntimeHeader,
   computeAllowedToolNames,
+  computeDiagnosticsFingerprint,
   getLensAuditChecklist,
   resolveScriptTools,
 };
@@ -71,9 +77,11 @@ export type {
   AssistantMode,
   AuteurSkillCategory,
   AuteurSkillDefinition,
+  BriefContextDelivery,
   ComposeAgentContextOptions,
   ComposedAgentContext,
   ComposedSystemSections,
+  ComposedTurnContext,
   CustomAuteurSkill,
   LensAuditChecklist,
   LiveEditorDiagnosticItem,
@@ -198,12 +206,34 @@ function buildRecentEditSummary(
   return lines.join('\n');
 }
 
-function buildLiveEditorStateText(state: LiveEditorStateSummary): string {
+function computeDiagnosticsFingerprint(
+  diagnostics: readonly LiveEditorDiagnosticItem[]
+): string {
+  if (diagnostics.length === 0) return 'clean';
+  const summary = diagnostics
+    .map((diag) => `${diag.severity}|${diag.ruleId}|${diag.targetId}|${diag.message}`)
+    .join('\n');
+  return computeSnapshotHash(summary);
+}
+
+function buildLiveEditorStateText(
+  state: LiveEditorStateSummary,
+  mode: 'full' | 'unchanged'
+): string {
+  if (mode === 'unchanged') {
+    return [
+      '<live_editor_state>',
+      `Unchanged since last turn. Current snapshotHash / expectedSnapshotHash: \`${state.snapshotHash}\`.`,
+      '</live_editor_state>',
+    ].join('\n');
+  }
+
   const lines: string[] = [
+    '<live_editor_state>',
     '## Live Editor State (Authoritative Current Snapshot)',
     ...(state.sceneTitle ? [`- Scene title: "${state.sceneTitle}"`] : []),
     `- Empty document: ${state.isEmpty ? 'yes' : 'no'}`,
-    `- Snapshot hash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — do not rely on prior turn memory for IDs or lines' : 'current'})`,
+    `- Snapshot hash / expectedSnapshotHash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — do not rely on prior turn memory for IDs or lines' : 'current'})`,
     ...(state.recentEditSummary
       ? [`- Recent user edits since last turn:\n${state.recentEditSummary}`]
       : []),
@@ -223,29 +253,109 @@ function buildLiveEditorStateText(state: LiveEditorStateSummary): string {
     }
   }
 
+  lines.push('</live_editor_state>');
   return lines.join('\n');
 }
 
-function buildSceneBriefSectionText(briefContext?: string): string {
-  const trimmed = briefContext?.trim() ?? '';
-  if (trimmed.length === 0) return '';
+function resolveBriefContextDelta(
+  currentBriefRaw: string | undefined,
+  previousBriefRaw: string | undefined,
+  hasPreviousInteraction: boolean
+): {delivery: BriefContextDelivery; text: string; isActive: boolean} {
+  const current = currentBriefRaw?.trim() ?? '';
+  const prev = previousBriefRaw?.trim() ?? '';
 
-  return [
-    '## Scene Brief & References (Active Reference Context)',
-    'Treat these cast/media references, format specs, and additional directorial notes as active reference context across drafting, refinement, and Script Supervisor audits unless the user explicitly overrides them in chat.',
-    '',
-    trimmed,
-  ].join('\n');
+  if (!hasPreviousInteraction) {
+    if (current.length === 0) {
+      return {delivery: 'none', text: '', isActive: false};
+    }
+    return {
+      delivery: 'full',
+      isActive: true,
+      text: [
+        '<scene_brief>',
+        '## Scene Brief & References (Active Reference Context)',
+        'Treat these cast/media references, format specs, and additional directorial notes as active reference context across drafting, refinement, and Script Supervisor audits unless the user explicitly overrides them in chat.',
+        '',
+        current,
+        '</scene_brief>',
+      ].join('\n'),
+    };
+  }
+
+  if (current === prev) {
+    return {
+      delivery: current.length > 0 ? 'unchanged' : 'none',
+      text: '',
+      isActive: current.length > 0,
+    };
+  }
+
+  if (current.length > 0 && prev.length === 0) {
+    return {
+      delivery: 'full',
+      isActive: true,
+      text: [
+        '<scene_brief>',
+        '## Scene Brief & References (Active Reference Context)',
+        'Treat these cast/media references, format specs, and additional directorial notes as active reference context across drafting, refinement, and Script Supervisor audits unless the user explicitly overrides them in chat.',
+        '',
+        current,
+        '</scene_brief>',
+      ].join('\n'),
+    };
+  }
+
+  if (current.length > 0 && prev.length > 0) {
+    return {
+      delivery: 'updated',
+      isActive: true,
+      text: [
+        '<scene_brief status="updated">',
+        '## Scene Brief & References (UPDATED — Supersedes Prior Scene Brief)',
+        'The user updated the Scene Brief since the previous turn. Follow these updated cast/media references, format specs, and directorial notes going forward.',
+        '',
+        current,
+        '</scene_brief>',
+      ].join('\n'),
+    };
+  }
+
+  return {
+    delivery: 'cleared',
+    isActive: false,
+    text: '<scene_brief status="cleared">Scene Brief paused or cleared by the user since the previous turn — disregard prior Scene Brief constraints unless reaffirmed in chat.</scene_brief>',
+  };
+}
+
+function buildAskDirectiveText(
+  focus: AssistantFocus,
+  allowedToolNames: readonly ScriptToolName[],
+  askQuestionMode: AskQuestionMode
+): string {
+  if (focus === 'audit' || !allowedToolNames.includes('ask_question')) {
+    return '';
+  }
+
+  if (askQuestionMode === 'ask_first') {
+    return '<turn_directive>[Ask First: ON] The user explicitly requested clarifying questions before drafting or editing. Call `ask_question` with 1–4 concise, high-leverage directorial questions (each with 2–5 short multi-select options; never include an "Other" option since the UI provides a custom comment field). Do not stage a draft or patch in this same turn; once `ask_question` succeeds, stop calling tools and wait for the user to reply without repeating the questions in prose.</turn_directive>';
+  }
+
+  if (askQuestionMode === 'followup') {
+    return '<turn_directive>[Clarifying follow-up] The user just submitted answers to your clarifying questions. If you now have enough direction, proceed directly to drafting or staging your patch. Only call `ask_question` for a concise follow-up round if a critical ambiguity still blocks a strong result (and stop after calling it so the user can respond).</turn_directive>';
+  }
+
+  return '';
 }
 
 function buildActiveSkillsSectionText(activeSkills: readonly ResolvedAuteurSkill[]): string {
   if (activeSkills.length === 0) return '';
 
   const blocks = activeSkills.map((skill) =>
-    [`### Active Skill: ${skill.name} (\`${skill.id}\`)`, skill.body].join('\n')
+    [`### Pinned Skill: ${skill.name} (\`${skill.id}\`)`, skill.body].join('\n')
   );
 
-  return ['## Active Auteur Craft Skills', ...blocks].join('\n\n');
+  return ['## Pinned Auteur Craft Skills', ...blocks].join('\n\n');
 }
 
 function buildSkillDirectorySectionText(availableSkills: readonly ResolvedAuteurSkill[]): string {
@@ -262,11 +372,21 @@ function computeDefaultAutoTools(
   focus: AssistantFocus,
   isEmpty: boolean,
   hasAvailableSkills: boolean,
-  askQuestionMode: AskQuestionMode = 'off'
+  _askQuestionMode: AskQuestionMode = 'off'
 ): Set<ScriptToolName> {
   const tools = new Set<ScriptToolName>();
 
-  if (focus === 'draft' || (focus === 'auto' && isEmpty)) {
+  if (focus === 'auto') {
+    tools.add('get_script_overview');
+    tools.add('get_script_source');
+    tools.add('inspect_lens_slice');
+    tools.add('propose_script_patch');
+    tools.add('propose_text_replace');
+    tools.add('propose_script_draft');
+    tools.add('propose_script_title');
+    tools.add('report_audit_review');
+    tools.add('ask_question');
+  } else if (focus === 'draft') {
     if (!isEmpty) {
       tools.add('get_script_overview');
       tools.add('get_script_source');
@@ -274,14 +394,7 @@ function computeDefaultAutoTools(
     }
     tools.add('propose_script_draft');
     tools.add('propose_script_title');
-  } else if (focus === 'auto') {
-    tools.add('get_script_overview');
-    tools.add('get_script_source');
-    tools.add('inspect_lens_slice');
-    tools.add('propose_script_patch');
-    tools.add('propose_text_replace');
-    tools.add('propose_script_title');
-    tools.add('report_audit_review');
+    tools.add('ask_question');
   } else if (focus === 'refine') {
     tools.add('get_script_overview');
     tools.add('get_script_source');
@@ -289,16 +402,13 @@ function computeDefaultAutoTools(
     tools.add('propose_script_patch');
     tools.add('propose_text_replace');
     tools.add('propose_script_title');
+    tools.add('ask_question');
   } else {
     // focus === 'audit'
     tools.add('get_script_overview');
     tools.add('get_script_source');
     tools.add('inspect_lens_slice');
     tools.add('report_audit_review');
-  }
-
-  if (askQuestionMode !== 'off' && focus !== 'audit') {
-    tools.add('ask_question');
   }
 
   if (hasAvailableSkills) {
@@ -369,9 +479,7 @@ function resolveScriptTools(params: {
       }
     } else if (defaultAutoSet.has(def.name)) {
       status = 'active';
-      if (def.name === 'ask_question') {
-        reason = 'auto_ask_first';
-      } else if (def.name === 'load_auteur_skill') {
+      if (def.name === 'load_auteur_skill') {
         reason = 'auto_available_skills';
       } else {
         reason = 'auto_focus';
@@ -449,6 +557,8 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     };
   });
 
+  const diagnosticsFingerprint = computeDiagnosticsFingerprint(diagnostics);
+
   const prevHash = options.previousSnapshotHash?.trim();
   const changedSinceLastTurn = Boolean(
     (prevHash && prevHash !== envelope.snapshotHash) ||
@@ -472,6 +582,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     beatCount,
     referenceBindingCount: derived.referenceBindings.length,
     tokenMappingCount: derived.tokenMappings.length,
+    diagnosticsFingerprint,
     diagnosticsSummary: {
       total: diagnostics.length,
       errors: errorCount,
@@ -481,16 +592,9 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   };
 
   // Resolve all built-in + custom skills into strictly one mutually exclusive state
+  // (Zero passive auto-injection: skills stay On-Demand in the directory unless explicitly Pinned or Muted)
   const seenSkillIds = new Set<string>();
   const resolvedSkills: ResolvedAuteurSkill[] = [];
-  const includeMontageExample = derived.sceneTopology === 'discontinuous_montage';
-  const normalizedRefHandles = (options.referenceHandles ?? [])
-    .map((handle) => handle.trim())
-    .filter((handle) => handle.length > 0);
-  const hasVideoReferenceHandle = normalizedRefHandles.some((handle) => /^@?video/i.test(handle));
-  const hasCharacterReferenceHandle = normalizedRefHandles.some((handle) =>
-    /^@?(image|actor|audio)/i.test(handle)
-  );
 
   const resolveSkillEntry = (entry: {
     id: string;
@@ -519,26 +623,6 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     } else if (pinMode === 'pinned') {
       status = 'active';
       reason = 'pinned';
-    } else if (entry.builtIn && id === 'draft_craft' && (isEmpty || options.focus === 'draft')) {
-      status = 'active';
-      reason = 'passive_empty_or_draft';
-    } else if (
-      entry.builtIn &&
-      id === 'video_continuation' &&
-      (derived.hasContinuationContext || hasVideoReferenceHandle)
-    ) {
-      status = 'active';
-      reason = 'passive_continuation';
-    } else if (entry.builtIn && id === 'token_mapping' && derived.tokenMappings.length > 0) {
-      status = 'active';
-      reason = 'passive_token_mapping';
-    } else if (
-      entry.builtIn &&
-      id === 'character_reference' &&
-      (derived.referenceBindings.length > 0 || hasCharacterReferenceHandle)
-    ) {
-      status = 'active';
-      reason = 'passive_character_reference';
     } else {
       status = 'available';
       reason = 'on_demand';
@@ -559,17 +643,12 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   };
 
   for (const builtInSkill of BUILTIN_AUTEUR_SKILLS) {
-    const defaultBody =
-      builtInSkill.id === 'draft_craft' && includeMontageExample
-        ? buildDraftCraftBody(DRAFT_CRAFT_CORE_RULES, true)
-        : builtInSkill.body;
-
     resolveSkillEntry({
       id: builtInSkill.id,
       name: builtInSkill.name,
       category: builtInSkill.category,
       triggerHint: builtInSkill.triggerHint,
-      defaultBody,
+      defaultBody: builtInSkill.body,
       builtIn: true,
     });
   }
@@ -617,14 +696,34 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
       trimmedToolProtocolOverride !== DEFAULT_TOOL_PROTOCOL_CORE.trim()
   );
 
-  const liveEditorStateText = buildLiveEditorStateText(editorState);
-  const sceneBriefText = buildSceneBriefSectionText(options.briefContext);
+  const hasPreviousInteraction = Boolean(options.hasPreviousInteraction);
+  const sceneTitleChanged =
+    options.previousSceneTitle !== undefined &&
+    options.previousSceneTitle.trim() !== (trimmedTitle ?? '');
+  const diagnosticsChanged =
+    options.previousDiagnosticsFingerprint !== undefined &&
+    options.previousDiagnosticsFingerprint !== diagnosticsFingerprint;
+  const liveEditorStateMode: 'full' | 'unchanged' =
+    !hasPreviousInteraction || changedSinceLastTurn || sceneTitleChanged || diagnosticsChanged
+      ? 'full'
+      : 'unchanged';
+
+  const liveEditorStateText = buildLiveEditorStateText(editorState, liveEditorStateMode);
+  const briefDelta = resolveBriefContextDelta(
+    options.briefContext,
+    options.previousBriefContext,
+    hasPreviousInteraction
+  );
+  const askDirectiveText = buildAskDirectiveText(
+    options.focus,
+    allowedToolNames,
+    effectiveAskQuestionMode
+  );
   const activeSkillsText = buildActiveSkillsSectionText(activeSkills);
   const skillDirectoryText = buildSkillDirectorySectionText(availableSkills);
   const toolProtocolText = buildToolProtocolBlock({
     focus: options.focus,
     allowedToolNames,
-    snapshotHash: editorState.snapshotHash,
     isEmpty,
     availableSkillCount: availableSkills.length,
     askQuestionMode: effectiveAskQuestionMode,
@@ -648,11 +747,13 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     },
     liveEditorState: {
       text: liveEditorStateText,
+      mode: liveEditorStateMode,
       editable: false,
     },
     sceneBrief: {
-      text: sceneBriefText,
-      isActive: sceneBriefText.length > 0,
+      text: briefDelta.text,
+      isActive: briefDelta.isActive,
+      delivery: briefDelta.delivery,
       editable: false,
     },
     activeSkills: {
@@ -672,13 +773,27 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     },
   };
 
+  const turnContextText = [liveEditorStateText, briefDelta.text, askDirectiveText]
+    .filter((block) => block.trim().length > 0)
+    .join('\n\n');
+
+  const turnContext: ComposedTurnContext = {
+    liveEditorStateMode,
+    liveEditorStateText,
+    briefDelivery: briefDelta.delivery,
+    sceneBriefText: briefDelta.text,
+    askDirectiveText,
+    text: turnContextText,
+  };
+
+  // Zone 1 Frozen Prefix: strictly cache-stable sections only (no volatile script hash,
+  // no per-turn Brief deltas, and no Ask First rewrites) so system_instruction stays
+  // byte-for-byte identical across turns and sessions.
   const systemInstruction = [
     sections.foundationalCraft.text,
-    sections.liveEditorState.text,
-    sections.sceneBrief.text,
     sections.activeSkills.text,
-    sections.skillDirectory.text,
     sections.toolProtocol.text,
+    sections.skillDirectory.text,
   ]
     .filter((block) => block.trim().length > 0)
     .join('\n\n');
@@ -695,6 +810,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     allowedToolNames,
     enforceToolLinterGate,
     sections,
+    turnContext,
     systemInstruction,
   };
 }

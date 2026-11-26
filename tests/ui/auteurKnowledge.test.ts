@@ -31,42 +31,40 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
   const MONTAGE_SCRIPT = TEST_CRAFT_EXEMPLARS['heist-montage'].content;
   const INTERROGATION_SCRIPT = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
-  it('prunes allowed tools by focus and editor emptiness without triple write-schema bloat', () => {
+  it('exposes all 10 tools consistently in Auto regardless of emptiness, while scoping Draft/Refine/Audit cleanly', () => {
     expect(assistantModeToFocus('check')).toBe('audit');
     expect(assistantModeToFocus('refine')).toBe('refine');
     expect(assistantModeToFocus('draft')).toBe('draft');
 
-    // auto + empty script -> propose_script_draft, propose_script_title (+ load_auteur_skill), no get_script_overview
-    const autoEmpty = composeAgentContext({focus: 'auto', rawText: '   '});
-    expect(autoEmpty.editorState.isEmpty).toBe(true);
-    expect(autoEmpty.allowedToolNames).toEqual([
-      'propose_script_draft',
-      'propose_script_title',
-      'load_auteur_skill',
-    ]);
-    expect(autoEmpty.allowedToolNames).not.toContain('ask_question');
-
-    // auto + existing script -> overview, source, slice, patch, text replace, title, audit (+ load_auteur_skill), NO propose_script_draft
-    const autoExisting = composeAgentContext({focus: 'auto', rawText: INTERROGATION_SCRIPT});
-    expect(autoExisting.editorState.isEmpty).toBe(false);
-    expect(autoExisting.allowedToolNames).toEqual([
+    const expectedAutoTools = [
       'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
       'propose_text_replace',
+      'propose_script_draft',
       'propose_script_title',
       'report_audit_review',
+      'ask_question',
       'load_auteur_skill',
-    ]);
-    expect(autoExisting.allowedToolNames).not.toContain('propose_script_draft');
-    expect(autoExisting.allowedToolNames).not.toContain('ask_question');
+    ];
 
-    // draft + empty vs non-empty (non-empty Draft gains get_script_source & inspect_lens_slice)
+    // auto + empty script -> exposes all 10 tools consistently for frozen [tools] prefix caching
+    const autoEmpty = composeAgentContext({focus: 'auto', rawText: '   '});
+    expect(autoEmpty.editorState.isEmpty).toBe(true);
+    expect(autoEmpty.allowedToolNames).toEqual(expectedAutoTools);
+
+    // auto + existing script -> identical 10 tools
+    const autoExisting = composeAgentContext({focus: 'auto', rawText: INTERROGATION_SCRIPT});
+    expect(autoExisting.editorState.isEmpty).toBe(false);
+    expect(autoExisting.allowedToolNames).toEqual(expectedAutoTools);
+
+    // draft + empty vs non-empty (non-empty Draft gains inspect tools)
     const draftEmpty = composeAgentContext({focus: 'draft', rawText: ''});
     expect(draftEmpty.allowedToolNames).toEqual([
       'propose_script_draft',
       'propose_script_title',
+      'ask_question',
       'load_auteur_skill',
     ]);
     const draftExisting = composeAgentContext({focus: 'draft', rawText: INTERROGATION_SCRIPT});
@@ -76,6 +74,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       'inspect_lens_slice',
       'propose_script_draft',
       'propose_script_title',
+      'ask_question',
       'load_auteur_skill',
     ]);
 
@@ -88,6 +87,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       'propose_script_patch',
       'propose_text_replace',
       'propose_script_title',
+      'ask_question',
       'load_auteur_skill',
     ]);
     const auditCtx = composeAgentContext({focus: 'audit', rawText: INTERROGATION_SCRIPT});
@@ -120,10 +120,11 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       'propose_script_patch',
       'propose_text_replace',
       'propose_script_title',
+      'ask_question',
     ]);
   });
 
-  it('enforces single-state skill machine (active | available | muted), passive triggers, Pin/Mute, custom skills, and zero duplication', () => {
+  it('enforces single-state skill machine (pinned | on-demand | muted) with zero passive auto-injection and zero duplication', () => {
     const richScript = [
       '[INTENT]',
       'Create a continuous sequel extending @video1 featuring @image1 as Mara (voice: @audio1).',
@@ -142,6 +143,17 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       '[CAM 01] MS eye level -> [ACT] Mara steps forward in LOC01 -> <boot splash>',
     ].join('\n');
 
+    const defaultCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: richScript,
+      referenceHandles: ['@video1', '@image1'],
+    });
+    // Zero default pinned skills & zero passive auto-injection
+    expect(defaultCtx.activeSkills).toEqual([]);
+    expect(defaultCtx.availableSkills.map((s) => s.id)).toEqual(
+      BUILTIN_AUTEUR_SKILLS.map((s) => s.id)
+    );
+
     const ctx = composeAgentContext({
       focus: 'refine',
       rawText: richScript,
@@ -159,30 +171,29 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       ],
     });
 
-    // Passive triggers: video_continuation, token_mapping, character_reference + pinned temporal_calibration
+    // Strictly pinned skills are active; all other non-muted skills stay on-demand in directory
     const activeIds = ctx.activeSkills.map((s) => s.id);
     const availableIds = ctx.availableSkills.map((s) => s.id);
     const mutedIds = ctx.mutedSkills.map((s) => s.id);
 
-    expect(activeIds).toEqual(
+    expect(activeIds).toEqual(['temporal_calibration']);
+    expect(mutedIds).toEqual(['spatial_fences']);
+    expect(availableIds).toEqual(
       expect.arrayContaining([
+        'draft_craft',
         'video_continuation',
         'token_mapping',
         'character_reference',
-        'temporal_calibration',
+        'house_noir_voice',
       ])
     );
-    expect(activeIds).not.toContain('draft_craft');
-    expect(activeIds).not.toContain('spatial_fences');
-    expect(mutedIds).toEqual(['spatial_fences']);
-    expect(availableIds).toEqual(expect.arrayContaining(['draft_craft', 'house_noir_voice']));
 
     // Mutual exclusivity across all three buckets
     const allIds = [...activeIds, ...availableIds, ...mutedIds];
     expect(new Set(allIds).size).toBe(allIds.length);
     expect(allIds.length).toBe(ctx.resolvedSkills.length);
 
-    // Active skills appear in sections.activeSkills, NEVER in skillDirectory or load_auteur_skill enum
+    // Pinned skills appear in sections.activeSkills, NEVER in skillDirectory or load_auteur_skill enum
     const decls = buildToolDeclarationsForContext(ctx);
     const loadDecl = decls.find((d) => d.name === 'load_auteur_skill')!;
     expect(loadDecl).toBeDefined();
@@ -201,7 +212,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       expect(skillIdSchema.enum).not.toContain(id);
     }
 
-    // Dynamic enum is NOT statically cached across turns with different custom skills
+    // Dynamic enum reflects user custom skill configuration
     const secondTurnCtx = composeAgentContext({
       focus: 'refine',
       rawText: INTERROGATION_SCRIPT,
@@ -223,21 +234,21 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(secondEnum).toContain('custom_second_turn_skill');
     expect(secondEnum).not.toContain('house_noir_voice');
 
-    // draft_craft auto-activates on empty doc and includes montage example ONLY on montage topology
-    const emptyDraftCtx = composeAgentContext({focus: 'auto', rawText: ''});
-    const emptyDraftSkill = emptyDraftCtx.activeSkills.find((s) => s.id === 'draft_craft')!;
-    expect(emptyDraftSkill).toBeDefined();
-    expect(emptyDraftSkill.body).toContain("Robert's Machu Picchu Trail Dispatch");
-    expect(emptyDraftSkill.body).toContain('Cappadocia Balloon Panic');
-    expect(emptyDraftSkill.body).not.toContain('Discontinuous Montage');
-
-    const montageDraftCtx = composeAgentContext({focus: 'draft', rawText: MONTAGE_SCRIPT});
-    const montageDraftSkill = montageDraftCtx.activeSkills.find((s) => s.id === 'draft_craft')!;
-    expect(montageDraftSkill.body).toContain('Discontinuous Montage');
-    expect(montageDraftSkill.body).toContain('The Grand Continental');
+    // Pinning draft_craft stays static across topologies (no systemInstruction mutation on montage)
+    const pinnedEmpty = composeAgentContext({
+      focus: 'auto',
+      rawText: '',
+      skillOverrides: {draft_craft: {pinMode: 'pinned'}},
+    });
+    const pinnedMontage = composeAgentContext({
+      focus: 'auto',
+      rawText: MONTAGE_SCRIPT,
+      skillOverrides: {draft_craft: {pinMode: 'pinned'}},
+    });
+    expect(pinnedEmpty.systemInstruction).toBe(pinnedMontage.systemInstruction);
   });
 
-  it('keeps editable foundational craft separate from code-owned toolProtocol and injects Live Editor State up front', () => {
+  it('keeps Zone 1 systemInstruction & tools byte-for-byte cache-stable across script edits, Brief updates, and Ask First toggles', () => {
     const scriptWithLint = [
       '[INTENT]',
       'Create a corridor scene with @image1 as Elena.',
@@ -249,30 +260,60 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       '[CAM 01] MS eye level -> [ACT] Elena steps stage-left -> Elena says {Wait.}',
     ].join('\n');
 
-    const ctx = composeAgentContext({
-      focus: 'refine',
-      rawText: scriptWithLint,
-      previousSnapshotHash: 'old-hash-000',
+    const turn1Ctx = composeAgentContext({
+      focus: 'auto',
+      rawText: '',
+      briefContext: '### Format & Specs\nSingle take.',
+      askQuestionMode: 'ask_first',
       foundationalCraftOverride: 'Custom director voice override.',
     });
 
-    expect(ctx.knowledgeVersion).toBe(AUTEUR_KNOWLEDGE_VERSION);
-    expect(ctx.sections.foundationalCraft.isOverridden).toBe(true);
-    expect(ctx.sections.foundationalCraft.text).toBe('Custom director voice override.');
-    expect(ctx.sections.toolProtocol.editable).toBe(true);
-    expect(ctx.sections.toolProtocol.isOverridden).toBe(false);
-    expect(ctx.sections.toolProtocol.text).toContain(ctx.editorState.snapshotHash);
-    expect(ctx.sections.toolProtocol.text).toContain('expectedSnapshotHash');
+    expect(turn1Ctx.knowledgeVersion).toBe(AUTEUR_KNOWLEDGE_VERSION);
+    expect(turn1Ctx.sections.foundationalCraft.isOverridden).toBe(true);
+    expect(turn1Ctx.sections.foundationalCraft.text).toBe('Custom director voice override.');
+    expect(turn1Ctx.sections.toolProtocol.editable).toBe(true);
+    expect(turn1Ctx.sections.toolProtocol.isOverridden).toBe(false);
+    expect(turn1Ctx.sections.toolProtocol.text).toContain('expectedSnapshotHash');
+    expect(turn1Ctx.sections.toolProtocol.text).not.toContain(turn1Ctx.editorState.snapshotHash);
+    expect(turn1Ctx.systemInstruction).not.toContain('## Live Editor State');
+    expect(turn1Ctx.systemInstruction).not.toContain('## Scene Brief & References');
+    expect(turn1Ctx.systemInstruction).not.toContain('<turn_directive>');
+    expect(turn1Ctx.turnContext.liveEditorStateMode).toBe('full');
+    expect(turn1Ctx.turnContext.briefDelivery).toBe('full');
+    expect(turn1Ctx.turnContext.askDirectiveText).toContain('[Ask First: ON]');
 
-    expect(ctx.editorState.changedSinceLastTurn).toBe(true);
-    expect(ctx.editorState.diagnosticsSummary.errors).toBe(1);
-    expect(ctx.editorState.diagnosticsSummary.warnings).toBe(1);
-    expect(ctx.sections.liveEditorState.text).toContain(ctx.editorState.snapshotHash);
-    expect(ctx.sections.liveEditorState.text).toContain('CHANGED since last turn');
-    expect(ctx.sections.liveEditorState.text).toContain('Execution Macro-State(s)');
-    expect(ctx.sections.liveEditorState.text).not.toContain('Execution Beat(s)');
-    expect(ctx.sections.liveEditorState.text).toContain('viewport-coordinate-purity');
-    expect(ctx.sections.liveEditorState.text).toContain('macro-state-resolution');
+    // Turn 2: script drafted + lint errors + Brief edited + Ask First turned OFF -> Zone 1 & tools stay identical!
+    const turn2Ctx = composeAgentContext({
+      focus: 'auto',
+      rawText: scriptWithLint,
+      sceneTitle: 'Corridor Standoff',
+      hasPreviousInteraction: true,
+      previousSnapshotHash: turn1Ctx.editorState.snapshotHash,
+      previousRawText: '',
+      previousBriefContext: '### Format & Specs\nSingle take.',
+      briefContext: '### Format & Specs\nHandheld 35mm take.',
+      askQuestionMode: 'off',
+      foundationalCraftOverride: 'Custom director voice override.',
+    });
+
+    expect(turn2Ctx.systemInstruction).toBe(turn1Ctx.systemInstruction);
+    expect(JSON.stringify(buildToolDeclarationsForContext(turn2Ctx))).toBe(
+      JSON.stringify(buildToolDeclarationsForContext(turn1Ctx))
+    );
+
+    expect(turn2Ctx.editorState.changedSinceLastTurn).toBe(true);
+    expect(turn2Ctx.editorState.diagnosticsSummary.errors).toBe(1);
+    expect(turn2Ctx.editorState.diagnosticsSummary.warnings).toBe(1);
+    expect(turn2Ctx.turnContext.liveEditorStateMode).toBe('full');
+    expect(turn2Ctx.turnContext.liveEditorStateText).toContain(turn2Ctx.editorState.snapshotHash);
+    expect(turn2Ctx.turnContext.liveEditorStateText).toContain('CHANGED since last turn');
+    expect(turn2Ctx.turnContext.liveEditorStateText).toContain('Execution Macro-State(s)');
+    expect(turn2Ctx.turnContext.liveEditorStateText).not.toContain('Execution Beat(s)');
+    expect(turn2Ctx.turnContext.liveEditorStateText).toContain('viewport-coordinate-purity');
+    expect(turn2Ctx.turnContext.liveEditorStateText).toContain('macro-state-resolution');
+    expect(turn2Ctx.turnContext.briefDelivery).toBe('updated');
+    expect(turn2Ctx.turnContext.sceneBriefText).toContain('UPDATED');
+    expect(turn2Ctx.turnContext.askDirectiveText).toBe('');
 
     const defaultCraftCtx = composeAgentContext({
       focus: 'refine',
@@ -282,34 +323,50 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(defaultCraftCtx.sections.foundationalCraft.text).not.toContain('Execution Beat');
     expect(defaultCraftCtx.sections.foundationalCraft.text).not.toContain('Macro-State beat');
 
-    const sameHashCtx = composeAgentContext({
-      focus: 'refine',
+    // Turn 3: script, title, diagnostics, and Brief unchanged -> compact 1-line Live Editor State + omitted Brief
+    const turn3Ctx = composeAgentContext({
+      focus: 'auto',
       rawText: scriptWithLint,
-      previousSnapshotHash: ctx.editorState.snapshotHash,
-      previousRawText: scriptWithLint,
       sceneTitle: 'Corridor Standoff',
+      hasPreviousInteraction: true,
+      previousSnapshotHash: turn2Ctx.editorState.snapshotHash,
+      previousRawText: scriptWithLint,
+      previousSceneTitle: 'Corridor Standoff',
+      previousDiagnosticsFingerprint: turn2Ctx.editorState.diagnosticsFingerprint,
+      previousBriefContext: '### Format & Specs\nHandheld 35mm take.',
+      briefContext: '### Format & Specs\nHandheld 35mm take.',
     });
-    expect(sameHashCtx.editorState.changedSinceLastTurn).toBe(false);
-    expect(sameHashCtx.editorState.sceneTitle).toBe('Corridor Standoff');
-    expect(sameHashCtx.editorState.recentEditSummary).toBeUndefined();
-    expect(sameHashCtx.sections.liveEditorState.text).toContain('Scene title: "Corridor Standoff"');
-    expect(sameHashCtx.sections.liveEditorState.text).not.toContain('Recent user edits');
+    expect(turn3Ctx.editorState.changedSinceLastTurn).toBe(false);
+    expect(turn3Ctx.editorState.recentEditSummary).toBeUndefined();
+    expect(turn3Ctx.turnContext.liveEditorStateMode).toBe('unchanged');
+    expect(turn3Ctx.turnContext.liveEditorStateText).toContain('Unchanged since last turn.');
+    expect(turn3Ctx.turnContext.liveEditorStateText).toContain(turn3Ctx.editorState.snapshotHash);
+    expect(turn3Ctx.turnContext.briefDelivery).toBe('unchanged');
+    expect(turn3Ctx.turnContext.sceneBriefText).toBe('');
 
-    // Manual edit between turns injects automatic recent-edit diff summary into Live Editor State
+    // Turn 4: Brief paused/cleared emits explicit 1-line cleared notice; manual script edit emits diff
     const editedScript = scriptWithLint.replace('Elena steps stage-left', 'Elena pauses');
-    const editedCtx = composeAgentContext({
-      focus: 'refine',
+    const turn4Ctx = composeAgentContext({
+      focus: 'auto',
       rawText: editedScript,
       sceneTitle: 'Corridor Standoff',
-      previousSnapshotHash: ctx.editorState.snapshotHash,
+      hasPreviousInteraction: true,
+      previousSnapshotHash: turn3Ctx.editorState.snapshotHash,
       previousRawText: scriptWithLint,
+      previousSceneTitle: 'Corridor Standoff',
+      previousDiagnosticsFingerprint: turn3Ctx.editorState.diagnosticsFingerprint,
+      previousBriefContext: '### Format & Specs\nHandheld 35mm take.',
+      briefContext: undefined,
     });
-    expect(editedCtx.editorState.changedSinceLastTurn).toBe(true);
-    expect(editedCtx.editorState.recentEditSummary).toContain('Modified: S1');
-    expect(editedCtx.editorState.recentEditSummary).toContain('- [CAM 01]');
-    expect(editedCtx.editorState.recentEditSummary).toContain('+ [CAM 01]');
-    expect(editedCtx.sections.liveEditorState.text).toContain('Recent user edits since last turn:');
-    expect(editedCtx.sections.liveEditorState.text).toContain('Modified: S1');
+    expect(turn4Ctx.editorState.changedSinceLastTurn).toBe(true);
+    expect(turn4Ctx.editorState.recentEditSummary).toContain('Modified: S1');
+    expect(turn4Ctx.editorState.recentEditSummary).toContain('- [CAM 01]');
+    expect(turn4Ctx.editorState.recentEditSummary).toContain('+ [CAM 01]');
+    expect(turn4Ctx.turnContext.liveEditorStateMode).toBe('full');
+    expect(turn4Ctx.turnContext.liveEditorStateText).toContain('Recent user edits since last turn:');
+    expect(turn4Ctx.turnContext.liveEditorStateText).toContain('Modified: S1');
+    expect(turn4Ctx.turnContext.briefDelivery).toBe('cleared');
+    expect(turn4Ctx.turnContext.sceneBriefText).toContain('status="cleared"');
 
     // Direct buildRecentEditSummary test for unchanged input
     expect(buildRecentEditSummary(scriptWithLint, scriptWithLint)).toBeUndefined();
@@ -591,23 +648,26 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       },
     ]);
 
-    // Verify auto mode on existing script sent 8 tools (excluding propose_script_draft & ask_question)
+    // Verify auto mode sent all 10 tools consistently and moved volatile turn context into Round 1 input
     expect(result.trace.rounds[0].request.toolNames).toEqual([
       'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
       'propose_text_replace',
+      'propose_script_draft',
       'propose_script_title',
       'report_audit_review',
+      'ask_question',
       'load_auteur_skill',
     ]);
-    expect(String(capturedRequests[0].system_instruction)).toContain('CHANGED since last turn');
-    expect(String(capturedRequests[0].system_instruction)).toContain('Scene Brief & References');
-    expect(String(capturedRequests[0].system_instruction)).toContain(
-      'Single continuous handheld take.'
-    );
-    expect(capturedRequests[0].input).toBe('Check blocking with our studio rule.');
+    expect(String(capturedRequests[0].system_instruction)).not.toContain('CHANGED since last turn');
+    expect(String(capturedRequests[0].system_instruction)).not.toContain('Scene Brief & References');
+    expect(String(capturedRequests[0].input)).toContain('<live_editor_state>');
+    expect(String(capturedRequests[0].input)).toContain('CHANGED since last turn');
+    expect(String(capturedRequests[0].input)).toContain('Scene Brief & References');
+    expect(String(capturedRequests[0].input)).toContain('Single continuous handheld take.');
+    expect(String(capturedRequests[0].input)).toContain('Check blocking with our studio rule.');
 
     // Trace never contains apiKey
     const serialized = JSON.stringify(result.trace);
@@ -870,19 +930,25 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(customCtx.sections.toolProtocol.text).toContain('Linter gate override:');
     expect(customCtx.sections.toolProtocol.text).not.toContain('- `propose_text_replace`:');
 
-    // ask_question forced Always On without Ask First uses on-demand ambiguity guidance
-    expect(customCtx.sections.toolProtocol.text).toContain('genuine directorial ambiguity');
-    expect(customCtx.sections.toolProtocol.text).not.toContain('Clarifying interview requested (Ask First)');
+    // Static ask_question protocol rule lives in toolProtocol; Ask First toggles live in turnContext
+    expect(customCtx.sections.toolProtocol.text).toContain('[Ask First: ON]');
+    expect(customCtx.turnContext.askDirectiveText).toBe('');
 
-    // When Ask First IS toggled while ask_question is Always On, Ask First interview mode takes precedence
+    // When Ask First IS toggled, turnContext carries the Ask First directive while systemInstruction stays identical
     const forcedWithAskFirst = composeAgentContext({
       focus: 'auto',
       rawText: INTERROGATION_SCRIPT,
       askQuestionMode: 'ask_first',
       toolOverrides: {ask_question: {activationMode: 'enabled'}},
     });
-    expect(forcedWithAskFirst.sections.toolProtocol.text).toContain(
-      'Clarifying interview requested (Ask First)'
+    expect(forcedWithAskFirst.turnContext.askDirectiveText).toContain('[Ask First: ON]');
+    expect(forcedWithAskFirst.systemInstruction).toBe(
+      composeAgentContext({
+        focus: 'auto',
+        rawText: INTERROGATION_SCRIPT,
+        askQuestionMode: 'off',
+        toolOverrides: {ask_question: {activationMode: 'enabled'}},
+      }).systemInstruction
     );
 
     // Custom API description flows into Gemini function declarations

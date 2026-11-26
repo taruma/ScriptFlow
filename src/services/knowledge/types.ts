@@ -10,7 +10,7 @@ import type {
  * Monotonic version tag for built-in Auteur craft defaults and skill bodies.
  * Future UI override persistence uses this to detect upstream knowledge updates.
  */
-export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k3';
+export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k4';
 
 export type AssistantMode = 'refine' | 'check' | 'draft';
 export type AssistantFocus = 'auto' | 'draft' | 'refine' | 'audit';
@@ -77,14 +77,7 @@ export type AuteurSkillCategory = 'workflow' | 'module';
 export type SkillPinMode = 'auto' | 'pinned' | 'muted';
 export type SkillResolutionStatus = 'active' | 'available' | 'muted';
 
-export type SkillActivationReason =
-  | 'pinned'
-  | 'muted'
-  | 'passive_empty_or_draft'
-  | 'passive_continuation'
-  | 'passive_token_mapping'
-  | 'passive_character_reference'
-  | 'on_demand';
+export type SkillActivationReason = 'pinned' | 'muted' | 'on_demand';
 
 export interface AuteurSkillDefinition {
   id: string;
@@ -151,12 +144,24 @@ export interface LiveEditorStateSummary {
   beatCount: number;
   referenceBindingCount: number;
   tokenMappingCount: number;
+  diagnosticsFingerprint: string;
   diagnosticsSummary: {
     total: number;
     errors: number;
     warnings: number;
   };
   diagnostics: LiveEditorDiagnosticItem[];
+}
+
+export type BriefContextDelivery = 'full' | 'updated' | 'cleared' | 'unchanged' | 'none';
+
+export interface ComposedTurnContext {
+  liveEditorStateMode: 'full' | 'unchanged';
+  liveEditorStateText: string;
+  briefDelivery: BriefContextDelivery;
+  sceneBriefText: string;
+  askDirectiveText: string;
+  text: string;
 }
 
 export interface ComposedSystemSections {
@@ -167,11 +172,13 @@ export interface ComposedSystemSections {
   };
   liveEditorState: {
     text: string;
+    mode: 'full' | 'unchanged';
     editable: false;
   };
   sceneBrief: {
     text: string;
     isActive: boolean;
+    delivery: BriefContextDelivery;
     editable: false;
   };
   activeSkills: {
@@ -196,8 +203,12 @@ export interface ComposeAgentContextOptions {
   rawText: string;
   sceneTitle?: string;
   ruleOverrides?: LintRuleOverrides;
+  hasPreviousInteraction?: boolean;
   previousSnapshotHash?: string;
   previousRawText?: string;
+  previousSceneTitle?: string;
+  previousDiagnosticsFingerprint?: string;
+  previousBriefContext?: string;
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];
@@ -221,6 +232,7 @@ export interface ComposedAgentContext {
   allowedToolNames: ScriptToolName[];
   enforceToolLinterGate: boolean;
   sections: ComposedSystemSections;
+  turnContext: ComposedTurnContext;
   systemInstruction: string;
 }
 

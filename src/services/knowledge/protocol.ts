@@ -118,7 +118,7 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
     defaultDescription:
       'Validates and compiles a full AuteurScriptDraft JSON into canonical v0.4.0 plain text and stages a reviewable DraftSuggestion without overwriting the editor.',
     defaultProtocolGuidance:
-      '- `propose_script_draft`: stage a complete, lint-clean `AuteurScriptDraft` ([INTENT], [LOGIC], [AESTHETIC] as `key_value`, [OPENING], and [EXECUTION]).',
+      '- `propose_script_draft`: stage a complete, lint-clean `AuteurScriptDraft` ([INTENT], [LOGIC], [AESTHETIC] as `key_value`, [OPENING], and [EXECUTION]). Use for empty scripts or explicit full rewrites (prefer `propose_script_patch` / `propose_text_replace` for targeted edits on existing scripts). If `draft_craft` is in the Available Skill Directory and not yet loaded in this session, call `load_auteur_skill` for `draft_craft` before drafting.',
   },
   {
     name: 'propose_script_title',
@@ -145,7 +145,7 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
     defaultDescription:
       'Presents 1 to 4 concise clarifying questions to the user as an interactive multi-select card (every question lets the user pick multiple options and add an optional custom comment). Stop after calling and wait for the user to answer.',
     defaultProtocolGuidance:
-      '- `ask_question`: call only when genuine directorial ambiguity blocks a strong draft or edit (1–4 concise questions with 2–5 short multi-select options; never include an "Other" option since the UI provides a comment field). Once called, stop calling tools and wait for the user to reply without repeating the questions in prose.',
+      '- `ask_question`: ONLY call when the current turn explicitly includes `[Ask First: ON]` (ask 1–4 concise questions with 2–5 short multi-select options without an "Other" option, do not stage a draft or patch in the same turn, and stop calling tools once staged) or `[Clarifying follow-up]` (only if critical ambiguity still blocks a strong result). Never call `ask_question` when Ask First is off.',
   },
   {
     name: 'load_auteur_skill',
@@ -161,19 +161,19 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
 export interface ToolProtocolRuntimeHeaderParams {
   focus: AssistantFocus;
   allowedToolNames: readonly ScriptToolName[];
-  snapshotHash: string;
+  snapshotHash?: string;
   enforceToolLinterGate?: boolean;
 }
 
 /**
- * Generates the auto-synced runtime header lines prepended to `## Tool & Safety Protocol`
- * so live focus, active tool names, optimistic concurrency hash, and linter gate status
- * stay strictly accurate on every keystroke.
+ * Generates the cache-stable runtime header lines prepended to `## Tool & Safety Protocol`
+ * reflecting live focus, active tool names, concurrency instructions, and linter gate status
+ * without embedding volatile per-edit `snapshotHash` values.
  */
 export function buildToolProtocolRuntimeHeader(
   params: ToolProtocolRuntimeHeaderParams
 ): string[] {
-  const {focus, allowedToolNames, snapshotHash, enforceToolLinterGate = true} = params;
+  const {focus, allowedToolNames, enforceToolLinterGate = true} = params;
   const hasTool = (name: ScriptToolName) => allowedToolNames.includes(name);
   const lines: string[] = [];
 
@@ -194,7 +194,7 @@ export function buildToolProtocolRuntimeHeader(
     hasTool('report_audit_review')
   ) {
     lines.push(
-      `- Optimistic concurrency: always pass \`expectedSnapshotHash: "${snapshotHash}"\` on \`propose_script_patch\`, \`propose_text_replace\`, and any embedded \`suggestedPatch\` inside \`report_audit_review\`.`
+      '- Optimistic concurrency: always pass the latest `expectedSnapshotHash` from `<live_editor_state>` (or `get_script_overview`) on `propose_script_patch`, `propose_text_replace`, and any embedded `suggestedPatch` inside `report_audit_review`.'
     );
   }
 
@@ -216,8 +216,8 @@ export function buildToolProtocolRuntimeHeader(
 export interface ToolProtocolParams {
   focus: AssistantFocus;
   allowedToolNames: readonly ScriptToolName[];
-  snapshotHash: string;
-  isEmpty: boolean;
+  snapshotHash?: string;
+  isEmpty?: boolean;
   availableSkillCount: number;
   askQuestionMode?: AskQuestionMode;
   enforceToolLinterGate?: boolean;
@@ -229,10 +229,7 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
   const {
     focus,
     allowedToolNames,
-    snapshotHash,
-    isEmpty,
     availableSkillCount,
-    askQuestionMode = 'off',
     enforceToolLinterGate = true,
     coreProtocolOverride,
     resolvedTools,
@@ -241,7 +238,6 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
   const runtimeHeader = buildToolProtocolRuntimeHeader({
     focus,
     allowedToolNames,
-    snapshotHash,
     enforceToolLinterGate,
   });
 
@@ -272,32 +268,15 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
 
     const resolved = resolvedByName.get(toolName);
     const builtin = builtinByName.get(toolName);
-    const isOverridden = resolved?.isProtocolGuidanceOverridden ?? false;
-
-    if (toolName === 'ask_question' && !isOverridden) {
-      if (askQuestionMode === 'ask_first') {
-        lines.push(
-          '- Clarifying interview requested (Ask First): the user explicitly asked to be interviewed before drafting or editing. Call `ask_question` with 1–4 concise, high-leverage directorial questions (each with 2–5 short multi-select options; the UI automatically lets the user select multiple options and add a custom comment per question—never include an "Other" option). Do not stage a draft or patch in this same turn; once `ask_question` succeeds, stop calling tools and wait for the user to reply without repeating the questions in prose.'
-        );
-        continue;
-      }
-      if (askQuestionMode === 'followup') {
-        lines.push(
-          '- Clarifying follow-up: the user just submitted answers to your clarifying questions. If you now have enough direction, proceed directly to drafting or staging your patch. Only call `ask_question` for a concise follow-up round if a critical ambiguity still blocks a strong result (and stop after calling it so the user can respond).'
-        );
-        continue;
-      }
-    }
-
     const guidance = (resolved?.protocolGuidance ?? builtin?.defaultProtocolGuidance ?? '').trim();
     if (guidance.length > 0) {
       lines.push(guidance);
     }
   }
 
-  if (focus === 'auto' && !isEmpty && allowedToolNames.length > 0) {
+  if (focus === 'auto' && allowedToolNames.length > 0) {
     lines.push(
-      '- Auto routing on an existing script: choose only from the allowed tools above for edits, titles, or audits, or answer directly in prose if the user only asks a question.'
+      '- Auto routing: choose the minimal matching tool(s) above—`propose_script_draft` for empty scripts or full rewrites, `propose_script_patch` / `propose_text_replace` for targeted edits, `propose_script_title` for title updates, `report_audit_review` for audits, or respond directly in prose for pure questions.'
     );
   }
 

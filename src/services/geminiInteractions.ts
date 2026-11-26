@@ -305,8 +305,12 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     rawText: options.rawText,
     sceneTitle: options.sceneTitle,
     ruleOverrides: options.ruleOverrides,
+    hasPreviousInteraction: Boolean(options.previousInteractionId),
     previousSnapshotHash: options.previousSnapshotHash,
     previousRawText: options.previousRawText,
+    previousSceneTitle: options.previousSceneTitle,
+    previousDiagnosticsFingerprint: options.previousDiagnosticsFingerprint,
+    previousBriefContext: options.previousBriefContext,
     foundationalCraftOverride: options.foundationalCraftOverride,
     skillOverrides: options.skillOverrides,
     customSkills: options.customSkills,
@@ -323,7 +327,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     options.callbacks?.onSkillLoaded?.({
       id: skill.id,
       name: skill.name,
-      source: skill.reason === 'pinned' ? 'pinned' : 'passive',
+      source: 'pinned',
     });
   }
 
@@ -331,7 +335,11 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const toolNames = tools.map((tool) => tool.name);
   const systemInstruction = composedContext.systemInstruction;
 
-  let nextInput: unknown = buildInitialInteractionInput(options.prompt, options.attachments);
+  let nextInput: unknown = buildInitialInteractionInput(
+    options.prompt,
+    options.attachments,
+    composedContext.turnContext.text
+  );
   let accumulatedText = '';
   let accumulatedThought = '';
   const toolTraces: AgentToolCallTrace[] = [];
@@ -488,6 +496,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
             rawText: options.rawText,
             sceneTitle: options.sceneTitle,
             ruleOverrides: options.ruleOverrides,
+            askQuestionMode: options.askQuestionMode,
             composedContext,
             createSuggestionId: options.createSuggestionId,
             onStageSuggestion: (suggestion) => {

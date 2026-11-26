@@ -12,6 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **Cache-Stable 3-Zone AI Prompt Architecture & Unified `Auto` Toolset (`AUTEUR_KNOWLEDGE_VERSION = "0.4.0-k4"`)**:
+  - Kept Zone 1 (`tools` + `system_instruction`: Foundational Craft, Pinned Skills, cache-stable Tool & Safety Protocol, and On-Demand Skill Directory) byte-for-byte identical across script edits, `Scene Brief` changes, and `Ask First` toggles to maximize Gemini 4 implicit prefix caching.
+  - Updated **`Auto`** focus to expose all **10** non-disabled tools consistently on both empty and non-empty scripts, while keeping `ask_question` hard-gated at runtime (`ok: false` unless **`Ask First`** is toggled ON, the turn is a `[Clarifying follow-up]`, or `ask_question` is forced **`Always On`**).
+  - Removed passive script/brief skill auto-injection so all built-in and custom skills default to **On-Demand** in the directory unless explicitly **Pinned** or **Muted** (loading `draft_craft` dynamically includes the discontinuous montage exemplar on demand without mutating `system_instruction`).
+  - Moved volatile per-turn context (`<live_editor_state>` full snapshot vs. compact 1-line `unchanged` confirmation, delta-only `<scene_brief>`, and `<turn_directive>`) into Round 1 `input` via `composeAgentContext().turnContext`, and updated `ContextPreviewTab`, `SkillsManagerTab`, and `FunctionToolsTab` to display both zones transparently.
+  - Preserved full backward compatibility in `aiSkillsStore` and `agentContextCodec` (`packVersion: 1`) across legacy `0.4.0-k1`–`k3` packs and `"on_demand"` pin aliases.
+
 ### Added
 - **URL Deep-Linking (`/?example=`, `/?url=`, `/?agents=`) & Readable Example Slugs**:
   - Added readable `slug` identifiers in `src/data/examples/catalog.json` (`the-grand-continental`, `mark-and-lucas`, `balloon-panic`, `robert-machu-pichu`, `three-years-late-part-1`..`4`, `frequency-over-force-part-1`..`2`) and `getBundledExampleByIdOrSlug()` in `src/data/examples/index.ts`.

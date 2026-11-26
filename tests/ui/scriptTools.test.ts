@@ -556,12 +556,19 @@ describe('Phase 3A hardening: JSON Schema sanitization & lint-gated draft stagin
 describe('ask_question opt-in clarifying workflow', () => {
   const sampleScript = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
-  it('omits ask_question by default across all focuses and exposes it only when explicitly enabled outside Audit', () => {
-    for (const focus of ['auto', 'draft', 'refine', 'audit'] as const) {
+  it('keeps ask_question declared in Auto/Draft/Refine for cache stability while gating execution strictly via Ask First', () => {
+    for (const focus of ['auto', 'draft', 'refine'] as const) {
       const ctx = composeAgentContext({focus, rawText: sampleScript});
-      expect(ctx.allowedToolNames).not.toContain('ask_question');
-      expect(buildToolDeclarationsForContext(ctx).map((t) => t.name)).not.toContain('ask_question');
+      expect(ctx.allowedToolNames).toContain('ask_question');
+      expect(buildToolDeclarationsForContext(ctx).map((t) => t.name)).toContain('ask_question');
+      expect(ctx.turnContext.askDirectiveText).toBe('');
     }
+
+    const auditDefault = composeAgentContext({focus: 'audit', rawText: sampleScript});
+    expect(auditDefault.allowedToolNames).not.toContain('ask_question');
+    expect(buildToolDeclarationsForContext(auditDefault).map((t) => t.name)).not.toContain(
+      'ask_question'
+    );
 
     const askFirstAuto = composeAgentContext({
       focus: 'auto',
@@ -569,7 +576,7 @@ describe('ask_question opt-in clarifying workflow', () => {
       askQuestionMode: 'ask_first',
     });
     expect(askFirstAuto.allowedToolNames).toContain('ask_question');
-    expect(askFirstAuto.sections.toolProtocol.text).toContain('Ask First');
+    expect(askFirstAuto.turnContext.askDirectiveText).toContain('[Ask First: ON]');
     expect(buildToolDeclarationsForContext(askFirstAuto).map((t) => t.name)).toContain(
       'ask_question'
     );
@@ -580,7 +587,7 @@ describe('ask_question opt-in clarifying workflow', () => {
       askQuestionMode: 'followup',
     });
     expect(followupDraft.allowedToolNames).toContain('ask_question');
-    expect(followupDraft.sections.toolProtocol.text).toContain('Clarifying follow-up');
+    expect(followupDraft.turnContext.askDirectiveText).toContain('[Clarifying follow-up]');
 
     // Audit focus always suppresses ask_question even if requested
     const auditBlocked = composeAgentContext({
@@ -589,6 +596,7 @@ describe('ask_question opt-in clarifying workflow', () => {
       askQuestionMode: 'ask_first',
     });
     expect(auditBlocked.allowedToolNames).not.toContain('ask_question');
+    expect(auditBlocked.turnContext.askDirectiveText).toBe('');
   });
 
   it('validates, sanitizes, stages, and supersedes QuestionSuggestion cards cleanly', () => {
@@ -600,9 +608,38 @@ describe('ask_question opt-in clarifying workflow', () => {
           questions: [{question: 'Topology?', options: ['Oner', 'Coverage']}],
         },
       },
-      {mode: 'draft', rawText: '', composedContext: defaultCtx}
+      {mode: 'draft', rawText: '', askQuestionMode: 'off', composedContext: defaultCtx}
     );
     expect(blocked.ok).toBe(false);
+
+    // Omitting askQuestionMode also stays blocked when ask_question is not forced Always On
+    const omittedModeBlocked = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {
+          questions: [{question: 'Topology?', options: ['Oner', 'Coverage']}],
+        },
+      },
+      {mode: 'draft', rawText: '', composedContext: defaultCtx}
+    );
+    expect(omittedModeBlocked.ok).toBe(false);
+
+    // Forced Always On permits ask_question even when Ask First toggle is off
+    const forcedCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: sampleScript,
+      toolOverrides: {ask_question: {activationMode: 'enabled'}},
+    });
+    const forcedAllowed = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {
+          questions: [{question: 'Topology?', options: ['Oner', 'Coverage']}],
+        },
+      },
+      {mode: 'refine', rawText: sampleScript, askQuestionMode: 'off', composedContext: forcedCtx}
+    );
+    expect(forcedAllowed.ok).toBe(true);
 
     const askCtx = composeAgentContext({
       focus: 'draft',
@@ -618,7 +655,7 @@ describe('ask_question opt-in clarifying workflow', () => {
           questions: [{question: 'Pick one?', options: ['Only one', 'Other']}],
         },
       },
-      {mode: 'draft', rawText: '', composedContext: askCtx}
+      {mode: 'draft', rawText: '', askQuestionMode: 'ask_first', composedContext: askCtx}
     );
     expect(invalid.ok).toBe(false);
 
@@ -643,6 +680,7 @@ describe('ask_question opt-in clarifying workflow', () => {
       {
         mode: 'draft',
         rawText: '',
+        askQuestionMode: 'ask_first',
         composedContext: askCtx,
         createSuggestionId: () => 'q-sug-1',
         onStageSuggestion: (item) => staged.push(item),
@@ -1107,5 +1145,29 @@ describe('get_script_source, propose_text_replace, and propose_script_title tool
     );
     expect(bypassedDraft.ok).toBe(true);
     expect((bypassedDraft.stagedSuggestion as DraftSuggestion).errorCount).toBeGreaterThan(0);
+  });
+
+  it('loads draft_craft with discontinuous montage example dynamically on demand without mutating systemInstruction', () => {
+    const montageScript = TEST_CRAFT_EXEMPLARS['heist-montage'].content;
+    const emptyCtx = composeAgentContext({focus: 'auto', rawText: ''});
+    const montageCtx = composeAgentContext({focus: 'auto', rawText: montageScript});
+
+    // Frozen systemInstruction stays identical even across montage vs empty topology
+    expect(montageCtx.systemInstruction).toBe(emptyCtx.systemInstruction);
+
+    const onEmpty = executeScriptToolCall(
+      {name: 'load_auteur_skill', arguments: {skillId: 'draft_craft'}},
+      {mode: 'draft', rawText: '', composedContext: emptyCtx}
+    );
+    expect(onEmpty.ok).toBe(true);
+    expect(String(onEmpty.result.content)).not.toContain('Discontinuous Montage');
+
+    const onMontage = executeScriptToolCall(
+      {name: 'load_auteur_skill', arguments: {skillId: 'draft_craft'}},
+      {mode: 'draft', rawText: montageScript, composedContext: montageCtx}
+    );
+    expect(onMontage.ok).toBe(true);
+    expect(String(onMontage.result.content)).toContain('Discontinuous Montage');
+    expect(String(onMontage.result.content)).toContain('The Grand Continental');
   });
 });
