@@ -5,10 +5,13 @@ import type {QuestionSuggestion, StagedSuggestion} from '../../services/scriptTo
 import {aggregateSessionCost} from '../aiPricing.ts';
 import type {GeminiModelId} from '../aiSettings.ts';
 import type {ScriptRecord} from '../library/dbTypes.ts';
+import {formatExportTimestamp, slugifyFilename} from '../scriptLibraryCodec.ts';
 import {formatAttachmentTag, formatSceneBriefContext} from './draftBrief.ts';
 import {EMPTY_DRAFT_BRIEF, type AiChatMessage, type DraftBriefState, type ReferenceEntry} from './types.ts';
 
 export const AI_SESSION_SCHEMA_VERSION = 1;
+export const AI_SESSION_EXPORT_FORMAT = 'auteur-ai-session-export';
+export const AI_SESSION_EXPORT_VERSION = 1;
 export const MAX_AUTO_AI_SESSIONS = 100;
 export const RECENT_AI_SESSIONS_LIMIT = 5;
 
@@ -588,4 +591,193 @@ export function formatAiSessionAsMarkdown(
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+export interface AiSessionToolUsageStat {
+  name: string;
+  calls: number;
+  okCount: number;
+  errorCount: number;
+}
+
+export interface BuiltAiSessionExport {
+  filename: string;
+  content: string;
+  mimeType: string;
+}
+
+export interface AiSessionJsonExportPayload {
+  format: typeof AI_SESSION_EXPORT_FORMAT;
+  exportVersion: typeof AI_SESSION_EXPORT_VERSION;
+  exportedAt: string;
+  session: {
+    id: string;
+    schemaVersion: number;
+    title: string;
+    titleIsCustom?: boolean;
+    pinned?: boolean;
+    createdAt: string;
+    updatedAt: string;
+    scriptSessionKey: string;
+    scriptId: string;
+    scriptKind: 'custom' | 'example';
+    scriptTitleSnapshot: string;
+    resolvedScriptTitle?: string;
+    scriptStatus?: AiSessionScriptStatus;
+    focus: AssistantFocus;
+    selectedTargetKey: string;
+    model: GeminiModelId;
+    messageCount: number;
+    turnCount: number;
+    estimatedCostUsd: number;
+    hasOmittedMedia?: boolean;
+  };
+  brief: DraftBriefState;
+  systemInstructions: Record<string, string>;
+  toolsSummary: {
+    declaredTools: string[];
+    invokedTools: AiSessionToolUsageStat[];
+  };
+  messages: unknown[];
+  continuity: AiSessionContinuityState;
+}
+
+export function buildAiSessionMarkdownExport(
+  session: AiSessionRecord,
+  options?: {scriptStatusLabel?: string; now?: Date}
+): BuiltAiSessionExport {
+  const slug = slugifyFilename(session.title || session.scriptTitleSnapshot || 'ai-chat');
+  const stamp = formatExportTimestamp(options?.now);
+  return {
+    filename: `${slug}-ai-chat-${stamp}.md`,
+    content: formatAiSessionAsMarkdown(session, options?.scriptStatusLabel),
+    mimeType: 'text/markdown;charset=utf-8',
+  };
+}
+
+/**
+ * Exports a complete, self-describing JSON payload for an AI session with top-level
+ * deduplicated `systemInstructions` (referenced via `systemInstructionRef` inside trace rounds),
+ * a `toolsSummary` of declared and invoked tools, text-only Brief, full messages/traces,
+ * and continuity metadata—strictly excluding any API keys.
+ */
+export function buildAiSessionJsonExport(
+  session: AiSessionRecord,
+  options?: {
+    scriptStatus?: AiSessionScriptStatus;
+    resolvedScriptTitle?: string;
+    now?: Date;
+  }
+): BuiltAiSessionExport {
+  const now = options?.now ?? new Date();
+  const compacted = compactSessionForStorage(hydrateSessionFromStorage(session));
+  const systemInstructions = {...(compacted.traceSystemInstructions ?? {})};
+
+  const declaredToolsSet = new Set<string>();
+  const toolStats = new Map<string, AiSessionToolUsageStat>();
+
+  const recordToolStat = (name: string, ok: boolean) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    const prev = toolStats.get(cleanName) ?? {
+      name: cleanName,
+      calls: 0,
+      okCount: 0,
+      errorCount: 0,
+    };
+    prev.calls += 1;
+    if (ok) prev.okCount += 1;
+    else prev.errorCount += 1;
+    toolStats.set(cleanName, prev);
+  };
+
+  const exportMessages = compacted.messages.map((msg) => {
+    if (!msg.trace || !Array.isArray(msg.trace.rounds)) {
+      if (msg.toolCalls) {
+        for (const call of msg.toolCalls) {
+          recordToolStat(call.name, call.status === 'ok');
+        }
+      }
+      return msg;
+    }
+
+    const rounds = msg.trace.rounds.map((round) => {
+      for (const toolName of round.request.toolNames ?? []) {
+        if (toolName.trim()) {
+          declaredToolsSet.add(toolName.trim());
+        }
+      }
+      for (const call of round.toolCalls ?? []) {
+        recordToolStat(call.name, call.ok);
+      }
+
+      const rawSys = round.request.systemInstruction;
+      if (typeof rawSys === 'string' && rawSys.startsWith(TRACE_SYS_REF_PREFIX)) {
+        const refKey = rawSys.slice(TRACE_SYS_REF_PREFIX.length);
+        if (systemInstructions[refKey] !== undefined) {
+          const {systemInstruction: _omitted, ...restRequest} = round.request;
+          return {
+            ...round,
+            request: {
+              ...restRequest,
+              systemInstructionRef: refKey,
+            },
+          };
+        }
+      }
+      return round;
+    });
+
+    return {
+      ...msg,
+      trace: {
+        ...msg.trace,
+        rounds,
+      },
+    };
+  });
+
+  const payload: AiSessionJsonExportPayload = {
+    format: AI_SESSION_EXPORT_FORMAT,
+    exportVersion: AI_SESSION_EXPORT_VERSION,
+    exportedAt: now.toISOString(),
+    session: {
+      id: compacted.id,
+      schemaVersion: compacted.schemaVersion,
+      title: compacted.title,
+      ...(compacted.titleIsCustom ? {titleIsCustom: true} : {}),
+      ...(compacted.pinned ? {pinned: true} : {}),
+      createdAt: new Date(compacted.createdAt).toISOString(),
+      updatedAt: new Date(compacted.updatedAt).toISOString(),
+      scriptSessionKey: compacted.scriptSessionKey,
+      scriptId: compacted.scriptId,
+      scriptKind: compacted.scriptKind,
+      scriptTitleSnapshot: compacted.scriptTitleSnapshot,
+      ...(options?.resolvedScriptTitle ? {resolvedScriptTitle: options.resolvedScriptTitle} : {}),
+      ...(options?.scriptStatus ? {scriptStatus: options.scriptStatus} : {}),
+      focus: compacted.focus,
+      selectedTargetKey: compacted.selectedTargetKey,
+      model: compacted.model,
+      messageCount: compacted.messageCount,
+      turnCount: compacted.turnCount,
+      estimatedCostUsd: compacted.estimatedCostUsd,
+      ...(compacted.hasOmittedMedia ? {hasOmittedMedia: true} : {}),
+    },
+    brief: compacted.brief,
+    systemInstructions,
+    toolsSummary: {
+      declaredTools: Array.from(declaredToolsSet).sort((a, b) => a.localeCompare(b)),
+      invokedTools: Array.from(toolStats.values()).sort((a, b) => a.name.localeCompare(b.name)),
+    },
+    messages: exportMessages,
+    continuity: compacted.continuity,
+  };
+
+  const slug = slugifyFilename(compacted.title || compacted.scriptTitleSnapshot || 'ai-session');
+  const stamp = formatExportTimestamp(now);
+  return {
+    filename: `${slug}-ai-session-${stamp}.json`,
+    content: `${JSON.stringify(payload, null, 2)}\n`,
+    mimeType: 'application/json;charset=utf-8',
+  };
 }

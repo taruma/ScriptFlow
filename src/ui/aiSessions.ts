@@ -1,7 +1,11 @@
 export {
+  AI_SESSION_EXPORT_FORMAT,
+  AI_SESSION_EXPORT_VERSION,
   AI_SESSION_SCHEMA_VERSION,
   MAX_AUTO_AI_SESSIONS,
   RECENT_AI_SESSIONS_LIMIT,
+  buildAiSessionJsonExport,
+  buildAiSessionMarkdownExport,
   compactSessionForStorage,
   createAiSessionId,
   deriveAiSessionTitle,
@@ -20,8 +24,11 @@ export {
   stripBriefMediaForStorage,
   type AiSessionContinuityState,
   type AiSessionFilterTab,
+  type AiSessionJsonExportPayload,
   type AiSessionPendingQuestion,
   type AiSessionRecord,
   type AiSessionScriptStatus,
+  type AiSessionToolUsageStat,
+  type BuiltAiSessionExport,
   type ResolvedAiSessionSummary,
 } from './ai/sessionStore.ts';

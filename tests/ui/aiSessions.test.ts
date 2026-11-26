@@ -8,7 +8,11 @@ import {
   type DraftBriefState,
 } from '../../src/ui/aiAssistant.ts';
 import {
+  AI_SESSION_EXPORT_FORMAT,
+  AI_SESSION_EXPORT_VERSION,
   AI_SESSION_SCHEMA_VERSION,
+  buildAiSessionJsonExport,
+  buildAiSessionMarkdownExport,
   compactSessionForStorage,
   describeStagedSuggestion,
   filterAiSessions,
@@ -18,6 +22,7 @@ import {
   selectAiSessionsToPrune,
   selectRecentSessionsForScript,
   stripBriefMediaForStorage,
+  type AiSessionJsonExportPayload,
   type AiSessionRecord,
 } from '../../src/ui/aiSessions.ts';
 import type {ScriptRecord} from '../../src/ui/scriptLibraryDb.ts';
@@ -334,5 +339,97 @@ describe('aiSessions domain & storage codec', () => {
         questions: [],
       })
     ).toBe('Quick framing check');
+  });
+
+  it('builds Markdown conversation exports and deduplicated JSON full-payload exports with toolsSummary', () => {
+    const frozenSys = 'AUTEUR FROZEN ZONE 1 '.repeat(16);
+    const trace = makeSampleTrace(frozenSys, 'int-final');
+    trace.rounds[0].request.toolNames = ['get_script_overview', 'propose_script_patch'];
+    trace.rounds[0].toolCalls = [
+      {
+        callId: 'c1',
+        name: 'get_script_overview',
+        arguments: {},
+        ok: true,
+        result: {beatCount: 3},
+      },
+      {
+        callId: 'c2',
+        name: 'propose_script_patch',
+        arguments: {ops: []},
+        ok: false,
+        result: {error: 'lint error'},
+      },
+    ];
+    trace.rounds[1].request.toolNames = ['get_script_overview', 'propose_script_patch'];
+    trace.rounds[1].toolCalls = [
+      {
+        callId: 'c3',
+        name: 'propose_script_patch',
+        arguments: {ops: []},
+        ok: true,
+        result: {ok: true},
+      },
+    ];
+
+    const session = makeSampleSession({
+      id: 'export-1',
+      title: 'Rainy Pier Rewrite',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          mode: 'refine',
+          focus: 'auto',
+          text: 'Tighten beat 1 framing.',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          mode: 'refine',
+          focus: 'auto',
+          text: 'Staged a tighter cut.',
+          trace,
+        },
+      ],
+    });
+
+    const fixedNow = new Date(2026, 10, 26, 11, 45, 30);
+    const mdExport = buildAiSessionMarkdownExport(session, {
+      scriptStatusLabel: 'Script deleted',
+      now: fixedNow,
+    });
+    expect(mdExport.filename).toBe('rainy-pier-rewrite-ai-chat-20261126-114530.md');
+    expect(mdExport.mimeType).toBe('text/markdown;charset=utf-8');
+    expect(mdExport.content).toContain('# Rainy Pier Rewrite');
+    expect(mdExport.content).toContain('Tighten beat 1 framing.');
+
+    const jsonExport = buildAiSessionJsonExport(session, {
+      scriptStatus: 'deleted',
+      resolvedScriptTitle: 'Rooftop Scene',
+      now: fixedNow,
+    });
+    expect(jsonExport.filename).toBe('rainy-pier-rewrite-ai-session-20261126-114530.json');
+    expect(jsonExport.mimeType).toBe('application/json;charset=utf-8');
+
+    const parsed = JSON.parse(jsonExport.content) as AiSessionJsonExportPayload;
+    expect(parsed.format).toBe(AI_SESSION_EXPORT_FORMAT);
+    expect(parsed.exportVersion).toBe(AI_SESSION_EXPORT_VERSION);
+    expect(parsed.session.scriptStatus).toBe('deleted');
+    expect(parsed.systemInstructions).toEqual({sys_0: frozenSys});
+    expect(parsed.toolsSummary).toEqual({
+      declaredTools: ['get_script_overview', 'propose_script_patch'],
+      invokedTools: [
+        {name: 'get_script_overview', calls: 1, okCount: 1, errorCount: 0},
+        {name: 'propose_script_patch', calls: 2, okCount: 1, errorCount: 1},
+      ],
+    });
+
+    const firstAssistant = parsed.messages[1] as {
+      trace: {rounds: Array<{request: {systemInstruction?: string; systemInstructionRef?: string}}>};
+    };
+    expect(firstAssistant.trace.rounds[0].request.systemInstruction).toBeUndefined();
+    expect(firstAssistant.trace.rounds[0].request.systemInstructionRef).toBe('sys_0');
+    expect(firstAssistant.trace.rounds[1].request.systemInstructionRef).toBe('sys_0');
   });
 });

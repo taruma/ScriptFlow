@@ -1,12 +1,14 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
   AlertCircle,
   ArrowRightLeft,
   BookOpen,
+  Braces,
   Check,
   ChevronDown,
   ChevronRight,
   Copy,
+  Download,
   FileText,
   History,
   Pencil,
@@ -25,13 +27,16 @@ import {
 import {estimateTraceCost, formatEstimatedUsd} from '../../../ui/aiPricing.ts';
 import {getGeminiModelOption} from '../../../ui/aiSettings.ts';
 import {
+  buildAiSessionJsonExport,
+  buildAiSessionMarkdownExport,
   describeStagedSuggestion,
-  formatAiSessionAsMarkdown,
   type AiSessionRecord,
   type ResolvedAiSessionSummary,
 } from '../../../ui/aiSessions.ts';
 import {copyTextToClipboard} from '../../../ui/clipboard.ts';
 import {UI_LABELS} from '../../../ui/labels.ts';
+import {isOutsideDismissTarget} from '../../../ui/outsideDismiss.ts';
+import {triggerTextFileDownload} from '../../../ui/scriptFileIO.ts';
 import {formatRelativeUpdatedTime} from '../../../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../../../ui/tokens/ui.ts';
 import type {AiInspectableTrace} from '../../AiTraceModal.tsx';
@@ -67,6 +72,8 @@ export function AiSessionPreviewPane({
   const [renameDraft, setRenameDraft] = useState('');
   const [isBriefExpanded, setIsBriefExpanded] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
 
   const session = summary?.session ?? null;
 
@@ -75,7 +82,32 @@ export function AiSessionPreviewPane({
     setRenameDraft(session?.title ?? '');
     setIsBriefExpanded(false);
     setCopiedKey(null);
+    setIsDownloadOpen(false);
   }, [session?.id]);
+
+  useEffect(() => {
+    if (!isDownloadOpen) return;
+    const handlePointer = (event: Event) => {
+      if (isOutsideDismissTarget(downloadMenuRef.current, event.target)) {
+        setIsDownloadOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsDownloadOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointer, {capture: true});
+    document.addEventListener('mousedown', handlePointer, {capture: true});
+    document.addEventListener('keydown', handleKeyDown, {capture: true});
+    return () => {
+      document.removeEventListener('pointerdown', handlePointer, {capture: true});
+      document.removeEventListener('mousedown', handlePointer, {capture: true});
+      document.removeEventListener('keydown', handleKeyDown, {capture: true});
+    };
+  }, [isDownloadOpen]);
 
   useEffect(() => {
     if (!copiedKey) return;
@@ -308,25 +340,108 @@ export function AiSessionPreviewPane({
             <span>{session.pinned ? labels.unpinButton : labels.pinButton}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() =>
-              void handleCopy(
-                'markdown',
-                formatAiSessionAsMarkdown(session, isDeleted ? labels.scriptDeletedBadge : undefined)
-              )
-            }
-            className={UI_TOKENS.button.actionPill}
-          >
-            {copiedKey === 'markdown' ? (
-              <Check className="h-3.5 w-3.5 text-[var(--phase-aesthetic-text)]" />
-            ) : (
-              <Copy className="h-3.5 w-3.5 text-text-muted" />
+          {/* Download | ▾ Split Button (opens upward) */}
+          <div ref={downloadMenuRef} className="relative">
+            <div className={UI_TOKENS.button.splitGroup}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDownloadOpen(false);
+                  const exp = buildAiSessionMarkdownExport(session, {
+                    scriptStatusLabel: isDeleted ? labels.scriptDeletedBadge : undefined,
+                  });
+                  triggerTextFileDownload(exp.filename, exp.content, exp.mimeType);
+                }}
+                title={labels.downloadDefaultTitle}
+                aria-label={labels.downloadDefaultAria}
+                className={UI_TOKENS.button.splitPrimary}
+              >
+                <Download className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <span>{labels.downloadButton}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDownloadOpen((prev) => !prev)}
+                aria-expanded={isDownloadOpen}
+                aria-haspopup="menu"
+                aria-label={labels.downloadMenuAria}
+                className={
+                  isDownloadOpen ? UI_TOKENS.button.splitChevronOpen : UI_TOKENS.button.splitChevron
+                }
+              >
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform duration-150 ${
+                    isDownloadOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </div>
+
+            {isDownloadOpen && (
+              <div
+                role="menu"
+                aria-label={labels.downloadMenuAria}
+                className="absolute bottom-full left-0 mb-2 w-64 bg-surface rounded-xl shadow-xl border border-border-main p-1.5 space-y-0.5 z-50 text-text-main"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsDownloadOpen(false);
+                    const exp = buildAiSessionMarkdownExport(session, {
+                      scriptStatusLabel: isDeleted ? labels.scriptDeletedBadge : undefined,
+                    });
+                    triggerTextFileDownload(exp.filename, exp.content, exp.mimeType);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-subtle transition-colors cursor-pointer"
+                >
+                  <span className="flex items-start gap-2 min-w-0">
+                    <FileText className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-text-main">
+                        {labels.downloadConversationLabel}
+                      </span>
+                      <span className="block text-[10px] text-text-muted">
+                        {labels.downloadConversationDesc}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
+                    {labels.downloadTagMd}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsDownloadOpen(false);
+                    const exp = buildAiSessionJsonExport(session, {
+                      scriptStatus: summary.scriptStatus,
+                      resolvedScriptTitle: summary.resolvedScriptTitle,
+                    });
+                    triggerTextFileDownload(exp.filename, exp.content, exp.mimeType);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left hover:bg-surface-subtle transition-colors cursor-pointer"
+                >
+                  <span className="flex items-start gap-2 min-w-0">
+                    <Braces className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-text-main">
+                        {labels.downloadFullJsonLabel}
+                      </span>
+                      <span className="block text-[10px] text-text-muted">
+                        {labels.downloadFullJsonDesc}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-faint shrink-0">
+                    {labels.downloadTagJson}
+                  </span>
+                </button>
+              </div>
             )}
-            <span>
-              {copiedKey === 'markdown' ? labels.copiedMarkdownButton : labels.copyMarkdownButton}
-            </span>
-          </button>
+          </div>
 
           <button
             type="button"
