@@ -194,6 +194,7 @@ export function runAskQuestion(
       id: `q-${i + 1}`,
       question: questionText,
       options,
+      ...(record.multiSelect === true ? {multiSelect: true} : {}),
     });
   }
 

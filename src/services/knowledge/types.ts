@@ -10,7 +10,7 @@ import type {
  * Monotonic version tag for built-in Auteur craft defaults and skill bodies.
  * Future UI override persistence uses this to detect upstream knowledge updates.
  */
-export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k4';
+export const AUTEUR_KNOWLEDGE_VERSION = '0.4.0-k5';
 
 export type AssistantMode = 'refine' | 'check' | 'draft';
 export type AssistantFocus = 'auto' | 'draft' | 'refine' | 'audit';

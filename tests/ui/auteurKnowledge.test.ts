@@ -984,5 +984,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(pureChatCtx.allowedToolNames).toEqual([]);
     expect(buildToolDeclarationsForContext(pureChatCtx)).toEqual([]);
     expect(pureChatCtx.sections.toolProtocol.text).toContain('pure conversation mode');
+    expect(BUILTIN_AUTEUR_SKILLS.some((skill) => skill.id === 'draft_interview')).toBe(true);
+    expect(AUTEUR_KNOWLEDGE_VERSION).toBe('0.4.0-k5');
   });
 });

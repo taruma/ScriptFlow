@@ -347,6 +347,23 @@ describe('ai messageReducers', () => {
     const afterQuestion = markQuestionAnsweredInMessages(afterApply, 'msg-1', 'q-1');
     expect(afterQuestion[0].appliedSuggestionIds).toEqual(['sug-b', 'q-1']);
 
+    const afterRecordedAnswer = markQuestionAnsweredInMessages(afterApply, 'msg-1', 'q-2', {
+      status: 'answered',
+      answers: {'q-1': {selectedOptions: ['Option A'], comment: 'Keep tight 50mm'}},
+    });
+    expect(afterRecordedAnswer[0].appliedSuggestionIds).toEqual(['sug-b', 'q-2']);
+    expect(afterRecordedAnswer[0].questionResponses?.['q-2']).toEqual({
+      status: 'answered',
+      answers: {'q-1': {selectedOptions: ['Option A'], comment: 'Keep tight 50mm'}},
+    });
+
+    const afterDismissedQuestion = markQuestionAnsweredInMessages(afterApply, 'msg-1', 'q-3', {
+      status: 'dismissed',
+      answers: {},
+    });
+    expect(afterDismissedQuestion[0].dismissedSuggestionIds).toEqual(['sug-a', 'q-3']);
+    expect(afterDismissedQuestion[0].questionResponses?.['q-3']?.status).toBe('dismissed');
+
     // Unknown message ID preserves reference stability
     expect(markSuggestionDismissedInMessages(afterQuestion, 'missing', 'sug-z')).toBe(
       afterQuestion

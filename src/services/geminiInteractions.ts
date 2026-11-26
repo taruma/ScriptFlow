@@ -16,6 +16,8 @@ import {
   type InteractionsClientLike,
   type InteractionStreamEventLike,
   type PendingFunctionCall,
+  type PendingQuestionPause,
+  type PendingToolResultStep,
   type RoundStreamOutcome,
   type RunAgentTurnOptions,
   type RunAgentTurnResult,
@@ -51,6 +53,8 @@ export {
   type AgentTurnTrace,
   type InteractionsClientLike,
   type InteractionStreamEventLike,
+  type PendingQuestionPause,
+  type PendingToolResultStep,
   type RunAgentTurnOptions,
   type RunAgentTurnResult,
 } from './gemini/interactionTypes.ts';
@@ -335,11 +339,33 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const toolNames = tools.map((tool) => tool.name);
   const systemInstruction = composedContext.systemInstruction;
 
-  let nextInput: unknown = buildInitialInteractionInput(
-    options.prompt,
-    options.attachments,
-    composedContext.turnContext.text
+  const isResumingFunctionResults = Boolean(
+    options.resumeFunctionResults && options.resumeFunctionResults.length > 0
   );
+  let nextInput: unknown = isResumingFunctionResults
+    ? options.resumeFunctionResults!.map((step) => {
+        if (
+          step.name === 'ask_question' &&
+          composedContext.turnContext.text &&
+          typeof step.result === 'object' &&
+          step.result !== null &&
+          !('followUpContext' in step.result)
+        ) {
+          return {
+            ...step,
+            result: {
+              ...step.result,
+              followUpContext: composedContext.turnContext.text,
+            },
+          };
+        }
+        return {...step};
+      })
+    : buildInitialInteractionInput(
+        options.prompt,
+        options.attachments,
+        composedContext.turnContext.text
+      );
   let accumulatedText = '';
   let accumulatedThought = '';
   const toolTraces: AgentToolCallTrace[] = [];
@@ -467,13 +493,8 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
 
       toolRounds += 1;
 
-      const functionResultSteps: Array<{
-        type: 'function_result';
-        name: string;
-        call_id: string;
-        result: Record<string, unknown>;
-        is_error?: boolean;
-      }> = [];
+      const functionResultSteps: PendingToolResultStep[] = [];
+      let pausedQuestion: PendingQuestionPause | undefined;
 
       for (const call of outcome.functionCalls) {
         if (options.signal?.aborted) {
@@ -524,17 +545,53 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         activeRound.toolCalls.push(trace);
         options.callbacks?.onToolCallResult?.(trace);
 
-        functionResultSteps.push({
+        const resultStep: PendingToolResultStep = {
           type: 'function_result',
           name: call.name,
           call_id: call.id,
           result: execResult.result,
           ...(execResult.ok ? {} : {is_error: true}),
-        });
+        };
+
+        if (
+          call.name === 'ask_question' &&
+          execResult.ok &&
+          execResult.stagedSuggestion?.kind === 'question' &&
+          !pausedQuestion
+        ) {
+          pausedQuestion = {
+            callId: call.id,
+            suggestionId: execResult.stagedSuggestion.id,
+            interactionId: currentInteractionId ?? outcome.interactionId ?? '',
+            siblingFunctionResults: [...functionResultSteps],
+          };
+          continue;
+        }
+
+        if (pausedQuestion) {
+          pausedQuestion.siblingFunctionResults.push(resultStep);
+        } else {
+          functionResultSteps.push(resultStep);
+        }
       }
 
       activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
       activeRound = null;
+
+      if (pausedQuestion) {
+        return {
+          interactionId: currentInteractionId ?? null,
+          text: accumulatedText,
+          thoughtSummary: accumulatedThought,
+          toolRounds,
+          hitToolRoundLimit,
+          toolTraces,
+          stagedSuggestions,
+          pendingQuestion: pausedQuestion,
+          trace: buildTurnTrace(),
+        };
+      }
+
       nextInput = functionResultSteps;
     }
 

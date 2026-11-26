@@ -20,6 +20,7 @@ import {
   type TitleSuggestion,
 } from '../../src/services/scriptTools.ts';
 import {
+  buildQuestionToolResultPayload,
   formatQuestionAnswersPrompt,
   formatToolCallTooltip,
   formatToolDisplayName,
@@ -1169,5 +1170,80 @@ describe('get_script_source, propose_text_replace, and propose_script_title tool
     expect(onMontage.ok).toBe(true);
     expect(String(onMontage.result.content)).toContain('Discontinuous Montage');
     expect(String(onMontage.result.content)).toContain('The Grand Continental');
+  });
+
+  it('parses ask_question multiSelect flags, builds structured function_result payloads, and loads draft_interview dynamically', () => {
+    const askCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: '',
+      askQuestionMode: 'ask_first',
+    });
+
+    const loadedInterview = executeScriptToolCall(
+      {name: 'load_auteur_skill', arguments: {skillId: 'draft_interview'}},
+      {mode: 'draft', rawText: '', composedContext: askCtx}
+    );
+    expect(loadedInterview.ok).toBe(true);
+    expect(String(loadedInterview.result.content)).toContain('Camera Topology');
+    expect(String(loadedInterview.result.content)).toContain('Temporal Cadence');
+
+    const askResult = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {
+          intro: 'Two quick directorial locks before drafting.',
+          questions: [
+            {
+              question: 'Which camera approach fits the scene best?',
+              options: ['Static single take', 'Continuous dolly', 'Multi-cut montage'],
+            },
+            {
+              question: 'Which visual textures should dominate?',
+              options: ['Wet asphalt reflection', 'Sodium vapor haze', 'Handheld micro-shake'],
+              multiSelect: true,
+            },
+          ],
+        },
+      },
+      {mode: 'draft', rawText: '', askQuestionMode: 'ask_first', composedContext: askCtx}
+    );
+
+    expect(askResult.ok).toBe(true);
+    expect(askResult.stagedSuggestion?.kind).toBe('question');
+    const qCard = askResult.stagedSuggestion as QuestionSuggestion;
+    expect(qCard.questions[0].multiSelect).toBeUndefined();
+    expect(qCard.questions[1].multiSelect).toBe(true);
+
+    const answeredPayload = buildQuestionToolResultPayload(
+      qCard,
+      {
+        'q-1': {selectedOptions: ['Continuous dolly'], comment: 'Keep lens 35mm wide'},
+        'q-2': {selectedOptions: ['Wet asphalt reflection', 'Sodium vapor haze'], comment: ''},
+      },
+      'answered'
+    );
+    expect(answeredPayload).toEqual({
+      ok: true,
+      status: 'answered',
+      answers: [
+        {
+          id: 'q-1',
+          question: 'Which camera approach fits the scene best?',
+          selected: ['Continuous dolly'],
+          note: 'Keep lens 35mm wide',
+        },
+        {
+          id: 'q-2',
+          question: 'Which visual textures should dominate?',
+          selected: ['Wet asphalt reflection', 'Sodium vapor haze'],
+        },
+      ],
+    });
+
+    const skippedPayload = buildQuestionToolResultPayload(qCard, {}, 'skipped');
+    expect(skippedPayload).toMatchObject({ok: true, status: 'skipped'});
+
+    const dismissedPayload = buildQuestionToolResultPayload(qCard, {}, 'dismissed');
+    expect(dismissedPayload).toMatchObject({ok: true, status: 'dismissed'});
   });
 });

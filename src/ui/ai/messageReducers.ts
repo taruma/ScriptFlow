@@ -11,6 +11,7 @@ import {
   upsertLoadedSkill,
   type AiChatMessage,
   type AiLoadedSkillItem,
+  type QuestionResponseRecord,
 } from '../aiAssistant.ts';
 
 function updateMessageById(
@@ -269,9 +270,41 @@ export function applyBatchFixesReceiptToMessages(
 export function markQuestionAnsweredInMessages(
   messages: AiChatMessage[],
   messageId: string,
-  suggestionId: string
+  suggestionId: string,
+  response?: QuestionResponseRecord
 ): AiChatMessage[] {
-  return markSuggestionAppliedInMessages(messages, messageId, suggestionId);
+  if (!response) {
+    return markSuggestionAppliedInMessages(messages, messageId, suggestionId);
+  }
+
+  return updateMessageById(messages, messageId, (msg) => {
+    const nextResponses = {
+      ...(msg.questionResponses ?? {}),
+      [suggestionId]: response,
+    };
+
+    if (response.status === 'dismissed') {
+      const currentDismissed = msg.dismissedSuggestionIds ?? [];
+      const nextDismissed = currentDismissed.includes(suggestionId)
+        ? currentDismissed
+        : [...currentDismissed, suggestionId];
+      return {
+        ...msg,
+        dismissedSuggestionIds: nextDismissed,
+        questionResponses: nextResponses,
+      };
+    }
+
+    const currentApplied = msg.appliedSuggestionIds ?? [];
+    const nextApplied = currentApplied.includes(suggestionId)
+      ? currentApplied
+      : [...currentApplied, suggestionId];
+    return {
+      ...msg,
+      appliedSuggestionIds: nextApplied,
+      questionResponses: nextResponses,
+    };
+  });
 }
 
 export function dismissQuickScanInMessages(

@@ -15,6 +15,7 @@ export {
   type EditorJumpTarget,
   type FormattedQuestionAnswers,
   type QuestionAnswerDraft,
+  type QuestionResponseRecord,
   type ReferenceAttachment,
   type ReferenceEntry,
   type ReferenceKind,
@@ -26,6 +27,7 @@ export {
 export {
   buildAiTargetOptions,
   buildAuditQuickPrompt,
+  buildQuestionToolResultPayload,
   buildScopedRefinePrompt,
   clampComposerHeight,
   formatLensShort,

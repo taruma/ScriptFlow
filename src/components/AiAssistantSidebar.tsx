@@ -562,6 +562,7 @@ export function AiAssistantSidebar({
                     onApplyDraft={chat.handleApplyDraft}
                     onApplyTitle={chat.handleApplyTitle}
                     onSubmitQuestionAnswers={chat.handleSubmitQuestionAnswers}
+                    onSkipQuestion={chat.handleSkipQuestion}
                     onDismissSuggestion={chat.markSuggestionDismissed}
                     onQuickAudit={chat.handleQuickAudit}
                     onOpenSettings={handleOpenSettings}

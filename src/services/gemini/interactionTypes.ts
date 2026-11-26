@@ -158,6 +158,8 @@ export interface RunAgentTurnOptions {
   briefContext?: string;
   askQuestionMode?: AskQuestionMode;
   attachments?: readonly AgentMediaAttachment[];
+  /** Optional `function_result` steps to resume a paused interaction turn directly via `previousInteractionId`. */
+  resumeFunctionResults?: readonly PendingToolResultStep[];
   signal?: AbortSignal;
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;
@@ -168,6 +170,22 @@ export interface RunAgentTurnOptions {
   createClient?: (apiKey: string) => InteractionsClientLike;
 }
 
+export interface PendingToolResultStep {
+  type: 'function_result';
+  name: string;
+  call_id: string;
+  result: Record<string, unknown>;
+  is_error?: boolean;
+}
+
+export interface PendingQuestionPause {
+  callId: string;
+  suggestionId: string;
+  interactionId: string;
+  /** Sibling tool results from the same round that must still be submitted alongside the user's answer. */
+  siblingFunctionResults: PendingToolResultStep[];
+}
+
 export interface RunAgentTurnResult {
   interactionId: string | null;
   text: string;
@@ -176,6 +194,8 @@ export interface RunAgentTurnResult {
   hitToolRoundLimit: boolean;
   toolTraces: AgentToolCallTrace[];
   stagedSuggestions: StagedSuggestion[];
+  /** Non-null when `ask_question` succeeded and paused the turn awaiting user input. */
+  pendingQuestion?: PendingQuestionPause;
   trace: AgentTurnTrace;
 }
 

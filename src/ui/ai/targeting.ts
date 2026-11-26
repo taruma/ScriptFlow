@@ -501,6 +501,59 @@ export function formatQuestionAnswersPrompt(
 }
 
 /**
+ * Builds the structured Interactions API `function_result` JSON payload sent back
+ * when resuming a paused `ask_question` call (answer submission, Skip & Proceed, or dismiss).
+ */
+export function buildQuestionToolResultPayload(
+  suggestion: QuestionSuggestion,
+  answers: Readonly<Record<string, QuestionAnswerDraft>>,
+  status: 'answered' | 'skipped' | 'dismissed',
+  updatedEditorContext?: string
+): Record<string, unknown> {
+  if (status === 'skipped') {
+    return {
+      ok: true,
+      status: 'skipped',
+      instruction:
+        'User clicked Skip & Proceed ("Your call"). Do not ask clarifying questions again; apply strong Auteur craft defaults and proceed directly with drafting or editing.',
+      ...(updatedEditorContext ? {updatedEditorContext} : {}),
+    };
+  }
+
+  if (status === 'dismissed') {
+    return {
+      ok: true,
+      status: 'dismissed',
+      instruction:
+        'User dismissed the clarifying question card. Proceed using the user message and current editor/brief context without repeating those questions.',
+      ...(updatedEditorContext ? {updatedEditorContext} : {}),
+    };
+  }
+
+  const normalizedAnswers = suggestion.questions.map((item) => {
+    const draft = answers[item.id];
+    const selectedSet = new Set(draft?.selectedOptions ?? []);
+    const selected = item.options.filter((opt) => selectedSet.has(opt));
+    const note = draft?.comment.trim() ?? '';
+
+    return {
+      id: item.id,
+      question: item.question,
+      selected,
+      ...(note ? {note} : {}),
+      ...(selected.length === 0 && !note ? {preference: 'no_preference_your_call'} : {}),
+    };
+  });
+
+  return {
+    ok: true,
+    status: 'answered',
+    answers: normalizedAnswers,
+    ...(updatedEditorContext ? {updatedEditorContext} : {}),
+  };
+}
+
+/**
  * Returns the latest active (non-dismissed, non-stale, non-superseded) Quick Scan result
  * from the chat history so Live Mode suspect `S#` dots stay synchronized and clear
  * automatically once edited, dismissed, or superseded by a newer completed Audit review.

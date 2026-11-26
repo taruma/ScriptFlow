@@ -355,7 +355,7 @@ function buildStaticToolDeclarationsMap(): Record<
           questions: {
             type: 'array',
             description:
-              '1 to 4 concise clarifying questions. All questions are multi-select and include an inline comment field automatically.',
+              '1 to 4 concise clarifying questions. Single-select by default unless multiSelect: true is set; every question automatically includes an inline additive note field.',
             items: {
               type: 'object',
               properties: {
@@ -367,8 +367,13 @@ function buildStaticToolDeclarationsMap(): Record<
                 options: {
                   type: 'array',
                   description:
-                    '2 to 5 short, distinct options (unnumbered, without an "Other" choice—the UI provides a comment field automatically).',
+                    '2 to 5 short, distinct options (unnumbered, without an "Other" choice—the UI provides an additive note field automatically).',
                   items: {type: 'string'},
+                },
+                multiSelect: {
+                  type: 'boolean',
+                  description:
+                    'Set true only when multiple options can be combined; omit or set false for a single exclusive pick.',
                 },
               },
               required: ['question', 'options'],

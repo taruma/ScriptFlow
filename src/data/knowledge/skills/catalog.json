@@ -7,6 +7,13 @@
     "file": "draft_craft.md"
   },
   {
+    "id": "draft_interview",
+    "name": "Draft Interview",
+    "category": "workflow",
+    "triggerHint": "Load BEFORE drafting an open or underspecified scene when ask_question is available: guides 2–4 high-leverage directorial questions (topology, tempo, audio balance, visual texture) without re-asking settled details.",
+    "file": "draft_interview.md"
+  },
+  {
     "id": "video_continuation",
     "name": "Video Continuation & Terminal-Frame Handoff",
     "category": "module",

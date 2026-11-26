@@ -624,6 +624,6 @@ describe('agentContextCodec', () => {
       exportedAt: '2026-11-26T09:00:00.000Z',
     });
     expect(reExported.pack.packVersion).toBe(1);
-    expect(reExported.pack.skills?.knowledgeVersion).toBe('0.4.0-k4');
+    expect(reExported.pack.skills?.knowledgeVersion).toBe('0.4.0-k5');
   });
 });

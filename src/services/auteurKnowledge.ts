@@ -338,11 +338,11 @@ function buildAskDirectiveText(
   }
 
   if (askQuestionMode === 'ask_first') {
-    return '<turn_directive>[Ask First: ON] The user explicitly requested clarifying questions before drafting or editing. Call `ask_question` with 1–4 concise, high-leverage directorial questions (each with 2–5 short multi-select options; never include an "Other" option since the UI provides a custom comment field). Do not stage a draft or patch in this same turn; once `ask_question` succeeds, stop calling tools and wait for the user to reply without repeating the questions in prose.</turn_directive>';
+    return '<turn_directive>[Ask First: ON] The user explicitly requested clarifying questions before drafting or editing. If drafting an open scene, load `draft_interview` first (when available), then call `ask_question` with 1–4 concise, high-leverage directorial questions (2–5 short options each; omit `multiSelect` or set `false` for single-select picks, set `multiSelect: true` when choices combine, and never include an "Other" option since every question already provides an inline additive note field). Do not stage a draft or patch in this same turn—calling `ask_question` pauses the turn immediately until the user answers or skips.</turn_directive>';
   }
 
   if (askQuestionMode === 'followup') {
-    return '<turn_directive>[Clarifying follow-up] The user just submitted answers to your clarifying questions. If you now have enough direction, proceed directly to drafting or staging your patch. Only call `ask_question` for a concise follow-up round if a critical ambiguity still blocks a strong result (and stop after calling it so the user can respond).</turn_directive>';
+    return '<turn_directive>[Clarifying follow-up] The user just responded to your clarifying questions (answers, additive notes, or Skip & Proceed). If you have enough direction—or if the user skipped with "Your call"—proceed directly to drafting or staging your patch. Only call `ask_question` again if a critical blocker remains.</turn_directive>';
   }
 
   return '';

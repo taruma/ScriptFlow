@@ -13,7 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Changed
-- **Cache-Stable 3-Zone AI Prompt Architecture & Unified `Auto` Toolset (`AUTEUR_KNOWLEDGE_VERSION = "0.4.0-k4"`)**:
+- **Pause-and-Resume `ask_question` Redesign & `draft_interview` Skill (`AUTEUR_KNOWLEDGE_VERSION = "0.4.0-k5"`)**:
+  - Updated `runGeminiAgentTurn` (`src/services/geminiInteractions.ts`) to pause immediately when `ask_question` succeeds—returning `pendingQuestion` with buffered `siblingFunctionResults` instead of wasting a Round 2 reply—and added `resumeFunctionResults` to resume the exact `previous_interaction_id` cleanly via Interactions API `function_result` (plus a safe composer/dismiss escape hatch).
+  - Updated `ClarifyingQuestionItem` and `QuestionSuggestionCard` to support per-question `multiSelect?: boolean` (single-select radio pick by default, multi-select checkboxes when combinable) paired cleanly with an **independent additive note input**, a quiet **`Skip & Proceed`** (*"Your call"*) action, zero resent user chat bubbles, and persisted `questionResponses` for expandable in-place `✓ Answered` / `Skipped` receipts.
+  - Added the built-in **`draft_interview`** workflow skill (`src/data/knowledge/skills/draft_interview.md`, registered in `catalog.json`, default On-Demand) guiding 2–4 high-leverage directorial questions before drafting open scenes while preserving `agentContextCodec` backward compatibility.
+- **Cache-Stable 3-Zone AI Prompt Architecture & Unified `Auto` Toolset (`0.4.0-k4`)**:
   - Kept Zone 1 (`tools` + `system_instruction`: Foundational Craft, Pinned Skills, cache-stable Tool & Safety Protocol, and On-Demand Skill Directory) byte-for-byte identical across script edits, `Scene Brief` changes, and `Ask First` toggles to maximize Gemini 4 implicit prefix caching.
   - Updated **`Auto`** focus to expose all **10** non-disabled tools consistently on both empty and non-empty scripts, while keeping `ask_question` hard-gated at runtime (`ok: false` unless **`Ask First`** is toggled ON, the turn is a `[Clarifying follow-up]`, or `ask_question` is forced **`Always On`**).
   - Removed passive script/brief skill auto-injection so all built-in and custom skills default to **On-Demand** in the directory unless explicitly **Pinned** or **Muted** (loading `draft_craft` dynamically includes the discontinuous montage exemplar on demand without mutating `system_instruction`).

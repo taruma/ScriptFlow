@@ -101,6 +101,7 @@ export interface AiChatMessage {
   suggestions?: StagedSuggestion[];
   dismissedSuggestionIds?: string[];
   appliedSuggestionIds?: string[];
+  questionResponses?: Record<string, QuestionResponseRecord>;
   error?: {
     code: GeminiErrorCode;
     message: string;
@@ -139,6 +140,11 @@ export interface ToolCallTooltipInfo {
 export interface QuestionAnswerDraft {
   selectedOptions: string[];
   comment: string;
+}
+
+export interface QuestionResponseRecord {
+  status: 'answered' | 'skipped' | 'dismissed';
+  answers: Record<string, QuestionAnswerDraft>;
 }
 
 export interface FormattedQuestionAnswers {

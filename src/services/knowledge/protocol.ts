@@ -143,9 +143,9 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
     label: 'Clarifying Questions',
     category: 'workflow',
     defaultDescription:
-      'Presents 1 to 4 concise clarifying questions to the user as an interactive multi-select card (every question lets the user pick multiple options and add an optional custom comment). Stop after calling and wait for the user to answer.',
+      'Presents 1 to 4 concise clarifying questions as an interactive card (single-select by default; set multiSelect: true for combinable choices; every question also includes an additive note field). Calling this tool pauses the turn immediately until the user answers or skips.',
     defaultProtocolGuidance:
-      '- `ask_question`: ONLY call when the current turn explicitly includes `[Ask First: ON]` (ask 1–4 concise questions with 2–5 short multi-select options without an "Other" option, do not stage a draft or patch in the same turn, and stop calling tools once staged) or `[Clarifying follow-up]` (only if critical ambiguity still blocks a strong result). Never call `ask_question` when Ask First is off.',
+      '- `ask_question`: ONLY call when the current turn explicitly includes `[Ask First: ON]` (ask 1–4 concise questions with 2–5 short options without an "Other" option, setting `multiSelect: true` only when choices combine; if drafting an open scene, load `draft_interview` first; do not stage a draft or patch in the same turn) or `[Clarifying follow-up]` (only if critical ambiguity still blocks a strong result). Calling `ask_question` immediately pauses your turn until the user responds. Never call `ask_question` when Ask First is off.',
   },
   {
     name: 'load_auteur_skill',

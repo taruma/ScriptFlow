@@ -10,6 +10,9 @@ import {
 import {
   GeminiServiceError,
   runGeminiAgentTurn,
+  type AgentMediaAttachment,
+  type PendingQuestionPause,
+  type PendingToolResultStep,
 } from '../../../services/geminiInteractions.ts';
 import type {
   DraftSuggestion,
@@ -20,6 +23,7 @@ import type {
 } from '../../../services/scriptTools.ts';
 import {
   buildAuditQuickPrompt,
+  buildQuestionToolResultPayload,
   buildScopedRefinePrompt,
   collectPendingBriefAttachments,
   focusToLegacyMode,
@@ -149,6 +153,7 @@ export interface AiChatOrchestrator {
     suggestion: QuestionSuggestion,
     answers: Record<string, QuestionAnswerDraft>
   ) => void;
+  handleSkipQuestion: (messageId: string, suggestion: QuestionSuggestion) => void;
   markSuggestionApplied: (messageId: string, suggestionId: string) => void;
   markSuggestionDismissed: (messageId: string, suggestionId: string) => void;
 }
@@ -208,6 +213,9 @@ export function useAiChatOrchestrator({
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
   const lastSessionKeyRef = useRef<string>(scriptSessionKey);
+  const pendingQuestionRef = useRef<
+    (PendingQuestionPause & {messageId: string; suggestion: QuestionSuggestion}) | null
+  >(null);
 
   const activePatches = useMemo(
     () => (isOpen ? collectActiveAiPatches(messages, currentSnapshotHash) : EMPTY_ACTIVE_PATCHES),
@@ -250,6 +258,7 @@ export function useAiChatOrchestrator({
       abortControllerRef.current = null;
     }
     setIsStreaming(false);
+    pendingQuestionRef.current = null;
     lastInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
     lastTurnRawTextRef.current = undefined;
@@ -291,56 +300,29 @@ export function useAiChatOrchestrator({
     };
   }, []);
 
-  const submitPrompt = useCallback(
-    async (rawUserPrompt: string, options?: SubmitPromptOptions) => {
-      const activeFocus = options?.overrideFocus ?? focus;
-      const legacyMode = focusToLegacyMode(activeFocus, isEmpty);
-      const isAskQuestionDisabled =
-        skillsState.toolOverrides?.ask_question?.activationMode === 'disabled';
-      const effectiveAskMode: AskQuestionMode =
-        activeFocus === 'audit' || isAskQuestionDisabled
-          ? 'off'
-          : (options?.askQuestionMode ?? 'off');
-      const trimmed = rawUserPrompt.trim();
-      if (!trimmed || isStreaming) return;
+  interface ExecuteAgentTurnParams {
+    userMessage?: AiChatMessage;
+    prompt: string;
+    activeFocus: AssistantFocus;
+    legacyMode: ReturnType<typeof focusToLegacyMode>;
+    effectiveAskMode: AskQuestionMode;
+    attachments: readonly AgentMediaAttachment[];
+    previousInteractionId?: string;
+    resumeFunctionResults?: readonly PendingToolResultStep[];
+  }
 
-      if (!hasApiKey) {
-        onOpenSettings();
-        return;
-      }
-
-      const useTargetScope =
-        !options?.displayText &&
-        !isEmpty &&
-        (activeFocus === 'auto' || activeFocus === 'refine') &&
-        activeTarget.kind !== 'whole';
-
-      const effectivePrompt = useTargetScope
-        ? buildScopedRefinePrompt(trimmed, activeTarget)
-        : trimmed;
-
-      const scopeLabel = options?.scopeLabel ?? (useTargetScope ? activeTarget.label : undefined);
-      const briefSummary = briefIsActive ? briefSummaryLabel : undefined;
-      const pendingAttachments = collectPendingBriefAttachments(
-        brief,
-        sentAttachmentFingerprintsRef.current,
-        Boolean(lastInteractionIdRef.current)
-      );
-
-      const userMessageId = `msg-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const executeAgentTurn = useCallback(
+    async ({
+      userMessage,
+      prompt,
+      activeFocus,
+      legacyMode,
+      effectiveAskMode,
+      attachments,
+      previousInteractionId,
+      resumeFunctionResults,
+    }: ExecuteAgentTurnParams) => {
       const assistantMessageId = `msg-a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-
-      const userMessage: AiChatMessage = {
-        id: userMessageId,
-        role: 'user',
-        mode: legacyMode,
-        focus: activeFocus,
-        text: options?.displayText ?? trimmed,
-        ...(scopeLabel ? {scopeLabel} : {}),
-        ...(briefSummary ? {briefSummary} : {}),
-        ...(effectiveAskMode === 'ask_first' ? {askFirst: true} : {}),
-      };
-
       const turnSnapshotHash = currentSnapshotHash;
       const turnRawText = rawText;
       const turnSceneTitle = sceneTitle;
@@ -363,7 +345,9 @@ export function useAiChatOrchestrator({
       };
 
       onStreamStart();
-      setMessages((prev) => [...prev, userMessage, initialAssistantMessage]);
+      setMessages((prev) =>
+        userMessage ? [...prev, userMessage, initialAssistantMessage] : [...prev, initialAssistantMessage]
+      );
       setIsStreaming(true);
 
       const controller = new AbortController();
@@ -377,11 +361,11 @@ export function useAiChatOrchestrator({
           reasoningLevel,
           mode: legacyMode,
           focus: activeFocus,
-          prompt: effectivePrompt,
+          prompt,
           rawText,
           sceneTitle,
           ruleOverrides,
-          previousInteractionId: lastInteractionIdRef.current,
+          previousInteractionId,
           previousSnapshotHash: lastTurnSnapshotHashRef.current,
           previousRawText: lastTurnRawTextRef.current,
           previousSceneTitle: lastTurnSceneTitleRef.current,
@@ -396,7 +380,8 @@ export function useAiChatOrchestrator({
           referenceHandles: activeReferenceHandles,
           briefContext: activeBriefContext,
           askQuestionMode: effectiveAskMode,
-          attachments: pendingAttachments,
+          attachments,
+          ...(resumeFunctionResults ? {resumeFunctionResults} : {}),
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -444,10 +429,25 @@ export function useAiChatOrchestrator({
         if (result.interactionId) {
           lastInteractionIdRef.current = result.interactionId;
           onHasActiveInteractionChange(true);
-          for (const att of pendingAttachments) {
+          for (const att of attachments) {
             sentAttachmentFingerprintsRef.current.add(att.fingerprint);
           }
         }
+
+        if (result.pendingQuestion) {
+          const pausedSuggestion = result.stagedSuggestions.find(
+            (s): s is QuestionSuggestion =>
+              s.kind === 'question' && s.id === result.pendingQuestion!.suggestionId
+          );
+          if (pausedSuggestion) {
+            pendingQuestionRef.current = {
+              ...result.pendingQuestion,
+              messageId: assistantMessageId,
+              suggestion: pausedSuggestion,
+            };
+          }
+        }
+
         lastTurnSnapshotHashRef.current = turnSnapshotHash;
         lastTurnRawTextRef.current = turnRawText;
         lastTurnSceneTitleRef.current = turnSceneTitle;
@@ -492,38 +492,138 @@ export function useAiChatOrchestrator({
       }
     },
     [
+      activeBriefContext,
+      activeReferenceHandles,
+      apiKey,
+      currentDiagnosticsFingerprint,
+      currentSnapshotHash,
+      model,
+      onHasActiveInteractionChange,
+      onLastTurnBriefContextChange,
+      onLastTurnDiagnosticsFingerprintChange,
+      onLastTurnRawTextChange,
+      onLastTurnSceneTitleChange,
+      onLastTurnSnapshotHashChange,
+      onStreamStart,
+      rawText,
+      reasoningLevel,
+      ruleOverrides,
+      sceneTitle,
+      skillsState.customSkills,
+      skillsState.enforceToolLinterGate,
+      skillsState.foundationalCraftOverride,
+      skillsState.skillOverrides,
+      skillsState.toolOverrides,
+      skillsState.toolProtocolOverride,
+    ]
+  );
+
+  const submitPrompt = useCallback(
+    async (rawUserPrompt: string, options?: SubmitPromptOptions) => {
+      const activeFocus = options?.overrideFocus ?? focus;
+      const legacyMode = focusToLegacyMode(activeFocus, isEmpty);
+      const isAskQuestionDisabled =
+        skillsState.toolOverrides?.ask_question?.activationMode === 'disabled';
+      const effectiveAskMode: AskQuestionMode =
+        activeFocus === 'audit' || isAskQuestionDisabled
+          ? 'off'
+          : (options?.askQuestionMode ?? 'off');
+      const trimmed = rawUserPrompt.trim();
+      if (!trimmed || isStreaming) return;
+
+      if (!hasApiKey) {
+        onOpenSettings();
+        return;
+      }
+
+      const useTargetScope =
+        !options?.displayText &&
+        !isEmpty &&
+        (activeFocus === 'auto' || activeFocus === 'refine') &&
+        activeTarget.kind !== 'whole';
+
+      const effectivePrompt = useTargetScope
+        ? buildScopedRefinePrompt(trimmed, activeTarget)
+        : trimmed;
+
+      const scopeLabel = options?.scopeLabel ?? (useTargetScope ? activeTarget.label : undefined);
+      const briefSummary = briefIsActive ? briefSummaryLabel : undefined;
+      const pendingAttachments = collectPendingBriefAttachments(
+        brief,
+        sentAttachmentFingerprintsRef.current,
+        Boolean(lastInteractionIdRef.current)
+      );
+
+      const userMessageId = `msg-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const userMessage: AiChatMessage = {
+        id: userMessageId,
+        role: 'user',
+        mode: legacyMode,
+        focus: activeFocus,
+        text: options?.displayText ?? trimmed,
+        ...(scopeLabel ? {scopeLabel} : {}),
+        ...(briefSummary ? {briefSummary} : {}),
+        ...(effectiveAskMode === 'ask_first' ? {askFirst: true} : {}),
+      };
+
+      // Safe composer escape hatch: resolve any paused/dismissed ask_question call_id cleanly
+      let previousInteractionId = lastInteractionIdRef.current;
+      let resumeFunctionResults: PendingToolResultStep[] | undefined;
+      const pending = pendingQuestionRef.current;
+      if (pending) {
+        pendingQuestionRef.current = null;
+        setMessages((prev) =>
+          markQuestionAnsweredInMessages(prev, pending.messageId, pending.suggestionId, {
+            status: 'dismissed',
+            answers: {},
+          })
+        );
+        if (
+          pending.interactionId &&
+          pending.interactionId === lastInteractionIdRef.current &&
+          pendingAttachments.length === 0
+        ) {
+          const dismissPayload = {
+            ...buildQuestionToolResultPayload(pending.suggestion, {}, 'dismissed'),
+            userOverridePrompt: effectivePrompt,
+          };
+          resumeFunctionResults = [
+            ...pending.siblingFunctionResults,
+            {
+              type: 'function_result',
+              name: 'ask_question',
+              call_id: pending.callId,
+              result: dismissPayload,
+            },
+          ];
+        } else {
+          previousInteractionId = undefined;
+        }
+      }
+
+      await executeAgentTurn({
+        userMessage,
+        prompt: effectivePrompt,
+        activeFocus,
+        legacyMode,
+        effectiveAskMode,
+        attachments: pendingAttachments,
+        previousInteractionId,
+        resumeFunctionResults,
+      });
+    },
+    [
       focus,
       isEmpty,
       brief,
       briefIsActive,
       briefSummaryLabel,
-      activeReferenceHandles,
-      activeBriefContext,
       isStreaming,
       hasApiKey,
       activeTarget,
-      currentSnapshotHash,
-      currentDiagnosticsFingerprint,
-      apiKey,
-      model,
-      reasoningLevel,
-      rawText,
-      sceneTitle,
-      ruleOverrides,
-      skillsState.foundationalCraftOverride,
-      skillsState.skillOverrides,
-      skillsState.customSkills,
-      skillsState.toolProtocolOverride,
-      skillsState.enforceToolLinterGate,
       skillsState.toolOverrides,
       onOpenSettings,
-      onStreamStart,
-      onHasActiveInteractionChange,
-      onLastTurnSnapshotHashChange,
-      onLastTurnRawTextChange,
-      onLastTurnSceneTitleChange,
-      onLastTurnDiagnosticsFingerprintChange,
-      onLastTurnBriefContextChange,
+      executeAgentTurn,
     ]
   );
 
@@ -669,8 +769,88 @@ export function useAiChatOrchestrator({
   }, []);
 
   const markSuggestionDismissed = useCallback((messageId: string, suggestionId: string) => {
+    if (pendingQuestionRef.current?.suggestionId === suggestionId) {
+      setMessages((prev) =>
+        markQuestionAnsweredInMessages(prev, messageId, suggestionId, {
+          status: 'dismissed',
+          answers: {},
+        })
+      );
+      return;
+    }
     setMessages((prev) => markSuggestionDismissedInMessages(prev, messageId, suggestionId));
   }, []);
+
+  const resumeQuestionResponse = useCallback(
+    (
+      messageId: string,
+      suggestion: QuestionSuggestion,
+      answers: Record<string, QuestionAnswerDraft>,
+      status: 'answered' | 'skipped'
+    ) => {
+      if (isStreaming) return;
+      setMessages((prev) =>
+        markQuestionAnsweredInMessages(prev, messageId, suggestion.id, {
+          status,
+          answers,
+        })
+      );
+      onClearAskFirst();
+
+      const isAskQuestionDisabled =
+        skillsState.toolOverrides?.ask_question?.activationMode === 'disabled';
+      const followupAskMode: AskQuestionMode =
+        focus === 'audit' || isAskQuestionDisabled ? 'off' : 'followup';
+
+      const pending = pendingQuestionRef.current;
+      if (pending && pending.suggestionId === suggestion.id && pending.interactionId) {
+        pendingQuestionRef.current = null;
+        const payload = buildQuestionToolResultPayload(suggestion, answers, status);
+        const resumeFunctionResults: PendingToolResultStep[] = [
+          ...pending.siblingFunctionResults,
+          {
+            type: 'function_result',
+            name: 'ask_question',
+            call_id: pending.callId,
+            result: payload,
+          },
+        ];
+        void executeAgentTurn({
+          prompt: '',
+          activeFocus: focus,
+          legacyMode: focusToLegacyMode(focus, isEmpty),
+          effectiveAskMode: followupAskMode,
+          attachments: [],
+          previousInteractionId: pending.interactionId,
+          resumeFunctionResults,
+        });
+        return;
+      }
+
+      if (status === 'skipped') {
+        void submitPrompt(
+          'Skip & Proceed (Your call) — please proceed using strong Auteur craft defaults.',
+          {askQuestionMode: followupAskMode}
+        );
+        return;
+      }
+
+      const formatted = formatQuestionAnswersPrompt(suggestion, answers);
+      void submitPrompt(formatted.promptText, {
+        displayText: formatted.displayText,
+        askQuestionMode: followupAskMode,
+      });
+    },
+    [
+      executeAgentTurn,
+      focus,
+      isEmpty,
+      isStreaming,
+      onClearAskFirst,
+      skillsState.toolOverrides,
+      submitPrompt,
+    ]
+  );
 
   const handleSubmitQuestionAnswers = useCallback(
     (
@@ -678,16 +858,16 @@ export function useAiChatOrchestrator({
       suggestion: QuestionSuggestion,
       answers: Record<string, QuestionAnswerDraft>
     ) => {
-      if (isStreaming) return;
-      const formatted = formatQuestionAnswersPrompt(suggestion, answers);
-      setMessages((prev) => markQuestionAnsweredInMessages(prev, messageId, suggestion.id));
-      onClearAskFirst();
-      void submitPrompt(formatted.promptText, {
-        displayText: formatted.displayText,
-        askQuestionMode: 'followup',
-      });
+      resumeQuestionResponse(messageId, suggestion, answers, 'answered');
     },
-    [isStreaming, onClearAskFirst, submitPrompt]
+    [resumeQuestionResponse]
+  );
+
+  const handleSkipQuestion = useCallback(
+    (messageId: string, suggestion: QuestionSuggestion) => {
+      resumeQuestionResponse(messageId, suggestion, {}, 'skipped');
+    },
+    [resumeQuestionResponse]
   );
 
   const handleApplyPatch = useCallback(
@@ -813,6 +993,7 @@ export function useAiChatOrchestrator({
     handleApplyDraft,
     handleApplyTitle,
     handleSubmitQuestionAnswers,
+    handleSkipQuestion,
     markSuggestionApplied,
     markSuggestionDismissed,
   };

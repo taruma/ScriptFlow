@@ -93,6 +93,7 @@ export interface ClarifyingQuestionItem {
   id: string;
   question: string;
   options: string[];
+  multiSelect?: boolean;
 }
 
 export interface QuestionSuggestion {

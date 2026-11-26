@@ -756,4 +756,128 @@ describe('geminiInteractions streaming agent client', () => {
     expect(String(capturedRequests[1].input)).toContain('<scene_brief status="updated">');
     expect(String(capturedRequests[1].input)).not.toContain('[Ask First: ON]');
   });
+
+  it('pauses immediately when ask_question succeeds (preserving sibling tool calls) and resumes directly via function_result', async () => {
+    const capturedRequests: Array<Record<string, unknown>> = [];
+    let callIndex = 0;
+
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async (params) => {
+          capturedRequests.push(params);
+          callIndex += 1;
+
+          if (callIndex === 1) {
+            return asAsyncStream([
+              {
+                event_type: 'interaction.created',
+                interaction: {id: 'int-pause-1', status: 'in_progress'},
+              },
+              {
+                event_type: 'step.start',
+                index: 0,
+                step: {
+                  type: 'function_call',
+                  id: 'call-skill-1',
+                  name: 'load_auteur_skill',
+                  arguments: {skillId: 'draft_interview'},
+                },
+              },
+              {
+                event_type: 'step.start',
+                index: 1,
+                step: {
+                  type: 'function_call',
+                  id: 'call-ask-1',
+                  name: 'ask_question',
+                  arguments: {
+                    questions: [
+                      {
+                        question: 'Which camera style should anchor this scene?',
+                        options: ['Single continuous take', 'Controlled shot-reverse-shot'],
+                      },
+                    ],
+                  },
+                },
+              },
+              {
+                event_type: 'interaction.completed',
+                interaction: {id: 'int-pause-1', status: 'completed'},
+              },
+            ]);
+          }
+
+          return asAsyncStream([
+            {
+              event_type: 'interaction.created',
+              interaction: {id: 'int-resume-2', status: 'in_progress'},
+            },
+            {
+              event_type: 'step.delta',
+              index: 0,
+              delta: {type: 'text', text: 'Proceeding with single continuous take.'},
+            },
+            {
+              event_type: 'interaction.completed',
+              interaction: {id: 'int-resume-2', status: 'completed'},
+            },
+          ]);
+        },
+      },
+    };
+
+    const pausedTurn = await runGeminiAgentTurn({
+      apiKey: 'AIza-pause-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'draft',
+      focus: 'auto',
+      prompt: 'Draft a tense train station farewell.',
+      rawText: '',
+      askQuestionMode: 'ask_first',
+      createClient: () => fakeClient,
+    });
+
+    // Stopped immediately after Round 1 without issuing a Round 2 request
+    expect(capturedRequests).toHaveLength(1);
+    expect(pausedTurn.pendingQuestion).toBeDefined();
+    expect(pausedTurn.pendingQuestion?.callId).toBe('call-ask-1');
+    expect(pausedTurn.pendingQuestion?.interactionId).toBe('int-pause-1');
+    expect(pausedTurn.pendingQuestion?.siblingFunctionResults).toHaveLength(1);
+    expect(pausedTurn.pendingQuestion?.siblingFunctionResults[0].call_id).toBe('call-skill-1');
+    expect(pausedTurn.stagedSuggestions).toHaveLength(1);
+
+    const resumedTurn = await runGeminiAgentTurn({
+      apiKey: 'AIza-pause-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'medium',
+      mode: 'draft',
+      focus: 'auto',
+      prompt: '',
+      rawText: '',
+      askQuestionMode: 'followup',
+      previousInteractionId: pausedTurn.pendingQuestion!.interactionId,
+      resumeFunctionResults: [
+        ...pausedTurn.pendingQuestion!.siblingFunctionResults,
+        {
+          type: 'function_result',
+          name: 'ask_question',
+          call_id: pausedTurn.pendingQuestion!.callId,
+          result: {ok: true, status: 'answered', answers: []},
+        },
+      ],
+      createClient: () => fakeClient,
+    });
+
+    expect(capturedRequests).toHaveLength(2);
+    expect(capturedRequests[1].previous_interaction_id).toBe('int-pause-1');
+    const resumeInput = capturedRequests[1].input as Array<Record<string, unknown>>;
+    expect(resumeInput).toHaveLength(2);
+    expect(resumeInput[0].call_id).toBe('call-skill-1');
+    expect(resumeInput[1].call_id).toBe('call-ask-1');
+    expect(String((resumeInput[1].result as Record<string, unknown>).followUpContext)).toContain(
+      '[Clarifying follow-up]'
+    );
+    expect(resumedTurn.text).toBe('Proceeding with single continuous take.');
+  });
 });

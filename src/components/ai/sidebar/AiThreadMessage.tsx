@@ -79,6 +79,7 @@ export interface AiThreadMessageProps {
     suggestion: QuestionSuggestion,
     answers: Record<string, QuestionAnswerDraft>
   ) => void;
+  onSkipQuestion: (messageId: string, suggestion: QuestionSuggestion) => void;
   onDismissSuggestion: (messageId: string, suggestionId: string) => void;
   onQuickAudit: (checkId: AuditQuickCheckId) => void;
   onOpenSettings: () => void;
@@ -106,6 +107,7 @@ export const AiThreadMessage = memo(function AiThreadMessage({
   onApplyDraft,
   onApplyTitle,
   onSubmitQuestionAnswers,
+  onSkipQuestion,
   onDismissSuggestion,
   onQuickAudit,
   onOpenSettings,
@@ -278,15 +280,18 @@ export const AiThreadMessage = memo(function AiThreadMessage({
               );
             }
             if (suggestion.kind === 'question') {
+              const submittedResponse = msg.questionResponses?.[suggestion.id];
               return (
                 <QuestionSuggestionCard
                   key={suggestion.id}
                   suggestion={suggestion}
+                  submittedResponse={submittedResponse}
                   isStreaming={msgStreaming}
                   isRunning={isRunning}
                   isAnswered={applied.includes(suggestion.id)}
                   isDismissed={dismissed.includes(suggestion.id)}
                   onSubmit={(s, answers) => onSubmitQuestionAnswers(msg.id, s, answers)}
+                  onSkip={(s) => onSkipQuestion(msg.id, s)}
                   onDismiss={(id) => onDismissSuggestion(msg.id, id)}
                 />
               );
