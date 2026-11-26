@@ -39,12 +39,28 @@ export interface QuickScanCardProps {
 
 function getStatusPillClass(status: QuickScanStatus): string {
   if (status === 'flagged') {
-    return 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300';
+    return 'auteur-phase-execution';
   }
   if (status === 'borderline') {
-    return 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+    return 'auteur-phase-intent';
   }
-  return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+  return 'auteur-phase-aesthetic';
+}
+
+function getStatusAccentColor(status: QuickScanStatus): string {
+  if (status === 'flagged') {
+    return 'var(--phase-execution-text)';
+  }
+  if (status === 'borderline') {
+    return 'var(--phase-intent-text)';
+  }
+  return 'var(--phase-aesthetic-text)';
+}
+
+function getOverallStatus(result: QuickScanResult): QuickScanStatus {
+  if (result.flaggedCount > 0) return 'flagged';
+  if (result.borderlineCount > 0) return 'borderline';
+  return 'clean';
 }
 
 function getStatusLabel(status: QuickScanStatus): string {
@@ -75,25 +91,22 @@ export const QuickScanCard = memo(function QuickScanCard({
 }: QuickScanCardProps) {
   const qsLabels = UI_LABELS.ai.quickScan;
   const isStale = result.snapshotHash !== currentSnapshotHash;
+  const overallStatus = getOverallStatus(result);
+  const overallAccentColor = getStatusAccentColor(overallStatus);
 
   const defaultSelected = useMemo(() => getDefaultSelectedAuditLenses(result), [result]);
   const [selectedLenses, setSelectedLenses] = useState<Set<AuteurLensPresetId>>(
     () => new Set(defaultSelected)
   );
-  const [expandedLenses, setExpandedLenses] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const summary of result.lensSummaries) {
-      if (summary.status !== 'clean') {
-        initial[summary.lens] = true;
-      }
-    }
-    return initial;
-  });
+  // Start all lens rows collapsed so the initial scorecard stays compact & calm
+  const [expandedLenses, setExpandedLenses] = useState<Record<string, boolean>>({});
+  const [isCardCollapsed, setIsCardCollapsed] = useState(false);
   const [expandedDismissed, setExpandedDismissed] = useState(false);
 
-  // Sync defaults if a new result object arrives on this card
+  // Sync defaults and collapse lenses cleanly when a new result object arrives
   useEffect(() => {
     setSelectedLenses(new Set(getDefaultSelectedAuditLenses(result)));
+    setExpandedLenses({});
   }, [result]);
 
   const toggleLensSelection = (lens: AuteurLensPresetId) => {
@@ -112,6 +125,30 @@ export const QuickScanCard = memo(function QuickScanCard({
     }));
   };
 
+  const anyLensHasItems = useMemo(
+    () => result.lensSummaries.some((summary) => summary.items.length > 0),
+    [result.lensSummaries]
+  );
+
+  const anyLensExpanded = useMemo(
+    () => result.lensSummaries.some((summary) => summary.items.length > 0 && Boolean(expandedLenses[summary.lens])),
+    [result.lensSummaries, expandedLenses]
+  );
+
+  const toggleAllLensesExpanded = () => {
+    if (anyLensExpanded) {
+      setExpandedLenses({});
+      return;
+    }
+    const next: Record<string, boolean> = {};
+    for (const summary of result.lensSummaries) {
+      if (summary.items.length > 0) {
+        next[summary.lens] = true;
+      }
+    }
+    setExpandedLenses(next);
+  };
+
   const orderedSelectedLenses = useMemo(
     () => AUDIT_LENS_PRESET_IDS.filter((lens) => selectedLenses.has(lens)),
     [selectedLenses]
@@ -122,68 +159,130 @@ export const QuickScanCard = memo(function QuickScanCard({
     ? qsLabels.summaryCounts(result.flaggedCount, result.borderlineCount)
     : qsLabels.summaryAllClean;
 
+  const renderVerdictIcon = (status: QuickScanStatus) => {
+    const style = {color: getStatusAccentColor(status)};
+    if (status === 'flagged') {
+      return <AlertCircle className="h-3.5 w-3.5 shrink-0" style={style} />;
+    }
+    if (status === 'borderline') {
+      return <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={style} />;
+    }
+    return <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={style} />;
+  };
+
+  // Compact single-line bar when dismissed (click to expand & review)
   if (dismissed && !expandedDismissed) {
     return (
       <button
         type="button"
         onClick={() => setExpandedDismissed(true)}
-        className="w-full flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface-subtle/70 px-3 py-2 text-left text-[11px] text-text-muted hover:bg-surface-muted/70 transition-colors cursor-pointer"
+        aria-expanded={false}
+        aria-label={qsLabels.expandCardAria}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface-subtle/70 px-3 py-2 text-left text-[11px] text-text-muted hover:bg-surface-hover/70 transition-colors cursor-pointer opacity-75"
       >
         <span className="inline-flex items-center gap-1.5 min-w-0">
           <ScanSearch className="h-3.5 w-3.5 shrink-0 text-text-faint" />
           <span className="font-medium text-text-main truncate">{qsLabels.cardTitle}</span>
-          <span className="text-text-faint truncate">· {summaryText}</span>
+          <span className="font-mono text-[10px] text-text-faint truncate">· {summaryText}</span>
         </span>
-        <span className="shrink-0 rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] text-text-faint">
-          {qsLabels.dismissedBadge}
+        <span className="inline-flex items-center gap-1 shrink-0">
+          <span className="rounded-md border border-border-main bg-surface px-1.5 py-0.5 font-mono text-[10px] text-text-faint">
+            {qsLabels.dismissedBadge}
+          </span>
+          <ChevronRight className="h-3 w-3 text-text-faint" />
         </span>
       </button>
     );
   }
 
-  return (
-    <div className="rounded-xl border border-border-main bg-surface shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle px-3 py-2">
-        <div className="flex items-center gap-2 min-w-0">
-          {result.flaggedCount > 0 ? (
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
-          ) : result.borderlineCount > 0 ? (
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-          ) : (
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-          )}
-          <span className="text-[11px] font-semibold tracking-wide text-text-main">
+  // Whole-card collapsed overview bar (preserves Live Mode dots without dismissing)
+  if (!dismissed && isCardCollapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsCardCollapsed(false)}
+        aria-expanded={false}
+        aria-label={qsLabels.expandCardAria}
+        style={{borderLeftColor: overallAccentColor}}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-border-main border-l-2 bg-surface px-3 py-2 text-left hover:bg-surface-subtle transition-colors cursor-pointer shadow-2xs"
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          {renderVerdictIcon(overallStatus)}
+          <span className="text-[11px] font-semibold text-text-main shrink-0">
             {qsLabels.cardTitle}
           </span>
           <span
-            className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium ${getStatusPillClass(
-              result.flaggedCount > 0
-                ? 'flagged'
-                : result.borderlineCount > 0
-                  ? 'borderline'
-                  : 'clean'
+            className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium truncate ${getStatusPillClass(
+              overallStatus
             )}`}
           >
             {summaryText}
           </span>
         </div>
-
-        <div className="flex items-center gap-1.5 font-mono text-[10px] text-text-faint">
-          <span>{qsLabels.checksSummary(result.totalQuestions)}</span>
-          <span>·</span>
-          <span>{formatDurationCompact(result.durationMs)}</span>
-          <span className="rounded border border-border-subtle bg-surface px-1 py-0.5 capitalize text-[9px] text-text-muted">
-            {result.sensitivity}
+        <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] text-text-faint">
+          <span className="tabular-nums">
+            {qsLabels.checksSummary(result.totalQuestions)} · {formatDurationCompact(result.durationMs)}
           </span>
-          {dismissed && (
+          <ChevronRight className="h-3.5 w-3.5 text-text-faint" />
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{borderLeftColor: dismissed ? undefined : overallAccentColor}}
+      className={`rounded-xl border border-border-main bg-surface shadow-sm overflow-hidden ${
+        dismissed ? 'opacity-75' : 'border-l-2'
+      }`}
+    >
+      {/* 2-Tier Header */}
+      <div className="border-b border-border-subtle bg-surface-subtle/75 px-3 py-2 space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {renderVerdictIcon(overallStatus)}
+            <span className="text-[11.5px] font-semibold tracking-tight text-text-main shrink-0">
+              {qsLabels.cardTitle}
+            </span>
+            <span
+              className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium truncate ${getStatusPillClass(
+                overallStatus
+              )}`}
+            >
+              {summaryText}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (dismissed) setExpandedDismissed(false);
+              else setIsCardCollapsed(true);
+            }}
+            aria-expanded={true}
+            aria-label={qsLabels.collapseCardAria}
+            className="rounded-md p-0.5 text-text-faint hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer shrink-0"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 font-mono text-[10px] text-text-faint">
+          <div className="flex items-center gap-1.5 min-w-0 truncate tabular-nums">
+            <span>{qsLabels.checksSummary(result.totalQuestions)}</span>
+            <span>·</span>
+            <span>{formatDurationCompact(result.durationMs)}</span>
+            <span>·</span>
+            <span className="capitalize">{result.sensitivity}</span>
+          </div>
+
+          {anyLensHasItems && (
             <button
               type="button"
-              onClick={() => setExpandedDismissed(false)}
-              className="rounded p-0.5 text-text-faint hover:bg-surface-muted hover:text-text-main cursor-pointer"
-              aria-label={UI_LABELS.ai.suggestions.collapseDetailsAria}
+              onClick={toggleAllLensesExpanded}
+              className="shrink-0 font-sans text-[10.5px] font-medium text-text-muted hover:text-text-main transition-colors cursor-pointer"
             >
-              <X className="h-3 w-3" />
+              {anyLensExpanded ? qsLabels.collapseAllLensesButton : qsLabels.expandAllLensesButton}
             </button>
           )}
         </div>
@@ -191,7 +290,7 @@ export const QuickScanCard = memo(function QuickScanCard({
 
       {/* Conditional Stale / YouTube Notices */}
       {isStale && (
-        <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-800 dark:text-amber-300">
+        <div className="auteur-phase-intent flex items-center justify-between gap-2 border-b border-border-subtle px-3 py-1.5 text-[11px]">
           <span className="inline-flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 shrink-0" />
             <span>{qsLabels.staleNotice}</span>
@@ -200,7 +299,7 @@ export const QuickScanCard = memo(function QuickScanCard({
             type="button"
             disabled={disabled}
             onClick={onRescan}
-            className="inline-flex items-center gap-1 rounded-md border border-amber-500/35 bg-surface px-2 py-0.5 text-[10px] font-medium text-text-main hover:bg-surface-muted transition-colors cursor-pointer disabled:opacity-45"
+            className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface px-2 py-0.5 text-[10px] font-medium text-text-main hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-45"
           >
             <RefreshCw className="h-2.5 w-2.5" />
             <span>{qsLabels.rescanButton}</span>
@@ -215,7 +314,7 @@ export const QuickScanCard = memo(function QuickScanCard({
         </div>
       )}
 
-      {/* Body: Lens Rows */}
+      {/* Body: Canonical Fixed-Order Lens Scorecard */}
       <div className="divide-y divide-border-subtle">
         {result.totalQuestions === 0 && result.deterministicCount === 0 ? (
           <div className="px-3 py-3 text-[11px] text-text-muted">{qsLabels.noRulesRanNote}</div>
@@ -259,7 +358,7 @@ export const QuickScanCard = memo(function QuickScanCard({
                     topItem?.ruleLabel ?? '',
                     pct
                   )}
-                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px] font-medium transition-colors cursor-pointer hover:opacity-85 ${getStatusPillClass(
+                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px] font-medium transition-opacity cursor-pointer hover:opacity-85 ${getStatusPillClass(
                     beat.status
                   )}`}
                 >
@@ -275,16 +374,7 @@ export const QuickScanCard = memo(function QuickScanCard({
 
       {/* Action Footer */}
       {!dismissed && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle bg-surface-subtle px-3 py-2">
-          <button
-            type="button"
-            onClick={onDismiss}
-            className={`${UI_TOKENS.ai.pillButton} text-[11px]`}
-          >
-            <X className="h-3 w-3" />
-            <span>{qsLabels.dismissButton}</span>
-          </button>
-
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle bg-surface-subtle/60 px-3 py-2">
           <div className="flex items-center gap-1.5">
             {orderedSelectedLenses.length > 0 ? (
               <button
@@ -307,6 +397,28 @@ export const QuickScanCard = memo(function QuickScanCard({
                 <span>{qsLabels.runFullDeepAuditButton}</span>
               </button>
             )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {!isStale && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={onRescan}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main disabled:opacity-45 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <RefreshCw className="h-2.5 w-2.5" />
+                <span>{qsLabels.rescanButton}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors cursor-pointer"
+            >
+              <X className="h-3 w-3" />
+              <span>{qsLabels.dismissButton}</span>
+            </button>
           </div>
         </div>
       )}
@@ -333,14 +445,35 @@ function LensSummaryRow({
   onToggleExpand,
   onJumpToTarget,
 }: LensSummaryRowProps) {
+  const [showCleanItems, setShowCleanItems] = useState(false);
   const qsLabels = UI_LABELS.ai.quickScan;
   const label = qsLabels.lensLabels[summary.lens];
   const hasItems = summary.items.length > 0;
   const nonCleanCount = summary.flaggedCount + summary.borderlineCount;
+  const isClean = summary.status === 'clean';
+
+  const issueItems = useMemo(
+    () => summary.items.filter((item) => item.status !== 'clean'),
+    [summary.items]
+  );
+  const cleanItems = useMemo(
+    () => summary.items.filter((item) => item.status === 'clean'),
+    [summary.items]
+  );
+
+  // Reset passed-checks toggle cleanly whenever a new summary arrives
+  useEffect(() => {
+    setShowCleanItems(false);
+  }, [summary]);
 
   return (
-    <div className="bg-surface">
-      <div className="flex items-center gap-2 px-3 py-1.5">
+    <div
+      style={{
+        borderLeftColor: isClean ? 'transparent' : getStatusAccentColor(summary.status),
+      }}
+      className="bg-surface border-l-2"
+    >
+      <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface-subtle/40 transition-colors">
         {selectable ? (
           <button
             type="button"
@@ -378,31 +511,78 @@ function LensSummaryRow({
             ) : (
               <span className="w-3 shrink-0" />
             )}
-            <span className="text-[11px] font-medium text-text-main truncate">{label}</span>
+            <span
+              className={`text-[11px] truncate ${
+                isClean ? 'text-text-muted' : 'font-medium text-text-main'
+              }`}
+            >
+              {label}
+            </span>
           </span>
 
           <span className="flex items-center gap-1.5 shrink-0">
             {summary.totalChecked > 0 && (
-              <span className="font-mono text-[10px] text-text-faint">
+              <span className="font-mono text-[10px] text-text-faint tabular-nums">
                 {nonCleanCount > 0 ? `${nonCleanCount}/${summary.totalChecked}` : `${summary.totalChecked}`}
               </span>
             )}
-            <span
-              className={`rounded border px-1.5 py-0.5 font-mono text-[9px] font-semibold ${getStatusPillClass(
-                summary.status
-              )}`}
-            >
-              {getStatusLabel(summary.status)}
-            </span>
+            {isClean ? (
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] text-text-faint">
+                <CheckCircle2
+                  className="h-3 w-3 shrink-0"
+                  style={{color: getStatusAccentColor('clean')}}
+                />
+                <span>{getStatusLabel('clean')}</span>
+              </span>
+            ) : (
+              <span
+                className={`rounded border px-1.5 py-0.5 font-mono text-[9.5px] font-semibold ${getStatusPillClass(
+                  summary.status
+                )}`}
+              >
+                {getStatusLabel(summary.status)}
+              </span>
+            )}
           </span>
         </button>
       </div>
 
       {expanded && hasItems && (
         <div className="border-t border-border-subtle/60 bg-surface-subtle/40 px-3 py-1.5 space-y-1">
-          {summary.items.map((item) => (
+          {issueItems.map((item) => (
             <FindingRow key={item.key} item={item} onJumpToTarget={onJumpToTarget} />
           ))}
+
+          {issueItems.length === 0 ? (
+            cleanItems.map((item) => (
+              <FindingRow key={item.key} item={item} onJumpToTarget={onJumpToTarget} />
+            ))
+          ) : (
+            cleanItems.length > 0 && (
+              <>
+                {showCleanItems &&
+                  cleanItems.map((item) => (
+                    <FindingRow key={item.key} item={item} onJumpToTarget={onJumpToTarget} />
+                  ))}
+                <button
+                  type="button"
+                  onClick={() => setShowCleanItems((prev) => !prev)}
+                  className="inline-flex items-center gap-1 pt-0.5 text-[10px] font-medium text-text-faint hover:text-text-main transition-colors cursor-pointer"
+                >
+                  {showCleanItems ? (
+                    <ChevronDown className="h-2.5 w-2.5" />
+                  ) : (
+                    <ChevronRight className="h-2.5 w-2.5" />
+                  )}
+                  <span>
+                    {showCleanItems
+                      ? qsLabels.hidePassedChecksButton(cleanItems.length)
+                      : qsLabels.showPassedChecksButton(cleanItems.length)}
+                  </span>
+                </button>
+              </>
+            )
+          )}
         </div>
       )}
     </div>
@@ -423,17 +603,23 @@ function FindingRow({
   const hasDetail = Boolean(
     item.instructions || item.trueDescription || item.deterministicMessage
   );
+  const dotColor = getStatusAccentColor(item.status);
 
   return (
     <div className="py-0.5">
       <div className="flex items-center justify-between gap-2 text-[11px]">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span
+            aria-hidden="true"
+            style={{backgroundColor: dotColor}}
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+          />
           {isJumpable ? (
             <button
               type="button"
               onClick={() => onJumpToTarget(item.targetId)}
               title={UI_LABELS.ai.suggestions.jumpToTargetTitle(item.targetId)}
-              className="shrink-0 rounded border border-border-main bg-surface px-1 py-0.5 font-mono text-[9px] font-semibold text-text-main hover:bg-surface-muted cursor-pointer"
+              className="shrink-0 rounded border border-border-main bg-surface px-1 py-0.5 font-mono text-[9px] font-semibold text-text-main hover:bg-surface-hover cursor-pointer"
             >
               {item.targetId}
             </button>
@@ -486,18 +672,28 @@ function FindingRow({
               {qsLabels.deterministicBadge}
             </span>
           ) : (
-            <span
-              className={`tabular-nums ${
-                item.status === 'flagged'
-                  ? 'text-red-600 dark:text-red-400 font-semibold'
-                  : item.status === 'borderline'
-                    ? 'text-amber-600 dark:text-amber-400 font-semibold'
-                    : 'text-text-faint'
-              }`}
+            <div
+              className="flex items-center gap-1.5"
               title={`P(issue) = ${pct}% · confidence = ${Math.round(item.confidence * 100)}%`}
             >
-              {pct}%
-            </span>
+              <span className="h-1 w-7 overflow-hidden rounded-full bg-border-subtle">
+                <span
+                  className="block h-full rounded-full"
+                  style={{
+                    width: `${Math.max(4, pct)}%`,
+                    backgroundColor: dotColor,
+                  }}
+                />
+              </span>
+              <span
+                style={{color: item.status === 'clean' ? undefined : dotColor}}
+                className={`w-7 text-right tabular-nums ${
+                  item.status === 'clean' ? 'text-text-faint' : 'font-semibold'
+                }`}
+              >
+                {pct}%
+              </span>
+            </div>
           )}
         </div>
       </div>

@@ -100,18 +100,26 @@ export const AI_LABELS = {
     quickScanRunning: 'Running Quick Scan…',
     quickScanFallbackButton: 'Run Standard Audit All instead',
     quickScan: {
-      cardTitle: 'Quick Scan (Layer 2.5)',
+      cardTitle: 'Quick Scan',
       dismissedBadge: 'Dismissed',
       runningLabel: 'Evaluating atomic checks…',
       staleNotice: 'Script edited since this scan.',
       rescanButton: 'Re-scan',
+      collapseCardAria: 'Collapse Quick Scan card',
+      expandCardAria: 'Expand Quick Scan card',
+      expandAllLensesButton: 'Expand all',
+      collapseAllLensesButton: 'Collapse all',
+      showPassedChecksButton: (count: number) =>
+        `Show ${count} passed ${count === 1 ? 'check' : 'checks'}`,
+      hidePassedChecksButton: (count: number) =>
+        `Hide ${count} passed ${count === 1 ? 'check' : 'checks'}`,
       youtubeNotice: (handles: readonly string[]) =>
         `YouTube ${handles.join(', ')} evaluated via text labels only (Decisions API omits YouTube streams).`,
       checksSummary: (count: number) => `${count} ${count === 1 ? 'check' : 'checks'}`,
       statusFlagged: 'Flagged',
       statusBorderline: 'Borderline',
       statusClean: 'Clean',
-      summaryAllClean: 'All checked atomic rules clean',
+      summaryAllClean: 'All clean',
       summaryCounts: (flagged: number, borderline: number) => {
         const parts: string[] = [];
         if (flagged > 0) parts.push(`${flagged} flagged`);
