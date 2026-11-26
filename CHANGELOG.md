@@ -5,37 +5,53 @@ All notable changes to the **ScriptFlow** application (**Auteur Script Editor & 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > **Versioning Scope Note**
-> - This file tracks **ScriptFlow application releases** (`1.0.0` in `package.json`).
+> - This file tracks **ScriptFlow application releases** (`1.1.0` in `package.json`).
 > - Changes to the platform- and model-agnostic **Auteur Script (`v0.4.0`)** canonical inline grammar, deterministic Script Supervisor linter, and programmatic JSON IR specification are tracked separately in [`docs/SPEC_CHANGELOG.md`](docs/SPEC_CHANGELOG.md).
 
 ---
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-11-26
+
+### Added
+- **AI Session History, IndexedDB `v3` Auto-Save, Recap Bridge & Multi-Format Exports (`src/ui/aiSessions.ts`, `src/components/AiSessionHistoryModal.tsx`)**:
+  - Added an independent `aiSessions` store in IndexedDB (`SCRIPT_LIBRARY_DB_VERSION = 3` in `src/ui/scriptLibraryDb.ts` + `localStorage` fallback & reconciliation) that auto-saves AI conversations at semantic checkpoints and survives script deletions/library clears (surfacing a `Script deleted` indicator when the original script is gone).
+  - Persists text-only `Scene Brief` fields (`specs`, `subtext`, and reference text/notes) while stripping binary media and keeping `omittedAttachmentTag` descriptors for Zone 1 / `previous_interaction_id` cache stability, and deduplicates Zone 1 `systemInstruction` strings in `traceSystemInstructions` for 100% identical `AiTraceModal` inspection.
+  - Added a compact **Recent Sessions** list (up to 5 sessions prioritizing the active script first) in the empty AI sidebar, an icon-only **History** button left of `Context`, **`File ▾ → AI Chat History...`**, and a lazy-loaded two-pane **`AiSessionHistoryModal`** supporting search, `All` / `This Script` / `Pinned` filters, inline rename/pin/delete, Brief copy, **`Load in Sidebar`**, **`Switch Script & Load`**, and an upward **`Download | ▾`** split menu (**Conversation `.md`** default, evaluation-ready **Full Conversation `.json`** with `scriptSnapshot`, `skillsUsed`, `toolsUsed` + compact failed-call error/repair hints, structured suggestion diffs/issues, and per-turn token/cache/cost metrics, and **Full Payload `.json`** with top-level deduplicated `systemInstructions` & `toolsSummary`).
+  - Added `'interaction_expired'` detection (`src/services/gemini/errors.ts`) and deterministic `<prior_session_recap>` Round 1 bridging (`src/services/gemini/sessionRecap.ts`) so expired Gemini chains and cross-script continuations recover automatically into a fresh chain without mutating frozen Zone 1 `system_instruction`.
+- **Built-In `draft_interview` Workflow Skill (`AUTEUR_KNOWLEDGE_VERSION = "0.4.0-k5"`)**:
+  - Added `src/data/knowledge/skills/draft_interview.md` (registered in `catalog.json`, default On-Demand) guiding 2–4 high-leverage directorial questions before drafting open scenes while preserving `agentContextCodec` backward compatibility.
+- **URL Deep-Linking (`/?example=`, `/?url=`, `/?agents=`) & Readable Example Slugs**:
+  - Added readable `slug` identifiers in `src/data/examples/catalog.json` (`the-grand-continental`, `mark-and-lucas`, `balloon-panic`, `robert-machu-pichu`, `three-years-late-part-1`..`4`, `frequency-over-force-part-1`..`2`) and `getBundledExampleByIdOrSlug()` in `src/data/examples/index.ts`.
+  - Added `src/ui/urlLaunch.ts` enforcing mutually exclusive single-action URL parameters (`?example=`, `?url=`, `?agents=`), `http:`/`https:` validation, `history.replaceState` query cleanup, and CORS/size-bounded remote text fetching.
+  - On desktop (`>= 640px`), `/?url=<file-url>` fetches and pre-populates `ScriptImportModal` (pre-flight scorecard + Merge/New/Replace confirmation) and `/?agents=<json-url>` fetches and opens `AgentContextImportDialog` directly without auto-opening the AI sidebar.
+  - On narrow viewports (`< 640px`), modals are skipped: `/?example=` and `/?url=` (opening as a read-only `'remote'` preview without modifying IndexedDB or `localStorage`) are accepted, while `/?agents=` is ignored with a toast.
+
 ### Changed
-- **Pause-and-Resume `ask_question` Redesign & `draft_interview` Skill (`AUTEUR_KNOWLEDGE_VERSION = "0.4.0-k5"`)**:
-  - Updated `runGeminiAgentTurn` (`src/services/geminiInteractions.ts`) to pause immediately when `ask_question` succeeds—returning `pendingQuestion` with buffered `siblingFunctionResults` instead of wasting a Round 2 reply—and added `resumeFunctionResults` to resume the exact `previous_interaction_id` cleanly via Interactions API `function_result` (plus a safe composer/dismiss escape hatch).
-  - Updated `ClarifyingQuestionItem` and `QuestionSuggestionCard` to present a compact stepped `1 / N` flow (clickable step pills, `Back`/`Next`/`Skip`, `Enter` to advance, `Skip all` / **`Skip & Proceed`**) over the same single token-efficient pause/resume round-trip, supporting per-question `multiSelect?: boolean` (single-select radio pick by default, multi-select checkboxes when combinable) paired with an **independent additive note input**, zero resent user chat bubbles, and persisted `questionResponses` for expandable in-place `✓ Answered` / `Skipped` receipts showing every question together on review.
-  - Added the built-in **`draft_interview`** workflow skill (`src/data/knowledge/skills/draft_interview.md`, registered in `catalog.json`, default On-Demand) guiding 2–4 high-leverage directorial questions before drafting open scenes while preserving `agentContextCodec` backward compatibility.
-  - Redesigned `QuickScanCard` for a calm, compact overview: added independent whole-card collapse (folding into a 1-line status bar without dismissing Live Mode dots), fixed canonical lens order (`Lens 1`–`Lens 5` + `Scene Brief & Media`) collapsed by default with `Expand all` / `Collapse all`, issues-first lens drill-down with `Show N passed checks` reveal, probability micro-bars, 4-theme `auteur-phase-*` status tokens, and aligned footer actions (`Deep Audit Selected` + quiet `Re-scan` / `Dismiss`).
 - **Cache-Stable 3-Zone AI Prompt Architecture & Unified `Auto` Toolset (`0.4.0-k4`)**:
   - Kept Zone 1 (`tools` + `system_instruction`: Foundational Craft, Pinned Skills, cache-stable Tool & Safety Protocol, and On-Demand Skill Directory) byte-for-byte identical across script edits, `Scene Brief` changes, and `Ask First` toggles to maximize Gemini 4 implicit prefix caching.
   - Updated **`Auto`** focus to expose all **10** non-disabled tools consistently on both empty and non-empty scripts, while keeping `ask_question` hard-gated at runtime (`ok: false` unless **`Ask First`** is toggled ON, the turn is a `[Clarifying follow-up]`, or `ask_question` is forced **`Always On`**).
   - Removed passive script/brief skill auto-injection so all built-in and custom skills default to **On-Demand** in the directory unless explicitly **Pinned** or **Muted** (loading `draft_craft` dynamically includes the discontinuous montage exemplar on demand without mutating `system_instruction`).
   - Moved volatile per-turn context (`<live_editor_state>` full snapshot vs. compact 1-line `unchanged` confirmation, delta-only `<scene_brief>`, and `<turn_directive>`) into Round 1 `input` via `composeAgentContext().turnContext`, and updated `ContextPreviewTab`, `SkillsManagerTab`, and `FunctionToolsTab` to display both zones transparently.
   - Preserved full backward compatibility in `aiSkillsStore` and `agentContextCodec` (`packVersion: 1`) across legacy `0.4.0-k1`–`k3` packs and `"on_demand"` pin aliases.
+- **Pause-and-Resume `ask_question` & Stepped `1 / N` Clarifying Flow**:
+  - Updated `runGeminiAgentTurn` (`src/services/geminiInteractions.ts`) to pause immediately when `ask_question` succeeds—returning `pendingQuestion` with buffered `siblingFunctionResults` instead of wasting a Round 2 reply—and added `resumeFunctionResults` to resume the exact `previous_interaction_id` cleanly via Interactions API `function_result` (plus a safe composer/dismiss escape hatch).
+  - Updated `ClarifyingQuestionItem` and `QuestionSuggestionCard` to present a stepped `1 / N` flow (clickable step pills, `Back`/`Next`/`Skip`, `Enter` to advance, `Skip all` / **`Skip & Proceed`**) over the same single token-efficient pause/resume round-trip, supporting per-question `multiSelect?: boolean` (single-select radio pick by default, multi-select checkboxes when combinable) paired with an independent additive note input, zero resent user chat bubbles, and persisted `questionResponses` for expandable in-place `✓ Answered` / `Skipped` receipts showing every question together on review.
+- **Compact `QuickScanCard` Overview, Independent Collapse & 4-Theme Parity**:
+  - Added independent whole-card collapse in `QuickScanCard` (folding into a 1-line status bar without dismissing Live Mode `AiQuickScanIndicator` dots), fixed canonical lens order (`Lens 1`–`Lens 5` + `Scene Brief & Media`) collapsed by default with `Expand all` / `Collapse all`, issues-first lens drill-down with `Show N passed checks` reveal, probability micro-bars, 4-theme `auteur-phase-*` status tokens, and aligned footer actions (`Deep Audit Selected` + quiet `Re-scan` / `Dismiss`).
 
-### Added
-- **AI Session History, IndexedDB `v3` Auto-Save & Recap Bridge (`src/ui/aiSessions.ts`, `src/components/AiSessionHistoryModal.tsx`)**:
-  - Added an independent `aiSessions` store in IndexedDB (`SCRIPT_LIBRARY_DB_VERSION = 3` in `src/ui/scriptLibraryDb.ts` + `localStorage` fallback) that auto-saves AI conversations at semantic checkpoints and survives script deletions/library clears (surfacing a `Script deleted` indicator when the original script is gone).
-  - Persists text-only `Scene Brief` fields (`specs`, `subtext`, and reference text/notes) while stripping binary media and keeping `omittedAttachmentTag` descriptors for Zone 1 / `previous_interaction_id` cache stability, and deduplicates Zone 1 `systemInstruction` strings in `traceSystemInstructions` for 100% identical `AiTraceModal` inspection.
-  - Added a compact **Recent Sessions** list (up to 5 sessions prioritizing the active script first) in the empty AI sidebar, an icon-only **History** button left of `Context` (with a distinct `SquarePen` **New Chat** icon), **`File ▾ → AI Chat History...`**, a sticky cross-script switch banner in the sidebar, zero-height hover **Copy** buttons on both user prompts and assistant responses, and a lazy-loaded two-pane **`AiSessionHistoryModal`** supporting search, `All`/`This Script`/`Pinned` filters, inline rename/pin/delete, Brief copy, **`Download | ▾`** (**Conversation `.md`** default, evaluation-ready **Full Conversation `.json`** with `scriptSnapshot`, skills, tools + failed-call diagnostics, suggestion diffs/issues, and per-turn token/cache metrics, and **Full Payload `.json`** with top-level deduplicated `systemInstructions` & `toolsSummary`), **`Load in Sidebar`**, and **`Switch Script & Load`** in a balanced bottom footer bar.
-  - Added `'interaction_expired'` detection (`src/services/gemini/errors.ts`) and deterministic `<prior_session_recap>` Round 1 bridging (`src/services/gemini/sessionRecap.ts`) so expired Gemini chains and cross-script continuations recover automatically into a fresh chain without mutating frozen Zone 1 `system_instruction`.
-- **URL Deep-Linking (`/?example=`, `/?url=`, `/?agents=`) & Readable Example Slugs**:
-  - Added readable `slug` identifiers in `src/data/examples/catalog.json` (`the-grand-continental`, `mark-and-lucas`, `balloon-panic`, `robert-machu-pichu`, `three-years-late-part-1`..`4`, `frequency-over-force-part-1`..`2`) and `getBundledExampleByIdOrSlug()` in `src/data/examples/index.ts`.
-  - Added `src/ui/urlLaunch.ts` enforcing mutually exclusive single-action URL parameters (`?example=`, `?url=`, `?agents=`), `http:`/`https:` validation, `history.replaceState` query cleanup, and CORS/size-bounded remote text fetching.
-  - On desktop (`>= 640px`), `/?url=<file-url>` fetches and pre-populates `ScriptImportModal` (pre-flight scorecard + Merge/New/Replace confirmation) and `/?agents=<json-url>` fetches and opens `AgentContextImportDialog` directly without auto-opening the AI sidebar.
-  - On narrow viewports (`< 640px`), modals are skipped: `/?example=` and `/?url=` (opening as a read-only `'remote'` preview without modifying IndexedDB or `localStorage`) are accepted, while `/?agents=` is ignored with a toast.
+### Fixed
+- **AI Session History & Sidebar Layout Polish**:
+  - Pinned the cross-script switch banner above the scrollable message stream and replaced the New Chat icon with a distinct `SquarePen` icon in `AiAssistantSidebar.tsx`.
+  - Moved user prompt Copy triggers outside-left of message bubbles (zero added vertical height) and added floating top-right hover Copy buttons on assistant responses in `AiThreadMessage.tsx` and `AiSessionPreviewPane.tsx`.
+  - Refined `AiSessionPreviewPane.tsx` with an uncrowded title/metadata header and a balanced bottom action bar.
+
+### Verification & Engineering Notes
+- **Lazy-Loaded Chunks (`12`)**: Added `AiSessionHistoryModal` and `AgentContextImportDialog` alongside the existing 10 `React.lazy` chunks.
+- **Verification Baseline**: Verified against `33` Vitest test files (`371` tests via `npm test`), strict TypeScript checking (`npm run lint` / `tsc --noEmit`), and Vite production bundling (`npm run build`).
 
 ---
 

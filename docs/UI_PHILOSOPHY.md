@@ -1,6 +1,6 @@
-# UI Philosophy — ScriptFlow (`v1.0.0`, Auteur Script Editor & Scene Blueprint)
+# UI Philosophy — ScriptFlow (`v1.1.0`, Auteur Script Editor & Scene Blueprint)
 
-**ScriptFlow** (`v1.0.0`) blends **Obsidian Live Preview** with **Notion's calm single-page document flow**, rendered through the **Physical Stationery & Blueprint Studio** visual design system.
+**ScriptFlow** (`v1.1.0`) blends **Obsidian Live Preview** with **Notion's calm single-page document flow**, rendered through the **Physical Stationery & Blueprint Studio** visual design system.
 
 ---
 

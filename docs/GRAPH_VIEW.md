@@ -1,6 +1,6 @@
 # Graph View — Technical Architecture & Extraction Reference
 
-This document is the transparent technical specification for **Graph View** (`[ Live | Graph | Source ]`) in **ScriptFlow (`v1.0.0`)** (the Auteur Script Editor & Scene Blueprint). It explains how a plain-text Auteur Script (`v0.4.0`) is parsed, inferred into decoupled graph objects, laid out deterministically across two orientations, and rendered interactively via `@xyflow/react`—all without mutating the canonical plain-text source of truth.
+This document is the transparent technical specification for **Graph View** (`[ Live | Graph | Source ]`) in **ScriptFlow (`v1.1.0`)** (the Auteur Script Editor & Scene Blueprint). It explains how a plain-text Auteur Script (`v0.4.0`) is parsed, inferred into decoupled graph objects, laid out deterministically across two orientations, and rendered interactively via `@xyflow/react`—all without mutating the canonical plain-text source of truth.
 
 ---
 

@@ -1,6 +1,6 @@
 # AI Assistant Walkthrough & Tools Guide
 
-This guide explains how the **ScriptFlow (`v1.0.0`) AI Assistant** works end-to-end—from BYOK setup and unified `Auto` focus routing to the cache-stable 3-Zone prompt architecture, every local script tool, Pinned vs. On-Demand skills, Layer 2.5 Quick Scan, multimodal Scene Brief, pre-send prompt customization, review card & Live Mode indicator workflow, and debug trace inspection.
+This guide explains how the **ScriptFlow (`v1.1.0`) AI Assistant** works end-to-end—from BYOK setup and unified `Auto` focus routing to the cache-stable 3-Zone prompt architecture, every local script tool, Pinned vs. On-Demand skills, Layer 2.5 Quick Scan, multimodal Scene Brief, pre-send prompt customization, review card & Live Mode indicator workflow, and debug trace inspection.
 
 > **Related References**
 > - **Architecture & Data Flow**: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
