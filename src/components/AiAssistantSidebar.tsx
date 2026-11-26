@@ -16,10 +16,10 @@ import {
   History,
   KeyRound,
   Layers,
-  RotateCcw,
   Settings2,
   ShieldAlert,
   Sparkles,
+  SquarePen,
   Wrench,
   X,
 } from 'lucide-react';
@@ -600,7 +600,7 @@ export function AiAssistantSidebar({
                 aria-label={UI_LABELS.ai.newChatButton}
                 className={UI_TOKENS.button.iconGhost}
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <SquarePen className="h-3.5 w-3.5" />
               </button>
 
               <button
@@ -616,6 +616,44 @@ export function AiAssistantSidebar({
 
           {/* Scrollable Message Stream */}
           <div className="relative flex-1 min-h-0 flex flex-col">
+            {chat.crossScriptSource && (
+              <div className="border-b border-border-subtle bg-surface-subtle/90 px-3 py-2 text-[11px] text-text-muted flex items-center justify-between gap-2 shrink-0">
+                <div className="min-w-0 space-y-1">
+                  <p className="leading-snug">
+                    {crossScriptLiveTarget
+                      ? UI_LABELS.ai.history.crossScriptNotice(
+                          chat.crossScriptSource.originalScriptTitle
+                        )
+                      : UI_LABELS.ai.history.crossScriptDeletedNotice(
+                          chat.crossScriptSource.originalScriptTitle
+                        )}
+                  </p>
+                  {crossScriptLiveTarget && (
+                    <button
+                      type="button"
+                      onClick={handleSwitchToCrossScriptSource}
+                      className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface hover:bg-surface-hover px-2 py-0.5 text-[10.5px] font-semibold text-text-main transition-colors cursor-pointer"
+                    >
+                      <ArrowRightLeft className="h-2.5 w-2.5 shrink-0" />
+                      <span>
+                        {UI_LABELS.ai.history.switchToScriptButton(
+                          chat.crossScriptSource.originalScriptTitle
+                        )}
+                      </span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={chat.dismissCrossScriptSource}
+                  aria-label={UI_LABELS.ai.history.dismissBannerAria}
+                  className={UI_TOKENS.button.iconGhost}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
             <div
               ref={scrollContainerRef}
               onScroll={handleThreadScroll}
@@ -649,44 +687,6 @@ export function AiAssistantSidebar({
                       <span>{UI_LABELS.ai.missingKeyCta}</span>
                     </button>
                   </div>
-                </div>
-              )}
-
-              {chat.crossScriptSource && (
-                <div className="rounded-xl border border-border-main bg-surface px-2.5 py-2 text-[11px] text-text-muted flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="min-w-0 space-y-1">
-                    <p className="leading-snug">
-                      {crossScriptLiveTarget
-                        ? UI_LABELS.ai.history.crossScriptNotice(
-                            chat.crossScriptSource.originalScriptTitle
-                          )
-                        : UI_LABELS.ai.history.crossScriptDeletedNotice(
-                            chat.crossScriptSource.originalScriptTitle
-                          )}
-                    </p>
-                    {crossScriptLiveTarget && (
-                      <button
-                        type="button"
-                        onClick={handleSwitchToCrossScriptSource}
-                        className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle hover:bg-surface-hover px-2 py-0.5 text-[10.5px] font-semibold text-text-main transition-colors cursor-pointer"
-                      >
-                        <ArrowRightLeft className="h-2.5 w-2.5 shrink-0" />
-                        <span>
-                          {UI_LABELS.ai.history.switchToScriptButton(
-                            chat.crossScriptSource.originalScriptTitle
-                          )}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={chat.dismissCrossScriptSource}
-                    aria-label={UI_LABELS.ai.history.dismissBannerAria}
-                    className={UI_TOKENS.button.iconGhost}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
                 </div>
               )}
 

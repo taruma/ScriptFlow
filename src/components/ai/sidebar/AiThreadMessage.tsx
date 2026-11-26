@@ -117,12 +117,19 @@ export const AiThreadMessage = memo(function AiThreadMessage({
   onOpenSettings,
 }: AiThreadMessageProps) {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [copiedReply, setCopiedReply] = useState(false);
 
   useEffect(() => {
     if (!copiedPrompt) return;
     const timer = window.setTimeout(() => setCopiedPrompt(false), 1600);
     return () => window.clearTimeout(timer);
   }, [copiedPrompt]);
+
+  useEffect(() => {
+    if (!copiedReply) return;
+    const timer = window.setTimeout(() => setCopiedReply(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copiedReply]);
 
   if (msg.role === 'user') {
     const handleCopyPrompt = async () => {
@@ -132,10 +139,31 @@ export const AiThreadMessage = memo(function AiThreadMessage({
       }
     };
 
+    const hasBadges = Boolean(msg.scopeLabel || msg.briefSummary || msg.askFirst);
+
     return (
-      <div className="flex justify-end group/usermsg">
+      <div className="flex justify-end items-end gap-1 group/usermsg">
+        {msg.text.trim().length > 0 && (
+          <button
+            type="button"
+            onClick={() => void handleCopyPrompt()}
+            title={UI_LABELS.ai.history.copyUserPromptTitle}
+            aria-label={
+              copiedPrompt
+                ? UI_LABELS.ai.history.copiedUserPromptAria
+                : UI_LABELS.ai.history.copyUserPromptAria
+            }
+            className="opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100 inline-flex items-center justify-center rounded-md p-1 text-text-faint hover:text-text-main hover:bg-surface-subtle transition-all cursor-pointer shrink-0"
+          >
+            {copiedPrompt ? (
+              <Check className="h-3 w-3 text-[var(--phase-aesthetic-text)]" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </button>
+        )}
         <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-border-main bg-surface px-3 py-2 text-xs text-text-main shadow-2xs space-y-1">
-          <div className="flex items-start justify-between gap-2">
+          {hasBadges && (
             <div className="flex flex-wrap items-center gap-1.5 min-w-0">
               {msg.scopeLabel && (
                 <span className="font-mono text-[10px] text-text-faint truncate">
@@ -153,26 +181,7 @@ export const AiThreadMessage = memo(function AiThreadMessage({
                 </span>
               )}
             </div>
-            {msg.text.trim().length > 0 && (
-              <button
-                type="button"
-                onClick={() => void handleCopyPrompt()}
-                title={UI_LABELS.ai.history.copyUserPromptTitle}
-                aria-label={
-                  copiedPrompt
-                    ? UI_LABELS.ai.history.copiedUserPromptAria
-                    : UI_LABELS.ai.history.copyUserPromptAria
-                }
-                className="opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100 inline-flex items-center justify-center rounded p-0.5 text-text-faint hover:text-text-main hover:bg-surface-subtle transition-all cursor-pointer shrink-0"
-              >
-                {copiedPrompt ? (
-                  <Check className="h-3 w-3 text-[var(--phase-aesthetic-text)]" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </button>
-            )}
-          </div>
+          )}
           <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
         </div>
       </div>
@@ -270,7 +279,35 @@ export const AiThreadMessage = memo(function AiThreadMessage({
       )}
 
       {msg.text.trim().length > 0 && (
-        <div className="rounded-xl border border-border-subtle bg-surface px-3 py-2.5 shadow-2xs">
+        <div className="relative group/assistantreply rounded-xl border border-border-subtle bg-surface px-3 py-2.5 shadow-2xs">
+          {!msg.isStreaming && (
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await copyTextToClipboard(msg.text);
+                if (ok) {
+                  setCopiedReply(true);
+                }
+              }}
+              title={UI_LABELS.ai.history.copyAssistantReplyTitle}
+              aria-label={
+                copiedReply
+                  ? UI_LABELS.ai.history.copiedAssistantReplyAria
+                  : UI_LABELS.ai.history.copyAssistantReplyAria
+              }
+              className={`absolute top-1.5 right-1.5 inline-flex items-center justify-center rounded-md border border-border-subtle bg-surface/90 backdrop-blur-xs p-1 text-text-faint hover:text-text-main hover:bg-surface-hover shadow-2xs transition-all cursor-pointer ${
+                copiedReply
+                  ? 'opacity-100'
+                  : 'opacity-0 group-hover/assistantreply:opacity-100 focus-visible:opacity-100'
+              }`}
+            >
+              {copiedReply ? (
+                <Check className="h-3 w-3 text-[var(--phase-aesthetic-text)]" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+            </button>
+          )}
           <MarkdownContent content={msg.text} />
         </div>
       )}
