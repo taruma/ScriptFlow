@@ -968,7 +968,7 @@ export const AI_LABELS = {
       downloadConversationLabel: 'Conversation',
       downloadConversationDesc: 'Prompts, replies, Brief & outcomes',
       downloadFullConversationJsonLabel: 'Full Conversation',
-      downloadFullConversationJsonDesc: 'Conversation, Brief, skills & tools used',
+      downloadFullConversationJsonDesc: 'Conversation, diffs, skills, tools & metrics',
       downloadFullJsonLabel: 'Full Payload',
       downloadFullJsonDesc: 'Traces, tools & system instructions',
       downloadTagMd: '.MD',

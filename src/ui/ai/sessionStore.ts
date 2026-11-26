@@ -2,7 +2,7 @@ import type {BundledExample} from '../../data/examples/index.ts';
 import type {AssistantFocus} from '../../services/auteurKnowledge.ts';
 import type {PendingQuestionPause} from '../../services/gemini/interactionTypes.ts';
 import type {QuestionSuggestion, StagedSuggestion} from '../../services/scriptTools.ts';
-import {aggregateSessionCost} from '../aiPricing.ts';
+import {aggregateSessionCost, estimateTraceCost} from '../aiPricing.ts';
 import type {GeminiModelId} from '../aiSettings.ts';
 import type {ScriptRecord} from '../library/dbTypes.ts';
 import {formatExportTimestamp, slugifyFilename} from '../scriptLibraryCodec.ts';
@@ -25,6 +25,7 @@ export const RECENT_AI_SESSIONS_LIMIT = 5;
 
 const TRACE_SYS_REF_PREFIX = '__ref:';
 const TRACE_DEDUP_MIN_LENGTH = 120;
+const PATCH_DIFF_EXPORT_MAX_LINES = 120;
 
 export type AiSessionScriptStatus = 'current' | 'other_exists' | 'deleted';
 export type AiSessionFilterTab = 'all' | 'current_script' | 'pinned';
@@ -790,11 +791,78 @@ export function buildAiSessionJsonExport(
   };
 }
 
+export interface AiSessionConversationToolFailure {
+  error?: string;
+  errors?: string[];
+  repairHints?: string[];
+}
+
+export interface AiSessionConversationTurnMetrics {
+  toolRounds: number;
+  durationMs: number;
+  inputTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  thoughtTokens: number;
+  estimatedCostUsd: number;
+}
+
+export type AiSessionConversationSuggestionDetails =
+  | {
+      affectedIds: string[];
+      opsCount: number;
+      addedCount: number;
+      removedCount: number;
+      diffLines: string[];
+      diffTruncated?: boolean;
+      lintDelta: {
+        beforeErrors: number;
+        afterErrors: number;
+        beforeWarnings: number;
+        afterWarnings: number;
+        introducedErrorCount: number;
+        introducedWarningCount: number;
+        resolvedCount: number;
+      };
+    }
+  | {
+      sceneTopology: string;
+      stagingBlockCount: number;
+      beatCount: number;
+      errorCount: number;
+      warningCount: number;
+      candidateRawText: string;
+    }
+  | {
+      errorCount: number;
+      warningCount: number;
+      issues: Array<{
+        lens: string;
+        severity: string;
+        targetLevel: string;
+        targetId: string;
+        message: string;
+        rationale: string;
+        repairHint: string;
+        hasSuggestedPatch: boolean;
+        patchValidationErrors?: string[];
+      }>;
+    }
+  | {
+      title: string;
+      previousTitle?: string;
+      rationale?: string;
+    }
+  | {
+      questions: Extract<StagedSuggestion, {kind: 'question'}>['questions'];
+    };
+
 export interface AiSessionConversationTurnSuggestion {
   kind: StagedSuggestion['kind'];
   summary: string;
   status: 'applied' | 'dismissed' | 'staged' | 'answered' | 'skipped';
   questionResponse?: QuestionResponseRecord;
+  details?: AiSessionConversationSuggestionDetails;
 }
 
 export interface AiSessionConversationTurn {
@@ -810,6 +878,7 @@ export interface AiSessionConversationTurn {
     name: string;
     status: 'ok' | 'error' | 'stopped' | 'running';
     arguments: Record<string, unknown>;
+    failure?: AiSessionConversationToolFailure;
   }>;
   suggestions?: AiSessionConversationTurnSuggestion[];
   quickScan?: {
@@ -819,6 +888,7 @@ export interface AiSessionConversationTurn {
     totalQuestions: number;
     suspectBeatCount: number;
   };
+  metrics?: AiSessionConversationTurnMetrics;
   bridgedFromHistory?: 'expired_chain' | 'cross_script';
   error?: {
     code: string;
@@ -844,16 +914,169 @@ export interface AiSessionConversationJsonPayload {
     estimatedCostUsd: number;
     hasOmittedMedia?: boolean;
   };
+  scriptSnapshot?: string;
   brief: DraftBriefState;
   skillsUsed: AiLoadedSkillItem[];
   toolsUsed: AiSessionToolUsageStat[];
   conversation: AiSessionConversationTurn[];
 }
 
+function extractToolFailure(
+  result: Record<string, unknown> | undefined
+): AiSessionConversationToolFailure | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+
+  const rawError =
+    typeof result.error === 'string' && result.error.trim().length > 0
+      ? result.error.trim()
+      : typeof result.message === 'string' && result.message.trim().length > 0
+        ? result.message.trim()
+        : undefined;
+
+  const errorsSet = new Set<string>();
+  const repairHintsSet = new Set<string>();
+
+  if (typeof result.repairHint === 'string' && result.repairHint.trim().length > 0) {
+    repairHintsSet.add(result.repairHint.trim());
+  }
+
+  if (Array.isArray(result.errors)) {
+    for (const entry of result.errors) {
+      if (typeof entry === 'string') {
+        const clean = entry.trim();
+        if (clean) errorsSet.add(clean);
+      } else if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        const msg = typeof obj.message === 'string' ? obj.message.trim() : '';
+        const targetId = typeof obj.targetId === 'string' ? obj.targetId.trim() : '';
+        const hint = typeof obj.repairHint === 'string' ? obj.repairHint.trim() : '';
+        if (msg) {
+          errorsSet.add(targetId && !msg.includes(targetId) ? `${targetId}: ${msg}` : msg);
+        }
+        if (hint) {
+          repairHintsSet.add(hint);
+        }
+      }
+    }
+  }
+
+  const errors = errorsSet.size > 0 ? Array.from(errorsSet) : undefined;
+  const repairHints = repairHintsSet.size > 0 ? Array.from(repairHintsSet) : undefined;
+
+  if (!rawError && !errors && !repairHints) {
+    return undefined;
+  }
+
+  return {
+    ...(rawError ? {error: rawError} : {}),
+    ...(errors ? {errors} : {}),
+    ...(repairHints ? {repairHints} : {}),
+  };
+}
+
+function buildSuggestionDetails(suggestion: StagedSuggestion): AiSessionConversationSuggestionDetails {
+  switch (suggestion.kind) {
+    case 'patch': {
+      const formattedLines = suggestion.diff.lines
+        .slice(0, PATCH_DIFF_EXPORT_MAX_LINES)
+        .map((line) => {
+          const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  ';
+          return `${prefix}${line.text}`;
+        });
+      return {
+        affectedIds: suggestion.affectedIds,
+        opsCount: suggestion.opsCount,
+        addedCount: suggestion.diff.addedCount,
+        removedCount: suggestion.diff.removedCount,
+        diffLines: formattedLines,
+        ...(suggestion.diff.lines.length > PATCH_DIFF_EXPORT_MAX_LINES ? {diffTruncated: true} : {}),
+        lintDelta: {
+          beforeErrors: suggestion.lintDelta.beforeErrors,
+          afterErrors: suggestion.lintDelta.afterErrors,
+          beforeWarnings: suggestion.lintDelta.beforeWarnings,
+          afterWarnings: suggestion.lintDelta.afterWarnings,
+          introducedErrorCount: suggestion.lintDelta.introducedErrors.length,
+          introducedWarningCount: suggestion.lintDelta.introducedWarnings.length,
+          resolvedCount: suggestion.lintDelta.resolvedDiagnostics.length,
+        },
+      };
+    }
+    case 'draft':
+      return {
+        sceneTopology: suggestion.sceneTopology,
+        stagingBlockCount: suggestion.stagingBlockCount,
+        beatCount: suggestion.beatCount,
+        errorCount: suggestion.errorCount,
+        warningCount: suggestion.warningCount,
+        candidateRawText: suggestion.candidateRawText,
+      };
+    case 'audit_review':
+      return {
+        errorCount: suggestion.errorCount,
+        warningCount: suggestion.warningCount,
+        issues: suggestion.issues.map((issue) => ({
+          lens: issue.lens,
+          severity: issue.severity,
+          targetLevel: issue.targetLevel,
+          targetId: issue.targetId,
+          message: issue.message,
+          rationale: issue.rationale,
+          repairHint: issue.repairHint,
+          hasSuggestedPatch: Boolean(issue.patchSuggestion),
+          ...(issue.patchValidationErrors && issue.patchValidationErrors.length > 0
+            ? {patchValidationErrors: issue.patchValidationErrors.map((err) => err.message)}
+            : {}),
+        })),
+      };
+    case 'title':
+      return {
+        title: suggestion.title,
+        ...(suggestion.previousTitle ? {previousTitle: suggestion.previousTitle} : {}),
+        ...(suggestion.rationale ? {rationale: suggestion.rationale} : {}),
+      };
+    case 'question':
+      return {
+        questions: suggestion.questions,
+      };
+  }
+}
+
+function buildTurnMetrics(
+  msg: AiChatMessage,
+  fallbackNowMs: number
+): AiSessionConversationTurnMetrics | undefined {
+  if (msg.trace) {
+    const est = estimateTraceCost(msg.trace, fallbackNowMs);
+    return {
+      toolRounds: msg.trace.toolRounds,
+      durationMs: msg.trace.durationMs,
+      inputTokens: est?.usage.inputTokens ?? 0,
+      cachedTokens: est?.usage.cachedTokens ?? 0,
+      outputTokens: est?.usage.outputTokens ?? 0,
+      thoughtTokens: est?.usage.thoughtTokens ?? 0,
+      estimatedCostUsd: est?.totalCostUsd ?? 0,
+    };
+  }
+  if (msg.quickScanTrace) {
+    const est = estimateTraceCost(msg.quickScanTrace, fallbackNowMs);
+    return {
+      toolRounds: 0,
+      durationMs: msg.quickScanTrace.durationMs,
+      inputTokens: est?.usage.inputTokens ?? 0,
+      cachedTokens: est?.usage.cachedTokens ?? 0,
+      outputTokens: est?.usage.outputTokens ?? 0,
+      thoughtTokens: est?.usage.thoughtTokens ?? 0,
+      estimatedCostUsd: est?.totalCostUsd ?? 0,
+    };
+  }
+  return undefined;
+}
+
 /**
- * Exports a clean, human-readable JSON focused on the conversation, text-only Brief,
- * loaded skills, and invoked tools (with arguments/status), omitting raw API trace
- * rounds, frozen system instructions, and continuity internals.
+ * Exports a clean, evaluation-ready JSON focused on the conversation, script snapshot,
+ * text-only Brief, loaded skills, invoked tools (with arguments/status and failed-call
+ * repair diagnostics), suggestion diffs/issues, and per-turn token/cache metrics—omitting
+ * raw API trace rounds, frozen system instructions, and continuity internals.
  */
 export function buildAiSessionConversationJsonExport(
   session: AiSessionRecord,
@@ -864,6 +1087,7 @@ export function buildAiSessionConversationJsonExport(
   }
 ): BuiltAiSessionExport {
   const now = options?.now ?? new Date();
+  const fallbackNowMs = now.getTime();
   const hydrated = hydrateSessionFromStorage(sanitizeAiSessionRecord(session));
   const {brief: cleanBrief, hadMedia} = stripBriefMediaForStorage(hydrated.brief);
   const normalizedMessages = normalizeMessagesForStorage(hydrated.messages);
@@ -906,24 +1130,42 @@ export function buildAiSessionConversationJsonExport(
       }
     }
 
+    const failedResultByCallId = new Map<string, Record<string, unknown>>();
+    if (msg.trace?.rounds) {
+      for (const round of msg.trace.rounds) {
+        for (const call of round.toolCalls ?? []) {
+          if (!call.ok && call.result) {
+            failedResultByCallId.set(call.callId, call.result);
+          }
+        }
+      }
+    }
+
     const turnToolCalls: NonNullable<AiSessionConversationTurn['toolCalls']> = [];
     if (msg.toolCalls && msg.toolCalls.length > 0) {
       for (const call of msg.toolCalls) {
         recordToolStat(call.name, call.status === 'ok');
+        const failure =
+          call.status === 'error'
+            ? extractToolFailure(failedResultByCallId.get(call.callId))
+            : undefined;
         turnToolCalls.push({
           name: call.name,
           status: call.status,
           arguments: call.arguments,
+          ...(failure ? {failure} : {}),
         });
       }
     } else if (msg.trace?.rounds) {
       for (const round of msg.trace.rounds) {
         for (const call of round.toolCalls ?? []) {
           recordToolStat(call.name, call.ok);
+          const failure = !call.ok ? extractToolFailure(call.result) : undefined;
           turnToolCalls.push({
             name: call.name,
             status: call.ok ? 'ok' : 'error',
             arguments: call.arguments,
+            ...(failure ? {failure} : {}),
           });
         }
       }
@@ -946,11 +1188,13 @@ export function buildAiSessionConversationJsonExport(
           summary: describeStagedSuggestion(s),
           status,
           ...(qResp ? {questionResponse: qResp} : {}),
+          details: buildSuggestionDetails(s),
         };
       }
     );
 
     const thoughtText = msg.thoughtSummary?.trim() ?? '';
+    const metrics = buildTurnMetrics(msg, fallbackNowMs);
     return {
       role: 'assistant',
       focus: msg.focus,
@@ -972,14 +1216,20 @@ export function buildAiSessionConversationJsonExport(
             },
           }
         : {}),
+      ...(metrics ? {metrics} : {}),
       ...(msg.bridgedFromHistory ? {bridgedFromHistory: msg.bridgedFromHistory} : {}),
       ...(msg.error ? {error: {code: msg.error.code, message: msg.error.message}} : {}),
     };
   });
 
-  const costSummary = aggregateSessionCost(normalizedMessages);
+  const costSummary = aggregateSessionCost(normalizedMessages, fallbackNowMs);
   const turnCount = normalizedMessages.filter((m) => m.role === 'user').length;
   const hasOmittedMedia = Boolean(hydrated.hasOmittedMedia || hadMedia);
+  const scriptSnapshot =
+    typeof hydrated.continuity.lastTurnRawText === 'string' &&
+    hydrated.continuity.lastTurnRawText.trim().length > 0
+      ? hydrated.continuity.lastTurnRawText
+      : undefined;
 
   const payload: AiSessionConversationJsonPayload = {
     format: AI_SESSION_CONVERSATION_EXPORT_FORMAT,
@@ -999,6 +1249,7 @@ export function buildAiSessionConversationJsonExport(
       estimatedCostUsd: costSummary.totalCostUsd,
       ...(hasOmittedMedia ? {hasOmittedMedia: true} : {}),
     },
+    ...(scriptSnapshot ? {scriptSnapshot} : {}),
     brief: cleanBrief,
     skillsUsed: Array.from(skillsMap.values()),
     toolsUsed: Array.from(toolStats.values()).sort((a, b) => a.name.localeCompare(b.name)),

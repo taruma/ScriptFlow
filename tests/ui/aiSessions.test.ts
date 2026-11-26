@@ -436,11 +436,44 @@ describe('aiSessions domain & storage codec', () => {
     expect(firstAssistant.trace.rounds[1].request.systemInstructionRef).toBe('sys_0');
   });
 
-  it('builds Full Conversation JSON exports with skillsUsed and toolsUsed while omitting raw trace payloads', () => {
+  it('builds evaluation-ready Full Conversation JSON exports with scriptSnapshot, failed tool diagnostics, suggestion details, and per-turn metrics while omitting raw trace payloads', () => {
     const trace = makeSampleTrace('FROZEN SYSTEM PROMPT '.repeat(12), 'int-conv-1');
+    trace.usage = {
+      total_input_tokens: 1200,
+      total_cached_tokens: 800,
+      total_output_tokens: 150,
+      total_thought_tokens: 50,
+    };
+    trace.toolRounds = 2;
+    trace.durationMs = 1420;
+    trace.rounds[0].toolCalls = [
+      {
+        callId: 'call-fail',
+        name: 'propose_script_patch',
+        arguments: {ops: [{op: 'replace_sub_state'}]},
+        ok: false,
+        result: {
+          error: 'Linter rejected patch',
+          errors: [{message: 'S1 missing [CAM]', repairHint: 'Prepend [CAM]'}],
+          repairHint: 'Fix S1',
+        },
+      },
+      {
+        callId: 'call-ok',
+        name: 'propose_script_patch',
+        arguments: {ops: [{op: 'replace_sub_state'}]},
+        ok: true,
+        result: {beatCount: 3, ok: true},
+      },
+    ];
+
+    const scriptText = '[INTENT] Rainy pier\n[EXECUTION]\n[CAM] WS -> [ACT] Cat walks';
     const session = makeSampleSession({
       id: 'conv-json-1',
       title: 'Pier Lighting Polish',
+      continuity: {
+        lastTurnRawText: scriptText,
+      },
       messages: [
         {
           id: 'u1',
@@ -460,18 +493,76 @@ describe('aiSessions domain & storage codec', () => {
           loadedSkills: [{id: 'token_mapping', name: 'Token Mapping', source: 'tool'}],
           toolCalls: [
             {
-              callId: 'call-1',
+              callId: 'call-fail',
+              name: 'propose_script_patch',
+              arguments: {ops: [{op: 'replace_sub_state'}]},
+              status: 'error',
+            },
+            {
+              callId: 'call-ok',
               name: 'propose_script_patch',
               arguments: {ops: [{op: 'replace_sub_state'}]},
               status: 'ok',
             },
           ],
-          appliedSuggestionIds: ['sug-1'],
+          appliedSuggestionIds: ['sug-patch', 'sug-title'],
           suggestions: [
             {
-              id: 'sug-1',
+              id: 'sug-patch',
+              kind: 'patch',
+              summary: 'Sharpen sodium reflection in S1',
+              baseSnapshotHash: 'h1',
+              nextSnapshotHash: 'h2',
+              affectedIds: ['S1'],
+              opsCount: 1,
+              patch: {expectedSnapshotHash: 'h1', ops: []},
+              beforeRawText: '[CAM] WS',
+              candidateRawText: '[CAM] WS -> [LIGHT] Sodium amber rim',
+              diff: {
+                lines: [
+                  {type: 'removed', text: '[CAM] WS', beforeLineNumber: 1},
+                  {type: 'added', text: '[CAM] WS -> [LIGHT] Sodium amber rim', afterLineNumber: 1},
+                ],
+                addedCount: 1,
+                removedCount: 1,
+                hasChanges: true,
+              },
+              lintDelta: {
+                beforeErrors: 1,
+                beforeWarnings: 0,
+                afterErrors: 0,
+                afterWarnings: 0,
+                introducedErrors: [],
+                introducedWarnings: [],
+                resolvedDiagnostics: [],
+              },
+            },
+            {
+              id: 'sug-audit',
+              kind: 'audit_review',
+              baseSnapshotHash: 'h1',
+              overallSummary: '1 continuity check flagged',
+              errorCount: 1,
+              warningCount: 0,
+              issues: [
+                {
+                  id: 'iss-1',
+                  lens: 'Lens 1: Spatial & Optics',
+                  severity: 'error',
+                  targetLevel: 'macro_state',
+                  targetId: 'S1',
+                  message: 'Shot opening missing camera slot.',
+                  rationale: 'Establish framing first.',
+                  repairHint: 'Prepend [CAM] WS.',
+                },
+              ],
+            },
+            {
+              id: 'sug-title',
               kind: 'title',
               title: 'Amber Pier',
+              previousTitle: 'Untitled Scene',
+              rationale: 'Matches sodium palette',
               baseSnapshotHash: 'h1',
             },
           ],
@@ -498,11 +589,12 @@ describe('aiSessions domain & storage codec', () => {
     expect(parsed.exportVersion).toBe(AI_SESSION_EXPORT_VERSION);
     expect(parsed.systemInstructions).toBeUndefined();
     expect(parsed.continuity).toBeUndefined();
+    expect(parsed.scriptSnapshot).toBe(scriptText);
     expect(parsed.skillsUsed).toEqual([
       {id: 'token_mapping', name: 'Token Mapping', source: 'tool'},
     ]);
     expect(parsed.toolsUsed).toEqual([
-      {name: 'propose_script_patch', calls: 1, okCount: 1, errorCount: 0},
+      {name: 'propose_script_patch', calls: 2, okCount: 1, errorCount: 1},
     ]);
     expect(parsed.conversation).toHaveLength(2);
     expect(parsed.conversation[0]).toMatchObject({
@@ -510,12 +602,79 @@ describe('aiSessions domain & storage codec', () => {
       scopeLabel: 'S1',
       text: 'Sharpen the sodium lamp reflection.',
     });
-    expect(parsed.conversation[1]).toMatchObject({
+
+    const assistantTurn = parsed.conversation[1];
+    expect(assistantTurn).toMatchObject({
       role: 'assistant',
       thoughtSummary: 'Checking S1 lookbook references.',
       text: 'Updated S1 with amber reflections.',
-      suggestions: [{kind: 'title', summary: 'Amber Pier', status: 'applied'}],
     });
-    expect((parsed.conversation[1] as {trace?: unknown}).trace).toBeUndefined();
+    expect(assistantTurn.toolCalls?.[0].failure).toEqual({
+      error: 'Linter rejected patch',
+      errors: ['S1 missing [CAM]'],
+      repairHints: ['Fix S1', 'Prepend [CAM]'],
+    });
+    expect(assistantTurn.toolCalls?.[1].failure).toBeUndefined();
+    expect((assistantTurn.toolCalls?.[1] as {result?: unknown}).result).toBeUndefined();
+
+    expect(assistantTurn.suggestions?.[0]).toMatchObject({
+      kind: 'patch',
+      status: 'applied',
+      details: {
+        affectedIds: ['S1'],
+        opsCount: 1,
+        addedCount: 1,
+        removedCount: 1,
+        diffLines: ['- [CAM] WS', '+ [CAM] WS -> [LIGHT] Sodium amber rim'],
+        lintDelta: {
+          beforeErrors: 1,
+          afterErrors: 0,
+          beforeWarnings: 0,
+          afterWarnings: 0,
+          introducedErrorCount: 0,
+          introducedWarningCount: 0,
+          resolvedCount: 0,
+        },
+      },
+    });
+    expect(assistantTurn.suggestions?.[1]).toMatchObject({
+      kind: 'audit_review',
+      status: 'staged',
+      details: {
+        errorCount: 1,
+        warningCount: 0,
+        issues: [
+          {
+            lens: 'Lens 1: Spatial & Optics',
+            severity: 'error',
+            targetLevel: 'macro_state',
+            targetId: 'S1',
+            message: 'Shot opening missing camera slot.',
+            rationale: 'Establish framing first.',
+            repairHint: 'Prepend [CAM] WS.',
+            hasSuggestedPatch: false,
+          },
+        ],
+      },
+    });
+    expect(assistantTurn.suggestions?.[2]).toMatchObject({
+      kind: 'title',
+      status: 'applied',
+      details: {
+        title: 'Amber Pier',
+        previousTitle: 'Untitled Scene',
+        rationale: 'Matches sodium palette',
+      },
+    });
+    expect(assistantTurn.metrics).toMatchObject({
+      toolRounds: 2,
+      durationMs: 1420,
+      inputTokens: 1200,
+      cachedTokens: 800,
+      outputTokens: 150,
+      thoughtTokens: 50,
+    });
+    expect(assistantTurn.metrics?.estimatedCostUsd).toBeGreaterThan(0);
+    expect((assistantTurn as {trace?: unknown}).trace).toBeUndefined();
   });
 });
