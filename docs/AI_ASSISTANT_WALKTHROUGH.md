@@ -316,12 +316,12 @@ Every built-in and custom skill resolves into **strictly one mutually exclusive 
 
 ## 7. Reading Responses, Applying Cards & Debugging Traces
 
-### Thinking Summary, Separated Tools & Skills Strip, and Sticky-Bottom Auto-Scroll
-Each assistant turn separates **Thinking** from **Tools & Skills** so long reasoning traces never bury active skills or tool calls:
-- **Thinking Accordion:** Open while streaming inside a bounded scrollable panel (`max-h-56` with internal sticky-bottom scroll), then auto-collapses when done (when enabled in AI Settings).
-- **Tools & Skills Activity Strip:** Rendered cleanly beneath the Thinking header and always visible even after Thinking collapses:
-  - **Skill Pills** (`Auto`, `Pinned`, `Loaded`) with hover tooltips explaining each skill's ID and activation source.
-  - **Tool Call Pills** (`running`, `done`, `retrying`, `stopped`) with hover tooltips summarizing the tool name, status, and arguments (e.g., `Preset: lens1_spatial_optics`, `2 ops · ...`, `Skill: temporal_calibration`).
+### Thinking Summary, Collapsible Turn Activity Timeline, and Sticky-Bottom Auto-Scroll
+Each assistant turn uses a quiet two-row disclosure layout so long reasoning traces, pinned skills, and tool calls never stack into multi-row pill clouds:
+- **Thinking Disclosure (`Thinking…` / `Thought for Xs`):** Quiet borderless header row with turn duration (`Thought for 4s`), per-turn estimated cost badge, and `Inspect` button on the right. Expands on an indented left rail automatically while streaming once thought tokens arrive (`max-h-56` with internal sticky-bottom scroll), then auto-collapses when done (when enabled in AI Settings).
+- **Collapsible Turn Activity Disclosure (`N skills · M tools`):** Collapsed by default to a single compact row beneath Thinking; while tools run, the row surfaces the active step (`Clarifying questions… · 3 skills · 1 tool`). Expanding reveals an indented vertical timeline with hover tooltips:
+  - **Function Tool Rows:** Completed `load_auteur_skill` calls fold into their resolved skill entries (while running, retrying, or stopped skill loads remain visible). Other tools (`running`, `done`, `retrying`, `stopped`) show their display name and concise argument preview.
+  - **Skill Rows:** Turn-loaded (`Loaded`) and `Auto` skills appear ahead of `Pinned` skills, with hover tooltips explaining each skill's ID and activation source.
 - **Sticky-Bottom Auto-Scroll:** The message stream follows streamed output automatically while you are near the bottom, immediately pauses if you scroll up to read earlier turns, and surfaces a quiet **`↓ Latest`** pill to jump back down and resume auto-scrolling.
 - Click **`Stop`** in the composer footer at any time to abort an in-flight turn cleanly via `AbortSignal`.
 

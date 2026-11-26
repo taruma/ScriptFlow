@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **Antigravity-Style Collapsible Turn Thinking & Activity Timeline (`src/components/ai/sidebar/ReasoningAccordion.tsx`, `src/ui/ai/turnActivity.ts`, `src/ui/labels/ai.ts`)**:
+  - Replaced the multi-row wrapping skill/tool pill cloud with a quiet two-row disclosure layout: a borderless **Thinking** header (`Thinking…` while streaming, `Thought for Xs` when complete, with turn cost badge and `Inspect` button) that expands on an indented left rail once thought tokens arrive, plus a **collapsed-by-default** turn activity row (`N skills · M tools`, or the active running tool while streaming) that expands into an indented vertical timeline with hover tooltips.
+  - Folded completed `load_auteur_skill` calls into their resolved `Loaded` skill entries (`dedupeTurnToolCalls`) and ordered turn-loaded/auto skills ahead of `Pinned` skills (`summarizeTurnActivity`) so each turn stays compact without hiding live loading or retry states.
+
 ---
 
 ## [1.1.0] - 2026-11-26

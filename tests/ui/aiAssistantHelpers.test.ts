@@ -5,12 +5,18 @@ import {
   buildAiTargetOptions,
   buildAuditQuickPrompt,
   buildScopedRefinePrompt,
+  dedupeTurnToolCalls,
   formatToolCallTooltip,
   formatToolDisplayName,
+  formatTurnDuration,
+  getActiveStreamingTool,
   isSuggestionStale,
   reconcileTargetScope,
   resolveEditorJumpTarget,
   shouldShowSettingsLinkForError,
+  summarizeTurnActivity,
+  type AiLoadedSkillItem,
+  type AiToolCallItem,
 } from '../../src/ui/aiAssistant.ts';
 import {parseMarkdownBlocks, parseMarkdownInline} from '../../src/ui/markdown.ts';
 import {SAMPLE_SCRIPT} from './aiTestFixtures.ts';
@@ -148,6 +154,78 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
       status: 'ok',
     });
     expect(surgicalSliceTip.detail).toBe('Preset: lens1_spatial_optics · States: S3, S4');
+  });
+
+  it('deduplicates completed load_auteur_skill calls, formats turn duration, and summarizes activity cleanly', () => {
+    const skills: AiLoadedSkillItem[] = [
+      {id: 'pinned_pov', name: 'Subjective POV', source: 'pinned'},
+      {id: 'draft_interview', name: 'Draft Interview', source: 'tool'},
+      {id: 'auto_brief', name: 'Multimodal Brief', source: 'passive'},
+    ];
+    const tools: AiToolCallItem[] = [
+      {
+        callId: 'c1',
+        name: 'load_auteur_skill',
+        arguments: {skillId: 'draft_interview'},
+        status: 'ok',
+      },
+      {
+        callId: 'c2',
+        name: 'load_auteur_skill',
+        arguments: {skillId: 'temporal_calibration'},
+        status: 'running',
+      },
+      {
+        callId: 'c3',
+        name: 'load_auteur_skill',
+        arguments: {skill_id: 'broken_skill'},
+        status: 'error',
+      },
+      {
+        callId: 'c4',
+        name: 'ask_question',
+        arguments: {questions: [{question: 'Which wardrobe?'}]},
+        status: 'ok',
+      },
+    ];
+
+    const deduped = dedupeTurnToolCalls(tools, skills);
+    expect(deduped.map((t) => t.callId)).toEqual(['c2', 'c3', 'c4']);
+
+    // If no matching/tool skill was recorded in loadedSkills, completed load_auteur_skill is kept
+    expect(
+      dedupeTurnToolCalls(
+        [{callId: 'c1', name: 'load_auteur_skill', arguments: {skillId: 'other'}, status: 'ok'}],
+        [{id: 'pinned_pov', name: 'Subjective POV', source: 'pinned'}]
+      )
+    ).toHaveLength(1);
+
+    expect(getActiveStreamingTool(deduped)?.callId).toBe('c2');
+    expect(
+      getActiveStreamingTool([{callId: 'c4', name: 'ask_question', arguments: {}, status: 'ok'}])
+    ).toBeNull();
+
+    const summary = summarizeTurnActivity(skills, deduped);
+    expect(summary.orderedSkills.map((s) => s.id)).toEqual([
+      'draft_interview',
+      'auto_brief',
+      'pinned_pov',
+    ]);
+    expect(summary.loadedSkillCount).toBe(2);
+    expect(summary.pinnedSkillCount).toBe(1);
+    expect(summary.totalSkillCount).toBe(3);
+    expect(summary.toolCount).toBe(3);
+    expect(summary.runningToolCount).toBe(1);
+    expect(summary.errorToolCount).toBe(1);
+    expect(summary.stoppedToolCount).toBe(0);
+
+    expect(formatTurnDuration(undefined)).toBeNull();
+    expect(formatTurnDuration(0)).toBeNull();
+    expect(formatTurnDuration(-50)).toBeNull();
+    expect(formatTurnDuration(450)).toBe('<1s');
+    expect(formatTurnDuration(4200)).toBe('4s');
+    expect(formatTurnDuration(60_000)).toBe('1m');
+    expect(formatTurnDuration(75_000)).toBe('1m 15s');
   });
 });
 

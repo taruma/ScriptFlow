@@ -56,3 +56,11 @@ export {
   hasDraftBriefContent,
   isDraftBriefActive,
 } from './ai/draftBrief.ts';
+
+export {
+  dedupeTurnToolCalls,
+  formatTurnDuration,
+  getActiveStreamingTool,
+  summarizeTurnActivity,
+  type TurnActivitySummary,
+} from './ai/turnActivity.ts';
