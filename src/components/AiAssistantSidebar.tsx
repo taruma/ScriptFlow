@@ -12,6 +12,8 @@ import {
 } from 'react';
 import {
   ArrowDown,
+  ArrowRightLeft,
+  History,
   KeyRound,
   Layers,
   RotateCcw,
@@ -22,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import type {AuteurDocument, LintRuleOverrides} from '../core/index.ts';
+import type {BundledExample} from '../data/examples/index.ts';
 import {
   composeAgentContext,
   type AskQuestionMode,
@@ -33,6 +36,7 @@ import {
   buildAiTargetOptions,
   isNearScrollBottom,
   reconcileTargetScope,
+  type DraftBriefState,
 } from '../ui/aiAssistant.ts';
 import {aggregateSessionCost, formatEstimatedUsd} from '../ui/aiPricing.ts';
 import {
@@ -40,14 +44,20 @@ import {
   REASONING_LEVEL_OPTIONS,
   useAiSettings,
 } from '../ui/aiSettings.ts';
+import {
+  type AiSessionRecord,
+  type ResolvedAiSessionSummary,
+} from '../ui/aiSessions.ts';
 import {useAiSkills} from '../ui/aiSkillsStore.ts';
 import {UI_LABELS} from '../ui/labels.ts';
 import type {ActiveAiPatchItem} from '../ui/patchIndicators.ts';
 import {useQuickScanRulesStore} from '../ui/quickScanRulesStore.ts';
+import type {ScriptRecord} from '../ui/scriptLibraryDb.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import type {ContextInspectorTabId} from './AiContextInspectorModal.tsx';
 import type {AiInspectableTrace} from './AiTraceModal.tsx';
 import {AiComposerDock} from './ai/sidebar/AiComposerDock.tsx';
+import {AiRecentSessionsList} from './ai/sidebar/AiRecentSessionsList.tsx';
 import {AiThreadMessage} from './ai/sidebar/AiThreadMessage.tsx';
 import {
   buildSessionCostTooltip,
@@ -59,6 +69,7 @@ import {
   useAiChatOrchestrator,
   type AiLivePatchActionHandlers,
 } from './ai/sidebar/useAiChatOrchestrator.ts';
+import {useAiSessionPersistence} from './ai/sidebar/useAiSessionPersistence.ts';
 import {useSidebarResize} from './ai/sidebar/useSidebarResize.ts';
 
 const AiSettingsModal = lazy(() =>
@@ -79,6 +90,13 @@ const AiBriefModal = lazy(() =>
 
 export type {AiLivePatchActionHandlers};
 
+export interface ExternalAiSessionLoadRequest {
+  nonce: number;
+  session: AiSessionRecord;
+  isCrossScript: boolean;
+  expectedScriptSessionKey?: string;
+}
+
 export interface AiAssistantSidebarProps {
   isOpen?: boolean;
   scriptSessionKey: string;
@@ -87,6 +105,17 @@ export interface AiAssistantSidebarProps {
   doc: AuteurDocument;
   readOnly: boolean;
   ruleOverrides?: LintRuleOverrides;
+  customScripts: readonly ScriptRecord[];
+  examples: readonly BundledExample[];
+  sessionRefreshNonce?: number;
+  externalLoadRequest?: ExternalAiSessionLoadRequest | null;
+  onConsumeExternalLoadRequest?: () => void;
+  onOpenHistoryModal: () => void;
+  onSwitchToScript: (
+    target: {kind: 'custom'; record: ScriptRecord} | {kind: 'example'; example: BundledExample},
+    sessionToLoad?: AiSessionRecord
+  ) => void;
+  onSessionsChanged?: () => void;
   onClose: () => void;
   onApplyPatchSuggestion: (
     suggestion: PatchSuggestion,
@@ -109,6 +138,14 @@ export function AiAssistantSidebar({
   doc,
   readOnly,
   ruleOverrides,
+  customScripts,
+  examples,
+  sessionRefreshNonce = 0,
+  externalLoadRequest,
+  onConsumeExternalLoadRequest,
+  onOpenHistoryModal,
+  onSwitchToScript,
+  onSessionsChanged,
   onClose,
   onApplyPatchSuggestion,
   onApplyDraftSuggestion,
@@ -153,6 +190,13 @@ export function AiAssistantSidebar({
 
   const briefCtrl = useAiBriefController();
   const resizeCtrl = useSidebarResize({isOpen, inputValue, sidebarRef, composerRef});
+  const sessionPersistence = useAiSessionPersistence({
+    scriptSessionKey,
+    customScripts,
+    examples,
+    refreshNonce: sessionRefreshNonce,
+    onSessionsChanged,
+  });
 
   const isAskQuestionToolDisabled =
     aiSkills.skillsState.toolOverrides?.ask_question?.activationMode === 'disabled';
@@ -263,6 +307,20 @@ export function AiAssistantSidebar({
     briefCtrl.setIsBriefOpen(false);
   }, [briefCtrl.setIsBriefOpen]);
 
+  const handleHydrateUiState = useCallback(
+    (state: {focus: AssistantFocus; selectedTargetKey: string; brief: DraftBriefState}) => {
+      setFocus(state.focus);
+      setSelectedTargetKey(state.selectedTargetKey);
+      briefCtrl.replaceBrief(state.brief);
+      setInspectedTrace(null);
+      setSessionCostTooltip(null);
+      shouldAutoScrollRef.current = true;
+      setIsScrolledUp(false);
+      setAskFirstEnabled(false);
+    },
+    [briefCtrl.replaceBrief]
+  );
+
   const chat = useAiChatOrchestrator({
     isOpen,
     scriptSessionKey,
@@ -304,7 +362,72 @@ export function AiAssistantSidebar({
     onScriptSwitchReset: handleScriptSwitchReset,
     onDraftApplied: handleDraftApplied,
     onClearAskFirst: handleClearAskFirst,
+    onPersistSession: sessionPersistence.saveSession,
+    onHydrateUiState: handleHydrateUiState,
   });
+
+  // Hydrate externally requested session (from AI Chat History Modal) once scriptSessionKey matches
+  useEffect(() => {
+    if (!externalLoadRequest) return;
+    if (
+      externalLoadRequest.expectedScriptSessionKey &&
+      externalLoadRequest.expectedScriptSessionKey !== scriptSessionKey
+    ) {
+      return;
+    }
+    chat.hydrateSession(externalLoadRequest.session, {
+      isCrossScript: externalLoadRequest.isCrossScript,
+    });
+    onConsumeExternalLoadRequest?.();
+  }, [
+    externalLoadRequest,
+    scriptSessionKey,
+    chat.hydrateSession,
+    onConsumeExternalLoadRequest,
+  ]);
+
+  const handleSelectRecentSession = useCallback(
+    (summary: ResolvedAiSessionSummary) => {
+      chat.hydrateSession(summary.session, {
+        isCrossScript: summary.scriptStatus !== 'current',
+      });
+    },
+    [chat.hydrateSession]
+  );
+
+  const crossScriptLiveTarget = useMemo(() => {
+    const src = chat.crossScriptSource;
+    if (!src) return null;
+    if (src.originalScriptKind === 'example') {
+      const example = examples.find((ex) => ex.id === src.originalScriptId);
+      return example ? ({kind: 'example', example} as const) : null;
+    }
+    const record = customScripts.find((rec) => rec.id === src.originalScriptId);
+    return record ? ({kind: 'custom', record} as const) : null;
+  }, [chat.crossScriptSource, customScripts, examples]);
+
+  const activeLoadedSession = useMemo(
+    () =>
+      chat.activeSessionId
+        ? (sessionPersistence.allSessions.find((s) => s.id === chat.activeSessionId) ?? null)
+        : null,
+    [chat.activeSessionId, sessionPersistence.allSessions]
+  );
+
+  const handleSwitchToCrossScriptSource = useCallback(() => {
+    if (!chat.crossScriptSource || !crossScriptLiveTarget) return;
+    const sourceSession =
+      sessionPersistence.allSessions.find(
+        (s) => s.id === chat.crossScriptSource?.originalSessionId
+      ) ?? activeLoadedSession ?? undefined;
+    onSwitchToScript(crossScriptLiveTarget, sourceSession);
+  }, [
+    chat.crossScriptSource,
+    crossScriptLiveTarget,
+    sessionPersistence.allSessions,
+    activeLoadedSession,
+    onSwitchToScript,
+  ]);
 
   const modelOption = getGeminiModelOption(settings.model);
   const reasoningOption =
@@ -432,6 +555,16 @@ export function AiAssistantSidebar({
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
+                onClick={onOpenHistoryModal}
+                title={UI_LABELS.ai.history.buttonTitle}
+                aria-label={UI_LABELS.ai.history.buttonAria}
+                className={UI_TOKENS.button.iconGhost}
+              >
+                <History className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleOpenContext('preview')}
                 title={UI_LABELS.ai.contextButtonTitle}
                 aria-label={UI_LABELS.ai.contextButtonAria(
@@ -519,23 +652,69 @@ export function AiAssistantSidebar({
                 </div>
               )}
 
-              {chat.messages.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border-main bg-surface/60 px-4 py-5 text-center space-y-1.5">
-                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-main bg-surface text-text-muted mx-auto">
-                    {focus === 'refine' ? (
-                      <Wrench className="h-4 w-4" />
-                    ) : focus === 'audit' ? (
-                      <ShieldAlert className="h-4 w-4" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
+              {chat.crossScriptSource && (
+                <div className="rounded-xl border border-border-main bg-surface px-2.5 py-2 text-[11px] text-text-muted flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="min-w-0 space-y-1">
+                    <p className="leading-snug">
+                      {crossScriptLiveTarget
+                        ? UI_LABELS.ai.history.crossScriptNotice(
+                            chat.crossScriptSource.originalScriptTitle
+                          )
+                        : UI_LABELS.ai.history.crossScriptDeletedNotice(
+                            chat.crossScriptSource.originalScriptTitle
+                          )}
+                    </p>
+                    {crossScriptLiveTarget && (
+                      <button
+                        type="button"
+                        onClick={handleSwitchToCrossScriptSource}
+                        className="inline-flex items-center gap-1 rounded-md border border-border-main bg-surface-subtle hover:bg-surface-hover px-2 py-0.5 text-[10.5px] font-semibold text-text-main transition-colors cursor-pointer"
+                      >
+                        <ArrowRightLeft className="h-2.5 w-2.5 shrink-0" />
+                        <span>
+                          {UI_LABELS.ai.history.switchToScriptButton(
+                            chat.crossScriptSource.originalScriptTitle
+                          )}
+                        </span>
+                      </button>
                     )}
                   </div>
-                  <h3 className="font-serif text-xs font-bold text-text-main">
-                    {focusMeta.emptyTitle}
-                  </h3>
-                  <p className="text-[11px] leading-relaxed text-text-muted max-w-[300px] mx-auto">
-                    {focusMeta.emptyDesc}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={chat.dismissCrossScriptSource}
+                    aria-label={UI_LABELS.ai.history.dismissBannerAria}
+                    className={UI_TOKENS.button.iconGhost}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+
+              {chat.messages.length === 0 ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-dashed border-border-main bg-surface/60 px-4 py-5 text-center space-y-1.5">
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border-main bg-surface text-text-muted mx-auto">
+                      {focus === 'refine' ? (
+                        <Wrench className="h-4 w-4" />
+                      ) : focus === 'audit' ? (
+                        <ShieldAlert className="h-4 w-4" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                    </div>
+                    <h3 className="font-serif text-xs font-bold text-text-main">
+                      {focusMeta.emptyTitle}
+                    </h3>
+                    <p className="text-[11px] leading-relaxed text-text-muted max-w-[300px] mx-auto">
+                      {focusMeta.emptyDesc}
+                    </p>
+                  </div>
+
+                  <AiRecentSessionsList
+                    sessions={sessionPersistence.recentSessions}
+                    onSelectSession={handleSelectRecentSession}
+                    onOpenHistoryModal={onOpenHistoryModal}
+                  />
                 </div>
               ) : (
                 chat.messages.map((msg, idx) => (

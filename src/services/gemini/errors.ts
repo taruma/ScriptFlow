@@ -53,7 +53,11 @@ function extractRawErrorMessage(error: unknown): string {
 /**
  * Normalizes SDK, HTTP, SSE, network, and abort errors into clean user-facing GeminiServiceError instances.
  */
-export function classifyGeminiError(error: unknown, signal?: AbortSignal): GeminiServiceError {
+export function classifyGeminiError(
+  error: unknown,
+  signal?: AbortSignal,
+  options?: {hadPreviousInteraction?: boolean}
+): GeminiServiceError {
   if (error instanceof GeminiServiceError) {
     return error;
   }
@@ -92,6 +96,25 @@ export function classifyGeminiError(error: unknown, signal?: AbortSignal): Gemin
     return new GeminiServiceError(
       'quota_exceeded',
       'Gemini API rate limit or quota exceeded. Wait a moment, switch to Gemini 4 Hydrogen, or check your billing tier.',
+      {status, cause: error}
+    );
+  }
+
+  if (
+    options?.hadPreviousInteraction &&
+    (status === 404 ||
+      status === 400 ||
+      lower.includes('not_found') ||
+      lower.includes('not found') ||
+      lower.includes('expired') ||
+      lower.includes('invalid')) &&
+    (lower.includes('interaction') ||
+      lower.includes('previous_interaction') ||
+      (status === 404 && !lower.includes('model')))
+  ) {
+    return new GeminiServiceError(
+      'interaction_expired',
+      'Previous Gemini session chain expired or is unavailable for this API key.',
       {status, cause: error}
     );
   }

@@ -67,6 +67,10 @@ export {
   buildInitialInteractionInput,
   sanitizeTraceInput,
 } from './gemini/traceUtils.ts';
+export {
+  buildPriorSessionRecap,
+  type BuildPriorSessionRecapOptions,
+} from './gemini/sessionRecap.ts';
 
 function defaultCreateClient(apiKey: string): InteractionsClientLike {
   return new GoogleGenAI({apiKey}) as unknown as InteractionsClientLike;
@@ -75,7 +79,8 @@ function defaultCreateClient(apiKey: string): InteractionsClientLike {
 async function consumeInteractionStream(
   stream: AsyncIterable<InteractionStreamEventLike>,
   callbacks: AgentStreamCallbacks | undefined,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  hadPreviousInteraction: boolean
 ): Promise<RoundStreamOutcome> {
   let interactionId: string | null = null;
   let status: string | null = null;
@@ -199,7 +204,7 @@ async function consumeInteractionStream(
       case 'error': {
         const message = event.error?.message || 'Gemini interaction stream error.';
         const codeText = event.error?.code ? `${event.error.code}: ${message}` : message;
-        throw classifyGeminiError(new Error(codeText), signal);
+        throw classifyGeminiError(new Error(codeText), signal, {hadPreviousInteraction});
       }
     }
   }
@@ -342,6 +347,10 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
   const isResumingFunctionResults = Boolean(
     options.resumeFunctionResults && options.resumeFunctionResults.length > 0
   );
+  const recapPreamble = options.priorSessionRecap?.trim() ?? '';
+  const round1Preamble = [recapPreamble, composedContext.turnContext.text]
+    .filter((block) => block.trim().length > 0)
+    .join('\n\n');
   let nextInput: unknown = isResumingFunctionResults
     ? options.resumeFunctionResults!.map((step) => {
         if (
@@ -364,7 +373,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     : buildInitialInteractionInput(
         options.prompt,
         options.attachments,
-        composedContext.turnContext.text
+        round1Preamble
       );
   let accumulatedText = '';
   let accumulatedThought = '';
@@ -458,7 +467,12 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
           : undefined,
       };
 
-      const outcome = await consumeInteractionStream(stream, roundCallbacks, options.signal);
+      const outcome = await consumeInteractionStream(
+        stream,
+        roundCallbacks,
+        options.signal,
+        Boolean(currentInteractionId)
+      );
 
       if (outcome.interactionId) {
         currentInteractionId = outcome.interactionId;
@@ -606,7 +620,9 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
       trace: buildTurnTrace(),
     };
   } catch (err) {
-    const classified = classifyGeminiError(err, options.signal);
+    const classified = classifyGeminiError(err, options.signal, {
+      hadPreviousInteraction: Boolean(currentInteractionId),
+    });
     if (activeRound) {
       activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
       activeRound.status = classified.code === 'aborted' ? 'aborted' : 'error';

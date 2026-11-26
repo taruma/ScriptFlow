@@ -1,3 +1,11 @@
+import {
+  compactSessionForStorage,
+  hydrateSessionFromStorage,
+  isValidStoredAiSession,
+  sanitizeAiSessionRecord,
+  sortAiSessions,
+  type AiSessionRecord,
+} from '../ai/sessionStore.ts';
 import {sortScriptSnapshots, type ScriptSnapshot} from '../scriptSnapshots.ts';
 import type {ScriptRecord} from './dbTypes.ts';
 import {
@@ -10,6 +18,10 @@ import {
 
 export function getSnapshotsFallbackKey(storageKey: string | null): string | null {
   return storageKey ? `${storageKey}-snapshots` : null;
+}
+
+export function getAiSessionsFallbackKey(storageKey: string | null): string | null {
+  return storageKey ? `${storageKey}-ai-sessions` : null;
 }
 
 export function readFallbackMap(storageKey: string | null): Map<string, ScriptRecord> {
@@ -85,6 +97,53 @@ export function clearFallbackStorage(storageKey: string | null): void {
     if (snapKey) {
       window.localStorage.removeItem(snapKey);
     }
+  } catch {
+    // Ignore storage removal failures
+  }
+}
+
+export function readFallbackAiSessionsMap(storageKey: string | null): Map<string, AiSessionRecord> {
+  const map = new Map<string, AiSessionRecord>();
+  const key = getAiSessionsFallbackKey(storageKey);
+  if (!key) return map;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return map;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return map;
+    for (const item of parsed) {
+      if (isValidStoredAiSession(item)) {
+        const clean = hydrateSessionFromStorage(sanitizeAiSessionRecord(item));
+        map.set(clean.id, clean);
+      }
+    }
+  } catch {
+    // Ignore storage read/parse failures
+  }
+  return map;
+}
+
+export function persistFallbackAiSessionsMap(
+  storageKey: string | null,
+  map: Map<string, AiSessionRecord>
+): void {
+  const key = getAiSessionsFallbackKey(storageKey);
+  if (!key) return;
+  try {
+    const compacted = sortAiSessions(Array.from(map.values())).map((session) =>
+      compactSessionForStorage(sanitizeAiSessionRecord(session))
+    );
+    window.localStorage.setItem(key, JSON.stringify(compacted));
+  } catch {
+    // Ignore storage quota or restricted environment errors
+  }
+}
+
+export function clearFallbackAiSessionsStorage(storageKey: string | null): void {
+  const key = getAiSessionsFallbackKey(storageKey);
+  if (!key) return;
+  try {
+    window.localStorage.removeItem(key);
   } catch {
     // Ignore storage removal failures
   }

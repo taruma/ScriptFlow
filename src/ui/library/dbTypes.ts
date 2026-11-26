@@ -1,12 +1,16 @@
 import type {BundledExample} from '../../data/examples/index.ts';
+import type {AiSessionRecord} from '../ai/sessionStore.ts';
 import type {ScriptSnapshot, SnapshotTrigger} from '../scriptSnapshots.ts';
 
 export const SCRIPT_LIBRARY_DB_NAME = 'auteur-script-library-v1';
-export const SCRIPT_LIBRARY_DB_VERSION = 2;
+export const SCRIPT_LIBRARY_DB_VERSION = 3;
 export const SCRIPT_LIBRARY_STORE_NAME = 'scripts';
 export const SCRIPT_LIBRARY_UPDATED_AT_INDEX = 'updatedAt';
 export const SCRIPT_SNAPSHOTS_STORE_NAME = 'snapshots';
 export const SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX = 'scriptId';
+export const AI_SESSIONS_STORE_NAME = 'aiSessions';
+export const AI_SESSIONS_UPDATED_AT_INDEX = 'updatedAt';
+export const AI_SESSIONS_SCRIPT_KEY_INDEX = 'scriptSessionKey';
 
 export interface SaveSnapshotInput {
   scriptId: string;
@@ -71,6 +75,7 @@ export interface LegacyMigrationResult {
 export interface FallbackReconcileResult {
   mergedScripts: number;
   mergedSnapshots: number;
+  mergedAiSessions: number;
 }
 
 export interface ScriptLibraryStore {
@@ -90,6 +95,17 @@ export interface ScriptLibraryStore {
   ): Promise<ScriptSnapshot | null>;
   deleteSnapshot(id: string): Promise<void>;
   clearSnapshotsForScript(scriptId: string): Promise<void>;
+  listAiSessions(): Promise<AiSessionRecord[]>;
+  getAiSession(id: string): Promise<AiSessionRecord | null>;
+  saveAiSession(
+    record: AiSessionRecord,
+    options?: {maxAuto?: number}
+  ): Promise<AiSessionRecord>;
+  updateAiSessionMeta(
+    id: string,
+    patch: {title?: string; pinned?: boolean}
+  ): Promise<AiSessionRecord | null>;
+  deleteAiSession(id: string): Promise<void>;
   reconcileFallbackStorage(): Promise<FallbackReconcileResult>;
   migrateFromLegacyLocalStorage(options?: LegacyMigrationOptions): Promise<LegacyMigrationResult>;
 }

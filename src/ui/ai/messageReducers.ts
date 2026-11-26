@@ -110,6 +110,26 @@ export function stageSuggestionInMessages(
   }));
 }
 
+export function resetAssistantTurnForRetryInMessages(
+  messages: AiChatMessage[],
+  messageId: string
+): AiChatMessage[] {
+  return updateMessageById(messages, messageId, (msg) => ({
+    ...msg,
+    text: '',
+    thoughtSummary: '',
+    toolCalls: [],
+    loadedSkills: [],
+    suggestions: [],
+    dismissedSuggestionIds: [],
+    appliedSuggestionIds: [],
+    error: undefined,
+    trace: undefined,
+    hitToolRoundLimit: undefined,
+    isStreaming: true,
+  }));
+}
+
 export function completeAssistantTurnInMessages(
   messages: AiChatMessage[],
   messageId: string,
@@ -118,6 +138,7 @@ export function completeAssistantTurnInMessages(
     thoughtSummary: string;
     hitToolRoundLimit?: boolean;
     trace?: AgentTurnTrace;
+    bridgedFromHistory?: 'expired_chain' | 'cross_script';
   }
 ): AiChatMessage[] {
   return updateMessageById(messages, messageId, (msg) => ({
@@ -127,6 +148,7 @@ export function completeAssistantTurnInMessages(
     isStreaming: false,
     hitToolRoundLimit: completion.hitToolRoundLimit,
     trace: completion.trace,
+    ...(completion.bridgedFromHistory ? {bridgedFromHistory: completion.bridgedFromHistory} : {}),
   }));
 }
 

@@ -880,4 +880,73 @@ describe('geminiInteractions streaming agent client', () => {
     );
     expect(resumedTurn.text).toBe('Proceeding with single continuous take.');
   });
+
+  it('classifies expired previous_interaction_id errors as interaction_expired without affecting model_not_found', () => {
+    const expiredErr = classifyGeminiError(
+      Object.assign(new Error('Interaction int-old-123 not found'), {status: 404}),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(expiredErr.code).toBe('interaction_expired');
+
+    const modelErr = classifyGeminiError(
+      Object.assign(new Error('Model gemini-4-carbon not found'), {status: 404}),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(modelErr.code).toBe('model_not_found');
+
+    const plain404WithoutPrev = classifyGeminiError(
+      Object.assign(new Error('Resource not found'), {status: 404}),
+      undefined,
+      {hadPreviousInteraction: false}
+    );
+    expect(plain404WithoutPrev.code).toBe('model_not_found');
+  });
+
+  it('prepends priorSessionRecap into Round 1 input while keeping Zone 1 system_instruction frozen', async () => {
+    const capturedRequests: Array<Record<string, unknown>> = [];
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async (params) => {
+          capturedRequests.push(params);
+          return asAsyncStream([
+            {event_type: 'interaction.created', interaction: {id: 'int-recap-1', status: 'in_progress'}},
+            {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Bridged cleanly.'}},
+            {event_type: 'interaction.completed', interaction: {id: 'int-recap-1', status: 'completed'}},
+          ]);
+        },
+      },
+    };
+
+    const baseline = await runGeminiAgentTurn({
+      apiKey: 'AIza-recap-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'low',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Add rain',
+      rawText: SAMPLE_SCRIPT,
+      createClient: () => fakeClient,
+    });
+
+    const bridged = await runGeminiAgentTurn({
+      apiKey: 'AIza-recap-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'low',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Continue rain idea',
+      rawText: SAMPLE_SCRIPT,
+      priorSessionRecap: '<prior_session_recap>\nEarlier chat note.\n</prior_session_recap>',
+      createClient: () => fakeClient,
+    });
+
+    expect(bridged.text).toBe('Bridged cleanly.');
+    expect(baseline.trace.rounds[0].request.systemInstruction).toBe(
+      bridged.trace.rounds[0].request.systemInstruction
+    );
+    expect(String(capturedRequests[1].input)).toContain('<prior_session_recap>');
+    expect(String(capturedRequests[1].input)).toContain('Continue rain idea');
+  });
 });

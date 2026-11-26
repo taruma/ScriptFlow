@@ -69,6 +69,8 @@ export interface ReferenceEntry {
   label: string;
   note?: string;
   attachment?: ReferenceAttachment;
+  /** Lightweight text-only descriptor preserved when media attachments are stripped for history storage. */
+  omittedAttachmentTag?: string;
 }
 
 export interface DraftBriefState {
@@ -113,6 +115,8 @@ export interface AiChatMessage {
   quickScanErrorFallback?: boolean;
   isStreaming?: boolean;
   hitToolRoundLimit?: boolean;
+  /** Non-null when this turn recovered via local recap after an expired chain or cross-script resume. */
+  bridgedFromHistory?: 'expired_chain' | 'cross_script';
 }
 
 export type EditorJumpTarget =

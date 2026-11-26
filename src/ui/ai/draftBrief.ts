@@ -35,7 +35,8 @@ function isNonEmptyReference(entry: ReferenceEntry): boolean {
     entry.handle.trim().length > 0 ||
     entry.label.trim().length > 0 ||
     (entry.note?.trim().length ?? 0) > 0 ||
-    Boolean(entry.attachment)
+    Boolean(entry.attachment) ||
+    Boolean(entry.omittedAttachmentTag?.trim())
   );
 }
 
@@ -116,9 +117,9 @@ export function getNextReferenceHandle(
   return `@${prefix}${maxIndex + 1}`;
 }
 
-function formatAttachmentTag(entry: ReferenceEntry): string {
+export function formatAttachmentTag(entry: ReferenceEntry): string {
   const att = entry.attachment;
-  if (!att) return '';
+  if (!att) return entry.omittedAttachmentTag?.trim() ?? '';
   if (att.source === 'youtube') {
     return '[YouTube video]';
   }

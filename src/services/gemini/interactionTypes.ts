@@ -17,6 +17,7 @@ export type GeminiErrorCode =
   | 'invalid_api_key'
   | 'quota_exceeded'
   | 'model_not_found'
+  | 'interaction_expired'
   | 'network_error'
   | 'aborted'
   | 'api_error';
@@ -160,6 +161,8 @@ export interface RunAgentTurnOptions {
   attachments?: readonly AgentMediaAttachment[];
   /** Optional `function_result` steps to resume a paused interaction turn directly via `previousInteractionId`. */
   resumeFunctionResults?: readonly PendingToolResultStep[];
+  /** Optional local `<prior_session_recap>` preamble when bridging an expired chain or cross-script resume. */
+  priorSessionRecap?: string;
   signal?: AbortSignal;
   maxToolRounds?: number;
   callbacks?: AgentStreamCallbacks;

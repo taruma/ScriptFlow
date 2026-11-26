@@ -1,6 +1,15 @@
 import {exportPlainText} from '../core/index.ts';
 import {BUNDLED_EXAMPLES} from '../data/examples/index.ts';
 import {
+  MAX_AUTO_AI_SESSIONS,
+  compactSessionForStorage,
+  hydrateSessionFromStorage,
+  sanitizeAiSessionRecord,
+  selectAiSessionsToPrune,
+  sortAiSessions,
+  type AiSessionRecord,
+} from './ai/sessionStore.ts';
+import {
   MAX_AUTO_SNAPSHOTS_PER_SCRIPT,
   selectSnapshotsToPrune,
   shouldSkipAutoSnapshot,
@@ -19,6 +28,9 @@ import {
   writeSavedTitle,
 } from './scriptStorage.ts';
 import {
+  AI_SESSIONS_SCRIPT_KEY_INDEX,
+  AI_SESSIONS_STORE_NAME,
+  AI_SESSIONS_UPDATED_AT_INDEX,
   SCRIPT_LIBRARY_DB_NAME,
   SCRIPT_LIBRARY_DB_VERSION,
   SCRIPT_LIBRARY_STORE_NAME,
@@ -36,9 +48,12 @@ import {
   type ScriptRecord,
 } from './library/dbTypes.ts';
 import {
+  clearFallbackAiSessionsStorage,
   clearFallbackStorage,
+  persistFallbackAiSessionsMap,
   persistFallbackMap,
   persistFallbackSnapshotsMap,
+  readFallbackAiSessionsMap,
   readFallbackMap,
   readFallbackSnapshotsMap,
 } from './library/fallbackStorage.ts';
@@ -46,15 +61,21 @@ import {
   getDefaultIndexedDB,
   idbBulkDelete,
   idbBulkPut,
+  idbBulkPutAiSessions,
   idbBulkPutSnapshots,
   idbClearAll,
   idbClearSnapshotsForScript,
   idbDelete,
+  idbDeleteAiSession,
   idbDeleteSnapshot,
   idbGet,
+  idbGetAiSession,
   idbList,
+  idbListAiSessions,
   idbListSnapshots,
+  idbPutAiSessionAndPrune,
   idbPutSnapshotAndPrune,
+  idbUpdateAiSessionMeta,
   idbUpdateSnapshot,
   openIndexedDb,
 } from './library/idbTransactions.ts';
@@ -67,6 +88,9 @@ import {
 } from './library/recordSanitizers.ts';
 
 export {
+  AI_SESSIONS_SCRIPT_KEY_INDEX,
+  AI_SESSIONS_STORE_NAME,
+  AI_SESSIONS_UPDATED_AT_INDEX,
   SCRIPT_LIBRARY_DB_NAME,
   SCRIPT_LIBRARY_DB_VERSION,
   SCRIPT_LIBRARY_STORE_NAME,
@@ -132,6 +156,7 @@ export function createScriptLibraryStore(
   let dbPromise: Promise<IDBDatabase> | null = null;
   let fallbackMap: Map<string, ScriptRecord> | null = null;
   let fallbackSnapshotsMap: Map<string, ScriptSnapshot> | null = null;
+  let fallbackAiSessionsMap: Map<string, AiSessionRecord> | null = null;
   let hasPendingFallbackData = false;
   let hasWarnedFallback = false;
   let reconcilePromise: Promise<FallbackReconcileResult> | null = null;
@@ -159,6 +184,13 @@ export function createScriptLibraryStore(
       fallbackSnapshotsMap = readFallbackSnapshotsMap(fallbackStorageKey);
     }
     return fallbackSnapshotsMap;
+  };
+
+  const ensureFallbackAiSessionsMap = (): Map<string, AiSessionRecord> => {
+    if (!fallbackAiSessionsMap) {
+      fallbackAiSessionsMap = readFallbackAiSessionsMap(fallbackStorageKey);
+    }
+    return fallbackAiSessionsMap;
   };
 
   const deleteFallbackSnapshotsForScripts = (scriptIds: ReadonlySet<string>): void => {
@@ -199,9 +231,26 @@ export function createScriptLibraryStore(
       }
     }
 
-    if (scriptsToInspect.size === 0 && snapshotsToInspect.size === 0) {
+    const aiSessionsToInspect = new Map<string, AiSessionRecord>();
+    for (const [id, sess] of readFallbackAiSessionsMap(fallbackStorageKey).entries()) {
+      aiSessionsToInspect.set(id, sess);
+    }
+    if (fallbackAiSessionsMap) {
+      for (const [id, sess] of fallbackAiSessionsMap.entries()) {
+        const prev = aiSessionsToInspect.get(id);
+        if (!prev || sess.updatedAt >= prev.updatedAt) {
+          aiSessionsToInspect.set(id, sess);
+        }
+      }
+    }
+
+    if (
+      scriptsToInspect.size === 0 &&
+      snapshotsToInspect.size === 0 &&
+      aiSessionsToInspect.size === 0
+    ) {
       hasPendingFallbackData = false;
-      return {mergedScripts: 0, mergedSnapshots: 0};
+      return {mergedScripts: 0, mergedSnapshots: 0, mergedAiSessions: 0};
     }
 
     let mergedScripts = 0;
@@ -240,12 +289,31 @@ export function createScriptLibraryStore(
       }
     }
 
+    let mergedAiSessions = 0;
+    if (aiSessionsToInspect.size > 0) {
+      const existingSessions = await idbListAiSessions(db);
+      const existingById = new Map(existingSessions.map((sess) => [sess.id, sess]));
+      const sessionsToPut: AiSessionRecord[] = [];
+      for (const candidate of aiSessionsToInspect.values()) {
+        const existing = existingById.get(candidate.id);
+        if (!existing || candidate.updatedAt > existing.updatedAt) {
+          sessionsToPut.push(candidate);
+        }
+      }
+      if (sessionsToPut.length > 0) {
+        await idbBulkPutAiSessions(db, sessionsToPut);
+        mergedAiSessions = sessionsToPut.length;
+      }
+    }
+
     fallbackMap?.clear();
     fallbackSnapshotsMap?.clear();
+    fallbackAiSessionsMap?.clear();
     clearFallbackStorage(fallbackStorageKey);
+    clearFallbackAiSessionsStorage(fallbackStorageKey);
     hasPendingFallbackData = false;
 
-    return {mergedScripts, mergedSnapshots};
+    return {mergedScripts, mergedSnapshots, mergedAiSessions};
   };
 
   const runMergeFallbackIntoDb = (db: IDBDatabase): Promise<FallbackReconcileResult> => {
@@ -547,16 +615,121 @@ export function createScriptLibraryStore(
       );
     },
 
+    async listAiSessions(): Promise<AiSessionRecord[]> {
+      return runWithFallback(
+        (db) => idbListAiSessions(db),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          return sortAiSessions(
+            Array.from(sessMap.values()).map((sess) => hydrateSessionFromStorage({...sess}))
+          );
+        }
+      );
+    },
+
+    async getAiSession(id: string): Promise<AiSessionRecord | null> {
+      const cleanId = id.trim();
+      if (!cleanId) return null;
+      return runWithFallback(
+        (db) => idbGetAiSession(db, cleanId),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          const found = sessMap.get(cleanId);
+          return found ? hydrateSessionFromStorage({...found}) : null;
+        }
+      );
+    },
+
+    async saveAiSession(
+      record: AiSessionRecord,
+      options?: {maxAuto?: number}
+    ): Promise<AiSessionRecord> {
+      const sanitized = sanitizeAiSessionRecord(record);
+      if (!sanitized.id) {
+        throw new Error('Cannot store an AiSessionRecord with an empty id.');
+      }
+      const compacted = compactSessionForStorage(sanitized);
+      const existing = await store.listAiSessions();
+      const withoutCurrent = existing.filter((item) => item.id !== compacted.id);
+      const pruneIds = selectAiSessionsToPrune(
+        [compacted, ...withoutCurrent],
+        options?.maxAuto ?? MAX_AUTO_AI_SESSIONS
+      );
+
+      return runWithFallback(
+        (db) => idbPutAiSessionAndPrune(db, compacted, pruneIds),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          const hydrated = hydrateSessionFromStorage(compacted);
+          sessMap.set(hydrated.id, hydrated);
+          for (const pruneId of pruneIds) {
+            if (pruneId !== hydrated.id) {
+              sessMap.delete(pruneId);
+            }
+          }
+          persistFallbackAiSessionsMap(fallbackStorageKey, sessMap);
+          hasPendingFallbackData = true;
+          return {...hydrated};
+        }
+      );
+    },
+
+    async updateAiSessionMeta(
+      id: string,
+      patch: {title?: string; pinned?: boolean}
+    ): Promise<AiSessionRecord | null> {
+      const cleanId = id.trim();
+      if (!cleanId) return null;
+      return runWithFallback(
+        (db) => idbUpdateAiSessionMeta(db, cleanId, patch),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          const existing = sessMap.get(cleanId);
+          if (!existing) return null;
+          const trimmedTitle = patch.title !== undefined ? patch.title.trim() : undefined;
+          const next = sanitizeAiSessionRecord({
+            ...existing,
+            ...(trimmedTitle && trimmedTitle.length > 0
+              ? {title: trimmedTitle, titleIsCustom: true}
+              : {}),
+            ...(patch.pinned !== undefined ? {pinned: patch.pinned} : {}),
+          });
+          if (patch.pinned === false) {
+            delete next.pinned;
+          }
+          const hydrated = hydrateSessionFromStorage(compactSessionForStorage(next));
+          sessMap.set(cleanId, hydrated);
+          persistFallbackAiSessionsMap(fallbackStorageKey, sessMap);
+          hasPendingFallbackData = true;
+          return {...hydrated};
+        }
+      );
+    },
+
+    async deleteAiSession(id: string): Promise<void> {
+      const cleanId = id.trim();
+      if (!cleanId) return;
+      return runWithFallback(
+        (db) => idbDeleteAiSession(db, cleanId),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          if (sessMap.delete(cleanId)) {
+            persistFallbackAiSessionsMap(fallbackStorageKey, sessMap);
+          }
+        }
+      );
+    },
+
     async reconcileFallbackStorage(): Promise<FallbackReconcileResult> {
       const db = await tryOpenDb({skipPendingMerge: true});
       if (!db) {
-        return {mergedScripts: 0, mergedSnapshots: 0};
+        return {mergedScripts: 0, mergedSnapshots: 0, mergedAiSessions: 0};
       }
       try {
         return await runMergeFallbackIntoDb(db);
       } catch (error) {
         warnFallbackOnce(error);
-        return {mergedScripts: 0, mergedSnapshots: 0};
+        return {mergedScripts: 0, mergedSnapshots: 0, mergedAiSessions: 0};
       }
     },
 

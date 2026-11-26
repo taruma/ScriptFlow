@@ -21,6 +21,7 @@ export const EDITOR_LABELS = {
     fileMenuFormatScript: 'Format Script',
     fileMenuFormatReadOnlyTitle: 'Bundled examples are read-only — fork to edit before formatting',
     fileMenuVersionHistory: 'Version History...',
+    fileMenuAiChatHistory: 'AI Chat History...',
     fileMenuExportHeader: 'Export & Library',
     fileMenuDownloadSubmenu: 'Download',
     fileMenuDownloadCanonical: 'Canonical .txt',

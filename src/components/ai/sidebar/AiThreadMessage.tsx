@@ -1,12 +1,16 @@
-import {memo} from 'react';
+import {memo, useEffect, useState} from 'react';
 import {
   AlertCircle,
+  Check,
+  Copy,
+  History,
   Loader2,
   Settings2,
   ShieldAlert,
   Square,
   Terminal,
 } from 'lucide-react';
+import {copyTextToClipboard} from '../../../ui/clipboard.ts';
 import type {AuteurLensPresetId, LintRuleOverrides} from '../../../core/index.ts';
 import type {QuickScanResult} from '../../../services/geminiDecisions.ts';
 import type {
@@ -112,12 +116,27 @@ export const AiThreadMessage = memo(function AiThreadMessage({
   onQuickAudit,
   onOpenSettings,
 }: AiThreadMessageProps) {
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+
+  useEffect(() => {
+    if (!copiedPrompt) return;
+    const timer = window.setTimeout(() => setCopiedPrompt(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copiedPrompt]);
+
   if (msg.role === 'user') {
+    const handleCopyPrompt = async () => {
+      const ok = await copyTextToClipboard(msg.text);
+      if (ok) {
+        setCopiedPrompt(true);
+      }
+    };
+
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end group/usermsg">
         <div className="max-w-[88%] rounded-2xl rounded-br-sm border border-border-main bg-surface px-3 py-2 text-xs text-text-main shadow-2xs space-y-1">
-          {(msg.scopeLabel || msg.briefSummary || msg.askFirst) && (
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
               {msg.scopeLabel && (
                 <span className="font-mono text-[10px] text-text-faint truncate">
                   {msg.scopeLabel}
@@ -134,7 +153,26 @@ export const AiThreadMessage = memo(function AiThreadMessage({
                 </span>
               )}
             </div>
-          )}
+            {msg.text.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleCopyPrompt()}
+                title={UI_LABELS.ai.history.copyUserPromptTitle}
+                aria-label={
+                  copiedPrompt
+                    ? UI_LABELS.ai.history.copiedUserPromptAria
+                    : UI_LABELS.ai.history.copyUserPromptAria
+                }
+                className="opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100 inline-flex items-center justify-center rounded p-0.5 text-text-faint hover:text-text-main hover:bg-surface-subtle transition-all cursor-pointer shrink-0"
+              >
+                {copiedPrompt ? (
+                  <Check className="h-3 w-3 text-[var(--phase-aesthetic-text)]" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
+            )}
+          </div>
           <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
         </div>
       </div>
@@ -159,6 +197,17 @@ export const AiThreadMessage = memo(function AiThreadMessage({
 
   return (
     <div className="space-y-2">
+      {msg.bridgedFromHistory && (
+        <div className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-surface-subtle px-2 py-0.5 text-[10px] text-text-muted">
+          <History className="h-2.5 w-2.5 text-text-faint shrink-0" />
+          <span>
+            {msg.bridgedFromHistory === 'cross_script'
+              ? UI_LABELS.ai.history.bridgedCrossScriptBadge
+              : UI_LABELS.ai.history.bridgedExpiredBadge}
+          </span>
+        </div>
+      )}
+
       {!isQuickScanMsg && (
         <ReasoningAccordion
           isStreaming={Boolean(msg.isStreaming)}

@@ -42,12 +42,18 @@ import {
   slugifyFilename,
 } from '../../src/ui/scriptFileIO.ts';
 import {
+  AI_SESSIONS_STORE_NAME,
   createScriptLibraryStore,
   SCRIPT_LIBRARY_STORE_NAME,
   SCRIPT_SNAPSHOTS_STORE_NAME,
   type LegacyLocalStorageAdapter,
   type ScriptRecord,
 } from '../../src/ui/scriptLibraryDb.ts';
+import {
+  AI_SESSION_SCHEMA_VERSION,
+  type AiSessionRecord,
+} from '../../src/ui/aiSessions.ts';
+import {EMPTY_DRAFT_BRIEF} from '../../src/ui/aiAssistant.ts';
 import {
   mirrorActiveScriptToLocalStorage,
   readActiveScriptId,
@@ -1273,17 +1279,23 @@ interface MockIdbControls {
 function createMockIndexedDbFactory(): MockIdbControls {
   const scriptsTable = new Map<string, Record<string, unknown>>();
   const snapshotsTable = new Map<string, Record<string, unknown>>();
+  const aiSessionsTable = new Map<string, Record<string, unknown>>();
   let opens = 0;
   let remainingTxFailures = 0;
   let openError: Error | null = null;
 
-  const getTable = (storeName: string) =>
-    storeName === SCRIPT_SNAPSHOTS_STORE_NAME ? snapshotsTable : scriptsTable;
+  const getTable = (storeName: string) => {
+    if (storeName === SCRIPT_SNAPSHOTS_STORE_NAME) return snapshotsTable;
+    if (storeName === AI_SESSIONS_STORE_NAME) return aiSessionsTable;
+    return scriptsTable;
+  };
 
   const createDb = (): IDBDatabase => {
     const objectStoreNames = {
       contains: (name: string) =>
-        name === SCRIPT_LIBRARY_STORE_NAME || name === SCRIPT_SNAPSHOTS_STORE_NAME,
+        name === SCRIPT_LIBRARY_STORE_NAME ||
+        name === SCRIPT_SNAPSHOTS_STORE_NAME ||
+        name === AI_SESSIONS_STORE_NAME,
     };
 
     const db = {
@@ -1561,7 +1573,7 @@ describe('Persistence hardening: IndexedDB retry, fallback reconciliation & hydr
     });
     const reconciled = await reloadedStore.reconcileFallbackStorage();
 
-    expect(reconciled).toEqual({mergedScripts: 2, mergedSnapshots: 1});
+    expect(reconciled).toEqual({mergedScripts: 2, mergedSnapshots: 1, mergedAiSessions: 0});
     expect(reloadedStore.backend).toBe('indexeddb');
     expect(memoryStorage.getItem(fallbackKey)).toBeNull();
     expect(memoryStorage.getItem(`${fallbackKey}-snapshots`)).toBeNull();
@@ -1617,6 +1629,118 @@ describe('Persistence hardening: IndexedDB retry, fallback reconciliation & hydr
     expect(mockIdb.scriptsTable.has('script-transient')).toBe(true);
     expect(memoryStorage.getItem(fallbackKey)).toBeNull();
   });
+});
+
+describe('scriptLibraryDb aiSessions store (detached from script deletion)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function makeTestAiSession(overrides: Partial<AiSessionRecord> = {}): AiSessionRecord {
+    return {
+      id: 'aisess-test-1',
+      schemaVersion: AI_SESSION_SCHEMA_VERSION,
+      title: 'Draft tense alley scene',
+      createdAt: 1000,
+      updatedAt: 2000,
+      scriptSessionKey: 'custom:script-1',
+      scriptId: 'script-1',
+      scriptKind: 'custom',
+      scriptTitleSnapshot: 'Alley Scene',
+      focus: 'auto',
+      selectedTargetKey: 'whole',
+      model: 'gemini-4-hydrogen',
+      messageCount: 2,
+      turnCount: 1,
+      estimatedCostUsd: 0,
+      messages: [
+        {id: 'u1', role: 'user', mode: 'draft', focus: 'auto', text: 'Draft tense alley scene'},
+        {id: 'a1', role: 'assistant', mode: 'draft', focus: 'auto', text: 'Staged opening.'},
+      ],
+      brief: {...EMPTY_DRAFT_BRIEF},
+      continuity: {lastInteractionId: 'int-1'},
+      ...overrides,
+    };
+  }
+
+  it('persists AI sessions, updates metadata, prunes unprotected sessions, and survives script delete & clearAll', async () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+    vi.stubGlobal('IDBKeyRange', {only: (value: string) => ({only: value})});
+    const mockIdb = createMockIndexedDbFactory();
+    const store = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: 'test-ai-sessions-v1',
+    });
+
+    await store.put({
+      id: 'script-1',
+      title: 'Alley Scene',
+      rawText: '[INTENT]\nAlley',
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+
+    await store.saveAiSession(makeTestAiSession({id: 'pinned-1', pinned: true, updatedAt: 100}));
+    await store.saveAiSession(makeTestAiSession({id: 'auto-old', updatedAt: 200}), {maxAuto: 1});
+    await store.saveAiSession(makeTestAiSession({id: 'auto-new', updatedAt: 300}), {maxAuto: 1});
+
+    let list = await store.listAiSessions();
+    expect(list.map((s) => s.id)).toEqual(['auto-new', 'pinned-1']);
+
+    const renamed = await store.updateAiSessionMeta('auto-new', {
+      title: 'Custom Alley Prompt',
+      pinned: true,
+    });
+    expect(renamed?.title).toBe('Custom Alley Prompt');
+    expect(renamed?.titleIsCustom).toBe(true);
+    expect(renamed?.pinned).toBe(true);
+
+    // Deleting the script or clearing the script library MUST NOT delete saved AI sessions
+    await store.delete('script-1');
+    list = await store.listAiSessions();
+    expect(list.map((s) => s.id)).toEqual(['auto-new', 'pinned-1']);
+
+    await store.clearAll();
+    list = await store.listAiSessions();
+    expect(list.map((s) => s.id)).toEqual(['auto-new', 'pinned-1']);
+
+    await store.deleteAiSession('pinned-1');
+    expect((await store.listAiSessions()).map((s) => s.id)).toEqual(['auto-new']);
+  });
+
+  it('reconciles stranded fallback AI sessions back into IndexedDB', async () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+    vi.stubGlobal('IDBKeyRange', {only: (value: string) => ({only: value})});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const fallbackKey = 'test-ai-fallback-reconcile';
+    const mockIdb = createMockIndexedDbFactory();
+    const initialStore = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: fallbackKey,
+    });
+
+    mockIdb.failNextTransactions(4);
+    await initialStore.saveAiSession(makeTestAiSession({id: 'sess-stranded', updatedAt: 5000}));
+    expect(initialStore.backend).toBe('fallback');
+    expect(memoryStorage.getItem(`${fallbackKey}-ai-sessions`)).not.toBeNull();
+
+    mockIdb.failNextTransactions(0);
+    const reloaded = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: fallbackKey,
+    });
+    const reconciled = await reloaded.reconcileFallbackStorage();
+    expect(reconciled).toEqual({mergedScripts: 0, mergedSnapshots: 0, mergedAiSessions: 1});
+    expect(memoryStorage.getItem(`${fallbackKey}-ai-sessions`)).toBeNull();
+    expect((await reloaded.getAiSession('sess-stranded'))?.title).toBe('Draft tense alley scene');
+  });
+});
+
+describe('scriptLibrary hydration reconciliation', () => {
 
   it('reconciles hydrated scripts without clobbering newer mirror edits or dropping missing custom scripts', () => {
     const idbRecord: ScriptRecord = {

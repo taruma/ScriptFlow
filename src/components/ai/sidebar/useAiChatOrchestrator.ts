@@ -9,6 +9,7 @@ import {
 } from '../../../services/geminiDecisions.ts';
 import {
   GeminiServiceError,
+  buildPriorSessionRecap,
   runGeminiAgentTurn,
   type AgentMediaAttachment,
   type PendingQuestionPause,
@@ -37,6 +38,14 @@ import {
   type QuestionAnswerDraft,
 } from '../../../ui/aiAssistant.ts';
 import {
+  AI_SESSION_SCHEMA_VERSION,
+  compactSessionForStorage,
+  createAiSessionId,
+  deriveAiSessionTitle,
+  parseScriptSessionKey,
+  type AiSessionRecord,
+} from '../../../ui/aiSessions.ts';
+import {
   appendTextDeltaInMessages,
   appendThoughtSummaryDeltaInMessages,
   applyBatchFixesReceiptToMessages,
@@ -52,6 +61,7 @@ import {
   recordSkillLoadedInMessages,
   recordToolCallResultInMessages,
   recordToolCallStartInMessages,
+  resetAssistantTurnForRetryInMessages,
   stageSuggestionInMessages,
 } from '../../../ui/ai/messageReducers.ts';
 import type {GeminiModelId, QuickScanSensitivity, ReasoningLevel} from '../../../ui/aiSettings.ts';
@@ -66,6 +76,14 @@ export interface AiLivePatchActionHandlers {
   applyPatchById: (patchId: string) => void;
   dismissPatchById: (patchId: string) => void;
   auditQuickScanBeat?: (beatIndex: number) => void;
+}
+
+export interface CrossScriptSourceInfo {
+  originalSessionId: string;
+  originalScriptTitle: string;
+  originalScriptSessionKey: string;
+  originalScriptId: string;
+  originalScriptKind: 'custom' | 'example';
 }
 
 export interface SubmitPromptOptions {
@@ -120,11 +138,21 @@ export interface UseAiChatOrchestratorOptions {
   onScriptSwitchReset: () => void;
   onDraftApplied: () => void;
   onClearAskFirst: () => void;
+  onPersistSession?: (record: AiSessionRecord) => void | Promise<unknown>;
+  onHydrateUiState?: (state: {
+    focus: AssistantFocus;
+    selectedTargetKey: string;
+    brief: DraftBriefState;
+  }) => void;
 }
 
 export interface AiChatOrchestrator {
   messages: AiChatMessage[];
   isStreaming: boolean;
+  activeSessionId: string | null;
+  crossScriptSource: CrossScriptSourceInfo | null;
+  dismissCrossScriptSource: () => void;
+  hydrateSession: (session: AiSessionRecord, options: {isCrossScript: boolean}) => void;
   submitPrompt: (rawUserPrompt: string, options?: SubmitPromptOptions) => Promise<void>;
   handleStopRun: () => void;
   handleResetChat: () => void;
@@ -199,9 +227,30 @@ export function useAiChatOrchestrator({
   onScriptSwitchReset,
   onDraftApplied,
   onClearAskFirst,
+  onPersistSession,
+  onHydrateUiState,
 }: UseAiChatOrchestratorOptions): AiChatOrchestrator {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [crossScriptSource, setCrossScriptSource] = useState<CrossScriptSourceInfo | null>(null);
+  const [persistGeneration, setPersistGeneration] = useState<number>(0);
+
+  const messagesRef = useRef<AiChatMessage[]>(messages);
+  messagesRef.current = messages;
+
+  const activeSessionIdRef = useRef<string | null>(null);
+  const activeSessionCreatedAtRef = useRef<number | null>(null);
+  const activeSessionMetaRef = useRef<{
+    title?: string;
+    titleIsCustom?: boolean;
+    pinned?: boolean;
+    hasOmittedMedia?: boolean;
+  } | null>(null);
+  const needsRecapBridgeRef = useRef<boolean>(false);
+  const crossScriptSourceRef = useRef<CrossScriptSourceInfo | null>(null);
+  const dirtyPersistRef = useRef<boolean>(false);
+  const skipNextBriefPersistRef = useRef<boolean>(false);
 
   const lastInteractionIdRef = useRef<string | undefined>(undefined);
   const lastTurnSnapshotHashRef = useRef<string | undefined>(undefined);
@@ -216,6 +265,122 @@ export function useAiChatOrchestrator({
   const pendingQuestionRef = useRef<
     (PendingQuestionPause & {messageId: string; suggestion: QuestionSuggestion}) | null
   >(null);
+
+  const latestContextRef = useRef({
+    scriptSessionKey,
+    sceneTitle,
+    focus,
+    selectedTargetKey: activeTarget.key,
+    model,
+    brief,
+  });
+  latestContextRef.current = {
+    scriptSessionKey,
+    sceneTitle,
+    focus,
+    selectedTargetKey: activeTarget.key,
+    model,
+    brief,
+  };
+
+  const onPersistSessionRef = useRef(onPersistSession);
+  onPersistSessionRef.current = onPersistSession;
+
+  const buildPersistSnapshot = useCallback(
+    (snapshotMessages: readonly AiChatMessage[]): AiSessionRecord => {
+      const ctx = latestContextRef.current;
+      const now = Date.now();
+      const sessionId = activeSessionIdRef.current ?? createAiSessionId();
+      activeSessionIdRef.current = sessionId;
+      const createdAt = activeSessionCreatedAtRef.current ?? now;
+      activeSessionCreatedAtRef.current = createdAt;
+      const parsedKey = parseScriptSessionKey(ctx.scriptSessionKey);
+      const meta = activeSessionMetaRef.current;
+      const title =
+        meta?.titleIsCustom && meta.title?.trim()
+          ? meta.title.trim()
+          : deriveAiSessionTitle(snapshotMessages, ctx.sceneTitle);
+
+      return compactSessionForStorage({
+        id: sessionId,
+        schemaVersion: AI_SESSION_SCHEMA_VERSION,
+        title,
+        ...(meta?.titleIsCustom ? {titleIsCustom: true} : {}),
+        ...(meta?.pinned ? {pinned: true} : {}),
+        createdAt,
+        updatedAt: Math.max(now, createdAt),
+        scriptSessionKey: ctx.scriptSessionKey,
+        scriptId: parsedKey.id,
+        scriptKind: parsedKey.kind,
+        scriptTitleSnapshot: ctx.sceneTitle?.trim() || 'Untitled Scene',
+        focus: ctx.focus,
+        selectedTargetKey: ctx.selectedTargetKey || 'whole',
+        model: ctx.model,
+        messageCount: snapshotMessages.length,
+        turnCount: snapshotMessages.filter((m) => m.role === 'user').length,
+        estimatedCostUsd: 0,
+        ...(meta?.hasOmittedMedia ? {hasOmittedMedia: true} : {}),
+        messages: [...snapshotMessages],
+        brief: ctx.brief,
+        continuity: {
+          ...(lastInteractionIdRef.current
+            ? {lastInteractionId: lastInteractionIdRef.current}
+            : {}),
+          ...(lastTurnSnapshotHashRef.current !== undefined
+            ? {lastTurnSnapshotHash: lastTurnSnapshotHashRef.current}
+            : {}),
+          ...(lastTurnRawTextRef.current !== undefined
+            ? {lastTurnRawText: lastTurnRawTextRef.current}
+            : {}),
+          ...(lastTurnSceneTitleRef.current !== undefined
+            ? {lastTurnSceneTitle: lastTurnSceneTitleRef.current}
+            : {}),
+          ...(lastTurnDiagnosticsFingerprintRef.current !== undefined
+            ? {lastTurnDiagnosticsFingerprint: lastTurnDiagnosticsFingerprintRef.current}
+            : {}),
+          ...(lastTurnBriefContextRef.current !== undefined
+            ? {lastTurnBriefContext: lastTurnBriefContextRef.current}
+            : {}),
+          ...(sentAttachmentFingerprintsRef.current.size > 0
+            ? {sentAttachmentFingerprints: Array.from(sentAttachmentFingerprintsRef.current)}
+            : {}),
+          ...(pendingQuestionRef.current ? {pendingQuestion: pendingQuestionRef.current} : {}),
+        },
+      });
+    },
+    []
+  );
+
+  const markDirtyForPersist = useCallback(() => {
+    dirtyPersistRef.current = true;
+    setPersistGeneration((prev) => prev + 1);
+  }, []);
+
+  const flushPersistIfNeeded = useCallback(() => {
+    if (!dirtyPersistRef.current || messagesRef.current.length === 0) return;
+    dirtyPersistRef.current = false;
+    const snapshot = buildPersistSnapshot(messagesRef.current);
+    setActiveSessionId(snapshot.id);
+    void onPersistSessionRef.current?.(snapshot);
+  }, [buildPersistSnapshot]);
+
+  useEffect(() => {
+    if (isStreaming || !dirtyPersistRef.current || messages.length === 0) return;
+    dirtyPersistRef.current = false;
+    const snapshot = buildPersistSnapshot(messages);
+    setActiveSessionId(snapshot.id);
+    void onPersistSessionRef.current?.(snapshot);
+  }, [persistGeneration, isStreaming, messages, buildPersistSnapshot]);
+
+  useEffect(() => {
+    if (skipNextBriefPersistRef.current) {
+      skipNextBriefPersistRef.current = false;
+      return;
+    }
+    if (!isStreaming && messagesRef.current.length > 0) {
+      markDirtyForPersist();
+    }
+  }, [brief, isStreaming, markDirtyForPersist]);
 
   const activePatches = useMemo(
     () => (isOpen ? collectActiveAiPatches(messages, currentSnapshotHash) : EMPTY_ACTIVE_PATCHES),
@@ -251,13 +416,27 @@ export function useAiChatOrchestrator({
     abortControllerRef.current?.abort();
   }, []);
 
+  const dismissCrossScriptSource = useCallback(() => {
+    crossScriptSourceRef.current = null;
+    setCrossScriptSource(null);
+  }, []);
+
   const handleResetChat = useCallback(() => {
+    flushPersistIfNeeded();
     activeRunIdRef.current += 1;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
     setIsStreaming(false);
+    dirtyPersistRef.current = false;
+    activeSessionIdRef.current = null;
+    activeSessionCreatedAtRef.current = null;
+    activeSessionMetaRef.current = null;
+    setActiveSessionId(null);
+    needsRecapBridgeRef.current = false;
+    crossScriptSourceRef.current = null;
+    setCrossScriptSource(null);
     pendingQuestionRef.current = null;
     lastInteractionIdRef.current = undefined;
     lastTurnSnapshotHashRef.current = undefined;
@@ -273,8 +452,10 @@ export function useAiChatOrchestrator({
     onLastTurnDiagnosticsFingerprintChange(undefined);
     onLastTurnBriefContextChange(undefined);
     onResetChatUi();
+    messagesRef.current = [];
     setMessages([]);
   }, [
+    flushPersistIfNeeded,
     onHasActiveInteractionChange,
     onLastTurnSnapshotHashChange,
     onLastTurnRawTextChange,
@@ -283,6 +464,106 @@ export function useAiChatOrchestrator({
     onLastTurnBriefContextChange,
     onResetChatUi,
   ]);
+
+  const hydrateSession = useCallback(
+    (session: AiSessionRecord, options: {isCrossScript: boolean}) => {
+      flushPersistIfNeeded();
+      activeRunIdRef.current += 1;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsStreaming(false);
+      dirtyPersistRef.current = false;
+      skipNextBriefPersistRef.current = true;
+
+      const normalizedMessages = session.messages.map((msg) => ({...msg, isStreaming: false}));
+      messagesRef.current = normalizedMessages;
+      setMessages(normalizedMessages);
+
+      if (options.isCrossScript) {
+        activeSessionIdRef.current = null;
+        activeSessionCreatedAtRef.current = null;
+        activeSessionMetaRef.current = session.hasOmittedMedia
+          ? {hasOmittedMedia: true}
+          : null;
+        setActiveSessionId(null);
+
+        needsRecapBridgeRef.current = true;
+        const sourceInfo: CrossScriptSourceInfo = {
+          originalSessionId: session.id,
+          originalScriptTitle: session.scriptTitleSnapshot || 'Untitled Scene',
+          originalScriptSessionKey: session.scriptSessionKey,
+          originalScriptId: session.scriptId,
+          originalScriptKind: session.scriptKind,
+        };
+        crossScriptSourceRef.current = sourceInfo;
+        setCrossScriptSource(sourceInfo);
+
+        pendingQuestionRef.current = null;
+        lastInteractionIdRef.current = undefined;
+        lastTurnSnapshotHashRef.current = undefined;
+        lastTurnRawTextRef.current = undefined;
+        lastTurnSceneTitleRef.current = undefined;
+        lastTurnDiagnosticsFingerprintRef.current = undefined;
+        lastTurnBriefContextRef.current = undefined;
+        sentAttachmentFingerprintsRef.current.clear();
+        onHasActiveInteractionChange(false);
+        onLastTurnSnapshotHashChange(undefined);
+        onLastTurnRawTextChange(undefined);
+        onLastTurnSceneTitleChange(undefined);
+        onLastTurnDiagnosticsFingerprintChange(undefined);
+        onLastTurnBriefContextChange(undefined);
+      } else {
+        activeSessionIdRef.current = session.id;
+        activeSessionCreatedAtRef.current = session.createdAt;
+        activeSessionMetaRef.current = {
+          title: session.title,
+          titleIsCustom: session.titleIsCustom,
+          pinned: session.pinned,
+          hasOmittedMedia: session.hasOmittedMedia,
+        };
+        setActiveSessionId(session.id);
+
+        needsRecapBridgeRef.current = false;
+        crossScriptSourceRef.current = null;
+        setCrossScriptSource(null);
+
+        const c = session.continuity ?? {};
+        pendingQuestionRef.current = c.pendingQuestion ?? null;
+        lastInteractionIdRef.current = c.lastInteractionId;
+        lastTurnSnapshotHashRef.current = c.lastTurnSnapshotHash;
+        lastTurnRawTextRef.current = c.lastTurnRawText;
+        lastTurnSceneTitleRef.current = c.lastTurnSceneTitle;
+        lastTurnDiagnosticsFingerprintRef.current = c.lastTurnDiagnosticsFingerprint;
+        lastTurnBriefContextRef.current = c.lastTurnBriefContext;
+        sentAttachmentFingerprintsRef.current = new Set(c.sentAttachmentFingerprints ?? []);
+
+        onHasActiveInteractionChange(Boolean(c.lastInteractionId));
+        onLastTurnSnapshotHashChange(c.lastTurnSnapshotHash);
+        onLastTurnRawTextChange(c.lastTurnRawText);
+        onLastTurnSceneTitleChange(c.lastTurnSceneTitle);
+        onLastTurnDiagnosticsFingerprintChange(c.lastTurnDiagnosticsFingerprint);
+        onLastTurnBriefContextChange(c.lastTurnBriefContext);
+      }
+
+      onHydrateUiState?.({
+        focus: session.focus,
+        selectedTargetKey: session.selectedTargetKey || 'whole',
+        brief: session.brief,
+      });
+    },
+    [
+      flushPersistIfNeeded,
+      onHasActiveInteractionChange,
+      onHydrateUiState,
+      onLastTurnBriefContextChange,
+      onLastTurnDiagnosticsFingerprintChange,
+      onLastTurnRawTextChange,
+      onLastTurnSceneTitleChange,
+      onLastTurnSnapshotHashChange,
+    ]
+  );
 
   // Reset in-memory chat, interaction chain, and brief tray automatically when switching scripts
   useEffect(() => {
@@ -303,6 +584,7 @@ export function useAiChatOrchestrator({
   interface ExecuteAgentTurnParams {
     userMessage?: AiChatMessage;
     prompt: string;
+    fallbackPromptOnExpired?: string;
     activeFocus: AssistantFocus;
     legacyMode: ReturnType<typeof focusToLegacyMode>;
     effectiveAskMode: AskQuestionMode;
@@ -315,6 +597,7 @@ export function useAiChatOrchestrator({
     async ({
       userMessage,
       prompt,
+      fallbackPromptOnExpired,
       activeFocus,
       legacyMode,
       effectiveAskMode,
@@ -328,6 +611,7 @@ export function useAiChatOrchestrator({
       const turnSceneTitle = sceneTitle;
       const turnDiagnosticsFingerprint = currentDiagnosticsFingerprint;
       const turnBriefContext = activeBriefContext ?? '';
+      const priorMessagesForRecap = messagesRef.current;
 
       const initialAssistantMessage: AiChatMessage = {
         id: assistantMessageId,
@@ -354,23 +638,30 @@ export function useAiChatOrchestrator({
       abortControllerRef.current = controller;
       const runId = ++activeRunIdRef.current;
 
-      try {
-        const result = await runGeminiAgentTurn({
+      const runSingleAttempt = (
+        attemptPrevId: string | undefined,
+        attemptResumeResults: readonly PendingToolResultStep[] | undefined,
+        attemptRecap: string | undefined,
+        attemptPrompt: string
+      ) =>
+        runGeminiAgentTurn({
           apiKey,
           model,
           reasoningLevel,
           mode: legacyMode,
           focus: activeFocus,
-          prompt,
+          prompt: attemptPrompt,
           rawText,
           sceneTitle,
           ruleOverrides,
-          previousInteractionId,
-          previousSnapshotHash: lastTurnSnapshotHashRef.current,
-          previousRawText: lastTurnRawTextRef.current,
-          previousSceneTitle: lastTurnSceneTitleRef.current,
-          previousDiagnosticsFingerprint: lastTurnDiagnosticsFingerprintRef.current,
-          previousBriefContext: lastTurnBriefContextRef.current,
+          previousInteractionId: attemptPrevId,
+          previousSnapshotHash: attemptPrevId ? lastTurnSnapshotHashRef.current : undefined,
+          previousRawText: attemptPrevId ? lastTurnRawTextRef.current : undefined,
+          previousSceneTitle: attemptPrevId ? lastTurnSceneTitleRef.current : undefined,
+          previousDiagnosticsFingerprint: attemptPrevId
+            ? lastTurnDiagnosticsFingerprintRef.current
+            : undefined,
+          previousBriefContext: attemptPrevId ? lastTurnBriefContextRef.current : undefined,
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
@@ -381,7 +672,8 @@ export function useAiChatOrchestrator({
           briefContext: activeBriefContext,
           askQuestionMode: effectiveAskMode,
           attachments,
-          ...(resumeFunctionResults ? {resumeFunctionResults} : {}),
+          ...(attemptResumeResults ? {resumeFunctionResults: attemptResumeResults} : {}),
+          ...(attemptRecap ? {priorSessionRecap: attemptRecap} : {}),
           signal: controller.signal,
           callbacks: {
             onInteractionId: (interactionId) => {
@@ -424,7 +716,67 @@ export function useAiChatOrchestrator({
           },
         });
 
+      try {
+        let bridgedKind: 'expired_chain' | 'cross_script' | undefined;
+        let attemptPrevId = previousInteractionId;
+        let attemptResumeResults = resumeFunctionResults;
+        let attemptPrompt = prompt;
+        let attemptRecap: string | undefined;
+
+        if (needsRecapBridgeRef.current && priorMessagesForRecap.length > 0) {
+          attemptPrevId = undefined;
+          attemptResumeResults = undefined;
+          if (!attemptPrompt.trim() && fallbackPromptOnExpired) {
+            attemptPrompt = fallbackPromptOnExpired;
+          }
+          attemptRecap = buildPriorSessionRecap(priorMessagesForRecap, {
+            originalScriptTitle: crossScriptSourceRef.current?.originalScriptTitle,
+            currentScriptTitle: sceneTitle,
+            isCrossScript: true,
+            hasOmittedMedia: Boolean(activeSessionMetaRef.current?.hasOmittedMedia),
+          });
+          bridgedKind = 'cross_script';
+        }
+
+        let result;
+        try {
+          result = await runSingleAttempt(
+            attemptPrevId,
+            attemptResumeResults,
+            attemptRecap,
+            attemptPrompt
+          );
+        } catch (firstErr) {
+          if (
+            firstErr instanceof GeminiServiceError &&
+            firstErr.code === 'interaction_expired' &&
+            attemptPrevId &&
+            !controller.signal.aborted
+          ) {
+            lastInteractionIdRef.current = undefined;
+            pendingQuestionRef.current = null;
+            onHasActiveInteractionChange(false);
+            setMessages((prev) => resetAssistantTurnForRetryInMessages(prev, assistantMessageId));
+            bridgedKind = 'expired_chain';
+
+            const expiredRecap = buildPriorSessionRecap(priorMessagesForRecap, {
+              originalScriptTitle: sceneTitle,
+              currentScriptTitle: sceneTitle,
+              isCrossScript: false,
+              hasOmittedMedia: Boolean(activeSessionMetaRef.current?.hasOmittedMedia),
+            });
+            const retryPrompt = attemptPrompt.trim()
+              ? attemptPrompt
+              : (fallbackPromptOnExpired ?? 'Continue from our previous discussion.');
+            result = await runSingleAttempt(undefined, undefined, expiredRecap, retryPrompt);
+          } else {
+            throw firstErr;
+          }
+        }
+
         if (activeRunIdRef.current !== runId) return;
+
+        needsRecapBridgeRef.current = false;
 
         if (result.interactionId) {
           lastInteractionIdRef.current = result.interactionId;
@@ -465,8 +817,10 @@ export function useAiChatOrchestrator({
             thoughtSummary: result.thoughtSummary,
             hitToolRoundLimit: result.hitToolRoundLimit,
             trace: result.trace,
+            bridgedFromHistory: bridgedKind,
           })
         );
+        markDirtyForPersist();
       } catch (err) {
         if (activeRunIdRef.current !== runId) return;
         const serviceErr =
@@ -484,6 +838,7 @@ export function useAiChatOrchestrator({
             trace: serviceErr.trace,
           })
         );
+        markDirtyForPersist();
       } finally {
         if (activeRunIdRef.current === runId) {
           abortControllerRef.current = null;
@@ -497,6 +852,7 @@ export function useAiChatOrchestrator({
       apiKey,
       currentDiagnosticsFingerprint,
       currentSnapshotHash,
+      markDirtyForPersist,
       model,
       onHasActiveInteractionChange,
       onLastTurnBriefContextChange,
@@ -699,6 +1055,7 @@ export function useAiChatOrchestrator({
       if (activeRunIdRef.current !== runId) return;
 
       setMessages((prev) => completeQuickScanInMessages(prev, assistantMsgId, result, trace));
+      markDirtyForPersist();
     } catch (error) {
       if (activeRunIdRef.current !== runId) return;
 
@@ -716,6 +1073,7 @@ export function useAiChatOrchestrator({
           message: normalized.message,
         })
       );
+      markDirtyForPersist();
     } finally {
       if (activeRunIdRef.current === runId) {
         abortControllerRef.current = null;
@@ -738,11 +1096,13 @@ export function useAiChatOrchestrator({
     quickScanRulesState.customRules,
     onOpenSettings,
     onStreamStart,
+    markDirtyForPersist,
   ]);
 
   const handleDismissQuickScan = useCallback((messageId: string) => {
     setMessages((prev) => dismissQuickScanInMessages(prev, messageId));
-  }, []);
+    markDirtyForPersist();
+  }, [markDirtyForPersist]);
 
   const handleDeepAuditFromQuickScan = useCallback(
     (
@@ -766,7 +1126,8 @@ export function useAiChatOrchestrator({
 
   const markSuggestionApplied = useCallback((messageId: string, suggestionId: string) => {
     setMessages((prev) => markSuggestionAppliedInMessages(prev, messageId, suggestionId));
-  }, []);
+    markDirtyForPersist();
+  }, [markDirtyForPersist]);
 
   const markSuggestionDismissed = useCallback((messageId: string, suggestionId: string) => {
     if (pendingQuestionRef.current?.suggestionId === suggestionId) {
@@ -776,10 +1137,12 @@ export function useAiChatOrchestrator({
           answers: {},
         })
       );
+      markDirtyForPersist();
       return;
     }
     setMessages((prev) => markSuggestionDismissedInMessages(prev, messageId, suggestionId));
-  }, []);
+    markDirtyForPersist();
+  }, [markDirtyForPersist]);
 
   const resumeQuestionResponse = useCallback(
     (
@@ -815,8 +1178,13 @@ export function useAiChatOrchestrator({
             result: payload,
           },
         ];
+        const fallbackPromptOnExpired =
+          status === 'skipped'
+            ? 'Skip & Proceed (Your call) — please proceed using strong Auteur craft defaults.'
+            : formatQuestionAnswersPrompt(suggestion, answers).promptText;
         void executeAgentTurn({
           prompt: '',
+          fallbackPromptOnExpired,
           activeFocus: focus,
           legacyMode: focusToLegacyMode(focus, isEmpty),
           effectiveAskMode: followupAskMode,
@@ -881,8 +1249,9 @@ export function useAiChatOrchestrator({
       setMessages((prev) =>
         applyPatchReceiptToMessages(prev, messageId, suggestion, kind, ruleOverrides)
       );
+      markDirtyForPersist();
     },
-    [currentSnapshotHash, onApplyPatchSuggestion, ruleOverrides]
+    [currentSnapshotHash, markDirtyForPersist, onApplyPatchSuggestion, ruleOverrides]
   );
 
   // Sync live-editor Apply / Dismiss popover actions directly into the sidebar state & Audit rebase flow
@@ -953,8 +1322,9 @@ export function useAiChatOrchestrator({
       if (!ok) return;
 
       setMessages((prev) => applyBatchFixesReceiptToMessages(prev, messageId, includedFixIds));
+      markDirtyForPersist();
     },
-    [currentSnapshotHash, onApplyPatchSuggestion]
+    [currentSnapshotHash, markDirtyForPersist, onApplyPatchSuggestion]
   );
 
   const handleApplyDraft = useCallback(
@@ -981,6 +1351,10 @@ export function useAiChatOrchestrator({
   return {
     messages,
     isStreaming,
+    activeSessionId,
+    crossScriptSource,
+    dismissCrossScriptSource,
+    hydrateSession,
     submitPrompt,
     handleStopRun,
     handleResetChat,

@@ -45,6 +45,7 @@ interface TopSlateBarProps {
   onImportFile: () => void;
   onFormatScript: () => void;
   onOpenVersionHistory: () => void;
+  onOpenAiHistory?: () => void;
   onDownloadCanonical: () => void;
   onDownloadTagless: () => void;
   onDownloadJsonEnvelope: () => void;
@@ -87,6 +88,7 @@ export function TopSlateBar({
   onImportFile,
   onFormatScript,
   onOpenVersionHistory,
+  onOpenAiHistory,
   onDownloadCanonical,
   onDownloadTagless,
   onDownloadJsonEnvelope,
@@ -176,6 +178,7 @@ export function TopSlateBar({
               onImportFile={onImportFile}
               onFormatScript={onFormatScript}
               onVersionHistory={onOpenVersionHistory}
+              onAiChatHistory={onOpenAiHistory}
               onDownloadCanonical={onDownloadCanonical}
               onDownloadTagless={onDownloadTagless}
               onDownloadJsonEnvelope={onDownloadJsonEnvelope}

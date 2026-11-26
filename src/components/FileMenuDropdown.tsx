@@ -28,6 +28,7 @@ export interface FileMenuDropdownProps {
   onImportFile: () => void;
   onFormatScript: () => void;
   onVersionHistory: () => void;
+  onAiChatHistory?: () => void;
   onDownloadCanonical: () => void;
   onDownloadTagless: () => void;
   onDownloadJsonEnvelope: () => void;
@@ -119,6 +120,7 @@ export function FileMenuDropdown({
   onImportFile,
   onFormatScript,
   onVersionHistory,
+  onAiChatHistory,
   onDownloadCanonical,
   onDownloadTagless,
   onDownloadJsonEnvelope,
@@ -226,6 +228,13 @@ export function FileMenuDropdown({
               label={UI_LABELS.topBar.fileMenuVersionHistory}
               onClick={runAndClose(onVersionHistory)}
             />
+            {onAiChatHistory && (
+              <MenuRow
+                icon={<History className="h-3.5 w-3.5 text-violet-500 shrink-0" />}
+                label={UI_LABELS.topBar.fileMenuAiChatHistory}
+                onClick={runAndClose(onAiChatHistory)}
+              />
+            )}
           </div>
 
           {/* Section 2: Export & Library */}

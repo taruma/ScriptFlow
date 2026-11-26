@@ -35,6 +35,7 @@ export interface AiBriefController {
   handleSetBriefEnabled: (enabled: boolean) => void;
   handleUpdateBriefSpecs: (specs: string) => void;
   handleUpdateBriefSubtext: (subtext: string) => void;
+  replaceBrief: (nextBrief: DraftBriefState) => void;
   resetBrief: () => void;
 }
 
@@ -133,6 +134,23 @@ export function useAiBriefController(): AiBriefController {
     setBrief((prev) => ({...prev, subtext}));
   }, []);
 
+  const replaceBrief = useCallback((nextBrief: DraftBriefState) => {
+    setBrief((prev) => {
+      for (const entry of prev.references) {
+        if (entry.attachment?.localMediaUrl) {
+          URL.revokeObjectURL(entry.attachment.localMediaUrl);
+        }
+      }
+      return {
+        enabled: nextBrief.enabled !== false,
+        references: Array.isArray(nextBrief.references) ? nextBrief.references : [],
+        specs: typeof nextBrief.specs === 'string' ? nextBrief.specs : '',
+        subtext: typeof nextBrief.subtext === 'string' ? nextBrief.subtext : '',
+      };
+    });
+    setIsBriefOpen(false);
+  }, []);
+
   const resetBrief = useCallback(() => {
     handleClearBrief();
     setIsBriefOpen(false);
@@ -156,6 +174,7 @@ export function useAiBriefController(): AiBriefController {
     handleSetBriefEnabled,
     handleUpdateBriefSpecs,
     handleUpdateBriefSubtext,
+    replaceBrief,
     resetBrief,
   };
 }

@@ -161,6 +161,16 @@ export const ReferenceEntryCard = memo(function ReferenceEntryCard({
               {att?.fileName || 'Image'}
             </span>
           </div>
+        ) : !att && entry.omittedAttachmentTag ? (
+          <div className="flex flex-col items-center justify-center gap-1 p-2 text-center text-text-muted">
+            <Tag className="h-4 w-4 text-text-faint" />
+            <span className="font-mono text-[9px] truncate max-w-full px-1">
+              {entry.omittedAttachmentTag}
+            </span>
+            <span className="text-[8px] leading-tight text-text-faint px-1 line-clamp-2">
+              {UI_LABELS.ai.history.omittedMediaNotice}
+            </span>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-1 p-2 text-center text-text-faint">
             <Tag className="h-4 w-4" />

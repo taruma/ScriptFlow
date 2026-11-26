@@ -1,12 +1,15 @@
 import {lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {extractMetadata, lintDocument, parseAuteurScript} from './core/index.ts';
-import type {AiLivePatchActionHandlers} from './components/AiAssistantSidebar.tsx';
+import type {
+  AiLivePatchActionHandlers,
+  ExternalAiSessionLoadRequest,
+} from './components/AiAssistantSidebar.tsx';
 import {ConfirmDialog, type ConfirmDialogRequest} from './components/ConfirmDialog.tsx';
 import {LiveDocument} from './components/LiveDocument.tsx';
 import {ScriptLibraryModal} from './components/ScriptLibraryModal.tsx';
 import {SourceEditor} from './components/SourceEditor.tsx';
 import {TopSlateBar, type ViewMode} from './components/TopSlateBar.tsx';
-import {BUNDLED_EXAMPLES, getBundledExampleByIdOrSlug} from './data/examples/index.ts';
+import {BUNDLED_EXAMPLES, getBundledExampleByIdOrSlug, type BundledExample} from './data/examples/index.ts';
 import type {QuickScanResult} from './services/geminiDecisions.ts';
 import {
   applyAgentContextImport,
@@ -17,6 +20,7 @@ import {
   type AuteurAgentContextPack,
 } from './ui/agentContextCodec.ts';
 import {resolveEditorJumpTarget} from './ui/aiAssistant.ts';
+import type {AiSessionRecord} from './ui/aiSessions.ts';
 import {loadStoredAiSkills, saveStoredAiSkills, type AiSkillsState} from './ui/aiSkillsStore.ts';
 import {useEditorSettings} from './ui/editorSettings.ts';
 import {APP_META, UI_LABELS} from './ui/labels.ts';
@@ -33,6 +37,7 @@ import {
   triggerTextFileDownload,
   type ImportPreflightResult,
 } from './ui/scriptFileIO.ts';
+import type {ScriptRecord} from './ui/scriptLibraryDb.ts';
 import {getScriptFamilyTree} from './ui/scriptLibraryView.ts';
 import {
   clearUrlLaunchParamsFromLocation,
@@ -61,6 +66,12 @@ const AiAssistantSidebar = lazy(() =>
 const VersionHistoryModal = lazy(() =>
   import('./components/VersionHistoryModal.tsx').then((mod) => ({
     default: mod.VersionHistoryModal,
+  }))
+);
+
+const AiSessionHistoryModal = lazy(() =>
+  import('./components/AiSessionHistoryModal.tsx').then((mod) => ({
+    default: mod.AiSessionHistoryModal,
   }))
 );
 
@@ -120,6 +131,11 @@ export default function App() {
   const [remoteImportReport, setRemoteImportReport] = useState<ImportPreflightResult | null>(null);
   const [pendingAgentImport, setPendingAgentImport] = useState<PendingAgentUrlImport | null>(null);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState<boolean>(false);
+  const [isAiHistoryOpen, setIsAiHistoryOpen] = useState<boolean>(false);
+  const [aiHistoryRefreshNonce, setAiHistoryRefreshNonce] = useState<number>(0);
+  const [pendingAiSessionLoad, setPendingAiSessionLoad] =
+    useState<ExternalAiSessionLoadRequest | null>(null);
+  const aiSessionLoadNonceRef = useRef<number>(0);
   const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
   const [isAiOpen, setIsAiOpen] = useState<boolean>(false);
   const [hasOpenedAi, setHasOpenedAi] = useState<boolean>(false);
@@ -599,6 +615,63 @@ export default function App() {
     [pendingAgentImport]
   );
 
+  const handleBumpAiSessionsChanged = useCallback(() => {
+    setAiHistoryRefreshNonce((n) => n + 1);
+  }, []);
+
+  const handleOpenAiHistory = useCallback(() => {
+    setIsAiHistoryOpen(true);
+  }, []);
+
+  const handleConsumePendingAiSessionLoad = useCallback(() => {
+    setPendingAiSessionLoad(null);
+  }, []);
+
+  const handleLoadAiSessionInSidebar = useCallback(
+    (session: AiSessionRecord, isCrossScript: boolean) => {
+      const nonce = ++aiSessionLoadNonceRef.current;
+      setHasOpenedAi(true);
+      setIsAiOpen(true);
+      setIsAiHistoryOpen(false);
+      setPendingAiSessionLoad({
+        nonce,
+        session,
+        isCrossScript,
+      });
+    },
+    []
+  );
+
+  const handleSwitchScriptAndLoadAiSession = useCallback(
+    (
+      target: {kind: 'custom'; record: ScriptRecord} | {kind: 'example'; example: BundledExample},
+      sessionToLoad?: AiSessionRecord
+    ) => {
+      const targetSessionKey =
+        target.kind === 'custom'
+          ? `custom:${target.record.id}`
+          : `example:${target.example.id}`;
+      setIsAiHistoryOpen(false);
+      setHasOpenedAi(true);
+      setIsAiOpen(true);
+      if (sessionToLoad) {
+        const nonce = ++aiSessionLoadNonceRef.current;
+        setPendingAiSessionLoad({
+          nonce,
+          session: sessionToLoad,
+          isCrossScript: sessionToLoad.scriptSessionKey !== targetSessionKey,
+          expectedScriptSessionKey: targetSessionKey,
+        });
+      }
+      if (target.kind === 'custom') {
+        void library.handleOpenCustomScript(target.record);
+      } else {
+        void library.handleOpenExample(target.example);
+      }
+    },
+    [library.handleOpenCustomScript, library.handleOpenExample]
+  );
+
   return (
     <div className="min-h-screen lg:h-dvh lg:overflow-hidden bg-app text-text-main flex flex-col">
       <TopSlateBar
@@ -617,6 +690,7 @@ export default function App() {
         onImportFile={handleOpenManualImportModal}
         onFormatScript={mutations.handleFormatScript}
         onOpenVersionHistory={() => setIsVersionHistoryOpen(true)}
+        onOpenAiHistory={isNarrow ? undefined : handleOpenAiHistory}
         onDownloadCanonical={library.handleDownloadCanonical}
         onDownloadTagless={library.handleDownloadTagless}
         onDownloadJsonEnvelope={library.handleDownloadJsonEnvelope}
@@ -718,6 +792,14 @@ export default function App() {
               doc={doc}
               readOnly={isReadOnly}
               ruleOverrides={settings.lintRuleOverrides}
+              customScripts={customScripts}
+              examples={BUNDLED_EXAMPLES}
+              sessionRefreshNonce={aiHistoryRefreshNonce}
+              externalLoadRequest={pendingAiSessionLoad}
+              onConsumeExternalLoadRequest={handleConsumePendingAiSessionLoad}
+              onOpenHistoryModal={handleOpenAiHistory}
+              onSwitchToScript={handleSwitchScriptAndLoadAiSession}
+              onSessionsChanged={handleBumpAiSessionsChanged}
               onClose={() => setIsAiOpen(false)}
               onApplyPatchSuggestion={mutations.handleApplyAiPatchSuggestion}
               onApplyDraftSuggestion={mutations.handleApplyAiDraftSuggestion}
@@ -791,6 +873,22 @@ export default function App() {
             onRestoreSnapshot={library.handleRestoreSnapshot}
             onForkSnapshot={library.handleForkSnapshotAsNewScript}
             onToast={setToastMessage}
+          />
+        </Suspense>
+      )}
+
+      {!isNarrow && isAiHistoryOpen && (
+        <Suspense fallback={null}>
+          <AiSessionHistoryModal
+            isOpen={isAiHistoryOpen}
+            onClose={() => setIsAiHistoryOpen(false)}
+            currentScriptSessionKey={aiScriptSessionKey}
+            customScripts={customScripts}
+            examples={BUNDLED_EXAMPLES}
+            refreshNonce={aiHistoryRefreshNonce}
+            onLoadInSidebar={handleLoadAiSessionInSidebar}
+            onSwitchScriptAndLoad={handleSwitchScriptAndLoadAiSession}
+            onSessionsChanged={handleBumpAiSessionsChanged}
           />
         </Suspense>
       )}

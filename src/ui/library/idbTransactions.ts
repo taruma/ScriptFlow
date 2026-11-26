@@ -1,5 +1,16 @@
+import {
+  compactSessionForStorage,
+  hydrateSessionFromStorage,
+  isValidStoredAiSession,
+  sanitizeAiSessionRecord,
+  sortAiSessions,
+  type AiSessionRecord,
+} from '../ai/sessionStore.ts';
 import {sortScriptSnapshots, type ScriptSnapshot} from '../scriptSnapshots.ts';
 import {
+  AI_SESSIONS_SCRIPT_KEY_INDEX,
+  AI_SESSIONS_STORE_NAME,
+  AI_SESSIONS_UPDATED_AT_INDEX,
   SCRIPT_LIBRARY_DB_VERSION,
   SCRIPT_LIBRARY_STORE_NAME,
   SCRIPT_LIBRARY_UPDATED_AT_INDEX,
@@ -64,6 +75,29 @@ export function openIndexedDb(factory: IDBFactory, dbName: string): Promise<IDBD
         snapshotStore.createIndex(
           SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX,
           SCRIPT_SNAPSHOTS_SCRIPT_ID_INDEX,
+          {unique: false}
+        );
+      }
+
+      let aiSessionStore: IDBObjectStore;
+      if (!db.objectStoreNames.contains(AI_SESSIONS_STORE_NAME)) {
+        aiSessionStore = db.createObjectStore(AI_SESSIONS_STORE_NAME, {keyPath: 'id'});
+      } else {
+        aiSessionStore = request.transaction!.objectStore(AI_SESSIONS_STORE_NAME);
+      }
+
+      if (!aiSessionStore.indexNames.contains(AI_SESSIONS_UPDATED_AT_INDEX)) {
+        aiSessionStore.createIndex(
+          AI_SESSIONS_UPDATED_AT_INDEX,
+          AI_SESSIONS_UPDATED_AT_INDEX,
+          {unique: false}
+        );
+      }
+
+      if (!aiSessionStore.indexNames.contains(AI_SESSIONS_SCRIPT_KEY_INDEX)) {
+        aiSessionStore.createIndex(
+          AI_SESSIONS_SCRIPT_KEY_INDEX,
+          AI_SESSIONS_SCRIPT_KEY_INDEX,
           {unique: false}
         );
       }
@@ -312,5 +346,151 @@ export function idbClearSnapshotsForScript(db: IDBDatabase, scriptId: string): P
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error('Failed to clear script snapshots.'));
     tx.onabort = () => reject(tx.error ?? new Error('Snapshot clear transaction aborted.'));
+  });
+}
+
+export function idbListAiSessions(db: IDBDatabase): Promise<AiSessionRecord[]> {
+  if (!db.objectStoreNames.contains(AI_SESSIONS_STORE_NAME)) {
+    return Promise.resolve([]);
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readonly');
+    const store = tx.objectStore(AI_SESSIONS_STORE_NAME);
+    const index = store.index(AI_SESSIONS_UPDATED_AT_INDEX);
+    const req = index.openCursor(null, 'prev');
+    const results: AiSessionRecord[] = [];
+
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor) {
+        if (isValidStoredAiSession(cursor.value)) {
+          results.push(hydrateSessionFromStorage(sanitizeAiSessionRecord(cursor.value)));
+        }
+        cursor.continue();
+      } else {
+        resolve(sortAiSessions(results));
+      }
+    };
+    req.onerror = () => reject(req.error ?? new Error('Failed to list AI sessions.'));
+  });
+}
+
+export function idbGetAiSession(db: IDBDatabase, id: string): Promise<AiSessionRecord | null> {
+  if (!db.objectStoreNames.contains(AI_SESSIONS_STORE_NAME)) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readonly');
+    const store = tx.objectStore(AI_SESSIONS_STORE_NAME);
+    const req = store.get(id);
+
+    req.onsuccess = () => {
+      resolve(
+        isValidStoredAiSession(req.result)
+          ? hydrateSessionFromStorage(sanitizeAiSessionRecord(req.result))
+          : null
+      );
+    };
+    req.onerror = () => reject(req.error ?? new Error('Failed to read AI session.'));
+  });
+}
+
+export function idbBulkPutAiSessions(
+  db: IDBDatabase,
+  sessions: readonly AiSessionRecord[]
+): Promise<AiSessionRecord[]> {
+  if (sessions.length === 0) return Promise.resolve([]);
+  const compacted = sessions.map((session) =>
+    compactSessionForStorage(sanitizeAiSessionRecord(session))
+  );
+  const hydrated = compacted.map((session) => hydrateSessionFromStorage(session));
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(AI_SESSIONS_STORE_NAME);
+    for (const session of compacted) {
+      store.put(session);
+    }
+
+    tx.oncomplete = () => resolve(hydrated);
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to persist AI sessions.'));
+    tx.onabort = () => reject(tx.error ?? new Error('AI sessions bulk save transaction aborted.'));
+  });
+}
+
+export function idbPutAiSessionAndPrune(
+  db: IDBDatabase,
+  session: AiSessionRecord,
+  pruneIds: readonly string[]
+): Promise<AiSessionRecord> {
+  const compacted = compactSessionForStorage(sanitizeAiSessionRecord(session));
+  const hydrated = hydrateSessionFromStorage(compacted);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(AI_SESSIONS_STORE_NAME);
+    store.put(compacted);
+    for (const id of pruneIds) {
+      if (id !== compacted.id) {
+        store.delete(id);
+      }
+    }
+
+    tx.oncomplete = () => resolve(hydrated);
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to save AI session.'));
+    tx.onabort = () => reject(tx.error ?? new Error('AI session save transaction aborted.'));
+  });
+}
+
+export function idbUpdateAiSessionMeta(
+  db: IDBDatabase,
+  id: string,
+  patch: {title?: string; pinned?: boolean}
+): Promise<AiSessionRecord | null> {
+  if (!db.objectStoreNames.contains(AI_SESSIONS_STORE_NAME)) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(AI_SESSIONS_STORE_NAME);
+    const req = store.get(id);
+    let updated: AiSessionRecord | null = null;
+
+    req.onsuccess = () => {
+      if (!isValidStoredAiSession(req.result)) {
+        return;
+      }
+      const existing = sanitizeAiSessionRecord(req.result);
+      const trimmedTitle = patch.title !== undefined ? patch.title.trim() : undefined;
+      const next: AiSessionRecord = sanitizeAiSessionRecord({
+        ...existing,
+        ...(trimmedTitle && trimmedTitle.length > 0
+          ? {title: trimmedTitle, titleIsCustom: true}
+          : {}),
+        ...(patch.pinned !== undefined ? {pinned: patch.pinned} : {}),
+      });
+      if (patch.pinned === false) {
+        delete next.pinned;
+      }
+      const compacted = compactSessionForStorage(next);
+      updated = hydrateSessionFromStorage(compacted);
+      store.put(compacted);
+    };
+    req.onerror = () => reject(req.error ?? new Error('Failed to update AI session.'));
+    tx.oncomplete = () => resolve(updated);
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to update AI session.'));
+    tx.onabort = () => reject(tx.error ?? new Error('AI session update transaction aborted.'));
+  });
+}
+
+export function idbDeleteAiSession(db: IDBDatabase, id: string): Promise<void> {
+  if (!db.objectStoreNames.contains(AI_SESSIONS_STORE_NAME)) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readwrite');
+    tx.objectStore(AI_SESSIONS_STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to delete AI session.'));
+    tx.onabort = () => reject(tx.error ?? new Error('AI session delete transaction aborted.'));
   });
 }
