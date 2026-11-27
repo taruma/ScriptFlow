@@ -1,5 +1,5 @@
 import {memo} from 'react';
-import {FileText, Film, Image as ImageIcon, Music} from 'lucide-react';
+import {Code2, FileText, Film, Image as ImageIcon, Music} from 'lucide-react';
 import {
   isReferenceAttachmentExpired,
   type ChatMessageAttachment,
@@ -11,7 +11,16 @@ export interface ChatAttachmentChipListProps {
   onInspectAttachment?: (item: ChatMessageAttachment) => void;
 }
 
-function AttachmentIcon({kind}: {kind: ChatMessageAttachment['kind']}) {
+function AttachmentIcon({
+  kind,
+  isSection,
+}: {
+  kind: ChatMessageAttachment['kind'];
+  isSection?: boolean;
+}) {
+  if (isSection) {
+    return <Code2 className="h-3 w-3 shrink-0 text-[var(--phase-logic-text)]" />;
+  }
   switch (kind) {
     case 'video':
       return <Film className="h-3 w-3 shrink-0 text-[var(--phase-continuity-text)]" />;
@@ -38,20 +47,26 @@ export const ChatAttachmentChipList = memo(function ChatAttachmentChipList({
     <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
       {attachments.map((item) => {
         const att = item.attachment;
+        const sectionTag = (item.sectionTag || att?.sectionTag)?.trim();
+        const isSection = Boolean(sectionTag);
         const isExpired = Boolean(att && isReferenceAttachmentExpired(att));
         const isOmitted = Boolean(item.omitted || !att);
         const canInspect = Boolean(att && !isOmitted && onInspectAttachment);
-        const displayName = item.fileName?.trim() || item.label.trim() || item.kind;
+        const displayName = isSection
+          ? `<${sectionTag}>`
+          : item.fileName?.trim() || item.label.trim() || item.kind;
 
         const sourceBadge = isExpired
           ? labels.cardFilesApiExpiredBadge
-          : item.source === 'youtube'
-            ? labels.cardYoutubeBadge
-            : item.source === 'files_api'
-              ? labels.cardFilesApiBadge
-              : item.kind === 'document'
-                ? labels.cardInlineTextBadge
-                : null;
+          : isSection
+            ? attachLabels.sectionChipBadge
+            : item.source === 'youtube'
+              ? labels.cardYoutubeBadge
+              : item.source === 'files_api'
+                ? labels.cardFilesApiBadge
+                : item.kind === 'document'
+                  ? labels.cardInlineTextBadge
+                  : null;
 
         const modeBadge =
           item.kind === 'video' && att && !isExpired
@@ -69,9 +84,13 @@ export const ChatAttachmentChipList = memo(function ChatAttachmentChipList({
                 className="h-5 w-5 rounded object-cover shrink-0 border border-border-subtle bg-surface-muted"
               />
             ) : (
-              <AttachmentIcon kind={item.kind} />
+              <AttachmentIcon kind={item.kind} isSection={isSection} />
             )}
-            <span className="max-w-[140px] truncate font-medium text-[11px] text-text-main">
+            <span
+              className={`max-w-[140px] truncate font-medium text-[11px] text-text-main ${
+                isSection ? 'font-mono' : ''
+              }`}
+            >
               {displayName}
             </span>
             {sourceBadge && (
@@ -79,11 +98,13 @@ export const ChatAttachmentChipList = memo(function ChatAttachmentChipList({
                 className={`rounded border px-1 py-0 font-mono text-[8.5px] font-semibold uppercase tracking-wide shrink-0 ${
                   isExpired
                     ? 'border-red-500/40 bg-red-500/15 text-red-700 dark:text-red-300'
-                    : item.source === 'youtube'
-                      ? 'auteur-phase-intent'
-                      : item.source === 'files_api'
-                        ? 'auteur-phase-aesthetic'
-                        : 'border-border-subtle bg-surface text-text-muted'
+                    : isSection
+                      ? 'auteur-phase-logic'
+                      : item.source === 'youtube'
+                        ? 'auteur-phase-intent'
+                        : item.source === 'files_api'
+                          ? 'auteur-phase-aesthetic'
+                          : 'border-border-subtle bg-surface text-text-muted'
                 }`}
               >
                 {sourceBadge}

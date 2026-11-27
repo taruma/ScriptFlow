@@ -59,6 +59,23 @@ describe('sessionRecap builder', () => {
               fingerprint: 'fp-r01',
             },
           },
+          {
+            id: 'a-section',
+            kind: 'document',
+            label: '<screenplay>',
+            mimeType: 'text/plain',
+            sizeBytes: 42,
+            source: 'inline',
+            sectionTag: 'screenplay',
+            attachment: {
+              source: 'inline',
+              mimeType: 'text/plain',
+              sizeBytes: 42,
+              sectionTag: 'screenplay',
+              inlineText: 'EXT. HARBOR - NIGHT\nWaves slap the pilings.',
+              fingerprint: 'fp-sec',
+            },
+          },
         ],
         text: 'Tighten S1 blocking and add foghorn foley.',
       },
@@ -109,7 +126,8 @@ describe('sessionRecap builder', () => {
     expect(recap).toContain('Harbor Pier Draft 2');
     expect(recap).toContain('Binary media attachments from earlier turns are not persisted');
     expect(recap).toContain('First draft prompt: nocturnal harbor pier');
-    expect(recap).toContain('Attachments: result_01.mp4 (video · Files API · agentic)');
+    expect(recap).toContain('Attachments: result_01.mp4 (video · Files API · agentic), <screenplay> (section · 42 B)');
+    expect(recap).toContain('<screenplay>\nEXT. HARBOR - NIGHT\nWaves slap the pilings.\n</screenplay>');
     expect(recap).toContain('[QUESTION ANSWERED] Camera feel check => lens: 35mm handheld — stay tight on hands');
     expect(recap).toContain('[APPLIED] patch: Add foghorn foley to S1');
   });

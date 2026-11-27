@@ -73,8 +73,13 @@ export {
   chatAttachmentToStaged,
   collectReadyComposerAttachments,
   formatChatAttachmentSummary,
+  getUtf8ByteLength,
   hasAnyOmittedOrExpiredMessageAttachments,
   isPersistableRemotePreviewUrl,
+  normalizeSectionTag,
+  RESERVED_SECTION_TAGS,
   sanitizeChatAttachmentForStorage,
+  TEXT_SECTION_PRESET_TAGS,
   toAgentMediaAttachmentFromChat,
+  validateSectionTag,
 } from './ai/chatAttachments.ts';

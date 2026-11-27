@@ -468,6 +468,17 @@ describe('Interactions API multimodal input builder & trace sanitization', () =>
         inlineText: 'Keep the pause before the door opens.',
         fingerprint: 'msg_fp_2',
       },
+      {
+        origin: 'message',
+        handle: '',
+        label: '<screenplay>',
+        kind: 'document',
+        source: 'inline',
+        mimeType: 'text/plain',
+        sectionTag: 'screenplay',
+        inlineText: 'INT. HALLWAY - NIGHT\nHeavy footsteps echo.',
+        fingerprint: 'msg_fp_3',
+      },
     ]) as Array<{type: string; content: Array<Record<string, unknown>>}>;
     const msgBlocks = messagePayload[0]!.content;
     expect(msgBlocks).toContainEqual({
@@ -477,6 +488,10 @@ describe('Interactions API multimodal input builder & trace sanitization', () =>
     expect(msgBlocks).toContainEqual({
       type: 'text',
       text: '[Attached document: beat_notes.md]\nKeep the pause before the door opens.',
+    });
+    expect(msgBlocks).toContainEqual({
+      type: 'text',
+      text: '<screenplay>\nINT. HALLWAY - NIGHT\nHeavy footsteps echo.\n</screenplay>',
     });
   });
 });

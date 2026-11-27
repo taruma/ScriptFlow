@@ -650,6 +650,17 @@ export function describeStagedSuggestion(suggestion: StagedSuggestion): string {
   }
 }
 
+function buildXmlCodeFence(body: string): string {
+  let maxBacktickRun = 2;
+  const matches = body.match(/`+/g);
+  if (matches) {
+    for (const run of matches) {
+      if (run.length > maxBacktickRun) maxBacktickRun = run.length;
+    }
+  }
+  return '`'.repeat(maxBacktickRun + 1);
+}
+
 export function formatAiSessionAsMarkdown(
   session: AiSessionRecord,
   scriptStatusLabel?: string
@@ -676,6 +687,15 @@ export function formatAiSessionAsMarkdown(
       lines.push(`### User (${msg.focus})`);
       if (msg.attachments && msg.attachments.length > 0) {
         lines.push(`- **Attachments:** ${msg.attachments.map(formatChatAttachmentSummary).join(', ')}`);
+        for (const att of msg.attachments) {
+          const sectionTag = (att.sectionTag || att.attachment?.sectionTag)?.trim();
+          const sectionBody = att.attachment?.inlineText;
+          if (sectionTag && typeof sectionBody === 'string') {
+            const wrapped = `<${sectionTag}>\n${sectionBody}\n</${sectionTag}>`;
+            const fence = buildXmlCodeFence(wrapped);
+            lines.push('', `${fence}xml`, wrapped, fence);
+          }
+        }
       }
       lines.push(msg.text || '_Empty prompt_');
       continue;
@@ -981,6 +1001,8 @@ export interface AiSessionConversationTurn {
     fileName?: string;
     mimeType: string;
     source: string;
+    sectionTag?: string;
+    content?: string;
     uri?: string;
     expirationTime?: string;
     processingMode?: string;
@@ -1241,21 +1263,30 @@ export function buildAiSessionConversationJsonExport(
         ...(msg.briefSummary ? {briefSummary: msg.briefSummary} : {}),
         ...(msg.attachments && msg.attachments.length > 0
           ? {
-              attachments: msg.attachments.map((att) => ({
-                kind: att.kind,
-                label: att.label,
-                ...(att.fileName ? {fileName: att.fileName} : {}),
-                mimeType: att.mimeType,
-                source: att.source,
-                ...(att.attachment?.uri ? {uri: att.attachment.uri} : {}),
-                ...(att.attachment?.expirationTime
-                  ? {expirationTime: att.attachment.expirationTime}
-                  : {}),
-                ...(att.attachment?.processingMode
-                  ? {processingMode: att.attachment.processingMode}
-                  : {}),
-                ...(att.omitted ? {omitted: true} : {}),
-              })),
+              attachments: msg.attachments.map((att) => {
+                const sectionTag = (att.sectionTag || att.attachment?.sectionTag)?.trim();
+                const sectionContent =
+                  sectionTag && typeof att.attachment?.inlineText === 'string'
+                    ? att.attachment.inlineText
+                    : undefined;
+                return {
+                  kind: att.kind,
+                  label: att.label,
+                  ...(att.fileName ? {fileName: att.fileName} : {}),
+                  mimeType: att.mimeType,
+                  source: att.source,
+                  ...(sectionTag ? {sectionTag} : {}),
+                  ...(sectionContent !== undefined ? {content: sectionContent} : {}),
+                  ...(att.attachment?.uri ? {uri: att.attachment.uri} : {}),
+                  ...(att.attachment?.expirationTime
+                    ? {expirationTime: att.attachment.expirationTime}
+                    : {}),
+                  ...(att.attachment?.processingMode
+                    ? {processingMode: att.attachment.processingMode}
+                    : {}),
+                  ...(att.omitted ? {omitted: true} : {}),
+                };
+              }),
             }
           : {}),
         ...(msg.askFirst ? {askFirst: true} : {}),

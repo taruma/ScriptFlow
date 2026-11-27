@@ -55,6 +55,8 @@ export interface ReferenceAttachment {
   /** Optional session-local object URL for instant preview/playback of Files API uploads. */
   localMediaUrl?: string;
   inlineText?: string;
+  /** Normalized XML section tag when this inline attachment represents a pasted text section (`<tag>...</tag>`). */
+  sectionTag?: string;
   uri?: string;
   filesApiName?: string;
   expirationTime?: string;
@@ -96,6 +98,8 @@ export interface ChatMessageAttachment {
   mimeType: string;
   sizeBytes?: number;
   source: ReferenceSourceKind;
+  /** Normalized XML section tag when this attachment is a user-authored `<tag>...</tag>` text section. */
+  sectionTag?: string;
   attachment?: ReferenceAttachment;
   omitted?: boolean;
 }
@@ -108,6 +112,8 @@ export interface StagedComposerAttachment {
   mimeType: string;
   sizeBytes?: number;
   source: ReferenceSourceKind;
+  /** Normalized XML section tag when this staged attachment is a user-authored `<tag>...</tag>` text section. */
+  sectionTag?: string;
   status: 'uploading' | 'processing' | 'ready' | 'error';
   error?: string;
   attachment?: ReferenceAttachment;

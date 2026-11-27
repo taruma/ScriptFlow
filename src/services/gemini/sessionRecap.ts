@@ -14,6 +14,7 @@ export interface BuildPriorSessionRecapOptions {
 
 const DEFAULT_RECAP_MAX_CHARS = 12_000;
 const MAX_SINGLE_MESSAGE_CHARS = 1_600;
+const MAX_RECAP_SECTION_CHARS = 900;
 
 function truncateMiddleOrEnd(text: string, maxChars: number): string {
   const trimmed = text.trim();
@@ -29,8 +30,20 @@ function formatMessageEntry(msg: AiChatMessage): string {
       msg.attachments && msg.attachments.length > 0
         ? `\nAttachments: ${msg.attachments.map(formatChatAttachmentSummary).join(', ')}`
         : '';
+    const sectionBlocks: string[] = [];
+    if (msg.attachments && msg.attachments.length > 0) {
+      for (const att of msg.attachments) {
+        const sectionTag = (att.sectionTag || att.attachment?.sectionTag)?.trim();
+        const sectionBody = att.attachment?.inlineText;
+        if (sectionTag && typeof sectionBody === 'string') {
+          const excerpt = truncateMiddleOrEnd(sectionBody, MAX_RECAP_SECTION_CHARS);
+          sectionBlocks.push(`<${sectionTag}>\n${excerpt}\n</${sectionTag}>`);
+        }
+      }
+    }
     const promptText = truncateMiddleOrEnd(msg.text || '(empty prompt)', MAX_SINGLE_MESSAGE_CHARS);
-    return `[User · ${msg.focus}${scope}]${attachmentsLine}\n${promptText}`;
+    const sectionsText = sectionBlocks.length > 0 ? `\n${sectionBlocks.join('\n')}` : '';
+    return `[User · ${msg.focus}${scope}]${attachmentsLine}${sectionsText}\n${promptText}`;
   }
 
   const parts: string[] = [];

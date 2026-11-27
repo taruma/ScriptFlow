@@ -34,6 +34,14 @@ export function buildInitialInteractionInput(
       .join(' ');
 
     if (att.source === 'inline' && typeof att.inlineText === 'string') {
+      const sectionTag = att.sectionTag?.trim();
+      if (isMessageAttachment && sectionTag) {
+        blocks.push({
+          type: 'text',
+          text: `<${sectionTag}>\n${att.inlineText}\n</${sectionTag}>`,
+        });
+        continue;
+      }
       const fileHeader = att.fileName ? ` · ${att.fileName}` : '';
       const header = isMessageAttachment
         ? `[Attached ${att.kind}: ${messageDisplayName}]`

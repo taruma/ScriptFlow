@@ -1,4 +1,5 @@
 import type {AgentMediaAttachment} from '../../services/geminiInteractions.ts';
+import {formatByteSize, MAX_INLINE_TEXT_BYTES} from '../briefMedia.ts';
 import {isReferenceAttachmentExpired} from './draftBrief.ts';
 import type {
   AiChatMessage,
@@ -7,6 +8,70 @@ import type {
   ReferenceEntry,
   StagedComposerAttachment,
 } from './types.ts';
+
+export const TEXT_SECTION_PRESET_TAGS = [
+  'screenplay',
+  'outline',
+  'dialogue',
+  'notes',
+  'reference_script',
+] as const;
+
+export const RESERVED_SECTION_TAGS = new Set<string>([
+  'live_editor_state',
+  'scene_brief',
+  'turn_directive',
+  'prior_session_recap',
+  'auteur_script',
+  'system',
+  'instructions',
+  'user_input',
+]);
+
+const MAX_SECTION_TAG_LENGTH = 40;
+
+/**
+ * Normalizes a user-typed section name into a valid XML tag identifier (`[a-z_][a-z0-9_-]*`).
+ */
+export function normalizeSectionTag(raw: string): string {
+  const stripped = raw
+    .trim()
+    .replace(/^[</\s]+|[>/\s]+$/g, '')
+    .toLowerCase();
+  if (!stripped) return '';
+  let normalized = stripped
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_-]+|[_-]+$/g, '');
+  if (!normalized) return '';
+  if (/^[0-9]/.test(normalized)) {
+    normalized = `section_${normalized}`;
+  }
+  return normalized.slice(0, MAX_SECTION_TAG_LENGTH);
+}
+
+/**
+ * Validates and normalizes an XML section tag, rejecting empty strings and ScriptFlow-reserved tags.
+ */
+export function validateSectionTag(
+  raw: string
+): {valid: true; tag: string} | {valid: false; tag: string; error: 'empty' | 'reserved'} {
+  const tag = normalizeSectionTag(raw);
+  if (!tag) {
+    return {valid: false, tag: '', error: 'empty'};
+  }
+  if (RESERVED_SECTION_TAGS.has(tag)) {
+    return {valid: false, tag, error: 'reserved'};
+  }
+  return {valid: true, tag};
+}
+
+/**
+ * Computes the exact UTF-8 byte length of a text section.
+ */
+export function getUtf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
 
 export function isPersistableRemotePreviewUrl(url?: string): boolean {
   return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
@@ -24,6 +89,8 @@ export function toAgentMediaAttachmentFromChat(
   if (!att || item.omitted) return null;
   if (isReferenceAttachmentExpired(att, nowMs)) return null;
 
+  const sectionTag = (att.sectionTag || item.sectionTag)?.trim();
+
   return {
     origin: 'message',
     handle: '',
@@ -34,6 +101,7 @@ export function toAgentMediaAttachmentFromChat(
     ...(att.fileName || item.fileName ? {fileName: att.fileName || item.fileName} : {}),
     ...(att.inlineBase64 ? {inlineBase64: att.inlineBase64} : {}),
     ...(typeof att.inlineText === 'string' ? {inlineText: att.inlineText} : {}),
+    ...(sectionTag ? {sectionTag} : {}),
     ...(att.uri ? {uri: att.uri} : {}),
     ...(att.processingMode ? {processingMode: att.processingMode} : {}),
     fingerprint: att.fingerprint,
@@ -56,6 +124,7 @@ export function collectReadyComposerAttachments(
 
   for (const staged of items) {
     if (staged.status !== 'ready' || !staged.attachment) continue;
+    const sectionTag = (staged.sectionTag || staged.attachment.sectionTag)?.trim();
     const msgAtt: ChatMessageAttachment = {
       id: staged.id,
       kind: staged.kind,
@@ -64,6 +133,7 @@ export function collectReadyComposerAttachments(
       mimeType: staged.mimeType,
       ...(staged.sizeBytes !== undefined ? {sizeBytes: staged.sizeBytes} : {}),
       source: staged.source,
+      ...(sectionTag ? {sectionTag} : {}),
       attachment: staged.attachment,
     };
     const wireAtt = toAgentMediaAttachmentFromChat(msgAtt, nowMs);
@@ -83,6 +153,7 @@ export function chatAttachmentToStaged(
   item: ChatMessageAttachment
 ): StagedComposerAttachment | null {
   if (!item.attachment || item.omitted) return null;
+  const sectionTag = (item.sectionTag || item.attachment.sectionTag)?.trim();
   return {
     id: item.id,
     kind: item.kind,
@@ -91,6 +162,7 @@ export function chatAttachmentToStaged(
     mimeType: item.mimeType,
     ...(item.sizeBytes !== undefined ? {sizeBytes: item.sizeBytes} : {}),
     source: item.source,
+    ...(sectionTag ? {sectionTag} : {}),
     status: 'ready',
     attachment: item.attachment,
   };
@@ -101,9 +173,19 @@ export function chatAttachmentToStaged(
  * can inspect/play composer attachments without duplicating modal code.
  */
 export function chatAttachmentToPreviewEntry(
-  item: Pick<ChatMessageAttachment, 'id' | 'kind' | 'label' | 'fileName' | 'attachment'>
+  item: Pick<ChatMessageAttachment, 'id' | 'kind' | 'label' | 'fileName' | 'sectionTag' | 'attachment'>
 ): ReferenceEntry | null {
   if (!item.attachment) return null;
+  const sectionTag = (item.sectionTag || item.attachment.sectionTag)?.trim();
+  if (sectionTag) {
+    return {
+      id: item.id,
+      handle: `<${sectionTag}>`,
+      kind: item.kind,
+      label: item.label.trim() || `<${sectionTag}>`,
+      attachment: item.attachment,
+    };
+  }
   return {
     id: item.id,
     handle: '',
@@ -117,6 +199,11 @@ export function chatAttachmentToPreviewEntry(
  * Formats a concise human-readable summary for Markdown exports and `<prior_session_recap>`.
  */
 export function formatChatAttachmentSummary(item: ChatMessageAttachment): string {
+  const sectionTag = (item.sectionTag || item.attachment?.sectionTag)?.trim();
+  if (sectionTag) {
+    const size = item.sizeBytes ? ` · ${formatByteSize(item.sizeBytes)}` : '';
+    return `<${sectionTag}> (section${size})`;
+  }
   const name = item.fileName?.trim() || item.label.trim() || item.mimeType || item.kind;
   const sourceLabel =
     item.source === 'youtube' ? 'YouTube' : item.source === 'files_api' ? 'Files API' : '';
@@ -175,6 +262,39 @@ export function sanitizeChatAttachmentForStorage(
     };
   }
 
+  const sectionTag = (att?.sectionTag || item.sectionTag)?.trim();
+  if (
+    att &&
+    att.source === 'inline' &&
+    sectionTag &&
+    typeof att.inlineText === 'string' &&
+    getUtf8ByteLength(att.inlineText) <= MAX_INLINE_TEXT_BYTES
+  ) {
+    const sizeBytes = att.sizeBytes ?? getUtf8ByteLength(att.inlineText);
+    const mimeType = att.mimeType || item.mimeType || 'text/plain';
+    const persistedSection: ReferenceAttachment = {
+      source: 'inline',
+      mimeType,
+      sizeBytes,
+      inlineText: att.inlineText,
+      sectionTag,
+      fingerprint: att.fingerprint,
+    };
+    return {
+      hadOmittedMedia: false,
+      item: {
+        id: item.id,
+        kind: 'document',
+        label: item.label || `<${sectionTag}>`,
+        mimeType,
+        sizeBytes,
+        source: 'inline',
+        sectionTag,
+        attachment: persistedSection,
+      },
+    };
+  }
+
   return {
     hadOmittedMedia: true,
     item: {
@@ -185,6 +305,7 @@ export function sanitizeChatAttachmentForStorage(
       mimeType: item.mimeType,
       ...(item.sizeBytes !== undefined ? {sizeBytes: item.sizeBytes} : {}),
       source: item.source,
+      ...(sectionTag ? {sectionTag} : {}),
       omitted: true,
     },
   };

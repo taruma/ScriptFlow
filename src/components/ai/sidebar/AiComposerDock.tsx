@@ -15,6 +15,7 @@ import {
   AlertCircle,
   ArrowUp,
   CloudUpload,
+  Code2,
   FileText,
   Film,
   HelpCircle,
@@ -73,11 +74,13 @@ export interface AiComposerDockProps {
   hasErroredAttachments: boolean;
   onAddLocalFiles: (files: FileList | File[]) => void | Promise<void>;
   onOpenCloudFilesModal: () => void;
+  onOpenTextSectionModal: () => void;
   onToggleYoutubeBar: (open: boolean) => void;
   onAddYoutubeDraft: (draft: NewReferenceEntryDraft) => void;
   onRemoveStagedAttachment: (id: string) => void;
   onToggleStagedVideoMode: (id: string) => void;
   onInspectStagedAttachment: (item: StagedComposerAttachment) => void;
+  onEditStagedSection: (id: string) => void;
   onDismissAttachError: () => void;
   onInputChange: (value: string) => void;
   onComposerKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
@@ -124,11 +127,13 @@ export const AiComposerDock = memo(function AiComposerDock({
   hasErroredAttachments,
   onAddLocalFiles,
   onOpenCloudFilesModal,
+  onOpenTextSectionModal,
   onToggleYoutubeBar,
   onAddYoutubeDraft,
   onRemoveStagedAttachment,
   onToggleStagedVideoMode,
   onInspectStagedAttachment,
+  onEditStagedSection,
   onDismissAttachError,
   onInputChange,
   onComposerKeyDown,
@@ -304,10 +309,15 @@ export const AiComposerDock = memo(function AiComposerDock({
               const isError = item.status === 'error';
               const isReady = item.status === 'ready';
               const att = item.attachment;
-              const displayName = item.fileName?.trim() || item.label.trim() || item.kind;
+              const sectionTag = (item.sectionTag || att?.sectionTag)?.trim();
+              const isSection = Boolean(sectionTag);
+              const displayName = isSection
+                ? `<${sectionTag}>`
+                : item.fileName?.trim() || item.label.trim() || item.kind;
               const isVideoReady = isReady && item.kind === 'video' && Boolean(att);
-              const sourceBadge =
-                item.source === 'youtube'
+              const sourceBadge = isSection
+                ? attachLabels.sectionChipBadge
+                : item.source === 'youtube'
                   ? briefLabels.cardYoutubeBadge
                   : item.source === 'files_api'
                     ? briefLabels.cardFilesApiBadge
@@ -324,6 +334,11 @@ export const AiComposerDock = memo(function AiComposerDock({
                 if (isError) {
                   return (
                     <AlertCircle className="h-3 w-3 shrink-0 text-red-600 dark:text-red-400" />
+                  );
+                }
+                if (isSection) {
+                  return (
+                    <Code2 className="h-3 w-3 shrink-0 text-[var(--phase-logic-text)]" />
                   );
                 }
                 if (att?.previewUrl) {
@@ -365,17 +380,31 @@ export const AiComposerDock = memo(function AiComposerDock({
                   {isReady && att ? (
                     <button
                       type="button"
-                      onClick={() => onInspectStagedAttachment(item)}
-                      title={attachLabels.inspectChipTitle}
+                      onClick={() =>
+                        isSection ? onEditStagedSection(item.id) : onInspectStagedAttachment(item)
+                      }
+                      title={
+                        isSection
+                          ? attachLabels.editSectionChipTitle
+                          : attachLabels.inspectChipTitle
+                      }
                       className="inline-flex items-center gap-1.5 min-w-0 cursor-pointer hover:opacity-85"
                     >
                       {renderThumbOrIcon()}
-                      <span className="max-w-[120px] truncate font-medium">{displayName}</span>
+                      <span
+                        className={`max-w-[140px] truncate font-medium ${isSection ? 'font-mono' : ''}`}
+                      >
+                        {displayName}
+                      </span>
                     </button>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 min-w-0">
                       {renderThumbOrIcon()}
-                      <span className="max-w-[120px] truncate font-medium">{displayName}</span>
+                      <span
+                        className={`max-w-[140px] truncate font-medium ${isSection ? 'font-mono' : ''}`}
+                      >
+                        {displayName}
+                      </span>
                     </span>
                   )}
 
@@ -390,11 +419,13 @@ export const AiComposerDock = memo(function AiComposerDock({
                   {!isUploading && !isError && sourceBadge && (
                     <span
                       className={`rounded border px-1 py-0 font-mono text-[8.5px] font-semibold uppercase shrink-0 ${
-                        item.source === 'youtube'
-                          ? 'auteur-phase-intent'
-                          : item.source === 'files_api'
-                            ? 'auteur-phase-aesthetic'
-                            : 'border-border-subtle bg-surface-subtle text-text-muted'
+                        isSection
+                          ? 'auteur-phase-logic'
+                          : item.source === 'youtube'
+                            ? 'auteur-phase-intent'
+                            : item.source === 'files_api'
+                              ? 'auteur-phase-aesthetic'
+                              : 'border-border-subtle bg-surface-subtle text-text-muted'
                       }`}
                     >
                       {sourceBadge}
@@ -520,6 +551,25 @@ export const AiComposerDock = memo(function AiComposerDock({
                     </div>
                     <div className="text-[10.5px] text-text-faint">
                       {attachLabels.menuYoutubeUrlHint}
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsAttachMenuOpen(false);
+                    onOpenTextSectionModal();
+                  }}
+                  className="w-full flex items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  <Code2 className="h-3.5 w-3.5 mt-0.5 text-[var(--phase-logic-text)] shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-text-main">
+                      {attachLabels.menuTextSection}
+                    </div>
+                    <div className="text-[10.5px] text-text-faint">
+                      {attachLabels.menuTextSectionHint}
                     </div>
                   </div>
                 </button>

@@ -139,6 +139,8 @@ export interface AgentMediaAttachment {
   fileName?: string;
   inlineBase64?: string;
   inlineText?: string;
+  /** Normalized XML section tag when this message attachment represents a pasted text section (`<tag>...</tag>`). */
+  sectionTag?: string;
   uri?: string;
   processingMode?: 'static' | 'agentic';
   fingerprint: string;

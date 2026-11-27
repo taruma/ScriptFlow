@@ -63,6 +63,7 @@ import {AiComposerDock} from './ai/sidebar/AiComposerDock.tsx';
 import {AiRecentSessionsList} from './ai/sidebar/AiRecentSessionsList.tsx';
 import {AiThreadMessage} from './ai/sidebar/AiThreadMessage.tsx';
 import {ComposerCloudFilesModal} from './ai/sidebar/ComposerCloudFilesModal.tsx';
+import {ComposerTextSectionModal} from './ai/sidebar/ComposerTextSectionModal.tsx';
 import {
   buildSessionCostTooltip,
   HoverTooltipPortal,
@@ -843,11 +844,13 @@ export function AiAssistantSidebar({
             hasErroredAttachments={composerAttach.hasErroredAttachments}
             onAddLocalFiles={composerAttach.addLocalFiles}
             onOpenCloudFilesModal={() => composerAttach.setIsCloudModalOpen(true)}
+            onOpenTextSectionModal={composerAttach.openNewTextSectionModal}
             onToggleYoutubeBar={composerAttach.setIsYoutubeBarOpen}
             onAddYoutubeDraft={composerAttach.addFromEntryDraft}
             onRemoveStagedAttachment={composerAttach.removeStaged}
             onToggleStagedVideoMode={composerAttach.toggleVideoMode}
             onInspectStagedAttachment={setInspectedChatAttachment}
+            onEditStagedSection={composerAttach.openEditTextSectionModal}
             onDismissAttachError={() => composerAttach.setComposerAttachError(null)}
             onInputChange={setInputValue}
             onComposerKeyDown={handleComposerKeyDown}
@@ -971,6 +974,13 @@ export function AiAssistantSidebar({
         onClose={() => composerAttach.setIsCloudModalOpen(false)}
         onOpenSettings={handleOpenSettings}
         onAttachDraft={composerAttach.addFromEntryDraft}
+      />
+
+      <ComposerTextSectionModal
+        isOpen={composerAttach.isTextSectionModalOpen}
+        editingSection={composerAttach.editingTextSection}
+        onClose={composerAttach.closeTextSectionModal}
+        onSave={composerAttach.upsertTextSection}
       />
 
       <BriefMediaLightbox

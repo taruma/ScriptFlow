@@ -5,6 +5,8 @@ import {
 } from '../../../services/geminiFiles.ts';
 import {
   collectReadyComposerAttachments,
+  getUtf8ByteLength,
+  validateSectionTag,
   type ChatMessageAttachment,
   type StagedComposerAttachment,
 } from '../../../ui/aiAssistant.ts';
@@ -13,8 +15,10 @@ import {
   classifyLocalDropFile,
   compressImageFile,
   filenameToDefaultLabel,
+  formatByteSize,
   inferMimeTypeFromFile,
   inferReferenceKindFromMime,
+  MAX_INLINE_TEXT_BYTES,
   readLocalTextFile,
 } from '../../../ui/briefMedia.ts';
 import {UI_LABELS} from '../../../ui/labels.ts';
@@ -38,6 +42,8 @@ export function useComposerAttachments({
   const [stagedAttachments, setStagedAttachments] = useState<StagedComposerAttachment[]>([]);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [isYoutubeBarOpen, setIsYoutubeBarOpen] = useState(false);
+  const [isTextSectionModalOpen, setIsTextSectionModalOpen] = useState(false);
+  const [editingTextSectionId, setEditingTextSectionId] = useState<string | null>(null);
   const [composerAttachError, setComposerAttachError] = useState<string | null>(null);
 
   const uploadControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -297,6 +303,87 @@ export function useComposerAttachments({
     }
   }, []);
 
+  const openNewTextSectionModal = useCallback(() => {
+    setEditingTextSectionId(null);
+    setIsTextSectionModalOpen(true);
+  }, []);
+
+  const openEditTextSectionModal = useCallback((id: string) => {
+    setEditingTextSectionId(id);
+    setIsTextSectionModalOpen(true);
+  }, []);
+
+  const closeTextSectionModal = useCallback(() => {
+    setIsTextSectionModalOpen(false);
+    setEditingTextSectionId(null);
+  }, []);
+
+  const upsertTextSection = useCallback(
+    ({id, tag, content}: {id?: string; tag: string; content: string}) => {
+      const validation = validateSectionTag(tag);
+      if (!validation.valid) {
+        setComposerAttachError(
+          validation.error === 'reserved'
+            ? UI_LABELS.ai.composerAttach.textSectionTagReservedError(validation.tag)
+            : UI_LABELS.ai.composerAttach.textSectionTagEmptyError
+        );
+        return;
+      }
+      if (!content.trim()) return;
+      const sizeBytes = getUtf8ByteLength(content);
+      if (sizeBytes > MAX_INLINE_TEXT_BYTES) {
+        setComposerAttachError(
+          UI_LABELS.ai.composerAttach.textSectionContentTooLargeError(
+            formatByteSize(sizeBytes) || `${sizeBytes} B`
+          )
+        );
+        return;
+      }
+
+      const normalizedTag = validation.tag;
+      const chipLabel = `<${normalizedTag}>`;
+      const fingerprint = buildAttachmentFingerprint(['text_section', normalizedTag, content]);
+
+      setComposerAttachError(null);
+      setStagedAttachments((prev) => {
+        const nextItem: StagedComposerAttachment = {
+          id: id ?? createAttachmentId(),
+          kind: 'document',
+          label: chipLabel,
+          mimeType: 'text/plain',
+          sizeBytes,
+          source: 'inline',
+          sectionTag: normalizedTag,
+          status: 'ready',
+          attachment: {
+            source: 'inline',
+            mimeType: 'text/plain',
+            sizeBytes,
+            inlineText: content,
+            sectionTag: normalizedTag,
+            fingerprint,
+          },
+        };
+        if (id && prev.some((item) => item.id === id)) {
+          return prev.map((item) => (item.id === id ? nextItem : item));
+        }
+        return [...prev, nextItem];
+      });
+      setIsTextSectionModalOpen(false);
+      setEditingTextSectionId(null);
+    },
+    []
+  );
+
+  const editingTextSection = useMemo(() => {
+    if (!editingTextSectionId) return null;
+    const match = stagedAttachments.find((item) => item.id === editingTextSectionId);
+    const tag = match?.sectionTag || match?.attachment?.sectionTag;
+    const content = match?.attachment?.inlineText;
+    if (!match || !tag || typeof content !== 'string') return null;
+    return {id: match.id, tag, content};
+  }, [editingTextSectionId, stagedAttachments]);
+
   const removeStaged = useCallback(
     (id: string) => {
       const controller = uploadControllersRef.current.get(id);
@@ -380,6 +467,8 @@ export function useComposerAttachments({
     setStagedAttachments([]);
     setIsCloudModalOpen(false);
     setIsYoutubeBarOpen(false);
+    setIsTextSectionModalOpen(false);
+    setEditingTextSectionId(null);
     setComposerAttachError(null);
   }, [revokeAllBlobUrls]);
 
@@ -414,6 +503,12 @@ export function useComposerAttachments({
     setIsCloudModalOpen,
     isYoutubeBarOpen,
     setIsYoutubeBarOpen,
+    isTextSectionModalOpen,
+    editingTextSection,
+    openNewTextSectionModal,
+    openEditTextSectionModal,
+    closeTextSectionModal,
+    upsertTextSection,
     composerAttachError,
     setComposerAttachError,
     hasPendingUploads,

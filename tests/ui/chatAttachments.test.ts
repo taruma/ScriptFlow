@@ -4,14 +4,23 @@ import {
   chatAttachmentToStaged,
   collectReadyComposerAttachments,
   formatChatAttachmentSummary,
+  getUtf8ByteLength,
   hasAnyOmittedOrExpiredMessageAttachments,
   isPersistableRemotePreviewUrl,
+  normalizeSectionTag,
   sanitizeChatAttachmentForStorage,
   toAgentMediaAttachmentFromChat,
+  validateSectionTag,
   type AiChatMessage,
   type ChatMessageAttachment,
   type StagedComposerAttachment,
 } from '../../src/ui/aiAssistant.ts';
+import {
+  AI_SESSION_SCHEMA_VERSION,
+  buildAiSessionConversationJsonExport,
+  formatAiSessionAsMarkdown,
+  type AiSessionRecord,
+} from '../../src/ui/aiSessions.ts';
 
 describe('chatAttachments pure helpers', () => {
   const nowMs = Date.parse('2026-11-27T12:00:00.000Z');
@@ -270,5 +279,128 @@ describe('chatAttachments pure helpers', () => {
     expect(
       chatAttachmentToStaged({...cloudAtt, attachment: undefined, omitted: true})
     ).toBeNull();
+  });
+
+  it('normalizes, validates, persists, and exports XML-wrapped pasted text sections up to 256 KB', () => {
+    expect(normalizeSectionTag('<Scene Notes!>')).toBe('scene_notes');
+    expect(normalizeSectionTag('</Act-1 Script>')).toBe('act-1_script');
+    expect(normalizeSectionTag('2nd_draft')).toBe('section_2nd_draft');
+    expect(normalizeSectionTag('   ')).toBe('');
+
+    expect(validateSectionTag('screenplay')).toEqual({valid: true, tag: 'screenplay'});
+    expect(validateSectionTag('   ')).toEqual({valid: false, tag: '', error: 'empty'});
+    expect(validateSectionTag('<live_editor_state>')).toEqual({
+      valid: false,
+      tag: 'live_editor_state',
+      error: 'reserved',
+    });
+    expect(validateSectionTag('SCENE_BRIEF')).toEqual({
+      valid: false,
+      tag: 'scene_brief',
+      error: 'reserved',
+    });
+
+    const sectionBody = 'EXT. PIER - NIGHT\nRain batters the wooden planks.';
+    const sectionBytes = getUtf8ByteLength(sectionBody);
+
+    const stagedSection: StagedComposerAttachment = {
+      id: 'sec-1',
+      kind: 'document',
+      label: '<screenplay>',
+      mimeType: 'text/plain',
+      sizeBytes: sectionBytes,
+      source: 'inline',
+      sectionTag: 'screenplay',
+      status: 'ready',
+      attachment: {
+        source: 'inline',
+        mimeType: 'text/plain',
+        sizeBytes: sectionBytes,
+        inlineText: sectionBody,
+        sectionTag: 'screenplay',
+        fingerprint: 'fp_sec_1',
+      },
+    };
+
+    const collected = collectReadyComposerAttachments([stagedSection], nowMs);
+    expect(collected.messageAttachments).toHaveLength(1);
+    expect(collected.messageAttachments[0]?.sectionTag).toBe('screenplay');
+    expect(collected.agentAttachments[0]).toMatchObject({
+      origin: 'message',
+      sectionTag: 'screenplay',
+      inlineText: sectionBody,
+    });
+
+    const msgSection = collected.messageAttachments[0]!;
+    expect(formatChatAttachmentSummary(msgSection)).toBe(`<screenplay> (section · ${sectionBytes} B)`);
+    expect(chatAttachmentToPreviewEntry(msgSection)).toEqual({
+      id: 'sec-1',
+      handle: '<screenplay>',
+      kind: 'document',
+      label: '<screenplay>',
+      attachment: msgSection.attachment,
+    });
+    expect(chatAttachmentToStaged(msgSection)?.sectionTag).toBe('screenplay');
+
+    // Persisted in full inside storage when <= 256 KB
+    const persisted = sanitizeChatAttachmentForStorage(msgSection, nowMs);
+    expect(persisted.hadOmittedMedia).toBe(false);
+    expect(persisted.item.omitted).toBeUndefined();
+    expect(persisted.item.sectionTag).toBe('screenplay');
+    expect(persisted.item.attachment?.inlineText).toBe(sectionBody);
+
+    // Oversized sections (> 256 KB) still omit cleanly
+    const oversizedSection: ChatMessageAttachment = {
+      ...msgSection,
+      attachment: {
+        ...msgSection.attachment!,
+        inlineText: 'a'.repeat(256 * 1024 + 1),
+      },
+    };
+    const omittedOversized = sanitizeChatAttachmentForStorage(oversizedSection, nowMs);
+    expect(omittedOversized.hadOmittedMedia).toBe(true);
+    expect(omittedOversized.item.omitted).toBe(true);
+
+    // Markdown & Conversation JSON exports preserve sectionTag + content
+    const session: AiSessionRecord = {
+      id: 'sess-sec',
+      schemaVersion: AI_SESSION_SCHEMA_VERSION,
+      title: 'Screenplay Draft',
+      createdAt: 1000,
+      updatedAt: 2000,
+      scriptSessionKey: 'custom:s1',
+      scriptId: 's1',
+      scriptKind: 'custom',
+      scriptTitleSnapshot: 'Pier Scene',
+      focus: 'draft',
+      selectedTargetKey: 'whole',
+      model: 'gemini-4-hydrogen',
+      messageCount: 1,
+      turnCount: 1,
+      estimatedCostUsd: 0,
+      messages: [
+        {
+          id: 'u-sec',
+          role: 'user',
+          mode: 'draft',
+          focus: 'draft',
+          text: 'Draft as an Auteur Script.',
+          attachments: [persisted.item],
+        },
+      ],
+      brief: {enabled: true, references: [], specs: '', subtext: ''},
+      continuity: {},
+    };
+
+    const md = formatAiSessionAsMarkdown(session);
+    expect(md).toContain('```xml\n<screenplay>\nEXT. PIER - NIGHT');
+    expect(md).toContain('</screenplay>\n```');
+
+    const convExport = JSON.parse(buildAiSessionConversationJsonExport(session).content);
+    expect(convExport.conversation[0].attachments[0]).toMatchObject({
+      kind: 'document',
+      sectionTag: 'screenplay',
+      content: sectionBody,
+    });
   });
 });
