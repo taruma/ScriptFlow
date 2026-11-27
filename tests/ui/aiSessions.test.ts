@@ -775,11 +775,22 @@ describe('aiSessions domain & storage codec', () => {
       durationMs: 1420,
       inputTokens: 1200,
       cachedTokens: 800,
+      nonCachedInputTokens: 400,
       outputTokens: 150,
       thoughtTokens: 50,
     });
+    expect(assistantTurn.metrics?.cacheHitRate).toBeCloseTo(800 / 1200, 10);
+    expect(assistantTurn.metrics?.estimatedCacheSavingsUsd).toBeGreaterThan(0);
+    expect(parsed.session.cachedTokens).toBe(800);
+    expect(parsed.session.nonCachedInputTokens).toBe(400);
+    expect(parsed.session.cacheHitRate).toBeCloseTo(800 / 1200, 10);
+    expect(parsed.session.estimatedCacheSavingsUsd).toBeGreaterThan(0);
     expect(assistantTurn.metrics?.estimatedCostUsd).toBeGreaterThan(0);
     expect((assistantTurn as {trace?: unknown}).trace).toBeUndefined();
+
+    const convMd = formatAiSessionAsMarkdown(session);
+    expect(convMd).toContain('- **Cache:** 67% hit · 33% miss (800 cached / 400 miss');
+    expect(convMd).toContain('est. saved ');
   });
 
   it('persists remote YouTube/Files API user message attachments while stripping inline payloads across storage, search, and exports', () => {

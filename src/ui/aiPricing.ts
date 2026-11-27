@@ -49,6 +49,15 @@ export interface ParsedTokenUsage {
   totalTokens: number;
 }
 
+export interface CacheStats {
+  inputTokens: number;
+  cachedTokens: number;
+  missedTokens: number;
+  hitRate: number | null;
+  missRate: number | null;
+  estimatedSavingsUsd: number;
+}
+
 export interface TurnCostEstimate {
   model: PricingModelId;
   rates: GeminiModelPricing;
@@ -58,6 +67,8 @@ export interface TurnCostEstimate {
   outputCostUsd: number;
   thoughtCostUsd: number;
   totalCostUsd: number;
+  cacheHitRate: number | null;
+  cacheSavingsUsd: number;
 }
 
 export interface SessionCostSummary {
@@ -74,6 +85,10 @@ export interface SessionCostSummary {
   outputTokens: number;
   thoughtTokens: number;
   totalTokens: number;
+  cacheEligibleInputTokens: number;
+  cacheMissedTokens: number;
+  cacheHitRate: number | null;
+  cacheSavingsUsd: number;
 }
 
 /**
@@ -223,6 +238,54 @@ export function parseInteractionUsage(
 }
 
 /**
+ * Computes normalized cache hit/miss rates and token counts from raw input and cached totals.
+ */
+export function computeCacheStats(
+  inputTokens: number,
+  cachedTokens: number,
+  estimatedSavingsUsd: number = 0
+): CacheStats {
+  const safeInput =
+    typeof inputTokens === 'number' && Number.isFinite(inputTokens) && inputTokens > 0
+      ? inputTokens
+      : 0;
+  const rawCached =
+    typeof cachedTokens === 'number' && Number.isFinite(cachedTokens) && cachedTokens > 0
+      ? cachedTokens
+      : 0;
+  const safeCached = Math.min(safeInput, rawCached);
+  const missedTokens = Math.max(0, safeInput - safeCached);
+  const hitRate = safeInput > 0 ? safeCached / safeInput : null;
+  const missRate = hitRate !== null ? Math.max(0, 1 - hitRate) : null;
+  const safeSavings =
+    typeof estimatedSavingsUsd === 'number' &&
+    Number.isFinite(estimatedSavingsUsd) &&
+    estimatedSavingsUsd > 0
+      ? estimatedSavingsUsd
+      : 0;
+
+  return {
+    inputTokens: safeInput,
+    cachedTokens: safeCached,
+    missedTokens,
+    hitRate,
+    missRate,
+    estimatedSavingsUsd: safeSavings,
+  };
+}
+
+/**
+ * Formats a `0..1` cache hit or miss ratio as a compact whole percentage (`84%`, `<1%`, `0%`, `100%`).
+ */
+export function formatCacheHitPercent(hitRate: number | null): string {
+  if (hitRate === null || !Number.isFinite(hitRate)) return '';
+  const clamped = Math.max(0, Math.min(1, hitRate));
+  const pct = clamped * 100;
+  if (pct > 0 && pct < 1) return '<1%';
+  return `${Math.round(pct)}%`;
+}
+
+/**
  * Estimates the USD cost of a single Gemini Interactions API turn from its
  * aggregated usage metadata and model rate card.
  */
@@ -241,6 +304,15 @@ export function estimateTurnCost(
   const outputCostUsd = (parsed.outputTokens * rates.outputPer1M) / TOKENS_PER_MILLION;
   const thoughtCostUsd = (parsed.thoughtTokens * rates.outputPer1M) / TOKENS_PER_MILLION;
   const totalCostUsd = inputCostUsd + cachedCostUsd + outputCostUsd + thoughtCostUsd;
+  const supportsCaching = rates.cachedInputPer1M < rates.inputPer1M || parsed.cachedTokens > 0;
+  const cacheHitRate =
+    supportsCaching && parsed.inputTokens > 0
+      ? Math.min(1, parsed.cachedTokens / parsed.inputTokens)
+      : null;
+  const cacheSavingsUsd = Math.max(
+    0,
+    (parsed.cachedTokens * (rates.inputPer1M - rates.cachedInputPer1M)) / TOKENS_PER_MILLION
+  );
 
   return {
     model,
@@ -251,6 +323,8 @@ export function estimateTurnCost(
     outputCostUsd,
     thoughtCostUsd,
     totalCostUsd,
+    cacheHitRate,
+    cacheSavingsUsd,
   };
 }
 
@@ -296,6 +370,8 @@ export function aggregateSessionCost(
   let outputTokens = 0;
   let thoughtTokens = 0;
   let totalTokens = 0;
+  let cacheEligibleInputTokens = 0;
+  let cacheSavingsUsd = 0;
 
   for (const msg of messages) {
     if (msg.role !== 'assistant') continue;
@@ -314,7 +390,17 @@ export function aggregateSessionCost(
     outputTokens += estimate.usage.outputTokens;
     thoughtTokens += estimate.usage.thoughtTokens;
     totalTokens += estimate.usage.totalTokens;
+    cacheSavingsUsd += estimate.cacheSavingsUsd;
+    if (estimate.cacheHitRate !== null) {
+      cacheEligibleInputTokens += estimate.usage.inputTokens;
+    }
   }
+
+  const cacheMissedTokens = Math.max(0, cacheEligibleInputTokens - cachedTokens);
+  const cacheHitRate =
+    cacheEligibleInputTokens > 0
+      ? Math.min(1, cachedTokens / cacheEligibleInputTokens)
+      : null;
 
   return {
     turnCount,
@@ -330,6 +416,10 @@ export function aggregateSessionCost(
     outputTokens,
     thoughtTokens,
     totalTokens,
+    cacheEligibleInputTokens,
+    cacheMissedTokens,
+    cacheHitRate,
+    cacheSavingsUsd,
   };
 }
 

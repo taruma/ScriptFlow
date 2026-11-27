@@ -41,7 +41,11 @@ import {
   type DraftBriefState,
   type StagedComposerAttachment,
 } from '../ui/aiAssistant.ts';
-import {aggregateSessionCost, formatEstimatedUsd} from '../ui/aiPricing.ts';
+import {
+  aggregateSessionCost,
+  formatCacheHitPercent,
+  formatEstimatedUsd,
+} from '../ui/aiPricing.ts';
 import {
   getGeminiModelOption,
   REASONING_LEVEL_OPTIONS,
@@ -457,6 +461,13 @@ export function AiAssistantSidebar({
 
   const sessionCost = useMemo(() => aggregateSessionCost(chat.messages), [chat.messages]);
   const formattedSessionCost = formatEstimatedUsd(sessionCost.totalCostUsd);
+  const sessionHasCacheHit = sessionCost.cachedTokens > 0;
+  const sessionCacheHitLabel =
+    sessionCost.cacheHitRate !== null
+      ? sessionHasCacheHit
+        ? UI_LABELS.ai.cost.cacheHitShort(formatCacheHitPercent(sessionCost.cacheHitRate))
+        : UI_LABELS.ai.cost.cacheMissShort
+      : undefined;
 
   const handleSessionCostMouseEnter = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
@@ -834,6 +845,8 @@ export function AiAssistantSidebar({
             showEstimatedCost={settings.showEstimatedCost}
             sessionCostTurnCount={sessionCost.turnCount}
             formattedSessionCost={formattedSessionCost}
+            sessionCacheHitLabel={sessionCacheHitLabel}
+            sessionHasCacheHit={sessionHasCacheHit}
             hasApiKey={hasApiKey}
             modelShortLabel={modelOption.shortLabel}
             reasoningLabel={reasoningOption.label}

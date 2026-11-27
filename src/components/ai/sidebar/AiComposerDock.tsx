@@ -64,6 +64,8 @@ export interface AiComposerDockProps {
   showEstimatedCost: boolean;
   sessionCostTurnCount: number;
   formattedSessionCost: string;
+  sessionCacheHitLabel?: string;
+  sessionHasCacheHit?: boolean;
   hasApiKey: boolean;
   modelShortLabel: string;
   reasoningLabel: string;
@@ -117,6 +119,8 @@ export const AiComposerDock = memo(function AiComposerDock({
   showEstimatedCost,
   sessionCostTurnCount,
   formattedSessionCost,
+  sessionCacheHitLabel,
+  sessionHasCacheHit = false,
   hasApiKey,
   modelShortLabel,
   reasoningLabel,
@@ -769,6 +773,24 @@ export const AiComposerDock = memo(function AiComposerDock({
         </div>
 
         <div className="flex items-center gap-1.5 min-w-0">
+          {showEstimatedCost && sessionCostTurnCount > 0 && sessionCacheHitLabel && (
+            <span
+              aria-label={UI_LABELS.ai.cost.sessionCacheBadgeAria(
+                sessionCacheHitLabel,
+                sessionCostTurnCount
+              )}
+              onMouseEnter={onSessionCostMouseEnter}
+              onMouseLeave={onSessionCostMouseLeave}
+              className={`inline-flex items-center rounded-lg border px-1.5 py-1 font-mono text-[10px] font-medium tabular-nums transition-colors cursor-default select-none shrink-0 ${
+                sessionHasCacheHit
+                  ? 'auteur-phase-aesthetic'
+                  : 'border-border-subtle bg-surface-subtle text-text-faint hover:border-border-main hover:text-text-muted'
+              }`}
+            >
+              {sessionCacheHitLabel}
+            </span>
+          )}
+
           {showEstimatedCost && sessionCostTurnCount > 0 && (
             <span
               aria-label={UI_LABELS.ai.cost.sessionBadgeAria(

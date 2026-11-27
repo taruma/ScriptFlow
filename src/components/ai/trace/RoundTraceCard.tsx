@@ -4,6 +4,13 @@ import type {
   AgentRoundTrace,
   AgentToolCallTrace,
 } from '../../../services/geminiInteractions.ts';
+import {
+  estimateTraceCost,
+  formatCacheHitPercent,
+  formatUsdBreakdown,
+  parseInteractionUsage,
+  type PricingModelId,
+} from '../../../ui/aiPricing.ts';
 import {UI_LABELS} from '../../../ui/labels.ts';
 import {
   formatJsonPretty,
@@ -13,16 +20,40 @@ import {
 
 export interface RoundTraceCardProps {
   round: AgentRoundTrace;
+  model?: PricingModelId;
+  startedAt?: string;
 }
 
-export function RoundTraceCard({round}: RoundTraceCardProps) {
+export function RoundTraceCard({round, model, startedAt}: RoundTraceCardProps) {
   const labels = UI_LABELS.ai.traceModal;
+  const costLabels = UI_LABELS.ai.cost;
   const hasTools = round.toolCalls.length > 0;
   const [requestOpen, setRequestOpen] = useState<boolean>(!hasTools);
   const [toolsOpen, setToolsOpen] = useState<boolean>(hasTools);
   const [systemInstructionOpen, setSystemInstructionOpen] = useState<boolean>(false);
 
   const roundUsageEntries = useMemo(() => formatUsageEntries(round.usage), [round.usage]);
+  const roundCacheSummary = useMemo(() => {
+    if (!round.usage) return null;
+    if (model) {
+      const est = estimateTraceCost({model, startedAt: startedAt ?? '', usage: round.usage});
+      if (!est || est.cacheHitRate === null) return null;
+      return {
+        hitRate: est.cacheHitRate,
+        cachedTokens: est.usage.cachedTokens,
+        missedTokens: est.usage.nonCachedInputTokens,
+        savingsUsd: est.cacheSavingsUsd,
+      };
+    }
+    const parsed = parseInteractionUsage(round.usage);
+    if (!parsed || parsed.inputTokens <= 0) return null;
+    return {
+      hitRate: Math.min(1, parsed.cachedTokens / parsed.inputTokens),
+      cachedTokens: parsed.cachedTokens,
+      missedTokens: parsed.nonCachedInputTokens,
+      savingsUsd: 0,
+    };
+  }, [model, round.usage, startedAt]);
   const formattedInput = useMemo(() => {
     if (typeof round.request.input === 'string') return round.request.input;
     return formatJsonPretty(round.request.input);
@@ -55,6 +86,27 @@ export function RoundTraceCard({round}: RoundTraceCardProps) {
               {round.status}
             </span>
           )}
+          {roundCacheSummary && (
+            <span
+              title={labels.roundCacheBadgeTooltip(
+                formatCacheHitPercent(roundCacheSummary.hitRate),
+                costLabels.formatTokens(roundCacheSummary.cachedTokens),
+                costLabels.formatTokens(roundCacheSummary.missedTokens),
+                roundCacheSummary.savingsUsd > 0
+                  ? formatUsdBreakdown(roundCacheSummary.savingsUsd)
+                  : undefined
+              )}
+              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums ${
+                roundCacheSummary.cachedTokens > 0
+                  ? 'auteur-phase-aesthetic'
+                  : 'border-border-subtle bg-surface text-text-faint'
+              }`}
+            >
+              {roundCacheSummary.cachedTokens > 0
+                ? costLabels.cacheHitShort(formatCacheHitPercent(roundCacheSummary.hitRate))
+                : costLabels.cacheMissShort}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-text-faint tabular-nums">
@@ -77,6 +129,11 @@ export function RoundTraceCard({round}: RoundTraceCardProps) {
               {entry.key}: <span className="text-text-body">{entry.value}</span>
             </span>
           ))}
+          {roundCacheSummary && roundCacheSummary.savingsUsd > 0 && (
+            <span className="rounded border px-1.5 py-0.5 tabular-nums auteur-phase-aesthetic">
+              {labels.cacheSavedLabel}: {formatUsdBreakdown(roundCacheSummary.savingsUsd)}
+            </span>
+          )}
         </div>
       )}
 

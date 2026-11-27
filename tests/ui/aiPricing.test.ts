@@ -1,8 +1,10 @@
 import {describe, expect, it} from 'vitest';
 import {
   aggregateSessionCost,
+  computeCacheStats,
   estimateTraceCost,
   estimateTurnCost,
+  formatCacheHitPercent,
   formatEstimatedUsd,
   formatUsdBreakdown,
   GEMINI_3_8_FLASH_PROMO_END_MS,
@@ -309,5 +311,95 @@ describe('aiPricing Gemini 4 & 3.x Flash rate table & cost estimation', () => {
     expect(session.turnCount).toBe(2);
     expect(session.totalCostUsd).toBeCloseTo(0.0229, 10);
     expect(session.totalTokens).toBe(15_000);
+    // Quick Scan has no cache rate discount, so cacheEligibleInputTokens reflects only Hydrogen (10k)
+    expect(session.cacheEligibleInputTokens).toBe(10_000);
+    expect(session.cacheMissedTokens).toBe(10_000);
+    expect(session.cacheHitRate).toBe(0);
+    expect(session.cacheSavingsUsd).toBe(0);
+  });
+
+  it('computes cache hit/miss ratios, sub-1% formatting, and estimated USD savings across turns and sessions', () => {
+    expect(formatCacheHitPercent(null)).toBe('');
+    expect(formatCacheHitPercent(0)).toBe('0%');
+    expect(formatCacheHitPercent(0.004)).toBe('<1%');
+    expect(formatCacheHitPercent(0.842)).toBe('84%');
+    expect(formatCacheHitPercent(1)).toBe('100%');
+
+    expect(computeCacheStats(10_000, 8_400, 0.012)).toEqual({
+      inputTokens: 10_000,
+      cachedTokens: 8_400,
+      missedTokens: 1_600,
+      hitRate: 0.84,
+      missRate: 0.16000000000000003,
+      estimatedSavingsUsd: 0.012,
+    });
+    expect(computeCacheStats(0, 0)).toEqual({
+      inputTokens: 0,
+      cachedTokens: 0,
+      missedTokens: 0,
+      hitRate: null,
+      missRate: null,
+      estimatedSavingsUsd: 0,
+    });
+
+    // Hydrogen: 1M input (800k cached / 200k miss) -> saved 0.8M * ($1.50 - $0.075)/1M = $1.14
+    const hitTurn = estimateTurnCost(
+      'gemini-4-hydrogen',
+      {
+        total_input_tokens: 1_000_000,
+        total_cached_tokens: 800_000,
+        total_output_tokens: 1_000,
+      },
+      NOV_21_2026
+    );
+    expect(hitTurn?.cacheHitRate).toBeCloseTo(0.8, 10);
+    expect(hitTurn?.cacheSavingsUsd).toBeCloseTo(1.14, 10);
+
+    // Quick Scan has equal cached/non-cached rate and 0 cached tokens -> cacheHitRate: null
+    const scanTurn = estimateTurnCost(
+      'gemini-decision-1',
+      {total_input_tokens: 5_000, total_output_tokens: 0},
+      NOV_21_2026
+    );
+    expect(scanTurn?.cacheHitRate).toBeNull();
+    expect(scanTurn?.cacheSavingsUsd).toBe(0);
+
+    // Session mixes a Quick Scan (5k ineligible) + Turn 1 cold miss (10k) + Turn 2 warm hit (30k, 24k cached)
+    const mixedSession = aggregateSessionCost(
+      [
+        {
+          role: 'assistant',
+          quickScanTrace: {
+            model: 'gemini-decision-1',
+            startedAt: '2026-11-21T10:00:00.000Z',
+            usage: {total_input_tokens: 5_000, total_output_tokens: 0},
+          },
+        },
+        {
+          role: 'assistant',
+          trace: {
+            model: 'gemini-4-hydrogen',
+            startedAt: '2026-11-21T10:01:00.000Z',
+            usage: {total_input_tokens: 10_000, total_cached_tokens: 0, total_output_tokens: 500},
+          },
+        },
+        {
+          role: 'assistant',
+          trace: {
+            model: 'gemini-4-hydrogen',
+            startedAt: '2026-11-21T10:02:00.000Z',
+            usage: {total_input_tokens: 30_000, total_cached_tokens: 24_000, total_output_tokens: 800},
+          },
+        },
+      ],
+      NOV_21_2026
+    );
+
+    expect(mixedSession.cacheEligibleInputTokens).toBe(40_000);
+    expect(mixedSession.cachedTokens).toBe(24_000);
+    expect(mixedSession.cacheMissedTokens).toBe(16_000);
+    expect(mixedSession.cacheHitRate).toBeCloseTo(0.6, 10);
+    // Savings: 24,000 * ($1.50 - $0.075) / 1M = $0.0342
+    expect(mixedSession.cacheSavingsUsd).toBeCloseTo(0.0342, 10);
   });
 });

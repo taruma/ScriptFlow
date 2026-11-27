@@ -2,7 +2,12 @@ import type {BundledExample} from '../../data/examples/index.ts';
 import type {AssistantFocus} from '../../services/auteurKnowledge.ts';
 import type {PendingQuestionPause} from '../../services/gemini/interactionTypes.ts';
 import type {QuestionSuggestion, StagedSuggestion} from '../../services/scriptTools.ts';
-import {aggregateSessionCost, estimateTraceCost} from '../aiPricing.ts';
+import {
+  aggregateSessionCost,
+  estimateTraceCost,
+  formatCacheHitPercent,
+  formatUsdBreakdown,
+} from '../aiPricing.ts';
 import type {GeminiModelId} from '../aiSettings.ts';
 import type {ScriptRecord} from '../library/dbTypes.ts';
 import {formatExportTimestamp, slugifyFilename} from '../scriptLibraryCodec.ts';
@@ -665,6 +670,7 @@ export function formatAiSessionAsMarkdown(
   session: AiSessionRecord,
   scriptStatusLabel?: string
 ): string {
+  const costSummary = aggregateSessionCost(session.messages, session.updatedAt);
   const lines: string[] = [
     `# ${session.title}`,
     '',
@@ -673,6 +679,17 @@ export function formatAiSessionAsMarkdown(
     `- **Updated:** ${new Date(session.updatedAt).toISOString()}`,
     `- **Turns:** ${session.turnCount}`,
   ];
+  if (costSummary.cacheHitRate !== null) {
+    const hitPct = formatCacheHitPercent(costSummary.cacheHitRate);
+    const missPct = formatCacheHitPercent(1 - costSummary.cacheHitRate);
+    const savingsText =
+      costSummary.cacheSavingsUsd > 0
+        ? ` · est. saved ${formatUsdBreakdown(costSummary.cacheSavingsUsd)}`
+        : '';
+    lines.push(
+      `- **Cache:** ${hitPct} hit · ${missPct} miss (${costSummary.cachedTokens.toLocaleString()} cached / ${costSummary.cacheMissedTokens.toLocaleString()} miss${savingsText})`
+    );
+  }
 
   const briefText = formatSceneBriefContext(session.brief);
   if (briefText.length > 0) {
@@ -763,6 +780,10 @@ export interface AiSessionJsonExportPayload {
     messageCount: number;
     turnCount: number;
     estimatedCostUsd: number;
+    cacheHitRate?: number | null;
+    cachedTokens?: number;
+    nonCachedInputTokens?: number;
+    estimatedCacheSavingsUsd?: number;
     hasOmittedMedia?: boolean;
   };
   brief: DraftBriefState;
@@ -926,6 +947,9 @@ export interface AiSessionConversationTurnMetrics {
   durationMs: number;
   inputTokens: number;
   cachedTokens: number;
+  nonCachedInputTokens: number;
+  cacheHitRate: number | null;
+  estimatedCacheSavingsUsd: number;
   outputTokens: number;
   thoughtTokens: number;
   estimatedCostUsd: number;
@@ -1049,6 +1073,10 @@ export interface AiSessionConversationJsonPayload {
     model: GeminiModelId;
     turnCount: number;
     estimatedCostUsd: number;
+    cacheHitRate?: number | null;
+    cachedTokens?: number;
+    nonCachedInputTokens?: number;
+    estimatedCacheSavingsUsd?: number;
     hasOmittedMedia?: boolean;
   };
   scriptSnapshot?: string;
@@ -1189,6 +1217,9 @@ function buildTurnMetrics(
       durationMs: msg.trace.durationMs,
       inputTokens: est?.usage.inputTokens ?? 0,
       cachedTokens: est?.usage.cachedTokens ?? 0,
+      nonCachedInputTokens: est?.usage.nonCachedInputTokens ?? 0,
+      cacheHitRate: est?.cacheHitRate ?? null,
+      estimatedCacheSavingsUsd: est?.cacheSavingsUsd ?? 0,
       outputTokens: est?.usage.outputTokens ?? 0,
       thoughtTokens: est?.usage.thoughtTokens ?? 0,
       estimatedCostUsd: est?.totalCostUsd ?? 0,
@@ -1201,6 +1232,9 @@ function buildTurnMetrics(
       durationMs: msg.quickScanTrace.durationMs,
       inputTokens: est?.usage.inputTokens ?? 0,
       cachedTokens: est?.usage.cachedTokens ?? 0,
+      nonCachedInputTokens: est?.usage.nonCachedInputTokens ?? 0,
+      cacheHitRate: est?.cacheHitRate ?? null,
+      estimatedCacheSavingsUsd: est?.cacheSavingsUsd ?? 0,
       outputTokens: est?.usage.outputTokens ?? 0,
       thoughtTokens: est?.usage.thoughtTokens ?? 0,
       estimatedCostUsd: est?.totalCostUsd ?? 0,
@@ -1418,6 +1452,14 @@ export function buildAiSessionConversationJsonExport(
       model: hydrated.model,
       turnCount: turnCount > 0 ? turnCount : costSummary.turnCount,
       estimatedCostUsd: costSummary.totalCostUsd,
+      ...(costSummary.cacheHitRate !== null
+        ? {
+            cacheHitRate: costSummary.cacheHitRate,
+            cachedTokens: costSummary.cachedTokens,
+            nonCachedInputTokens: costSummary.cacheMissedTokens,
+            estimatedCacheSavingsUsd: costSummary.cacheSavingsUsd,
+          }
+        : {}),
       ...(hasOmittedMedia ? {hasOmittedMedia: true} : {}),
     },
     ...(scriptSnapshot ? {scriptSnapshot} : {}),

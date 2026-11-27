@@ -1,11 +1,16 @@
 import {createPortal} from 'react-dom';
-import {formatUsdBreakdown, type SessionCostSummary} from '../../../ui/aiPricing.ts';
+import {
+  formatCacheHitPercent,
+  formatUsdBreakdown,
+  type SessionCostSummary,
+} from '../../../ui/aiPricing.ts';
 import {UI_LABELS} from '../../../ui/labels.ts';
 
 export interface HoverTooltipRow {
   label: string;
   secondary?: string;
   value: string;
+  tone?: 'positive' | 'muted';
 }
 
 export interface ActivityHoverTooltip {
@@ -38,18 +43,42 @@ export function buildSessionCostTooltip(
   rect: DOMRect
 ): ActivityHoverTooltip {
   const costLabels = UI_LABELS.ai.cost;
-  const rows: HoverTooltipRow[] = [
-    {
-      label: costLabels.rowInput,
-      secondary: costLabels.formatTokens(
-        sessionCost.nonCachedInputTokens + sessionCost.toolUseTokens
-      ),
-      value: formatUsdBreakdown(sessionCost.inputCostUsd),
-    },
-  ];
+  const hasCacheStats = sessionCost.cacheHitRate !== null;
+  const rows: HoverTooltipRow[] = [];
+
+  if (hasCacheStats && sessionCost.cacheHitRate !== null) {
+    const hitPct = formatCacheHitPercent(sessionCost.cacheHitRate);
+    const missPct = formatCacheHitPercent(1 - sessionCost.cacheHitRate);
+    if (sessionCost.cachedTokens > 0) {
+      rows.push({
+        label: costLabels.rowCache,
+        secondary: costLabels.cacheHitMissPair(hitPct, missPct),
+        value:
+          sessionCost.cacheSavingsUsd > 0
+            ? costLabels.cacheSavedCompact(formatUsdBreakdown(sessionCost.cacheSavingsUsd))
+            : hitPct,
+        tone: sessionCost.cacheSavingsUsd > 0 ? 'positive' : undefined,
+      });
+    } else {
+      rows.push({
+        label: costLabels.rowCache,
+        secondary: costLabels.cacheColdMiss,
+        value: formatUsdBreakdown(0),
+        tone: 'muted',
+      });
+    }
+  }
+
+  rows.push({
+    label: hasCacheStats ? costLabels.rowInputMiss : costLabels.rowInput,
+    secondary: costLabels.formatTokens(
+      sessionCost.nonCachedInputTokens + sessionCost.toolUseTokens
+    ),
+    value: formatUsdBreakdown(sessionCost.inputCostUsd),
+  });
   if (sessionCost.cachedTokens > 0) {
     rows.push({
-      label: costLabels.rowCached,
+      label: costLabels.rowCachedHit,
       secondary: costLabels.formatTokens(sessionCost.cachedTokens),
       value: formatUsdBreakdown(sessionCost.cachedCostUsd),
     });
@@ -118,7 +147,17 @@ export function HoverTooltipPortal({tooltip}: {tooltip: ActivityHoverTooltip | n
               <span className="text-text-muted truncate">{row.label}</span>
               <span className="flex items-center gap-2 shrink-0">
                 {row.secondary && <span className="text-text-faint">{row.secondary}</span>}
-                <span className="text-text-main font-medium">{row.value}</span>
+                <span
+                  className={
+                    row.tone === 'positive'
+                      ? 'font-semibold text-[var(--phase-aesthetic-text)]'
+                      : row.tone === 'muted'
+                        ? 'text-text-faint'
+                        : 'text-text-main font-medium'
+                  }
+                >
+                  {row.value}
+                </span>
               </span>
             </div>
           ))}

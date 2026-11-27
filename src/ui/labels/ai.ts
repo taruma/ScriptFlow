@@ -381,8 +381,20 @@ export const AI_LABELS = {
       sessionTooltipTitle: 'Session Estimated Cost',
       sessionTooltipSubtitle: (turns: number) =>
         `${turns} ${turns === 1 ? 'turn' : 'turns'} in this chat · resets on New Chat`,
+      rowCache: 'Cache',
       rowInput: 'Input',
+      rowInputMiss: 'Input (miss)',
       rowCached: 'Cached',
+      rowCachedHit: 'Cached (hit)',
+      rowCacheSaved: 'Est. saved',
+      cacheHitShort: (pct: string) => `${pct} hit`,
+      cacheMissShort: '0% miss',
+      cacheHitMissPair: (hitPct: string, missPct: string) => `${hitPct} hit · ${missPct} miss`,
+      cacheColdMiss: '0% hit (miss)',
+      cacheSavedCompact: (usd: string) => `-${usd}`,
+      turnCacheBadgeAria: (label: string) => `Cache hit rate ${label}`,
+      sessionCacheBadgeAria: (label: string, turns: number) =>
+        `Session cache hit rate ${label} across ${turns} ${turns === 1 ? 'turn' : 'turns'}`,
       rowToolInput: 'Tool input',
       rowOutput: 'Output',
       rowThinking: 'Thinking',
@@ -944,6 +956,19 @@ export const AI_LABELS = {
       summaryInteractionChain: 'Interaction Chain',
       summaryUsage: 'Token Usage',
       summaryEstimatedCost: 'Est. Cost',
+      summaryCache: 'Cache',
+      cacheHitTokensLabel: 'Hit',
+      cacheMissTokensLabel: 'Miss',
+      cacheSavedLabel: 'Saved',
+      roundCacheBadgeTooltip: (
+        hitPct: string,
+        cachedTok: string,
+        missedTok: string,
+        savedUsd?: string
+      ) =>
+        savedUsd
+          ? `${hitPct} cache hit (${cachedTok} hit / ${missedTok} miss · est. saved ${savedUsd})`
+          : `${hitPct} cache hit (${cachedTok} hit / ${missedTok} miss)`,
       costPromoBadge: 'promo',
       costRateSummary: (inputPer1M: number, outputPer1M: number) =>
         `$${inputPer1M}/$${outputPer1M} per 1M`,

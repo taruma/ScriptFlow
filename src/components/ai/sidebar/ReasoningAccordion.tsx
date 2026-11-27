@@ -31,6 +31,7 @@ import {
 } from '../../../ui/aiAssistant.ts';
 import {
   estimateTraceCost,
+  formatCacheHitPercent,
   formatEstimatedUsd,
   formatUsdBreakdown,
 } from '../../../ui/aiPricing.ts';
@@ -146,16 +147,40 @@ export const ReasoningAccordion = memo(function ReasoningAccordion({
     const roundsCount = Math.max(1, trace.rounds.length);
     const nonCachedInputOnlyCost =
       (turnCost.usage.nonCachedInputTokens * turnCost.rates.inputPer1M) / 1_000_000;
-    const rows: HoverTooltipRow[] = [
-      {
-        label: costLabels.rowInput,
-        secondary: costLabels.formatTokens(turnCost.usage.nonCachedInputTokens),
-        value: formatUsdBreakdown(nonCachedInputOnlyCost),
-      },
-    ];
+    const hasCacheStats = turnCost.cacheHitRate !== null;
+    const rows: HoverTooltipRow[] = [];
+
+    if (hasCacheStats && turnCost.cacheHitRate !== null) {
+      const hitPct = formatCacheHitPercent(turnCost.cacheHitRate);
+      const missPct = formatCacheHitPercent(1 - turnCost.cacheHitRate);
+      if (turnCost.usage.cachedTokens > 0) {
+        rows.push({
+          label: costLabels.rowCache,
+          secondary: costLabels.cacheHitMissPair(hitPct, missPct),
+          value:
+            turnCost.cacheSavingsUsd > 0
+              ? costLabels.cacheSavedCompact(formatUsdBreakdown(turnCost.cacheSavingsUsd))
+              : hitPct,
+          tone: turnCost.cacheSavingsUsd > 0 ? 'positive' : undefined,
+        });
+      } else {
+        rows.push({
+          label: costLabels.rowCache,
+          secondary: costLabels.cacheColdMiss,
+          value: formatUsdBreakdown(0),
+          tone: 'muted',
+        });
+      }
+    }
+
+    rows.push({
+      label: hasCacheStats ? costLabels.rowInputMiss : costLabels.rowInput,
+      secondary: costLabels.formatTokens(turnCost.usage.nonCachedInputTokens),
+      value: formatUsdBreakdown(nonCachedInputOnlyCost),
+    });
     if (turnCost.usage.cachedTokens > 0) {
       rows.push({
-        label: costLabels.rowCached,
+        label: costLabels.rowCachedHit,
         secondary: costLabels.formatTokens(turnCost.usage.cachedTokens),
         value: formatUsdBreakdown(turnCost.cachedCostUsd),
       });
@@ -181,27 +206,51 @@ export const ReasoningAccordion = memo(function ReasoningAccordion({
       });
     }
 
+    const showTooltipHandler = (event: ReactMouseEvent<HTMLElement>) =>
+      openPillTooltip(event, {
+        title: costLabels.turnTooltipTitle,
+        subtitle: costLabels.turnTooltipSubtitle(
+          modelLabel,
+          roundsCount,
+          turnCost.rates.isPromoRate
+        ),
+        badge: formattedTotal,
+        rows,
+        footer: costLabels.disclaimer,
+      });
+
+    const cachePillText =
+      turnCost.cacheHitRate !== null
+        ? turnCost.usage.cachedTokens > 0
+          ? costLabels.cacheHitShort(formatCacheHitPercent(turnCost.cacheHitRate))
+          : costLabels.cacheMissShort
+        : null;
+
     return (
-      <span
-        aria-label={costLabels.turnBadgeAria(formattedTotal)}
-        onMouseEnter={(event) =>
-          openPillTooltip(event, {
-            title: costLabels.turnTooltipTitle,
-            subtitle: costLabels.turnTooltipSubtitle(
-              modelLabel,
-              roundsCount,
-              turnCost.rates.isPromoRate
-            ),
-            badge: formattedTotal,
-            rows,
-            footer: costLabels.disclaimer,
-          })
-        }
-        onMouseLeave={() => setTooltip(null)}
-        className="inline-flex items-center rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted tabular-nums hover:border-border-main hover:text-text-main transition-colors cursor-default select-none shrink-0"
-      >
-        {formattedTotal}
-      </span>
+      <>
+        {cachePillText && (
+          <span
+            aria-label={costLabels.turnCacheBadgeAria(cachePillText)}
+            onMouseEnter={showTooltipHandler}
+            onMouseLeave={() => setTooltip(null)}
+            className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums transition-colors cursor-default select-none shrink-0 ${
+              turnCost.usage.cachedTokens > 0
+                ? 'auteur-phase-aesthetic'
+                : 'border-border-subtle bg-surface-subtle text-text-faint hover:border-border-main hover:text-text-muted'
+            }`}
+          >
+            {cachePillText}
+          </span>
+        )}
+        <span
+          aria-label={costLabels.turnBadgeAria(formattedTotal)}
+          onMouseEnter={showTooltipHandler}
+          onMouseLeave={() => setTooltip(null)}
+          className="inline-flex items-center rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-text-muted tabular-nums hover:border-border-main hover:text-text-main transition-colors cursor-default select-none shrink-0"
+        >
+          {formattedTotal}
+        </span>
+      </>
     );
   };
 

@@ -3,6 +3,7 @@ import {AlertCircle, Check, Copy, Terminal, X} from 'lucide-react';
 import type {AgentTurnTrace} from '../services/geminiInteractions.ts';
 import {
   estimateTraceCost,
+  formatCacheHitPercent,
   formatEstimatedUsd,
   formatUsdBreakdown,
 } from '../ui/aiPricing.ts';
@@ -334,6 +335,45 @@ function AgentTurnTraceBody({
             </div>
           )}
 
+          {turnCost && turnCost.cacheHitRate !== null && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0">
+                {labels.summaryCache}
+              </span>
+              <span
+                className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
+                  turnCost.usage.cachedTokens > 0
+                    ? 'auteur-phase-aesthetic'
+                    : 'border-border-subtle bg-surface-subtle text-text-faint'
+                }`}
+              >
+                {turnCost.usage.cachedTokens > 0
+                  ? UI_LABELS.ai.cost.cacheHitMissPair(
+                      formatCacheHitPercent(turnCost.cacheHitRate),
+                      formatCacheHitPercent(1 - turnCost.cacheHitRate)
+                    )
+                  : UI_LABELS.ai.cost.cacheColdMiss}
+              </span>
+              <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums">
+                {labels.cacheHitTokensLabel}:{' '}
+                <span className="text-text-main">
+                  {UI_LABELS.ai.cost.formatTokens(turnCost.usage.cachedTokens)}
+                </span>
+              </span>
+              <span className="rounded border border-border-subtle bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-text-muted tabular-nums">
+                {labels.cacheMissTokensLabel}:{' '}
+                <span className="text-text-main">
+                  {UI_LABELS.ai.cost.formatTokens(turnCost.usage.nonCachedInputTokens)}
+                </span>
+              </span>
+              {turnCost.cacheSavingsUsd > 0 && (
+                <span className="rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums auteur-phase-aesthetic">
+                  {labels.cacheSavedLabel}: {formatUsdBreakdown(turnCost.cacheSavingsUsd)}
+                </span>
+              )}
+            </div>
+          )}
+
           {(trace.activeSkillIds.length > 0 || trace.loadedSkillIds.length > 0) && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-faint shrink-0">
@@ -402,7 +442,12 @@ function AgentTurnTraceBody({
           ) : (
             <div className="space-y-3">
               {trace.rounds.map((round) => (
-                <RoundTraceCard key={round.roundIndex} round={round} />
+                <RoundTraceCard
+                  key={round.roundIndex}
+                  round={round}
+                  model={trace.model}
+                  startedAt={trace.startedAt}
+                />
               ))}
             </div>
           )}
