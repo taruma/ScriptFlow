@@ -331,6 +331,12 @@ export function compactSessionForStorage(record: AiSessionRecord): AiSessionReco
   });
 
   const costSummary = aggregateSessionCost(compactedMessages);
+  const preservedCostUsd =
+    typeof record.estimatedCostUsd === 'number' &&
+    Number.isFinite(record.estimatedCostUsd) &&
+    record.estimatedCostUsd >= 0
+      ? record.estimatedCostUsd
+      : 0;
   const userTurnCount = compactedMessages.filter((msg) => msg.role === 'user').length;
   const hasDictEntries = Object.keys(dict).length > 0;
   const hasOmittedMedia = Boolean(record.hasOmittedMedia || hadBriefMedia || hadMessageMedia);
@@ -342,7 +348,7 @@ export function compactSessionForStorage(record: AiSessionRecord): AiSessionReco
     scriptTitleSnapshot: record.scriptTitleSnapshot.trim() || 'Untitled Scene',
     messageCount: compactedMessages.length,
     turnCount: userTurnCount > 0 ? userTurnCount : costSummary.turnCount,
-    estimatedCostUsd: costSummary.totalCostUsd,
+    estimatedCostUsd: costSummary.turnCount > 0 ? costSummary.totalCostUsd : preservedCostUsd,
     messages: compactedMessages,
     brief: strippedBrief,
     ...(hasOmittedMedia ? {hasOmittedMedia: true} : {}),

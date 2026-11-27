@@ -1027,6 +1027,89 @@ export const AI_LABELS = {
       inspectTraceButton: 'Trace',
       noTurnsYet: 'No turns recorded in this session.',
       pausedBadge: 'Paused',
+      backupButton: 'Backup',
+      backupButtonTitle: 'Export all or selected AI chat sessions as a portable JSON backup',
+      backupButtonAria: 'Backup AI chat sessions',
+      importButton: 'Import',
+      importButtonTitle: 'Inspect and import AI chat sessions from a JSON backup',
+      importButtonAria: 'Import AI chat sessions',
+      importSuccessToast: (added: number, forked: number) => {
+        const total = added + forked;
+        if (forked > 0 && added > 0) {
+          return `Imported ${total} AI sessions (${added} new, ${forked} forked as copies).`;
+        }
+        if (forked > 0) {
+          return `Imported ${forked} AI ${forked === 1 ? 'session' : 'sessions'} as new copies.`;
+        }
+        return `Imported ${added} AI ${added === 1 ? 'session' : 'sessions'}.`;
+      },
+      backup: {
+        dialogAria: 'Backup AI Chat History',
+        title: 'Backup AI Chat History',
+        subtitle: 'Export portable JSON snapshots of your local AI sessions (API keys excluded).',
+        closeAria: 'Close Backup AI Chat History',
+        scopeHeading: 'What to Include',
+        scopeAll: 'All Sessions',
+        scopeCurrentScript: 'This Script',
+        scopePinned: 'Pinned Only',
+        scopeSelected: 'Pick Specific',
+        pickSearchPlaceholder: 'Filter sessions to pick...',
+        pickSearchAria: 'Filter sessions for backup',
+        selectAllButton: 'Select All',
+        clearSelectionButton: 'Clear',
+        emptyScopeHint: 'No sessions match this scope.',
+        includeTracesLabel: 'Include API request traces',
+        includeTracesDesc:
+          'Keeps raw Gemini API rounds and system instructions for Trace Inspector. Turn off for a much smaller file—conversations, thinking summaries, tool calls, suggestions, Brief, and resume recap remain intact.',
+        traceBadge: 'Traces',
+        noTraceBadge: 'No traces',
+        summarySelected: (count: number) =>
+          `${count} ${count === 1 ? 'session' : 'sessions'} selected`,
+        summaryEstimatedSize: (formattedSize: string) => `File size: ${formattedSize}`,
+        cancelButton: 'Cancel',
+        downloadButton: (count: number) =>
+          count > 0 ? `Download Backup (${count})` : 'Download Backup',
+      },
+      import: {
+        dialogAria: 'Import AI Chat History',
+        title: 'Import AI Chat History',
+        subtitle: 'Inspect file condition, trace coverage, and session conflicts before importing.',
+        closeAria: 'Close Import AI Chat History',
+        dropTitle: 'Drop AI backup JSON here',
+        dropSubtitle: 'Supports AI Chat History Backups and single-session Full Payload (.json)',
+        chooseFileButton: 'Choose JSON File',
+        chooseFileAria: 'Choose an AI chat backup JSON file',
+        chooseAnotherButton: 'Choose Another File',
+        formatBackupBadge: 'History Backup',
+        formatSingleBadge: 'Single Session Export',
+        exportedAtPrefix: 'Exported',
+        summaryNew: (count: number) => `${count} new`,
+        summaryConflict: (count: number) => `${count} conflict (fork)`,
+        summaryDuplicate: (count: number) => `${count} duplicate`,
+        summaryWithTraces: (count: number) => `${count} with traces`,
+        summaryWithoutTraces: (count: number) => `${count} without traces`,
+        noTracesNotice:
+          'This file omits raw API traces. Transcripts, thinking summaries, tool calls, suggestions, Brief notes, and resuming chats via recap will still work normally—only the Trace Inspector button is unavailable.',
+        orphanedScriptsNotice: (count: number) =>
+          `${count} ${count === 1 ? 'session references' : 'sessions reference'} a script not found in this browser. You can still inspect ${count === 1 ? 'it' : 'them'} or resume via recap on any open script.`,
+        selectRecommendedButton: 'Select Recommended',
+        selectAllButton: 'Select All',
+        clearButton: 'Clear',
+        statusNewBadge: 'New',
+        statusConflictBadge: 'Conflict → Fork',
+        statusDuplicateBadge: 'Duplicate',
+        conflictDetail: (existingTitle: string) =>
+          `Matches an existing ID ("${existingTitle}") with different content — imports as a separate copy without overwriting.`,
+        duplicateDetail: 'Already present locally with identical content (skipped by default).',
+        tracesPresentBadge: 'Traces',
+        tracesOmittedBadge: 'No traces',
+        scriptMissingBadge: 'Not in library',
+        cancelButton: 'Cancel',
+        confirmButton: (count: number) =>
+          count > 0 ? `Import ${count} ${count === 1 ? 'Session' : 'Sessions'}` : 'Import Selected',
+        importingButton: 'Importing…',
+        importErrorTitle: 'Could not import file',
+      },
     },
   },
 } as const;

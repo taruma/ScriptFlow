@@ -101,6 +101,7 @@ export interface ScriptLibraryStore {
     record: AiSessionRecord,
     options?: {maxAuto?: number}
   ): Promise<AiSessionRecord>;
+  bulkPutAiSessions(records: readonly AiSessionRecord[]): Promise<AiSessionRecord[]>;
   updateAiSessionMeta(
     id: string,
     patch: {title?: string; pinned?: boolean}

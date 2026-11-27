@@ -1,5 +1,5 @@
 import {lazy, Suspense, useEffect, useMemo, useState} from 'react';
-import {History, Pin, Search, X} from 'lucide-react';
+import {FolderArchive, History, Pin, Search, Upload, X} from 'lucide-react';
 import type {BundledExample} from '../data/examples/index.ts';
 import {formatEstimatedUsd} from '../ui/aiPricing.ts';
 import {useAiSettings} from '../ui/aiSettings.ts';
@@ -17,6 +17,8 @@ import {formatRelativeUpdatedTime} from '../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import type {AiInspectableTrace} from './AiTraceModal.tsx';
 import {ConfirmDialog, type ConfirmDialogRequest} from './ConfirmDialog.tsx';
+import {AiSessionBackupModal} from './ai/history/AiSessionBackupModal.tsx';
+import {AiSessionImportModal} from './ai/history/AiSessionImportModal.tsx';
 import {AiSessionPreviewPane} from './ai/history/AiSessionPreviewPane.tsx';
 
 const AiTraceModal = lazy(() =>
@@ -63,6 +65,9 @@ function AiSessionHistoryModalContent({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspectedTrace, setInspectedTrace] = useState<AiInspectableTrace | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
+  const [isBackupOpen, setIsBackupOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,14 +127,42 @@ function AiSessionHistoryModalContent({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !inspectedTrace && !confirmRequest) {
+      if (
+        event.key === 'Escape' &&
+        !inspectedTrace &&
+        !confirmRequest &&
+        !isBackupOpen &&
+        !isImportOpen
+      ) {
         event.preventDefault();
         onClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, inspectedTrace, confirmRequest]);
+  }, [onClose, inspectedTrace, confirmRequest, isBackupOpen, isImportOpen]);
+
+  useEffect(() => {
+    if (!importNotice) return;
+    const timer = window.setTimeout(() => setImportNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [importNotice]);
+
+  const handleConfirmImport = async (
+    recordsToWrite: readonly AiSessionRecord[],
+    stats: {addedCount: number; forkedCount: number}
+  ) => {
+    const saved = await scriptLibraryDb.bulkPutAiSessions(recordsToWrite);
+    const updatedList = await scriptLibraryDb.listAiSessions();
+    setSessions(updatedList);
+    if (saved.length > 0) {
+      setActiveFilter('all');
+      setSearchQuery('');
+      setSelectedId(saved[0].id);
+    }
+    setImportNotice(labels.importSuccessToast(stats.addedCount, stats.forkedCount));
+    onSessionsChanged?.();
+  };
 
   const handleRenameSession = async (id: string, nextTitle: string) => {
     try {
@@ -223,15 +256,53 @@ function AiSessionHistoryModalContent({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={labels.closeAria}
-              className={UI_TOKENS.button.iconClose}
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                disabled={sessions.length === 0 || isLoading}
+                onClick={() => setIsBackupOpen(true)}
+                title={labels.backupButtonTitle}
+                aria-label={labels.backupButtonAria}
+                className={`${UI_TOKENS.button.actionPill} disabled:opacity-45 disabled:cursor-not-allowed`}
+              >
+                <FolderArchive className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="hidden sm:inline">{labels.backupButton}</span>
+              </button>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() => setIsImportOpen(true)}
+                title={labels.importButtonTitle}
+                aria-label={labels.importButtonAria}
+                className={`${UI_TOKENS.button.actionPill} disabled:opacity-45 disabled:cursor-not-allowed`}
+              >
+                <Upload className="h-3.5 w-3.5 text-text-muted" />
+                <span className="hidden sm:inline">{labels.importButton}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={labels.closeAria}
+                className={UI_TOKENS.button.iconClose}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
+
+          {importNotice && (
+            <div className="px-4 py-2 border-b border-border-subtle bg-surface-subtle/80 text-xs text-text-main flex items-center justify-between gap-2 shrink-0">
+              <span>{importNotice}</span>
+              <button
+                type="button"
+                onClick={() => setImportNotice(null)}
+                aria-label={labels.closeAria}
+                className="text-text-faint hover:text-text-main cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Two-Pane Body */}
           <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
@@ -387,6 +458,23 @@ function AiSessionHistoryModalContent({
           />
         </Suspense>
       )}
+
+      <AiSessionBackupModal
+        isOpen={isBackupOpen}
+        onClose={() => setIsBackupOpen(false)}
+        resolvedSessions={resolvedSessions}
+        initialSelectedIds={selectedId ? new Set([selectedId]) : undefined}
+      />
+
+      <AiSessionImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        existingSessions={sessions}
+        currentScriptSessionKey={currentScriptSessionKey}
+        customScripts={customScripts}
+        examples={examples}
+        onConfirmImport={handleConfirmImport}
+      />
 
       <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
     </>

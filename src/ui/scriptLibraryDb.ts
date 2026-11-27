@@ -674,6 +674,31 @@ export function createScriptLibraryStore(
       );
     },
 
+    async bulkPutAiSessions(records: readonly AiSessionRecord[]): Promise<AiSessionRecord[]> {
+      if (records.length === 0) return [];
+      const sanitized = records
+        .map((record) => sanitizeAiSessionRecord(record))
+        .filter((record) => record.id.length > 0);
+      if (sanitized.length === 0) return [];
+
+      return runWithFallback(
+        (db) => idbBulkPutAiSessions(db, sanitized),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          const hydratedList: AiSessionRecord[] = [];
+          for (const record of sanitized) {
+            const compacted = compactSessionForStorage(record);
+            const hydrated = hydrateSessionFromStorage(compacted);
+            sessMap.set(hydrated.id, hydrated);
+            hydratedList.push({...hydrated});
+          }
+          persistFallbackAiSessionsMap(fallbackStorageKey, sessMap);
+          hasPendingFallbackData = true;
+          return hydratedList;
+        }
+      );
+    },
+
     async updateAiSessionMeta(
       id: string,
       patch: {title?: string; pinned?: boolean}

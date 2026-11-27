@@ -41,3 +41,23 @@ export {
   type BuiltAiSessionExport,
   type ResolvedAiSessionSummary,
 } from './ai/sessionStore.ts';
+export {
+  AI_SESSIONS_BACKUP_FORMAT,
+  AI_SESSIONS_BACKUP_VERSION,
+  analyzeAiSessionsImport,
+  buildAiSessionsBackupExport,
+  formatBackupByteSize,
+  hasSessionTraces,
+  parseAiSessionsImport,
+  prepareSelectedAiSessionsImport,
+  selectSessionsForBackup,
+  stripTracesFromSession,
+  type AiSessionBackupScope,
+  type AiSessionImportStatus,
+  type AiSessionsImportAnalysis,
+  type AnalyzedAiSessionImportItem,
+  type AuteurAiSessionsBackupPayload,
+  type BuiltAiSessionsBackupExport,
+  type ParseAiSessionsImportResult,
+  type PreparedAiSessionsImport,
+} from './ai/sessionBackup.ts';

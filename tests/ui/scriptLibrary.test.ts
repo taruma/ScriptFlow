@@ -1738,6 +1738,36 @@ describe('scriptLibraryDb aiSessions store (detached from script deletion)', () 
     expect(memoryStorage.getItem(`${fallbackKey}-ai-sessions`)).toBeNull();
     expect((await reloaded.getAiSession('sess-stranded'))?.title).toBe('Draft tense alley scene');
   });
+
+  it('bulkPutAiSessions persists imported sessions without FIFO pruning in IndexedDB and fallback mode', async () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+    vi.stubGlobal('IDBKeyRange', {only: (value: string) => ({only: value})});
+    const mockIdb = createMockIndexedDbFactory();
+    const idbStore = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: 'test-ai-bulk-put-idb',
+    });
+
+    const bulkBatch = Array.from({length: 105}, (_, idx) =>
+      makeTestAiSession({
+        id: `bulk-${idx + 1}`,
+        title: `Session ${idx + 1}`,
+        updatedAt: 1000 + idx,
+      })
+    );
+    const savedIdb = await idbStore.bulkPutAiSessions(bulkBatch);
+    expect(savedIdb).toHaveLength(105);
+    expect(await idbStore.listAiSessions()).toHaveLength(105);
+
+    const fallbackStore = createScriptLibraryStore({
+      indexedDB: null,
+      fallbackStorageKey: 'test-ai-bulk-put-fallback',
+    });
+    const savedFallback = await fallbackStore.bulkPutAiSessions(bulkBatch.slice(0, 5));
+    expect(savedFallback).toHaveLength(5);
+    expect(await fallbackStore.listAiSessions()).toHaveLength(5);
+  });
 });
 
 describe('scriptLibrary hydration reconciliation', () => {
