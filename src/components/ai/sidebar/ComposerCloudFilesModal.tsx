@@ -91,6 +91,7 @@ export function ComposerCloudFilesModal({
         <div className="overflow-y-auto auteur-pane-scroll p-4">
           <GeminiFilesPanel
             isOpen={true}
+            hideHeader
             apiKey={apiKey}
             hasApiKey={hasApiKey}
             attachedUris={attachedUris}

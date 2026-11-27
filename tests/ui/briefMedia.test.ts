@@ -28,11 +28,14 @@ import {
   CARD_MIN_WIDTH,
   CARD_VIDEO_DEFAULT_WIDTH,
   classifyLocalDropFile,
+  CLOUD_FILE_EXPIRING_SOON_MS,
   computeDownscaledDimensions,
   computeReferenceCardWidth,
   extractYouTubeVideoId,
   filenameToDefaultLabel,
   formatByteSize,
+  formatCloudFileTimeRemaining,
+  formatCloudFileTimestampTooltip,
   getYouTubeThumbnailUrl,
   IMAGE_COMPRESSION_QUALITY,
   IMAGE_MAX_LONGEST_EDGE,
@@ -566,5 +569,135 @@ describe('geminiFiles browser-direct Files API service', () => {
     expect(formatGeminiFilesError('403 PERMISSION_DENIED: You do not have permission to access the File x')).toContain(
       '48 hours'
     );
+  });
+
+  it('formats cloud file remaining time, expiration urgency, upload-age fallback, and tooltips', () => {
+    const now = Date.parse('2026-11-27T12:00:00Z');
+    const hourMs = 3_600_000;
+    const minMs = 60_000;
+
+    // Active file > 6h left
+    expect(
+      formatCloudFileTimeRemaining(
+        new Date(now + 47 * hourMs + 30 * minMs).toISOString(),
+        undefined,
+        now
+      )
+    ).toEqual({
+      label: '47h 30m left',
+      isExpiringSoon: false,
+      isExpired: false,
+    });
+
+    expect(
+      formatCloudFileTimeRemaining(new Date(now + 24 * hourMs).toISOString(), undefined, now)
+    ).toEqual({
+      label: '24h left',
+      isExpiringSoon: false,
+      isExpired: false,
+    });
+
+    // Expiring soon (< 6h left)
+    expect(CLOUD_FILE_EXPIRING_SOON_MS).toBe(6 * hourMs);
+    expect(
+      formatCloudFileTimeRemaining(
+        new Date(now + 5 * hourMs + 45 * minMs).toISOString(),
+        undefined,
+        now
+      )
+    ).toEqual({
+      label: '5h 45m left',
+      isExpiringSoon: true,
+      isExpired: false,
+    });
+
+    expect(
+      formatCloudFileTimeRemaining(new Date(now + 42 * minMs).toISOString(), undefined, now)
+    ).toEqual({
+      label: '42m left',
+      isExpiringSoon: true,
+      isExpired: false,
+    });
+
+    expect(
+      formatCloudFileTimeRemaining(new Date(now + 20_000).toISOString(), undefined, now)
+    ).toEqual({
+      label: '<1m left',
+      isExpiringSoon: true,
+      isExpired: false,
+    });
+
+    // Expired (<= 0ms)
+    expect(
+      formatCloudFileTimeRemaining(new Date(now).toISOString(), undefined, now)
+    ).toEqual({
+      label: 'Expired',
+      isExpiringSoon: false,
+      isExpired: true,
+    });
+    expect(
+      formatCloudFileTimeRemaining(new Date(now - 5 * minMs).toISOString(), undefined, now)
+    ).toEqual({
+      label: 'Expired',
+      isExpiringSoon: false,
+      isExpired: true,
+    });
+
+    // Fallback to createTime when expirationTime is absent
+    expect(
+      formatCloudFileTimeRemaining(undefined, new Date(now - 10_000).toISOString(), now)
+    ).toEqual({
+      label: 'Uploaded just now',
+      isExpiringSoon: false,
+      isExpired: false,
+    });
+    expect(
+      formatCloudFileTimeRemaining(undefined, new Date(now - 25 * minMs).toISOString(), now)
+    ).toEqual({
+      label: 'Uploaded 25m ago',
+      isExpiringSoon: false,
+      isExpired: false,
+    });
+    expect(
+      formatCloudFileTimeRemaining(
+        undefined,
+        new Date(now - (3 * hourMs + 15 * minMs)).toISOString(),
+        now
+      )
+    ).toEqual({
+      label: 'Uploaded 3h 15m ago',
+      isExpiringSoon: false,
+      isExpired: false,
+    });
+    expect(
+      formatCloudFileTimeRemaining(undefined, new Date(now - 50 * hourMs).toISOString(), now)
+    ).toEqual({
+      label: 'Uploaded 2d ago',
+      isExpiringSoon: false,
+      isExpired: false,
+    });
+
+    // Missing or invalid timestamps
+    expect(formatCloudFileTimeRemaining(undefined, undefined, now)).toBeNull();
+    expect(formatCloudFileTimeRemaining('not-a-date', 'also-invalid', now)).toBeNull();
+
+    // Tooltips
+    const bothTooltip = formatCloudFileTimestampTooltip(
+      '2026-11-26T10:00:00Z',
+      '2026-11-28T10:00:00Z'
+    );
+    expect(bothTooltip).toContain('Uploaded: ');
+    expect(bothTooltip).toContain(' · Expires: ');
+
+    const uploadOnlyTooltip = formatCloudFileTimestampTooltip('2026-11-26T10:00:00Z', undefined);
+    expect(uploadOnlyTooltip).toContain('Uploaded: ');
+    expect(uploadOnlyTooltip).not.toContain('Expires: ');
+
+    const expiresOnlyTooltip = formatCloudFileTimestampTooltip(undefined, '2026-11-28T10:00:00Z');
+    expect(expiresOnlyTooltip).toContain('Expires: ');
+    expect(expiresOnlyTooltip).not.toContain('Uploaded: ');
+
+    expect(formatCloudFileTimestampTooltip(undefined, undefined)).toBeUndefined();
+    expect(formatCloudFileTimestampTooltip('invalid', 'invalid')).toBeUndefined();
   });
 });

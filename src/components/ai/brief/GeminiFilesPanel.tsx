@@ -26,6 +26,8 @@ import {
   buildAttachmentFingerprint,
   filenameToDefaultLabel,
   formatByteSize,
+  formatCloudFileTimeRemaining,
+  formatCloudFileTimestampTooltip,
   inferReferenceKindFromMime,
 } from '../../../ui/briefMedia.ts';
 import {UI_LABELS} from '../../../ui/labels.ts';
@@ -47,6 +49,7 @@ export interface GeminiFilesPanelProps {
   apiKey: string;
   hasApiKey: boolean;
   attachedUris: ReadonlySet<string>;
+  hideHeader?: boolean;
   panelRef?: RefObject<GeminiFilesPanelHandle | null>;
   onClosePanel: () => void;
   onRequestOpenPanel: () => void;
@@ -61,6 +64,7 @@ export function GeminiFilesPanel({
   apiKey,
   hasApiKey,
   attachedUris,
+  hideHeader = false,
   panelRef,
   onClosePanel,
   onRequestOpenPanel,
@@ -284,22 +288,30 @@ export function GeminiFilesPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="rounded-xl border border-border-main bg-surface-subtle/70 p-3 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <CloudUpload className="h-3.5 w-3.5 shrink-0 text-[var(--phase-aesthetic-text)]" />
-          <span className="text-xs font-semibold text-text-main truncate">
-            {labels.filesApiPanelTitle}
-          </span>
+    <div
+      className={
+        hideHeader
+          ? 'space-y-3'
+          : 'rounded-xl border border-border-main bg-surface-subtle/70 p-3 space-y-3'
+      }
+    >
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <CloudUpload className="h-3.5 w-3.5 shrink-0 text-[var(--phase-aesthetic-text)]" />
+            <span className="text-xs font-semibold text-text-main truncate">
+              {labels.filesApiPanelTitle}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClosePanel}
+            className="text-[11px] text-text-muted hover:text-text-main cursor-pointer"
+          >
+            {labels.filesApiCloseButton}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClosePanel}
-          className="text-[11px] text-text-muted hover:text-text-main cursor-pointer"
-        >
-          {labels.filesApiCloseButton}
-        </button>
-      </div>
+      )}
 
       {!hasApiKey ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs text-text-muted">
@@ -427,10 +439,24 @@ export function GeminiFilesPanel({
             ) : cloudFiles.length === 0 ? (
               <p className="text-[11px] italic text-text-faint py-1">{labels.filesApiEmptyList}</p>
             ) : (
-              <div className="max-h-36 overflow-y-auto auteur-pane-scroll space-y-1 pr-0.5">
+              <div
+                className={`${
+                  hideHeader ? 'max-h-64' : 'max-h-36'
+                } overflow-y-auto auteur-pane-scroll space-y-1 pr-0.5`}
+              >
                 {cloudFiles.map((file) => {
                   const isAttached = attachedUris.has(file.uri);
                   const isActive = file.state === 'ACTIVE' || !file.state;
+                  const timeStatus = formatCloudFileTimeRemaining(
+                    file.expirationTime,
+                    file.createTime
+                  );
+                  const timeTooltip = formatCloudFileTimestampTooltip(
+                    file.createTime,
+                    file.expirationTime
+                  );
+                  const isExpired = Boolean(timeStatus?.isExpired);
+                  const canAttach = isActive && !isExpired;
                   return (
                     <div
                       key={file.name || file.uri}
@@ -440,10 +466,29 @@ export function GeminiFilesPanel({
                         <div className="font-medium text-text-main truncate">
                           {file.displayName}
                         </div>
-                        <div className="font-mono text-[10px] text-text-faint truncate">
+                        <div
+                          title={timeTooltip}
+                          className="font-mono text-[10px] text-text-faint truncate"
+                        >
                           {file.mimeType}
                           {file.sizeBytes > 0 ? ` · ${formatByteSize(file.sizeBytes)}` : ''}
                           {file.state && file.state !== 'ACTIVE' ? ` · ${file.state}` : ''}
+                          {timeStatus && (
+                            <>
+                              {' · '}
+                              <span
+                                className={
+                                  timeStatus.isExpired
+                                    ? 'text-red-600 dark:text-red-400 font-semibold'
+                                    : timeStatus.isExpiringSoon
+                                      ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                      : 'text-text-muted'
+                                }
+                              >
+                                {timeStatus.label}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -454,7 +499,8 @@ export function GeminiFilesPanel({
                         ) : (
                           <button
                             type="button"
-                            disabled={!isActive}
+                            disabled={!canAttach}
+                            title={isExpired ? labels.cardFilesApiExpiredTitle : undefined}
                             onClick={() => attachCloudFile(file)}
                             className={`${UI_TOKENS.ai.pillButton} text-[10px] py-0.5 px-2 disabled:opacity-40`}
                           >

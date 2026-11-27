@@ -428,7 +428,20 @@ export const AiComposerDock = memo(function AiComposerDock({
           </div>
         )}
 
-        <div className="flex items-end gap-1.5 px-2 py-2">
+        <textarea
+          ref={composerRef}
+          rows={2}
+          data-native-undo="true"
+          value={inputValue}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={onComposerKeyDown}
+          onPaste={handleTextareaPaste}
+          placeholder={placeholder}
+          aria-label={UI_LABELS.ai.composerAria}
+          className="block w-full min-h-[48px] resize-none overflow-y-auto bg-transparent px-3 pt-2.5 pb-1 text-xs leading-relaxed text-text-main placeholder-text-placeholder outline-none auteur-pane-scroll"
+        />
+
+        <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-1">
           <div ref={attachMenuContainerRef} className="relative shrink-0">
             <button
               type="button"
@@ -513,19 +526,6 @@ export const AiComposerDock = memo(function AiComposerDock({
               </div>
             )}
           </div>
-
-          <textarea
-            ref={composerRef}
-            rows={2}
-            data-native-undo="true"
-            value={inputValue}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={onComposerKeyDown}
-            onPaste={handleTextareaPaste}
-            placeholder={placeholder}
-            aria-label={UI_LABELS.ai.composerAria}
-            className="min-h-[56px] flex-1 resize-none overflow-y-auto bg-transparent text-xs leading-relaxed text-text-main placeholder-text-placeholder outline-none auteur-pane-scroll"
-          />
 
           {isStreaming ? (
             <button

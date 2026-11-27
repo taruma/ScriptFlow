@@ -4,6 +4,13 @@ export const IMAGE_MAX_LONGEST_EDGE = 1600;
 export const IMAGE_COMPRESSION_QUALITY = 0.85;
 export const MAX_INLINE_TEXT_BYTES = 256 * 1024; // 256 KB
 export const MAX_FILES_API_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+export const CLOUD_FILE_EXPIRING_SOON_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+export interface CloudFileTimeStatus {
+  label: string;
+  isExpiringSoon: boolean;
+  isExpired: boolean;
+}
 
 export const CARD_PREVIEW_HEIGHT = 136;
 export const CARD_MIN_WIDTH = 148;
@@ -246,6 +253,101 @@ export function formatByteSize(bytes?: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/**
+ * Formats the remaining TTL before a Gemini Files API upload expires (48h window),
+ * falling back to elapsed upload age when only `createTime` is available.
+ */
+export function formatCloudFileTimeRemaining(
+  expirationTime?: string,
+  createTime?: string,
+  nowMs: number = Date.now()
+): CloudFileTimeStatus | null {
+  if (expirationTime) {
+    const expMs = Date.parse(expirationTime);
+    if (Number.isFinite(expMs)) {
+      const diffMs = expMs - nowMs;
+      if (diffMs <= 0) {
+        return {label: 'Expired', isExpiringSoon: false, isExpired: true};
+      }
+      const totalMinutes = Math.floor(diffMs / 60_000);
+      let label: string;
+      if (totalMinutes < 1) {
+        label = '<1m left';
+      } else if (totalMinutes < 60) {
+        label = `${totalMinutes}m left`;
+      } else {
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        label = mins > 0 ? `${hours}h ${mins}m left` : `${hours}h left`;
+      }
+      return {
+        label,
+        isExpiringSoon: diffMs < CLOUD_FILE_EXPIRING_SOON_MS,
+        isExpired: false,
+      };
+    }
+  }
+
+  if (createTime) {
+    const createdMs = Date.parse(createTime);
+    if (Number.isFinite(createdMs)) {
+      const elapsedMs = Math.max(0, nowMs - createdMs);
+      const elapsedMinutes = Math.floor(elapsedMs / 60_000);
+      let label: string;
+      if (elapsedMinutes < 1) {
+        label = 'Uploaded just now';
+      } else if (elapsedMinutes < 60) {
+        label = `Uploaded ${elapsedMinutes}m ago`;
+      } else if (elapsedMinutes < 48 * 60) {
+        const hours = Math.floor(elapsedMinutes / 60);
+        const mins = elapsedMinutes % 60;
+        label = mins > 0 ? `Uploaded ${hours}h ${mins}m ago` : `Uploaded ${hours}h ago`;
+      } else {
+        const days = Math.floor(elapsedMinutes / (24 * 60));
+        label = `Uploaded ${days}d ago`;
+      }
+      return {
+        label,
+        isExpiringSoon: false,
+        isExpired: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+function formatShortCloudTimestamp(iso?: string): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Date(ms).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * Formats an exact upload/expiration timestamp tooltip for a Gemini Cloud file row.
+ */
+export function formatCloudFileTimestampTooltip(
+  createTime?: string,
+  expirationTime?: string
+): string | undefined {
+  const parts: string[] = [];
+  const uploaded = formatShortCloudTimestamp(createTime);
+  if (uploaded) parts.push(`Uploaded: ${uploaded}`);
+  const expires = formatShortCloudTimestamp(expirationTime);
+  if (expires) parts.push(`Expires: ${expires}`);
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
 /**
