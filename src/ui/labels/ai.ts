@@ -413,6 +413,7 @@ export const AI_LABELS = {
     toolStatusStopped: 'stopped',
     suggestions: {
       patchLabel: 'Proposed Patch',
+      patchTitleBadge: (title: string) => `Title → "${title}"`,
       draftLabel: 'Proposed Draft',
       titleBadge: 'Proposed Title',
       currentTitleLabel: 'Current',

@@ -385,6 +385,7 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     previousSceneTitle: options.previousSceneTitle,
     previousDiagnosticsFingerprint: options.previousDiagnosticsFingerprint,
     previousBriefContext: options.previousBriefContext,
+    appliedAssistantHash: options.appliedAssistantHash,
     foundationalCraftOverride: options.foundationalCraftOverride,
     skillOverrides: options.skillOverrides,
     customSkills: options.customSkills,

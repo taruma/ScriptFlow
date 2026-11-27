@@ -266,6 +266,7 @@ export function useAiChatOrchestrator({
   const lastTurnSceneTitleRef = useRef<string | undefined>(undefined);
   const lastTurnDiagnosticsFingerprintRef = useRef<string | undefined>(undefined);
   const lastTurnBriefContextRef = useRef<string | undefined>(undefined);
+  const lastAppliedAssistantRef = useRef<{hash: string; rawText: string} | null>(null);
   const sentAttachmentFingerprintsRef = useRef<Set<string>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
@@ -452,6 +453,7 @@ export function useAiChatOrchestrator({
     lastTurnSceneTitleRef.current = undefined;
     lastTurnDiagnosticsFingerprintRef.current = undefined;
     lastTurnBriefContextRef.current = undefined;
+    lastAppliedAssistantRef.current = null;
     sentAttachmentFingerprintsRef.current.clear();
     onHasActiveInteractionChange(false);
     onLastTurnSnapshotHashChange(undefined);
@@ -515,6 +517,7 @@ export function useAiChatOrchestrator({
         lastTurnSceneTitleRef.current = undefined;
         lastTurnDiagnosticsFingerprintRef.current = undefined;
         lastTurnBriefContextRef.current = undefined;
+        lastAppliedAssistantRef.current = null;
         sentAttachmentFingerprintsRef.current.clear();
         onHasActiveInteractionChange(false);
         onLastTurnSnapshotHashChange(undefined);
@@ -545,6 +548,7 @@ export function useAiChatOrchestrator({
         lastTurnSceneTitleRef.current = c.lastTurnSceneTitle;
         lastTurnDiagnosticsFingerprintRef.current = c.lastTurnDiagnosticsFingerprint;
         lastTurnBriefContextRef.current = c.lastTurnBriefContext;
+        lastAppliedAssistantRef.current = null;
         sentAttachmentFingerprintsRef.current = new Set(c.sentAttachmentFingerprints ?? []);
 
         onHasActiveInteractionChange(Boolean(c.lastInteractionId));
@@ -656,8 +660,21 @@ export function useAiChatOrchestrator({
         attemptRecap: string | undefined,
         attemptPrompt: string,
         attemptAttachments: readonly AgentMediaAttachment[]
-      ) =>
-        runGeminiAgentTurn({
+      ) => {
+        const applied = attemptPrevId ? lastAppliedAssistantRef.current : null;
+        const appliedMatchesLive = Boolean(applied && applied.hash === currentSnapshotHash);
+        const effectivePrevHash = attemptPrevId
+          ? applied && !appliedMatchesLive
+            ? applied.hash
+            : lastTurnSnapshotHashRef.current
+          : undefined;
+        const effectivePrevRawText = attemptPrevId
+          ? applied && !appliedMatchesLive
+            ? applied.rawText
+            : lastTurnRawTextRef.current
+          : undefined;
+
+        return runGeminiAgentTurn({
           apiKey,
           model,
           reasoningLevel,
@@ -668,13 +685,14 @@ export function useAiChatOrchestrator({
           sceneTitle,
           ruleOverrides,
           previousInteractionId: attemptPrevId,
-          previousSnapshotHash: attemptPrevId ? lastTurnSnapshotHashRef.current : undefined,
-          previousRawText: attemptPrevId ? lastTurnRawTextRef.current : undefined,
+          previousSnapshotHash: effectivePrevHash,
+          previousRawText: effectivePrevRawText,
           previousSceneTitle: attemptPrevId ? lastTurnSceneTitleRef.current : undefined,
           previousDiagnosticsFingerprint: attemptPrevId
             ? lastTurnDiagnosticsFingerprintRef.current
             : undefined,
           previousBriefContext: attemptPrevId ? lastTurnBriefContextRef.current : undefined,
+          ...(appliedMatchesLive && applied ? {appliedAssistantHash: applied.hash} : {}),
           foundationalCraftOverride: skillsState.foundationalCraftOverride ?? undefined,
           skillOverrides: skillsState.skillOverrides,
           customSkills: skillsState.customSkills,
@@ -723,6 +741,7 @@ export function useAiChatOrchestrator({
             },
           },
         });
+      };
 
       const initialAttachments: readonly AgentMediaAttachment[] = [
         ...briefAttachments,
@@ -855,6 +874,7 @@ export function useAiChatOrchestrator({
         lastTurnSceneTitleRef.current = turnSceneTitle;
         lastTurnDiagnosticsFingerprintRef.current = turnDiagnosticsFingerprint;
         lastTurnBriefContextRef.current = turnBriefContext;
+        lastAppliedAssistantRef.current = null;
         onLastTurnSnapshotHashChange(turnSnapshotHash);
         onLastTurnRawTextChange(turnRawText);
         onLastTurnSceneTitleChange(turnSceneTitle);
@@ -1305,6 +1325,10 @@ export function useAiChatOrchestrator({
       const ok = await onApplyPatchSuggestion(suggestion, kind);
       if (!ok) return;
 
+      lastAppliedAssistantRef.current = {
+        hash: suggestion.nextSnapshotHash,
+        rawText: suggestion.candidateRawText,
+      };
       setMessages((prev) =>
         applyPatchReceiptToMessages(prev, messageId, suggestion, kind, ruleOverrides)
       );
@@ -1380,6 +1404,10 @@ export function useAiChatOrchestrator({
       });
       if (!ok) return;
 
+      lastAppliedAssistantRef.current = {
+        hash: batchPatch.nextSnapshotHash,
+        rawText: batchPatch.candidateRawText,
+      };
       setMessages((prev) => applyBatchFixesReceiptToMessages(prev, messageId, includedFixIds));
       markDirtyForPersist();
     },
@@ -1390,6 +1418,10 @@ export function useAiChatOrchestrator({
     async (messageId: string, suggestion: DraftSuggestion) => {
       const ok = await onApplyDraftSuggestion(suggestion);
       if (ok) {
+        lastAppliedAssistantRef.current = {
+          hash: suggestion.nextSnapshotHash,
+          rawText: suggestion.candidateRawText,
+        };
         markSuggestionApplied(messageId, suggestion.id);
         onDraftApplied();
       }

@@ -215,8 +215,8 @@ describe('geminiInteractions streaming agent client', () => {
               step: {
                 type: 'function_call',
                 id: `call-${counter}`,
-                name: 'get_script_overview',
-                arguments: {},
+                name: 'get_script_source',
+                arguments: {targetIds: ['MB0']},
               },
             },
             {event_type: 'step.stop', index: 0},
@@ -323,8 +323,8 @@ describe('geminiInteractions streaming agent client', () => {
           step: {
             type: 'function_call',
             id: 'call-overview',
-            name: 'get_script_overview',
-            arguments: {},
+            name: 'get_script_source',
+            arguments: {targetIds: ['MB0']},
           },
         },
         {event_type: 'step.stop', index: 2},
@@ -575,8 +575,8 @@ describe('geminiInteractions streaming agent client', () => {
                 step: {
                   type: 'function_call',
                   id: 'call-overview',
-                  name: 'get_script_overview',
-                  arguments: {},
+                  name: 'get_script_source',
+                  arguments: {targetIds: ['MB0']},
                 },
               },
               {event_type: 'step.stop', index: 0},
@@ -1171,7 +1171,7 @@ describe('geminiInteractions streaming agent client', () => {
     const capturedRequests: Array<Record<string, unknown>> = [];
 
     const roundStreams: InteractionStreamEventLike[][] = [
-      // Round 1: model calls get_script_overview + propose_script_patch directly with the new hash
+      // Round 1: model calls inspect_lens_slice + propose_script_patch directly with the new hash
       [
         {event_type: 'interaction.created', interaction: {id: 'int-rbw-1', status: 'in_progress'}},
         {
@@ -1180,8 +1180,8 @@ describe('geminiInteractions streaming agent client', () => {
           step: {
             type: 'function_call',
             id: 'call-overview-1',
-            name: 'get_script_overview',
-            arguments: {},
+            name: 'inspect_lens_slice',
+            arguments: {preset: 'lens1_spatial_optics'},
           },
         },
         {event_type: 'step.stop', index: 0},
@@ -1320,8 +1320,8 @@ describe('geminiInteractions streaming agent client', () => {
 
     expect(capturedRequests).toHaveLength(4);
     expect(result.toolTraces).toHaveLength(5);
-    // Round 1: overview succeeds, premature patch fails with STALE_CONTEXT_READ_REQUIRED
-    expect(result.toolTraces[0].name).toBe('get_script_overview');
+    // Round 1: inspect_lens_slice succeeds, premature patch fails with STALE_CONTEXT_READ_REQUIRED
+    expect(result.toolTraces[0].name).toBe('inspect_lens_slice');
     expect(result.toolTraces[0].ok).toBe(true);
     expect(result.toolTraces[1].name).toBe('propose_script_patch');
     expect(result.toolTraces[1].ok).toBe(false);
@@ -1456,5 +1456,131 @@ describe('geminiInteractions streaming agent client', () => {
     expect(result.toolTraces[2].name).toBe('propose_script_patch');
     expect(result.toolTraces[2].ok).toBe(true);
     expect(result.stagedSuggestions).toHaveLength(1);
+  });
+
+  it('skips forced get_script_source when appliedAssistantHash matches the live script, and re-arms on manual post-apply edit', async () => {
+    const appliedScript = [
+      '[INTENT]',
+      'Create a corridor beat with @image1 as Nadia.',
+      '',
+      '[OPENING]',
+      'MS eye level. Frame-left, Nadia stands facing screen-right.',
+      '',
+      '[EXECUTION]',
+      '[CAM 01] MS eye level -> [ACT] Nadia opens the door -> <latch click>',
+    ].join('\n');
+    const appliedHash = toAuteurEnvelope(appliedScript).snapshotHash;
+
+    // 1. appliedAssistantHash matches live script -> immediate propose_script_patch succeeds in 1 tool round without reading
+    const skipReadStreams: InteractionStreamEventLike[][] = [
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-applied-1', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-patch-direct',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: appliedHash,
+              summary: 'Tighten beat 1 directly',
+              ops: [
+                {
+                  op: 'replace_state',
+                  targetId: 'S1',
+                  line: '[CAM 01] MS eye level -> [ACT] Nadia eases open the door -> <latch click>',
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {event_type: 'interaction.completed', interaction: {id: 'int-applied-1', status: 'requires_action'}},
+      ],
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-applied-2', status: 'in_progress'}},
+        {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Updated S1 directly.'}},
+        {event_type: 'interaction.completed', interaction: {id: 'int-applied-2', status: 'completed'}},
+      ],
+    ];
+
+    const directRes = await runGeminiAgentTurn({
+      apiKey: 'AIza-applied-hash-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'low',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Ease the door open.',
+      rawText: appliedScript,
+      previousInteractionId: 'int-prev-draft',
+      previousSnapshotHash: '00000000',
+      previousRawText: '',
+      appliedAssistantHash: appliedHash,
+      createClient: () => ({
+        interactions: {create: async () => asAsyncStream(skipReadStreams.shift() ?? [])},
+      }),
+    });
+
+    expect(directRes.toolTraces).toHaveLength(1);
+    expect(directRes.toolTraces[0].ok).toBe(true);
+    expect(directRes.stagedSuggestions).toHaveLength(1);
+
+    // 2. If user manually edited after applying, hash differs -> readGuard re-arms
+    const manualPostApply = appliedScript.replace('opens the door', 'kicks the door');
+    const manualHash = toAuteurEnvelope(manualPostApply).snapshotHash;
+    const armedStreams: InteractionStreamEventLike[][] = [
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-armed-1', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-patch-blocked',
+            name: 'propose_script_patch',
+            arguments: {
+              expectedSnapshotHash: manualHash,
+              summary: 'Premature edit after manual tweak',
+              ops: [
+                {
+                  op: 'replace_state',
+                  targetId: 'S1',
+                  line: '[CAM 01] MS eye level -> [ACT] Nadia closes the door -> <latch click>',
+                },
+              ],
+            },
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {event_type: 'interaction.completed', interaction: {id: 'int-armed-1', status: 'requires_action'}},
+      ],
+      [
+        {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Blocked pending read.'}},
+        {event_type: 'interaction.completed', interaction: {id: 'int-armed-2', status: 'completed'}},
+      ],
+    ];
+
+    const armedRes = await runGeminiAgentTurn({
+      apiKey: 'AIza-armed-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'low',
+      mode: 'refine',
+      focus: 'auto',
+      prompt: 'Close the door instead.',
+      rawText: manualPostApply,
+      previousInteractionId: 'int-prev-draft',
+      previousSnapshotHash: appliedHash,
+      previousRawText: appliedScript,
+      appliedAssistantHash: appliedHash,
+      createClient: () => ({
+        interactions: {create: async () => asAsyncStream(armedStreams.shift() ?? [])},
+      }),
+    });
+
+    expect(armedRes.toolTraces[0].ok).toBe(false);
+    expect((armedRes.toolTraces[0].result.errors as Array<{code: string}>)[0]?.code).toBe(
+      'STALE_CONTEXT_READ_REQUIRED'
+    );
   });
 });

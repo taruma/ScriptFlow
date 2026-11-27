@@ -32,30 +32,27 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
   const MONTAGE_SCRIPT = TEST_CRAFT_EXEMPLARS['heist-montage'].content;
   const INTERROGATION_SCRIPT = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
-  it('exposes all 10 tools consistently in Auto regardless of emptiness, while scoping Draft/Refine/Audit cleanly', () => {
+  it('exposes all 7 tools consistently in Auto regardless of emptiness, while scoping Draft/Refine/Audit cleanly', () => {
     expect(assistantModeToFocus('check')).toBe('audit');
     expect(assistantModeToFocus('refine')).toBe('refine');
     expect(assistantModeToFocus('draft')).toBe('draft');
 
     const expectedAutoTools = [
-      'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
-      'propose_text_replace',
       'propose_script_draft',
-      'propose_script_title',
       'report_audit_review',
       'ask_question',
       'load_auteur_skill',
     ];
 
-    // auto + empty script -> exposes all 10 tools consistently for frozen [tools] prefix caching
+    // auto + empty script -> exposes all 7 tools consistently for frozen [tools] prefix caching
     const autoEmpty = composeAgentContext({focus: 'auto', rawText: '   '});
     expect(autoEmpty.editorState.isEmpty).toBe(true);
     expect(autoEmpty.allowedToolNames).toEqual(expectedAutoTools);
 
-    // auto + existing script -> identical 10 tools
+    // auto + existing script -> identical 7 tools
     const autoExisting = composeAgentContext({focus: 'auto', rawText: INTERROGATION_SCRIPT});
     expect(autoExisting.editorState.isEmpty).toBe(false);
     expect(autoExisting.allowedToolNames).toEqual(expectedAutoTools);
@@ -64,17 +61,14 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     const draftEmpty = composeAgentContext({focus: 'draft', rawText: ''});
     expect(draftEmpty.allowedToolNames).toEqual([
       'propose_script_draft',
-      'propose_script_title',
       'ask_question',
       'load_auteur_skill',
     ]);
     const draftExisting = composeAgentContext({focus: 'draft', rawText: INTERROGATION_SCRIPT});
     expect(draftExisting.allowedToolNames).toEqual([
-      'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_draft',
-      'propose_script_title',
       'ask_question',
       'load_auteur_skill',
     ]);
@@ -82,18 +76,14 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     // refine & audit focus
     const refineCtx = composeAgentContext({focus: 'refine', rawText: INTERROGATION_SCRIPT});
     expect(refineCtx.allowedToolNames).toEqual([
-      'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
-      'propose_text_replace',
-      'propose_script_title',
       'ask_question',
       'load_auteur_skill',
     ]);
     const auditCtx = composeAgentContext({focus: 'audit', rawText: INTERROGATION_SCRIPT});
     expect(auditCtx.allowedToolNames).toEqual([
-      'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'report_audit_review',
@@ -115,12 +105,9 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     });
     expect(noSkillsCtx.availableSkills).toHaveLength(0);
     expect(noSkillsCtx.allowedToolNames).toEqual([
-      'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
-      'propose_text_replace',
-      'propose_script_title',
       'ask_question',
     ]);
   });
@@ -649,15 +636,12 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       },
     ]);
 
-    // Verify auto mode sent all 10 tools consistently and moved volatile turn context into Round 1 input
+    // Verify auto mode sent all 7 tools consistently and moved volatile turn context into Round 1 input
     expect(result.trace.rounds[0].request.toolNames).toEqual([
-      'get_script_overview',
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
-      'propose_text_replace',
       'propose_script_draft',
-      'propose_script_title',
       'report_audit_review',
       'ask_question',
       'load_auteur_skill',
@@ -902,7 +886,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
   });
 
   it('supports 3-state function tool activation (auto/enabled/disabled), editable protocol, and pure conversation mode', () => {
-    // 1. Force Always On (ask_question & propose_script_draft) + Disable (propose_text_replace)
+    // 1. Force Always On (ask_question & propose_script_draft) + Disable (report_audit_review)
     const customCtx = composeAgentContext({
       focus: 'auto',
       rawText: INTERROGATION_SCRIPT,
@@ -915,21 +899,21 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
           protocolGuidanceOverride: '- Custom draft bullet for forced draft tool.',
           descriptionOverride: 'Custom API description for draft tool.',
         },
-        propose_text_replace: {activationMode: 'disabled'},
+        report_audit_review: {activationMode: 'disabled'},
       },
     });
 
     expect(customCtx.enforceToolLinterGate).toBe(false);
     expect(customCtx.allowedToolNames).toContain('ask_question');
     expect(customCtx.allowedToolNames).toContain('propose_script_draft');
-    expect(customCtx.allowedToolNames).not.toContain('propose_text_replace');
+    expect(customCtx.allowedToolNames).not.toContain('report_audit_review');
     expect(customCtx.sections.toolProtocol.isOverridden).toBe(true);
     expect(customCtx.sections.toolProtocol.text).toContain('- Custom core staging safety rule.');
     expect(customCtx.sections.toolProtocol.text).toContain(
       '- Custom draft bullet for forced draft tool.'
     );
     expect(customCtx.sections.toolProtocol.text).toContain('Linter gate override:');
-    expect(customCtx.sections.toolProtocol.text).not.toContain('- `propose_text_replace`:');
+    expect(customCtx.sections.toolProtocol.text).not.toContain('- `report_audit_review`:');
 
     // Static ask_question protocol rule lives in toolProtocol; Ask First toggles live in turnContext
     expect(customCtx.sections.toolProtocol.text).toContain('[Ask First: ON]');
@@ -956,7 +940,7 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     const decls = buildToolDeclarationsForContext(customCtx);
     const draftDecl = decls.find((d) => d.name === 'propose_script_draft');
     expect(draftDecl?.description).toBe('Custom API description for draft tool.');
-    expect(decls.find((d) => d.name === 'propose_text_replace')).toBeUndefined();
+    expect(decls.find((d) => d.name === 'report_audit_review')).toBeUndefined();
 
     // 2. Schema safety guard: load_auteur_skill forced Always On stays inactive when 0 available skills
     const allMutedSkills = Object.fromEntries(
@@ -986,10 +970,13 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(buildToolDeclarationsForContext(pureChatCtx)).toEqual([]);
     expect(pureChatCtx.sections.toolProtocol.text).toContain('pure conversation mode');
     expect(BUILTIN_AUTEUR_SKILLS.some((skill) => skill.id === 'draft_interview')).toBe(true);
-    expect(AUTEUR_KNOWLEDGE_VERSION).toBe('0.4.0-k5');
+    expect(AUTEUR_KNOWLEDGE_VERSION).toBe('0.4.0-k6');
+    expect(customCtx.systemInstruction).not.toContain('get_script_overview');
+    expect(customCtx.systemInstruction).not.toContain('propose_text_replace');
+    expect(customCtx.systemInstruction).not.toContain('propose_script_title');
   });
 
-  it('tracks changedTargetIds on manual edits, keeps them undefined when unchanged, and includes read-before-write guidance in toolProtocol', () => {
+  it('tracks changedTargetIds on manual edits, includes MB#/cameraSlots in liveEditorState, and honors appliedAssistantHash', () => {
     const baseScript = [
       '[INTENT]',
       'Create a corridor beat with @image1 as Elena.',
@@ -1036,11 +1023,30 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(changedCtx.editorState.changedSinceLastTurn).toBe(true);
     expect(changedCtx.editorState.changedTargetIds).toEqual(['MB0', 'S2', 'S3']);
     expect(changedCtx.turnContext.liveEditorStateText).toContain('call get_script_source before editing');
-    expect(changedCtx.sections.toolProtocol.text).toContain('Read-before-write on changed scripts');
+    expect(changedCtx.turnContext.liveEditorStateText).toContain('Staging blocks: MB0 [INTENT], MB1 [OPENING]');
+    expect(changedCtx.turnContext.liveEditorStateText).toContain('Camera slots: CAM 01 (S1)');
+    expect(changedCtx.sections.toolProtocol.text).toContain('Read & round efficiency');
     expect(changedCtx.sections.toolProtocol.text).toContain('fresh-read rule');
     expect(changedCtx.systemInstruction).toBe(unchangedCtx.systemInstruction);
     expect(JSON.stringify(buildToolDeclarationsForContext(changedCtx))).toBe(
       JSON.stringify(buildToolDeclarationsForContext(unchangedCtx))
+    );
+
+    // When appliedAssistantHash matches the live script, changedSinceLastTurn stays false even if previousSnapshotHash differs
+    const appliedHash = toAuteurEnvelope(manuallyEditedScript).snapshotHash;
+    const selfAppliedCtx = composeAgentContext({
+      focus: 'auto',
+      rawText: manuallyEditedScript,
+      hasPreviousInteraction: true,
+      previousSnapshotHash: toAuteurEnvelope(baseScript).snapshotHash,
+      previousRawText: baseScript,
+      appliedAssistantHash: appliedHash,
+    });
+    expect(selfAppliedCtx.editorState.changedSinceLastTurn).toBe(false);
+    expect(selfAppliedCtx.editorState.appliedAssistantSuggestion).toBe(true);
+    expect(selfAppliedCtx.turnContext.liveEditorStateMode).toBe('full');
+    expect(selfAppliedCtx.turnContext.liveEditorStateText).toContain(
+      'applied from your previous staged suggestion'
     );
   });
 });

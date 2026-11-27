@@ -1,8 +1,4 @@
-import {
-  AUDIT_LENS_PRESETS,
-  getAuteurJsonSchemas,
-  type AuteurLensPresetId,
-} from '../../core/index.ts';
+import {AUDIT_LENS_PRESETS, type AuteurLensPresetId} from '../../core/index.ts';
 import {
   BUILTIN_SCRIPT_TOOLS,
   type AssistantMode,
@@ -10,26 +6,14 @@ import {
   type ResolvedAuteurSkill,
   type ScriptToolName,
 } from '../auteurKnowledge.ts';
+import {buildSlimPatchJsonSchema} from './aiPatchCompiler.ts';
 
 type StaticScriptToolName = Exclude<ScriptToolName, 'load_auteur_skill'>;
 
 export const MODE_TOOL_NAMES: Record<AssistantMode, readonly StaticScriptToolName[]> = {
-  refine: [
-    'get_script_overview',
-    'get_script_source',
-    'inspect_lens_slice',
-    'propose_script_patch',
-    'propose_text_replace',
-    'propose_script_title',
-  ],
-  check: ['get_script_overview', 'get_script_source', 'inspect_lens_slice', 'report_audit_review'],
-  draft: [
-    'get_script_overview',
-    'get_script_source',
-    'inspect_lens_slice',
-    'propose_script_draft',
-    'propose_script_title',
-  ],
+  refine: ['get_script_source', 'inspect_lens_slice', 'propose_script_patch'],
+  check: ['get_script_source', 'inspect_lens_slice', 'report_audit_review'],
+  draft: ['get_script_source', 'inspect_lens_slice', 'propose_script_draft'],
 };
 
 export interface GeminiFunctionToolDeclaration {
@@ -130,21 +114,15 @@ function buildStaticToolDeclarationsMap(): Record<
   StaticScriptToolName,
   GeminiFunctionToolDeclaration
 > {
-  const schemas = getAuteurJsonSchemas();
-  const patchSchema = sanitizeJsonSchemaForTool(schemas.patch) as Record<string, unknown>;
-  const reviewSchema = sanitizeJsonSchemaForTool(schemas.review) as Record<string, unknown>;
   const lensPresetIds = Object.keys(AUDIT_LENS_PRESETS) as AuteurLensPresetId[];
+  const patchSchema = sanitizeJsonSchemaForTool(
+    buildSlimPatchJsonSchema({includeTitle: true, opsOptional: true})
+  ) as Record<string, unknown>;
+  const auditSuggestedPatchSchema = sanitizeJsonSchemaForTool(
+    buildSlimPatchJsonSchema({includeTitle: false, opsOptional: false})
+  ) as Record<string, unknown>;
 
   return {
-    get_script_overview: {
-      type: 'function',
-      name: 'get_script_overview',
-      description: getDefaultToolDescription('get_script_overview'),
-      parameters: {
-        type: 'object',
-        properties: {},
-      },
-    },
     get_script_source: {
       type: 'function',
       name: 'get_script_source',
@@ -156,12 +134,12 @@ function buildStaticToolDeclarationsMap(): Record<
             type: 'array',
             items: {type: 'string'},
             description:
-              'Optional list of Macro-Block IDs ("MB0", "MB2"), header names ("AESTHETIC", "EXECUTION"), or Macro-State IDs ("S1", "S3") to read. Omit to read the entire script.',
+              'Optional Macro-Block IDs ("MB0", "MB2"), headers ("AESTHETIC", "EXECUTION"), or Macro-State IDs ("S1", "S3"). Omit for full script.',
           },
           annotateIds: {
             type: 'boolean',
             description:
-              'Defaults to true. Prefixes each returned Staging Macro-Block and Execution Macro-State with its exact MB# / S# ID alongside the canonical plain text.',
+              'Defaults to true. Prefixes each Macro-Block and Macro-State with its MB# / S# ID.',
           },
         },
       },
@@ -176,60 +154,23 @@ function buildStaticToolDeclarationsMap(): Record<
           preset: {
             type: 'string',
             enum: lensPresetIds,
+            description: 'Single Script Supervisor audit lens preset.',
+          },
+          presets: {
+            type: 'array',
+            items: {type: 'string', enum: lensPresetIds},
             description:
-              'Built-in audit lens preset (lens1_spatial_optics, lens2_temporal_pacing_wear, lens3_props_inventory, lens4_acoustics_voice, lens5_blocks_grammar).',
+              '1 to 5 audit lens presets to inspect in one deduplicated slice (preferred for multi-lens audits).',
           },
           includeStaging: {
             type: 'boolean',
-            description:
-              'Optional shorthand override. Set to false to omit Phase 1 Staging Macro-Blocks and return only Execution Macro-States.',
+            description: 'Set false to omit Phase 1 Staging Macro-Blocks.',
           },
           macroStateIds: {
             type: 'array',
             items: {type: 'string'},
             description:
-              'Optional shorthand list of Execution Macro-State IDs (e.g. ["S3", "S4"]) to include while preserving inherited resolvedCamera framing from earlier states.',
-          },
-          spec: {
-            type: 'object',
-            description:
-              'Optional custom LensSliceSpec (includeStaging, macroBlocks, aestheticKeys, macroStateIds, dimensions, subStateTags, includeAllSubStates, includeResolvedCamera, includeTokenMappings, includeReferenceBindings, includeSceneTopology, includeTrailingResolution, diagnosticLenses, includeAllDiagnostics).',
-            properties: {
-              preset: {type: 'string', enum: lensPresetIds},
-              includeStaging: {type: 'boolean'},
-              macroBlocks: {type: 'array', items: {type: 'string'}},
-              aestheticKeys: {type: 'array', items: {type: 'string'}},
-              macroStateIds: {type: 'array', items: {type: 'string'}},
-              dimensions: {
-                type: 'array',
-                items: {
-                  type: 'string',
-                  enum: [
-                    'camera',
-                    'action',
-                    'block',
-                    'light',
-                    'state_boundary',
-                    'tier2',
-                    'dialogue',
-                    'foley',
-                    'score',
-                    'onscreen_text',
-                    'plain',
-                  ],
-                },
-              },
-              subStateTags: {type: 'array', items: {type: 'string'}},
-              includeAllSubStates: {type: 'boolean'},
-              includeResolvedCamera: {type: 'boolean'},
-              includeTokenMappings: {
-                anyOf: [{type: 'boolean'}, {type: 'string', enum: ['all', 'referenced']}],
-              },
-              includeReferenceBindings: {type: 'boolean'},
-              includeSceneTopology: {type: 'boolean'},
-              includeTrailingResolution: {type: 'boolean'},
-              includeAllDiagnostics: {type: 'boolean'},
-            },
+              'Optional Execution Macro-State IDs (e.g. ["S3", "S4"]) while preserving inherited camera framing.',
           },
         },
       },
@@ -240,112 +181,81 @@ function buildStaticToolDeclarationsMap(): Record<
       description: getDefaultToolDescription('propose_script_patch'),
       parameters: patchSchema,
     },
-    propose_text_replace: {
-      type: 'function',
-      name: 'propose_text_replace',
-      description: getDefaultToolDescription('propose_text_replace'),
-      parameters: sanitizeJsonSchemaForTool({
-        type: 'object',
-        properties: {
-          expectedSnapshotHash: {
-            type: 'string',
-            description: 'Current script snapshotHash from Live Editor State or get_script_overview.',
-          },
-          summary: {
-            type: 'string',
-            description: 'Concise one-line summary of the staged text/regex replacement.',
-          },
-          replacements: {
-            type: 'array',
-            description: '1 to 20 ordered find-and-replace rules applied in one atomic pass.',
-            items: {
-              type: 'object',
-              properties: {
-                find: {
-                  type: 'string',
-                  description: 'Literal substring or regular expression pattern to find.',
-                },
-                replace: {
-                  type: 'string',
-                  description:
-                    'Replacement text (supports $1/$& capture references when isRegex=true; treated literally when isRegex=false).',
-                },
-                isRegex: {
-                  type: 'boolean',
-                  description: 'Treat find as a JavaScript regular expression (defaults to false).',
-                },
-                caseSensitive: {
-                  type: 'boolean',
-                  description: 'Match case sensitively (defaults to true). Set false for case-insensitive matching.',
-                },
-                wholeWord: {
-                  type: 'boolean',
-                  description: 'Wrap pattern in word boundaries (\\b) to avoid partial-word matches.',
-                },
-                targetIds: {
-                  type: 'array',
-                  items: {type: 'string'},
-                  description:
-                    'Optional list of target IDs ("MB0", "AESTHETIC", "S3", "S4") to scope this replacement rule.',
-                },
-              },
-              required: ['find', 'replace'],
-            },
-          },
-        },
-        required: ['expectedSnapshotHash', 'summary', 'replacements'],
-      }) as Record<string, unknown>,
-    },
     propose_script_draft: {
       type: 'function',
       name: 'propose_script_draft',
       description: getDefaultToolDescription('propose_script_draft'),
-      parameters: sanitizeJsonSchemaForTool({
+      parameters: {
         type: 'object',
         properties: {
+          scriptText: {
+            type: 'string',
+            description:
+              'Complete canonical v0.4.0 Auteur Script plain text ([INTENT], [LOGIC], [AESTHETIC], [OPENING], [EXECUTION]) without Markdown fences or # MB# / S#: prefixes.',
+          },
           title: {
             type: 'string',
-            description: 'Optional short scene title for the drafted script.',
+            description: 'Optional short scene title (<= 120 chars).',
           },
           summary: {
             type: 'string',
-            description: 'One-sentence summary of the drafted scene and topology.',
-          },
-          draft: schemas.draft,
-        },
-        required: ['draft'],
-      }) as Record<string, unknown>,
-    },
-    propose_script_title: {
-      type: 'function',
-      name: 'propose_script_title',
-      description: getDefaultToolDescription('propose_script_title'),
-      parameters: sanitizeJsonSchemaForTool({
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Proposed scene title (non-empty, trimmed, 120 characters or fewer).',
-          },
-          rationale: {
-            type: 'string',
-            description: 'Optional concise one-sentence reason why this title fits the scene.',
+            description: 'Optional one-sentence summary of the drafted scene and topology.',
           },
         },
-        required: ['title'],
-      }) as Record<string, unknown>,
+        required: ['scriptText'],
+      },
     },
     report_audit_review: {
       type: 'function',
       name: 'report_audit_review',
       description: getDefaultToolDescription('report_audit_review'),
-      parameters: reviewSchema,
+      parameters: {
+        type: 'object',
+        properties: {
+          overallSummary: {
+            type: 'string',
+            description: 'Concise overall Script Supervisor summary.',
+          },
+          issues: {
+            type: 'array',
+            description: 'Ordered list of continuity or grammar findings (empty array when clean).',
+            items: {
+              type: 'object',
+              properties: {
+                id: {type: 'string'},
+                lens: {
+                  type: 'string',
+                  enum: [
+                    'Lens 1: Spatial & Optics',
+                    'Lens 2: Temporal, Pacing & Wear',
+                    'Lens 3: Props & Inventory',
+                    'Lens 4: Acoustics & Voice',
+                    'Lens 5: Blocks & Grammar',
+                  ],
+                },
+                severity: {type: 'string', enum: ['error', 'warning']},
+                targetLevel: {
+                  type: 'string',
+                  enum: ['document', 'macro_block', 'aesthetic_entry', 'macro_state', 'sub_state'],
+                },
+                targetId: {type: 'string', description: 'Exact ID ("MB0", "S2", "S2.3").'},
+                message: {type: 'string'},
+                rationale: {type: 'string'},
+                repairHint: {type: 'string'},
+                suggestedPatch: auditSuggestedPatchSchema,
+              },
+              required: ['lens', 'severity', 'targetLevel', 'targetId', 'message', 'rationale', 'repairHint'],
+            },
+          },
+        },
+        required: ['issues'],
+      },
     },
     ask_question: {
       type: 'function',
       name: 'ask_question',
       description: getDefaultToolDescription('ask_question'),
-      parameters: sanitizeJsonSchemaForTool({
+      parameters: {
         type: 'object',
         properties: {
           intro: {
@@ -355,25 +265,22 @@ function buildStaticToolDeclarationsMap(): Record<
           questions: {
             type: 'array',
             description:
-              '1 to 4 concise clarifying questions. Single-select by default unless multiSelect: true is set; every question automatically includes an inline additive note field.',
+              '1 to 4 concise clarifying questions (single-select by default; set multiSelect: true when choices combine; additive note field included automatically).',
             items: {
               type: 'object',
               properties: {
                 question: {
                   type: 'string',
-                  description:
-                    'Clear, concise question text (unnumbered, without "select all that apply").',
+                  description: 'Clear, concise question text (unnumbered).',
                 },
                 options: {
                   type: 'array',
-                  description:
-                    '2 to 5 short, distinct options (unnumbered, without an "Other" choice—the UI provides an additive note field automatically).',
+                  description: '2 to 5 short, distinct options (no "Other" option).',
                   items: {type: 'string'},
                 },
                 multiSelect: {
                   type: 'boolean',
-                  description:
-                    'Set true only when multiple options can be combined; omit or set false for a single exclusive pick.',
+                  description: 'Set true only when multiple options can be combined.',
                 },
               },
               required: ['question', 'options'],
@@ -381,7 +288,7 @@ function buildStaticToolDeclarationsMap(): Record<
           },
         },
         required: ['questions'],
-      }) as Record<string, unknown>,
+      },
     },
   };
 }
@@ -519,8 +426,8 @@ const MODE_INSTRUCTIONS: Record<AssistantMode, string> = {
     CORE_AUTEUR_RULES_BLOCK,
     '',
     'Mode: REFINE (Targeted Editing).',
-    '- Call `get_script_overview` and `inspect_lens_slice` first to inspect current IDs (`MB#`, `MB#.#`, `S#`, `S#.#`) and `snapshotHash`.',
-    '- Propose concrete edits exclusively via `propose_script_patch` with `expectedSnapshotHash` and concise `summary`.',
+    '- Call `get_script_source` (using `targetIds` when localized) before editing whenever needed to verify exact IDs (`MB#`, `S#`) and wording.',
+    '- Propose edits via `propose_script_patch` with `expectedSnapshotHash`, concise `summary`, and text-first `ops` (and/or optional `title`).',
     '- If `propose_script_patch` returns validation or lint errors, read `errors` and `repairHint`, repair the patch, and retry before answering.',
     '- After staging a clean patch, summarize the change briefly in plain English.',
   ].join('\n'),
@@ -528,7 +435,7 @@ const MODE_INSTRUCTIONS: Record<AssistantMode, string> = {
     CORE_AUTEUR_RULES_BLOCK,
     '',
     'Mode: CHECK (Script Supervisor Audit).',
-    '- Call `get_script_overview` and relevant `inspect_lens_slice` presets (`lens1_spatial_optics` through `lens5_blocks_grammar`) before judging.',
+    '- Call `inspect_lens_slice` (batching multiple lenses via `presets: ["lens1_spatial_optics", ...]`) or `get_script_source` before judging.',
     '- Respect the script `sceneTopology` (continuous oner vs. multi-camera coverage vs. discontinuous montage).',
     '- Report structured findings via `report_audit_review` referencing exact `targetId` (`MB#`, `S#`, `S#.#`) and, when helpful, an executable `suggestedPatch` with `expectedSnapshotHash`.',
     '- If any embedded `suggestedPatch` is rejected by validation or lint rules, repair and re-report so every suggested fix is clean.',
@@ -537,9 +444,9 @@ const MODE_INSTRUCTIONS: Record<AssistantMode, string> = {
     CORE_AUTEUR_RULES_BLOCK,
     '',
     'Mode: DRAFT (New Scene Generation).',
-    '- Call `get_script_overview` if you need context about the current open script before drafting.',
-    '- Build a complete, well-structured `AuteurScriptDraft` ([INTENT], [LOGIC], [AESTHETIC] as key_value, [OPENING], and [EXECUTION] Macro-States) and stage it via `propose_script_draft`.',
-    '- If `propose_script_draft` returns schema validation errors or lint errors, repair them and call `propose_script_draft` again so the staged draft is clean.',
+    '- Call `get_script_source` if you need context about a non-empty open script before drafting.',
+    '- Build a complete, well-structured canonical `v0.4.0` `scriptText` ([INTENT], [LOGIC], [AESTHETIC], [OPENING], and [EXECUTION]) and stage it via `propose_script_draft`.',
+    '- If `propose_script_draft` returns validation errors or lint errors, repair them and call `propose_script_draft` again so the staged draft is clean.',
     '- Keep your response concise once the draft is staged.',
   ].join('\n'),
 };

@@ -4,6 +4,7 @@ import {TEST_CRAFT_EXEMPLARS} from '../fixtures/craftExemplars.ts';
 import {
   buildLineDiff,
   composeAuditFixesBatch,
+  executeScriptToolCall,
   rebaseAuditReviewAfterFix,
   type AuditReviewSuggestion,
   type PatchSuggestion,
@@ -296,5 +297,81 @@ describe('Audit Review Smart Sibling Rebase & Apply All Batching', () => {
     );
     expect(planAfter.eligibleCount).toBe(1);
     expect(planAfter.combinedPatch).toBeNull();
+  });
+
+  it('rebases and batches embedded fixes compiled from slim text-first report_audit_review patches', () => {
+    const hash = toAuteurEnvelope(INTERROGATION).snapshotHash;
+    let idSeq = 0;
+    const auditRes = executeScriptToolCall(
+      {
+        name: 'report_audit_review',
+        arguments: {
+          overallSummary: 'Two disjoint polish items.',
+          issues: [
+            {
+              lens: 'Lens 2: Temporal, Pacing & Wear',
+              severity: 'warning',
+              targetLevel: 'macro_state',
+              targetId: 'S1',
+              message: 'Clarify Miller hand gesture.',
+              rationale: 'Sharper physical beat.',
+              repairHint: 'Replace S1 action.',
+              suggestedPatch: {
+                expectedSnapshotHash: hash,
+                summary: 'Sharpen S1 gesture',
+                ops: [
+                  {
+                    op: 'replace_state',
+                    targetId: 'S1',
+                    line: '[CAM 01] MS eye level -> [ACT] Miller taps the desk twice -> <wood tap>',
+                  },
+                ],
+              },
+            },
+            {
+              lens: 'Lens 1: Spatial & Optics',
+              severity: 'warning',
+              targetLevel: 'macro_block',
+              targetId: 'MB0',
+              message: 'Tighten INTENT note.',
+              rationale: 'Clearer director intent.',
+              repairHint: 'Update MB0.',
+              suggestedPatch: {
+                expectedSnapshotHash: hash,
+                summary: 'Tighten INTENT',
+                ops: [
+                  {
+                    op: 'replace_text',
+                    find: 'interrogation',
+                    replace: 'focused interrogation',
+                    targetIds: ['MB0'],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {mode: 'check', rawText: INTERROGATION, createSuggestionId: () => `audit-slim-${++idSeq}`}
+    );
+
+    expect(auditRes.ok).toBe(true);
+    const audit = auditRes.stagedSuggestion as AuditReviewSuggestion;
+    expect(audit.issues[0].patchSuggestion).toBeDefined();
+    expect(audit.issues[1].patchSuggestion).toBeDefined();
+
+    const batch = composeAuditFixesBatch(INTERROGATION, audit, [], hash);
+    expect(batch.eligibleCount).toBe(2);
+    expect(batch.includedFixIds).toHaveLength(2);
+    expect(batch.combinedPatch).not.toBeNull();
+
+    const firstFix = audit.issues[0].patchSuggestion!;
+    const rebased = rebaseAuditReviewAfterFix(
+      audit,
+      firstFix,
+      firstFix.candidateRawText,
+      new Set([firstFix.id])
+    );
+    expect(rebased.issues[1].patchSuggestion?.baseSnapshotHash).toBe(firstFix.nextSnapshotHash);
   });
 });

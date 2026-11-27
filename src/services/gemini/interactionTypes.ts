@@ -162,6 +162,7 @@ export interface RunAgentTurnOptions {
   previousSceneTitle?: string;
   previousDiagnosticsFingerprint?: string;
   previousBriefContext?: string;
+  appliedAssistantHash?: string;
   foundationalCraftOverride?: string;
   skillOverrides?: Record<string, SkillOverride>;
   customSkills?: readonly CustomAuteurSkill[];

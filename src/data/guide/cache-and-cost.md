@@ -10,7 +10,7 @@ ScriptFlow isolates static instructions (`System Instruction` + tool schemas) in
 2. **Keep multi-turn sessions warm**: Implicit caches stay warm for several minutes. Returning hours later re-processes the conversation prefix cold on Round 1.
 3. **Pin skills you use every turn (`Context → Skills & Extensions`)**: For example, **Pin** `draft_craft` when drafting multiple scenes. Pinning puts it inside Zone 1—saving an extra `load_auteur_skill` tool round and sharing the same cached prefix across fresh chats started on the same model.
 4. **Avoid mid-session edits to Foundational Craft or Skill pins**: Modifying Zone 1 mid-thread invalidates that prefix for the next turn.
-5. **Know Gemini 4's `2,050`-token re-processing floor**: On Gemini 4 models, if a follow-up round adds fewer than ~2,050 new tokens, the backend still re-processes the trailing ~2,050 tokens at standard input rate (so tiny tool replies can dip slightly below 90% even on warm turns).
+5. **Know Gemini 4's `2,050`-token re-processing floor**: On Gemini 4 models, if a follow-up round adds fewer than ~2,050 new tokens, the backend still re-processes the trailing ~2,050 tokens at standard input rate (so tiny tool replies can dip slightly below 90% even on warm turns). *(ScriptFlow's lean 7-tool text-first schemas, `<live_editor_state>` block/camera summaries, batched multi-lens `inspect_lens_slice`, and self-applied suggestion tracking minimize cold-start tokens and extra rounds automatically.)*
 
 ---
 

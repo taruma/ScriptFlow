@@ -11,15 +11,10 @@ export interface ScriptToolReadState {
   readSourceTargetIds: ReadonlySet<string>;
 }
 
-type ReadGatedToolName =
-  | 'propose_script_patch'
-  | 'propose_text_replace'
-  | 'propose_script_draft'
-  | 'report_audit_review';
+type ReadGatedToolName = 'propose_script_patch' | 'propose_script_draft' | 'report_audit_review';
 
 const READ_GATED_TOOLS: ReadonlySet<ScriptToolName> = new Set<ReadGatedToolName>([
   'propose_script_patch',
-  'propose_text_replace',
   'propose_script_draft',
   'report_audit_review',
 ]);
@@ -87,16 +82,17 @@ function findAestheticMacroBlockIds(doc: AuteurDocument): string[] {
   return ids;
 }
 
-function resolveTopLevelTargetsForPatch(
+function resolveTargetsForPatch(
   args: Record<string, unknown>,
   doc: AuteurDocument
-): string[] {
+): {isGlobal: boolean; targetIds: string[]} {
   const patchObj =
     args.patch && typeof args.patch === 'object' && !Array.isArray(args.patch)
       ? (args.patch as Record<string, unknown>)
       : args;
   const ops = Array.isArray(patchObj.ops) ? patchObj.ops : [];
   const targets: string[] = [];
+  let isGlobal = false;
 
   for (const rawOp of ops) {
     if (!rawOp || typeof rawOp !== 'object' || Array.isArray(rawOp)) continue;
@@ -104,6 +100,50 @@ function resolveTopLevelTargetsForPatch(
     const opName = typeof op.op === 'string' ? op.op : '';
 
     switch (opName) {
+      // Slim text-first ops
+      case 'set_block':
+      case 'delete_block':
+      case 'replace_state':
+      case 'delete_state': {
+        if (typeof op.targetId === 'string') {
+          targets.push(...resolveSingleTargetToken(op.targetId, doc));
+        }
+        break;
+      }
+      case 'insert_block':
+      case 'insert_states': {
+        if (typeof op.afterId === 'string') {
+          targets.push(...resolveSingleTargetToken(op.afterId, doc));
+        }
+        break;
+      }
+      case 'reorder_state': {
+        if (typeof op.targetId === 'string') {
+          targets.push(...resolveSingleTargetToken(op.targetId, doc));
+        }
+        if (typeof op.afterId === 'string') {
+          targets.push(...resolveSingleTargetToken(op.afterId, doc));
+        }
+        break;
+      }
+      case 'replace_text': {
+        const rawTargetIds = Array.isArray(op.targetIds)
+          ? op.targetIds
+              .filter((item): item is string => typeof item === 'string')
+              .map((item) => item.trim())
+              .filter((item) => item.length > 0)
+          : [];
+        if (rawTargetIds.length === 0) {
+          isGlobal = true;
+        } else {
+          for (const token of rawTargetIds) {
+            targets.push(...resolveSingleTargetToken(token, doc));
+          }
+        }
+        break;
+      }
+
+      // Legacy AST ops (backward compatibility)
       case 'set_macro_block':
       case 'delete_macro_block': {
         if (typeof op.macroBlockId === 'string') {
@@ -155,44 +195,6 @@ function resolveTopLevelTargetsForPatch(
         }
         break;
       }
-    }
-  }
-
-  return dedupeIds(targets);
-}
-
-function resolveTargetsForTextReplace(
-  args: Record<string, unknown>,
-  doc: AuteurDocument
-): {isGlobal: boolean; targetIds: string[]} {
-  const rules = Array.isArray(args.replacements) ? args.replacements : [];
-  if (rules.length === 0) {
-    return {isGlobal: true, targetIds: []};
-  }
-
-  let isGlobal = false;
-  const targets: string[] = [];
-
-  for (const rawRule of rules) {
-    if (!rawRule || typeof rawRule !== 'object' || Array.isArray(rawRule)) {
-      isGlobal = true;
-      continue;
-    }
-    const rule = rawRule as Record<string, unknown>;
-    const rawTargetIds = Array.isArray(rule.targetIds)
-      ? rule.targetIds
-          .filter((item): item is string => typeof item === 'string')
-          .map((item) => item.trim())
-          .filter((item) => item.length > 0)
-      : [];
-
-    if (rawTargetIds.length === 0) {
-      isGlobal = true;
-      continue;
-    }
-
-    for (const token of rawTargetIds) {
-      targets.push(...resolveSingleTargetToken(token, doc));
     }
   }
 
@@ -250,6 +252,19 @@ export function checkReadBeforeWriteGuard(
     return null;
   }
 
+  // Title-only renames on propose_script_patch do not read or mutate script body lines
+  if (toolName === 'propose_script_patch') {
+    const patchObj =
+      args.patch && typeof args.patch === 'object' && !Array.isArray(args.patch)
+        ? (args.patch as Record<string, unknown>)
+        : args;
+    const ops = Array.isArray(patchObj.ops) ? patchObj.ops : [];
+    const hasTitle = typeof args.title === 'string' && args.title.trim().length > 0;
+    if (ops.length === 0 && hasTitle) {
+      return null;
+    }
+  }
+
   const readState = context.readState;
   if (!readState?.requiresFreshRead || context.rawText.trim().length === 0) {
     return null;
@@ -301,64 +316,21 @@ export function checkReadBeforeWriteGuard(
     );
   }
 
-  const doc = parseAuteurScript(context.rawText);
-
-  if (toolName === 'propose_script_patch') {
-    if (!canReadSource) {
-      if (readState.hasInspectedSlice) {
-        return null;
-      }
-      return buildReadRequiredFailure(
-        toolName,
-        'Fresh slice inspection required before patching because the script changed since the previous turn.',
-        'Call inspect_lens_slice to inspect the current script state before retrying propose_script_patch.'
-      );
-    }
-
-    const patchTargets = resolveTopLevelTargetsForPatch(args, doc);
-    if (!readState.hasReadSource) {
-      const combinedTargets = dedupeIds([
-        ...patchTargets,
-        ...(readState.changedTargetIds ?? []),
-      ]);
-      return buildReadRequiredFailure(
-        toolName,
-        'Fresh source read required before patching because the script changed since the previous turn.',
-        buildSourceReadHint(combinedTargets)
-      );
-    }
-
-    if (!readState.readFullSource) {
-      const unreadStaleTargets = patchTargets.filter(
-        (id) =>
-          !readState.readSourceTargetIds.has(id) &&
-          (readState.changedTargetIds === undefined || readState.changedTargetIds.includes(id))
-      );
-      if (unreadStaleTargets.length > 0) {
-        return buildReadRequiredFailure(
-          toolName,
-          `Target(s) ${unreadStaleTargets.join(', ')} have not been read since the script changed.`,
-          buildSourceReadHint(unreadStaleTargets)
-        );
-      }
-    }
-
-    return null;
-  }
-
-  // propose_text_replace
+  // propose_script_patch
   if (!canReadSource) {
     if (readState.hasInspectedSlice) {
       return null;
     }
     return buildReadRequiredFailure(
       toolName,
-      'Fresh slice inspection required before text replacement because the script changed since the previous turn.',
-      'Call inspect_lens_slice to inspect the current script state before retrying propose_text_replace.'
+      'Fresh slice inspection required before patching because the script changed since the previous turn.',
+      'Call inspect_lens_slice to inspect the current script state before retrying propose_script_patch.'
     );
   }
 
-  const {isGlobal, targetIds: replaceTargets} = resolveTargetsForTextReplace(args, doc);
+  const doc = parseAuteurScript(context.rawText);
+  const {isGlobal, targetIds: patchTargets} = resolveTargetsForPatch(args, doc);
+
   if (isGlobal) {
     if (allChangedTargetsRead(readState)) {
       return null;
@@ -375,18 +347,18 @@ export function checkReadBeforeWriteGuard(
 
   if (!readState.hasReadSource) {
     const combinedTargets = dedupeIds([
-      ...replaceTargets,
+      ...patchTargets,
       ...(readState.changedTargetIds ?? []),
     ]);
     return buildReadRequiredFailure(
       toolName,
-      'Fresh source read required before scoped text replacement because the script changed since the previous turn.',
+      'Fresh source read required before patching because the script changed since the previous turn.',
       buildSourceReadHint(combinedTargets)
     );
   }
 
   if (!readState.readFullSource) {
-    const unreadStaleTargets = replaceTargets.filter(
+    const unreadStaleTargets = patchTargets.filter(
       (id) =>
         !readState.readSourceTargetIds.has(id) &&
         (readState.changedTargetIds === undefined || readState.changedTargetIds.includes(id))

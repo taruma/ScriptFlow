@@ -116,6 +116,11 @@ export const PatchSuggestionCard = memo(function PatchSuggestionCard({
           </div>
 
           <p className="text-xs font-medium leading-snug text-text-main">{suggestion.summary}</p>
+          {suggestion.title && (
+            <p className="font-mono text-[10px] text-text-muted truncate">
+              {labels.patchTitleBadge(suggestion.title)}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">

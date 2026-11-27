@@ -4,8 +4,8 @@ The 4-tab bar below the prompt box guides intent without wiping your active tool
 
 - **Auto** *(default)*: Handles drafting on blank scripts, surgical refinement, Script Supervisor checks, and open craft discussion in one flow.
 - **Draft**: Tailored for generating a complete `v0.4.0` Auteur Script (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, and `[EXECUTION]`).
-- **Refine**: Scopes the assistant toward targeted AST or text edits cleanly against your existing Macro-Blocks (`MB#`) and Macro-States (`S#`).
-- **Audit**: Exposes 1-click **Quick Scan** plus deep **Script Supervisor** audit buttons (`Audit All` and `Lens 1`–`Lens 5`).
+- **Refine**: Scopes the assistant toward targeted text-first edits, multi-beat insertions, find-and-replace, and scene title updates against your existing Macro-Blocks (`MB#`) and Macro-States (`S#`).
+- **Audit**: Exposes 1-click **Quick Scan** plus deep **Script Supervisor** audit buttons (`Audit All` and `Lens 1`–`Lens 5`) using deduplicated multi-lens inspection.
 
 ---
 

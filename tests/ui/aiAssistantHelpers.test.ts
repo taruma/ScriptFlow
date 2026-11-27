@@ -145,6 +145,29 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
     expect(titleTip.title).toBe('Suggest scene title');
     expect(titleTip.detail).toBe('"Midnight Platform"');
 
+    const multiSliceTip = formatToolCallTooltip({
+      callId: 'c-slice-multi',
+      name: 'inspect_lens_slice',
+      arguments: {
+        presets: ['lens1_spatial_optics', 'lens2_temporal_pacing_wear', 'lens3_props_inventory'],
+      },
+      status: 'ok',
+    });
+    expect(multiSliceTip.detail).toContain('Presets (3):');
+
+    const patchWithTitleTip = formatToolCallTooltip({
+      callId: 'c-patch-title',
+      name: 'propose_script_patch',
+      arguments: {
+        title: 'Midnight Platform',
+        summary: 'Tighten beat 2 and rename scene',
+        ops: [{op: 'replace_state', targetId: 'S2', line: '[CAM 01] -> [ACT] Mark turns'}],
+      },
+      status: 'ok',
+    });
+    expect(patchWithTitleTip.detail).toContain('1 op');
+    expect(patchWithTitleTip.detail).toContain('Title: "Midnight Platform"');
+
     const surgicalSliceTip = formatToolCallTooltip({
       callId: 'c-slice',
       name: 'inspect_lens_slice',

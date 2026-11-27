@@ -415,15 +415,15 @@ export function buildQuickScanEscalationPrompt(options: {
 
   if (options.targetBeatIndex !== undefined) {
     lines.push(
-      `Run a targeted Script Supervisor audit focused on Execution Macro-State S${options.targetBeatIndex} across: ${lensPresetList}.`
+      `Run a targeted Script Supervisor audit focused on Execution Macro-State S${options.targetBeatIndex} across: ${lensPresetList}. Batch them via \`inspect_lens_slice({ presets: ${JSON.stringify(lenses)}, macroStateIds: ["S${options.targetBeatIndex}"] })\`.`
     );
   } else if (lenses.length === AUDIT_LENS_PRESET_IDS.length) {
     lines.push(
-      `Run a full Script Supervisor audit across all 5 lenses (${lensPresetList}).`
+      `Run a full Script Supervisor audit across all 5 lenses (${lensPresetList}). Batch them in one call via \`inspect_lens_slice({ presets: ${JSON.stringify(lenses)} })\`.`
     );
   } else {
     lines.push(
-      `Run a targeted Script Supervisor audit strictly on the selected lens(es): ${lensPresetList}. Only call \`inspect_lens_slice\` for these selected preset(s) — skip unselected lenses.`
+      `Run a targeted Script Supervisor audit strictly on the selected lens(es): ${lensPresetList}. Call \`inspect_lens_slice({ presets: ${JSON.stringify(lenses)} })\` for only these selected preset(s) — skip unselected lenses.`
     );
   }
 

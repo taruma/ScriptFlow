@@ -126,7 +126,7 @@ export function buildScopedRefinePrompt(userPrompt: string, scope: AiTargetScope
 }
 
 const AUDIT_QUICK_PROMPTS: Record<AuditQuickCheckId, string> = {
-  all: 'Run a full Script Supervisor audit across all 5 lenses (Spatial & Optics, Temporal Pacing & Wear, Props & Inventory, Acoustics & Voice, Blocks & Grammar). Inspect relevant lens slices first, respect the scene topology, and call report_audit_review with exact target IDs and clean suggestedPatch fixes where helpful.',
+  all: 'Run a full Script Supervisor audit across all 5 lenses (Spatial & Optics, Temporal Pacing & Wear, Props & Inventory, Acoustics & Voice, Blocks & Grammar). Call `inspect_lens_slice` with `presets: ["lens1_spatial_optics", "lens2_temporal_pacing_wear", "lens3_props_inventory", "lens4_acoustics_voice", "lens5_blocks_grammar"]` to inspect them in one deduplicated pass, respect the scene topology, and call report_audit_review with exact target IDs and clean suggestedPatch fixes where helpful.',
   lens1_spatial_optics:
     'Run a focused Script Supervisor audit on Lens 1: Spatial & Optics (camera framing, viewport coordinate purity, blocking sightlines, and continuity). Inspect the lens1_spatial_optics slice first and call report_audit_review with clickable target IDs and clean suggestedPatch fixes where appropriate.',
   lens2_temporal_pacing_wear:
@@ -321,6 +321,9 @@ export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo
       break;
     }
     case 'inspect_lens_slice': {
+      const presetsArr = Array.isArray(args.presets)
+        ? (args.presets as unknown[]).map(String).filter((p) => p.trim().length > 0)
+        : [];
       const preset = typeof args.preset === 'string' ? args.preset : undefined;
       const spec =
         args.spec && typeof args.spec === 'object' && !Array.isArray(args.spec)
@@ -338,11 +341,14 @@ export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo
         macroStateIds.length > 0
           ? `States: ${macroStateIds.slice(0, 6).join(', ')}${macroStateIds.length > 6 ? ` (+${macroStateIds.length - 6})` : ''}`
           : '';
-      const baseDetail = preset
-        ? `Preset: ${preset}`
-        : spec && Array.isArray(spec.dimensions) && spec.dimensions.length > 0
-          ? `Custom slice: ${(spec.dimensions as unknown[]).map(String).join(', ')}`
-          : '';
+      const baseDetail =
+        presetsArr.length > 0
+          ? `Presets (${presetsArr.length}): ${presetsArr.slice(0, 3).join(', ')}${presetsArr.length > 3 ? ` (+${presetsArr.length - 3})` : ''}`
+          : preset
+            ? `Preset: ${preset}`
+            : spec && Array.isArray(spec.dimensions) && spec.dimensions.length > 0
+              ? `Custom slice: ${(spec.dimensions as unknown[]).map(String).join(', ')}`
+              : '';
       if (baseDetail && statesSuffix) {
         detail = `${baseDetail} · ${statesSuffix}`;
       } else if (baseDetail) {
@@ -356,10 +362,12 @@ export function formatToolCallTooltip(tool: AiToolCallItem): ToolCallTooltipInfo
     }
     case 'propose_script_patch': {
       const opsCount = Array.isArray(args.ops) ? args.ops.length : 0;
+      const titleArg = typeof args.title === 'string' ? args.title.trim() : '';
       const summary = typeof args.summary === 'string' ? args.summary.trim() : '';
       const parts: string[] = [];
       if (opsCount > 0) parts.push(`${opsCount} ${opsCount === 1 ? 'op' : 'ops'}`);
-      if (summary) parts.push(truncatePreview(summary, 90));
+      if (titleArg) parts.push(`Title: "${truncatePreview(titleArg, 45)}"`);
+      if (summary) parts.push(truncatePreview(summary, 80));
       detail = parts.length > 0 ? parts.join(' · ') : 'Dry-runs and stages targeted script patch.';
       break;
     }

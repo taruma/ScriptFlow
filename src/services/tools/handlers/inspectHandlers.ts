@@ -5,101 +5,171 @@ import {
   parseAuteurScript,
   sliceAuteurEnvelope,
   toAuteurEnvelope,
+  type AuteurEnvelope,
   type AuteurLensPresetId,
+  type AuteurLensSlice,
+  type DerivedDiagnosticIR,
   type LensSliceSpec,
   type LintRuleOverrides,
+  type SlicedMacroState,
+  type StagingMacroBlockIR,
+  type TokenMappingIR,
 } from '../../../core/index.ts';
-import {getLensAuditChecklist} from '../../auteurKnowledge.ts';
-import {countBySeverity, type ScriptToolExecutionResult} from '../suggestions.ts';
+import {getLensAuditChecklist, type LensAuditChecklist} from '../../auteurKnowledge.ts';
+import type {ScriptToolExecutionResult} from '../suggestions.ts';
 
-export function runGetScriptOverview(
-  rawText: string,
-  ruleOverrides?: LintRuleOverrides,
-  sceneTitle?: string
-): ScriptToolExecutionResult {
-  const envelope = toAuteurEnvelope(rawText, ruleOverrides);
-  const {document, derived} = envelope;
-  const diagCounts = countBySeverity(derived.diagnostics);
-  const beats = document.executionMacroBlock?.macroStates ?? [];
-  const continuityById = new Map(
-    derived.macroStateContinuity.map((item) => [item.macroStateId, item])
-  );
-  const normalizedTitle = sceneTitle?.trim() ? sceneTitle.trim() : null;
+function mergeStagingBlocks(slices: readonly AuteurLensSlice[]): StagingMacroBlockIR[] {
+  const byId = new Map<string, StagingMacroBlockIR>();
+  const orderedIds: string[] = [];
 
-  return {
-    ok: true,
-    toolName: 'get_script_overview',
-    result: {
-      ok: true,
-      sceneTitle: normalizedTitle,
-      snapshotHash: envelope.snapshotHash,
-      schemaVersion: document.schemaVersion,
-      sceneTopology: derived.sceneTopology,
-      hasContinuationContext: derived.hasContinuationContext,
-      stagingMacroBlocks: document.stagingMacroBlocks.map((block) =>
-        block.format === 'key_value'
-          ? {
-              id: block.id,
-              header: block.header,
-              kind: block.kind,
-              format: block.format,
-              entryCount: block.entries.length,
-              keys: block.entries
-                .map((e) => e.key)
-                .filter((k): k is string => k !== null),
-            }
-          : {
-              id: block.id,
-              header: block.header,
-              kind: block.kind,
-              format: block.format,
-              charCount: block.body.length,
-            }
-      ),
-      executionHeader: document.executionMacroBlock?.header ?? null,
-      macroStateCount: beats.length,
-      macroStates: beats.map((ms) => {
-        const cont = continuityById.get(ms.id);
-        return {
+  for (const slice of slices) {
+    for (const block of slice.stagingMacroBlocks) {
+      const existing = byId.get(block.id);
+      if (!existing) {
+        orderedIds.push(block.id);
+        byId.set(
+          block.id,
+          block.format === 'key_value'
+            ? {...block, entries: block.entries.map((e) => ({...e}))}
+            : {...block}
+        );
+        continue;
+      }
+
+      if (existing.format === 'key_value' && block.format === 'key_value') {
+        const seenEntryIds = new Set(existing.entries.map((e) => e.id));
+        for (const entry of block.entries) {
+          if (!seenEntryIds.has(entry.id)) {
+            seenEntryIds.add(entry.id);
+            existing.entries.push({...entry});
+          }
+        }
+      }
+    }
+  }
+
+  return orderedIds.map((id) => byId.get(id)!);
+}
+
+function mergeMacroStates(
+  envelope: AuteurEnvelope,
+  slices: readonly AuteurLensSlice[]
+): SlicedMacroState[] {
+  const docSubOrderByStateId = new Map<string, Map<string, number>>();
+  for (const ms of envelope.document.executionMacroBlock?.macroStates ?? []) {
+    const subOrder = new Map<string, number>();
+    ms.subStates.forEach((sub, idx) => subOrder.set(sub.id, idx));
+    docSubOrderByStateId.set(ms.id, subOrder);
+  }
+
+  const byStateId = new Map<string, SlicedMacroState>();
+  const stateOrder: string[] = [];
+  for (const ms of envelope.document.executionMacroBlock?.macroStates ?? []) {
+    stateOrder.push(ms.id);
+  }
+
+  for (const slice of slices) {
+    for (const ms of slice.macroStates) {
+      const existing = byStateId.get(ms.id);
+      if (!existing) {
+        byStateId.set(ms.id, {
           id: ms.id,
-          subStateCount: ms.subStates.length,
-          activeCameraIdentifier: cont?.activeCameraIdentifier ?? null,
-          cameraTransition: cont?.cameraTransition ?? 'NONE',
-        };
-      }),
-      cameraSlots: derived.cameraSlots,
-      referenceBindingCount: derived.referenceBindings.length,
-      tokenMappingCount: derived.tokenMappings.length,
-      diagnosticsSummary: {
-        total: derived.diagnostics.length,
-        errors: diagCounts.errors,
-        warnings: diagCounts.warnings,
-      },
-      diagnostics: derived.diagnostics.map((d) => ({
-        id: d.id,
-        ruleId: d.ruleId,
-        lens: d.lens,
-        severity: d.severity,
-        targetId: d.targetId,
-        message: d.message,
-        repairHint: d.repairHint,
-      })),
-    },
+          ...(ms.resolvedCamera ? {resolvedCamera: ms.resolvedCamera} : {}),
+          subStates: [...ms.subStates],
+          ...(ms.endsOnDialogue !== undefined ? {endsOnDialogue: ms.endsOnDialogue} : {}),
+        });
+        continue;
+      }
+
+      if (!existing.resolvedCamera && ms.resolvedCamera) {
+        existing.resolvedCamera = ms.resolvedCamera;
+      }
+      if (existing.endsOnDialogue === undefined && ms.endsOnDialogue !== undefined) {
+        existing.endsOnDialogue = ms.endsOnDialogue;
+      }
+
+      const seenSubs = new Set(existing.subStates.map((s) => s.id));
+      for (const sub of ms.subStates) {
+        if (!seenSubs.has(sub.id)) {
+          seenSubs.add(sub.id);
+          existing.subStates.push(sub);
+        }
+      }
+
+      const subOrder = docSubOrderByStateId.get(ms.id);
+      if (subOrder) {
+        existing.subStates.sort(
+          (a, b) => (subOrder.get(a.id) ?? 0) - (subOrder.get(b.id) ?? 0)
+        );
+      }
+    }
+  }
+
+  const merged: SlicedMacroState[] = [];
+  for (const stateId of stateOrder) {
+    const item = byStateId.get(stateId);
+    if (item) merged.push(item);
+  }
+  return merged;
+}
+
+function mergeMultipleLensSlices(
+  envelope: AuteurEnvelope,
+  slices: readonly AuteurLensSlice[]
+): AuteurLensSlice {
+  const first = slices[0];
+  const merged: AuteurLensSlice = {
+    snapshotHash: first.snapshotHash,
+    schemaVersion: first.schemaVersion,
+    stagingMacroBlocks: mergeStagingBlocks(slices),
+    macroStates: mergeMacroStates(envelope, slices),
   };
-}
 
-interface AnnotatedStagingSection {
-  id: string;
-  phase: 'staging';
-  header: string;
-  text: string;
-}
+  for (const slice of slices) {
+    if (slice.sceneTopology !== undefined && merged.sceneTopology === undefined) {
+      merged.sceneTopology = slice.sceneTopology;
+      merged.hasContinuationContext = slice.hasContinuationContext;
+    }
+    if (slice.referenceBindings && !merged.referenceBindings) {
+      merged.referenceBindings = slice.referenceBindings;
+    }
+  }
 
-interface AnnotatedExecutionSection {
-  id: string;
-  phase: 'execution';
-  header: string;
-  macroStates: Array<{id: string; text: string}>;
+  const tokenMappings: TokenMappingIR[] = [];
+  const seenTokens = new Set<string>();
+  let hasTokenMappings = false;
+  for (const slice of slices) {
+    if (!slice.tokenMappings) continue;
+    hasTokenMappings = true;
+    for (const tm of slice.tokenMappings) {
+      if (!seenTokens.has(tm.token)) {
+        seenTokens.add(tm.token);
+        tokenMappings.push(tm);
+      }
+    }
+  }
+  if (hasTokenMappings) {
+    merged.tokenMappings = tokenMappings;
+  }
+
+  const diagnostics: DerivedDiagnosticIR[] = [];
+  const seenDiagIds = new Set<string>();
+  let hasDiagnostics = false;
+  for (const slice of slices) {
+    if (!slice.diagnostics) continue;
+    hasDiagnostics = true;
+    for (const d of slice.diagnostics) {
+      if (!seenDiagIds.has(d.id)) {
+        seenDiagIds.add(d.id);
+        diagnostics.push(d);
+      }
+    }
+  }
+  if (hasDiagnostics) {
+    merged.diagnostics = diagnostics;
+  }
+
+  return merged;
 }
 
 export function runGetScriptSource(
@@ -207,7 +277,6 @@ export function runGetScriptSource(
     }
   }
 
-  const annotatedSections: Array<AnnotatedStagingSection | AnnotatedExecutionSection> = [];
   const sourceBlocks: string[] = [];
   const matchedIds: string[] = [];
 
@@ -227,12 +296,6 @@ export function runGetScriptSource(
     matchedIds.push(id);
     const body = block.rawBody.replace(/\n+$/, '');
     const canonicalSection = body.length > 0 ? `[${block.name}]\n${body}` : `[${block.name}]`;
-    annotatedSections.push({
-      id,
-      phase: 'staging',
-      header: block.name,
-      text: canonicalSection,
-    });
     sourceBlocks.push(annotateIds ? `# ${id}\n${canonicalSection}` : canonicalSection);
   });
 
@@ -245,23 +308,11 @@ export function runGetScriptSource(
       matchedIds.push(id);
       return {id, text: beat.raw};
     });
-    annotatedSections.push({
-      id: doc.execution.headerName,
-      phase: 'execution',
-      header: doc.execution.headerName,
-      macroStates: beatItems,
-    });
     const renderedBeats = beatItems
       .map((item) => (annotateIds ? `${item.id}: ${item.text}` : item.text))
       .join('\n');
     sourceBlocks.push(`[${doc.execution.headerName}]\n${renderedBeats}`);
   } else if (!isFiltered && doc.execution && doc.execution.beats.length === 0) {
-    annotatedSections.push({
-      id: doc.execution.headerName,
-      phase: 'execution',
-      header: doc.execution.headerName,
-      macroStates: [],
-    });
     sourceBlocks.push(`[${doc.execution.headerName}]`);
   }
 
@@ -280,11 +331,10 @@ export function runGetScriptSource(
       ...(notFoundIds.length > 0
         ? {
             notFoundIds,
-            repairHint: `Some requested targetIds were not found (${notFoundIds.join(', ')}). Call get_script_overview if you need the complete list of IDs.`,
+            repairHint: `Some requested targetIds were not found (${notFoundIds.join(', ')}). Omit targetIds to read the full script if needed.`,
           }
         : {}),
       sourceText,
-      annotatedSections,
     },
   };
 }
@@ -294,83 +344,141 @@ export function runInspectLensSlice(
   rawText: string,
   ruleOverrides?: LintRuleOverrides
 ): ScriptToolExecutionResult {
-  const hasPreset = typeof args.preset === 'string' && args.preset.trim().length > 0;
   const hasSpecObject =
     args.spec !== undefined && typeof args.spec === 'object' && args.spec !== null;
-  const topLevelOverrideKeys = Object.keys(args).filter(
-    (key) => key !== 'preset' && key !== 'spec' && args[key] !== undefined
-  );
+  const rawPresetsArray = Array.isArray(args.presets) ? args.presets : [];
+  const hasPreset = typeof args.preset === 'string' && args.preset.trim().length > 0;
 
-  let specOrPreset: LensSliceSpec | AuteurLensPresetId;
-
-  if (hasPreset && !hasSpecObject && topLevelOverrideKeys.length === 0) {
-    const parsedPreset = AuteurLensPresetIdSchema.safeParse(args.preset);
-    if (!parsedPreset.success) {
-      return {
-        ok: false,
-        toolName: 'inspect_lens_slice',
-        result: {
-          ok: false,
-          errors: parsedPreset.error.issues.map((issue) => ({
-            path: issue.path.join('.') || 'preset',
-            message: issue.message,
-          })),
-          repairHint: `Use one of the valid presets: ${Object.keys(AUDIT_LENS_PRESETS).join(', ')}, or pass a custom spec object.`,
-        },
-      };
+  if (!hasSpecObject && (rawPresetsArray.length > 0 || hasPreset)) {
+    const requestedPresetsRaw: unknown[] = [];
+    if (hasPreset) requestedPresetsRaw.push(args.preset);
+    for (const item of rawPresetsArray) {
+      requestedPresetsRaw.push(item);
     }
-    specOrPreset = parsedPreset.data;
-  } else {
-    const candidateSpec: Record<string, unknown> = hasSpecObject
-      ? {...(args.spec as Record<string, unknown>)}
-      : {};
-    for (const key of topLevelOverrideKeys) {
-      if (candidateSpec[key] === undefined) {
-        candidateSpec[key] = args[key];
+
+    const resolvedPresets: AuteurLensPresetId[] = [];
+    const seenPresets = new Set<AuteurLensPresetId>();
+    for (const rawPreset of requestedPresetsRaw) {
+      const parsed = AuteurLensPresetIdSchema.safeParse(rawPreset);
+      if (!parsed.success) {
+        return {
+          ok: false,
+          toolName: 'inspect_lens_slice',
+          result: {
+            ok: false,
+            errors: parsed.error.issues.map((issue) => ({
+              path: issue.path.join('.') || 'presets',
+              message: issue.message,
+            })),
+            repairHint: `Use valid presets: ${Object.keys(AUDIT_LENS_PRESETS).join(', ')}.`,
+          },
+        };
+      }
+      if (!seenPresets.has(parsed.data)) {
+        seenPresets.add(parsed.data);
+        resolvedPresets.push(parsed.data);
       }
     }
-    if (hasPreset && candidateSpec.preset === undefined) {
-      candidateSpec.preset = args.preset;
+
+    const overrideFields: Partial<LensSliceSpec> = {};
+    if (typeof args.includeStaging === 'boolean') {
+      overrideFields.includeStaging = args.includeStaging;
+    }
+    if (Array.isArray(args.macroStateIds)) {
+      const validIds = args.macroStateIds
+        .filter((id): id is string => typeof id === 'string')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0);
+      if (validIds.length > 0) {
+        overrideFields.macroStateIds = validIds;
+      }
     }
 
-    const parsedSpec = LensSliceSpecSchema.safeParse(candidateSpec);
-    if (!parsedSpec.success) {
+    const envelope = toAuteurEnvelope(rawText, ruleOverrides);
+    const topology = envelope.derived.sceneTopology ?? 'empty';
+
+    if (resolvedPresets.length === 1) {
+      const presetId = resolvedPresets[0];
+      const spec: LensSliceSpec = {
+        ...AUDIT_LENS_PRESETS[presetId],
+        ...overrideFields,
+      };
+      const slice = sliceAuteurEnvelope(envelope, spec);
+      const checklist = getLensAuditChecklist(presetId, slice.sceneTopology ?? topology);
       return {
-        ok: false,
+        ok: true,
         toolName: 'inspect_lens_slice',
         result: {
-          ok: false,
-          errors: parsedSpec.error.issues.map((issue) => ({
-            path: issue.path.join('.'),
-            message: issue.message,
-          })),
-          repairHint:
-            'Provide a valid preset ID or valid LensSliceSpec fields (includeStaging, macroBlocks, macroStateIds, dimensions, subStateTags, includeResolvedCamera, etc.).',
+          ok: true,
+          slice,
+          checklist,
         },
       };
     }
 
-    // If caller combined preset with custom overrides, merge base preset with overrides
-    if (parsedSpec.data.preset) {
-      specOrPreset = {
-        ...AUDIT_LENS_PRESETS[parsedSpec.data.preset],
-        ...parsedSpec.data,
-      };
-    } else {
-      specOrPreset = parsedSpec.data;
-    }
+    const individualSlices = resolvedPresets.map((presetId) =>
+      sliceAuteurEnvelope(envelope, {
+        ...AUDIT_LENS_PRESETS[presetId],
+        ...overrideFields,
+      })
+    );
+    const mergedSlice = mergeMultipleLensSlices(envelope, individualSlices);
+    const checklists: LensAuditChecklist[] = resolvedPresets.map((presetId) =>
+      getLensAuditChecklist(presetId, topology)
+    );
+
+    return {
+      ok: true,
+      toolName: 'inspect_lens_slice',
+      result: {
+        ok: true,
+        presets: resolvedPresets,
+        slice: mergedSlice,
+        checklists,
+      },
+    };
   }
 
+  // Backward-compatible fallback for custom LensSliceSpec callers
+  const topLevelOverrideKeys = Object.keys(args).filter(
+    (key) => key !== 'preset' && key !== 'presets' && key !== 'spec' && args[key] !== undefined
+  );
+  const candidateSpec: Record<string, unknown> = hasSpecObject
+    ? {...(args.spec as Record<string, unknown>)}
+    : {};
+  for (const key of topLevelOverrideKeys) {
+    if (candidateSpec[key] === undefined) {
+      candidateSpec[key] = args[key];
+    }
+  }
+  if (hasPreset && candidateSpec.preset === undefined) {
+    candidateSpec.preset = args.preset;
+  }
+
+  const parsedSpec = LensSliceSpecSchema.safeParse(candidateSpec);
+  if (!parsedSpec.success) {
+    return {
+      ok: false,
+      toolName: 'inspect_lens_slice',
+      result: {
+        ok: false,
+        errors: parsedSpec.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+        repairHint: `Provide preset or presets (${Object.keys(AUDIT_LENS_PRESETS).join(', ')}), optionally with macroStateIds or includeStaging.`,
+      },
+    };
+  }
+
+  const specOrPreset = parsedSpec.data.preset
+    ? {...AUDIT_LENS_PRESETS[parsedSpec.data.preset], ...parsedSpec.data}
+    : parsedSpec.data;
+
   const envelope = toAuteurEnvelope(rawText, ruleOverrides);
-  const resolvedSpec: LensSliceSpec =
-    typeof specOrPreset === 'string' ? AUDIT_LENS_PRESETS[specOrPreset] : specOrPreset;
-  const slice = sliceAuteurEnvelope(envelope, resolvedSpec);
-  const resolvedPreset = slice.preset;
-  const checklist = resolvedPreset
-    ? getLensAuditChecklist(
-        resolvedPreset,
-        slice.sceneTopology ?? envelope.derived.sceneTopology ?? 'empty'
-      )
+  const slice = sliceAuteurEnvelope(envelope, specOrPreset);
+  const checklist = slice.preset
+    ? getLensAuditChecklist(slice.preset, slice.sceneTopology ?? envelope.derived.sceneTopology ?? 'empty')
     : undefined;
 
   return {

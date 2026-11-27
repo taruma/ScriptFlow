@@ -428,6 +428,104 @@ MS on Miller seated frame-left facing screen-right.
     expect(relaxedRes.diagnosticsAfter).toHaveLength(0);
   });
 
+  it('supports sequential positional fallback for __new_* inserts while guarding surviving IDs', () => {
+    const stateChainRes = applyAuteurPatch(INTERROGATION, {
+      ops: [
+        {
+          op: 'insert_macro_state',
+          afterMacroStateId: 'S3',
+          subStates: [
+            {dimension: 'camera', subStateTag: 'CAM', identifier: '03', content: 'CU on clock'},
+            {dimension: 'action', subStateTag: 'ACT', content: 'Second hand ticks forward'},
+          ],
+        },
+        {
+          op: 'insert_macro_state',
+          afterMacroStateId: 'S4',
+          subStates: [
+            {dimension: 'camera', subStateTag: 'CAM', identifier: '04', content: 'MCU on Ray'},
+            {dimension: 'action', subStateTag: 'ACT', content: 'Ray glances at the doorway'},
+          ],
+        },
+      ],
+    });
+
+    expect(stateChainRes.ok).toBe(true);
+    const nextStates = stateChainRes.nextEnvelope!.document.executionMacroBlock!.macroStates;
+    expect(nextStates[3].id).toBe('S4');
+    expect(nextStates[3].subStates[0]).toMatchObject({dimension: 'camera', content: 'CU on clock'});
+    expect(nextStates[4].id).toBe('S5');
+    expect(nextStates[4].subStates[0]).toMatchObject({dimension: 'camera', content: 'MCU on Ray'});
+
+    const blockChainRes = applyAuteurPatch(INTERROGATION, {
+      ops: [
+        {
+          op: 'insert_macro_block',
+          afterMacroBlockId: 'MB3',
+          macroBlock: {
+            header: 'STAGE',
+            format: 'prose',
+            body: 'Windowless concrete room.',
+          },
+        },
+        {
+          op: 'insert_macro_block',
+          afterMacroBlockId: 'MB4',
+          macroBlock: {
+            header: 'LIGHTING',
+            format: 'prose',
+            body: 'Overhead sodium flicker.',
+          },
+        },
+      ],
+    });
+
+    expect(blockChainRes.ok).toBe(true);
+    const nextBlocks = blockChainRes.nextEnvelope!.document.stagingMacroBlocks;
+    expect(nextBlocks[4].id).toBe('MB4');
+    expect(nextBlocks[4].header).toBe('STAGE');
+    expect(nextBlocks[5].id).toBe('MB5');
+    expect(nextBlocks[5].header).toBe('LIGHTING');
+
+    // Guard 1: insert after null shifts surviving S1 to index 1; non-existent S99 still fails
+    const nonExistentAfterNullRes = applyAuteurPatch(INTERROGATION, {
+      ops: [
+        {
+          op: 'insert_macro_state',
+          afterMacroStateId: null,
+          subStates: [
+            {dimension: 'camera', subStateTag: 'CAM', identifier: '00', content: 'WS room'},
+          ],
+        },
+        {
+          op: 'insert_macro_state',
+          afterMacroStateId: 'S99',
+          subStates: [
+            {dimension: 'camera', subStateTag: 'CAM', identifier: '05', content: 'CU lamp'},
+          ],
+        },
+      ],
+    });
+    expect(nonExistentAfterNullRes.ok).toBe(false);
+    expect(nonExistentAfterNullRes.errors[0].code).toBe('TARGET_NOT_FOUND');
+
+    // Guard 2: deleting S1 shifts surviving S2 to index 0; deleted S1 must not match surviving index 0
+    const deletedRefRes = applyAuteurPatch(INTERROGATION, {
+      ops: [
+        {op: 'delete_macro_state', macroStateId: 'S1'},
+        {
+          op: 'insert_macro_state',
+          afterMacroStateId: 'S1',
+          subStates: [
+            {dimension: 'camera', subStateTag: 'CAM', identifier: '05', content: 'CU lamp'},
+          ],
+        },
+      ],
+    });
+    expect(deletedRefRes.ok).toBe(false);
+    expect(deletedRefRes.errors[0].code).toBe('TARGET_NOT_FOUND');
+  });
+
   describe('projectAuteurPatchPreview', () => {
     it('projects compound Staging and Execution ops accurately without index drift', () => {
       const before = toAuteurEnvelope(INTERROGATION);

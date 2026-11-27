@@ -367,12 +367,17 @@ export function useDocumentMutations({
       if (isReadOnly) {
         onSkipNextAiReset();
         return onForkCurrentExampleWithContent(suggestion.candidateRawText, {
+          ...(suggestion.title ? {title: suggestion.title} : {}),
           snapshotMeta: {trigger, beforeLabel, afterLabel},
         });
       }
       const previousRawText = rawText;
       const nextRawText = suggestion.candidateRawText;
+      const nextTitle = suggestion.title ? suggestion.title : sceneTitle;
       commitRawText(nextRawText, {mode: 'checkpoint'});
+      if (suggestion.title) {
+        onTitleChange(suggestion.title);
+      }
       onToast(
         kind === 'fix'
           ? options?.batchCount && options.batchCount > 1
@@ -380,7 +385,10 @@ export function useDocumentMutations({
             : UI_LABELS.toasts.aiFixApplied
           : UI_LABELS.toasts.aiPatchApplied
       );
-      await onFlushPendingSave({rawText: nextRawText});
+      await onFlushPendingSave({
+        rawText: nextRawText,
+        ...(suggestion.title ? {title: nextTitle} : {}),
+      });
       if (previousRawText !== nextRawText) {
         await onCreateSnapshot({
           trigger,
@@ -398,7 +406,9 @@ export function useDocumentMutations({
     [
       isReadOnly,
       rawText,
+      sceneTitle,
       commitRawText,
+      onTitleChange,
       onFlushPendingSave,
       onCreateSnapshot,
       onForkCurrentExampleWithContent,

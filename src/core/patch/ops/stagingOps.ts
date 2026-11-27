@@ -89,7 +89,20 @@ export function applyStagingOp(
         working.stagingMacroBlocks.unshift(materialized);
         return null;
       }
-      const afterIdx = working.stagingMacroBlocks.findIndex((b) => b.id === op.afterMacroBlockId);
+      let afterIdx = working.stagingMacroBlocks.findIndex((b) => b.id === op.afterMacroBlockId);
+      if (afterIdx === -1) {
+        const posMatch = /^MB(\d+)$/i.exec(op.afterMacroBlockId.trim());
+        if (posMatch) {
+          const posIdx = Number.parseInt(posMatch[1], 10);
+          if (
+            posIdx >= 0 &&
+            posIdx < working.stagingMacroBlocks.length &&
+            working.stagingMacroBlocks[posIdx].id.startsWith('__new_')
+          ) {
+            afterIdx = posIdx;
+          }
+        }
+      }
       if (afterIdx === -1) {
         return createOpError(
           opIndex,

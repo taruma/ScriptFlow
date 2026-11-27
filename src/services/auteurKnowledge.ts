@@ -257,17 +257,25 @@ function buildLiveEditorStateText(
     ].join('\n');
   }
 
+  const hashStatusNote = state.appliedAssistantSuggestion
+    ? 'applied from your previous staged suggestion — no manual edits; safe to edit directly without re-reading'
+    : state.changedSinceLastTurn
+      ? 'CHANGED since last turn — call get_script_source before editing; do not rely on prior turn memory for IDs or lines'
+      : 'current';
+
   const lines: string[] = [
     '<live_editor_state>',
     '## Live Editor State (Authoritative Current Snapshot)',
     ...(state.sceneTitle ? [`- Scene title: "${state.sceneTitle}"`] : []),
     `- Empty document: ${state.isEmpty ? 'yes' : 'no'}`,
-    `- Snapshot hash / expectedSnapshotHash: \`${state.snapshotHash}\` (${state.changedSinceLastTurn ? 'CHANGED since last turn — call get_script_source before editing; do not rely on prior turn memory for IDs or lines' : 'current'})`,
+    `- Snapshot hash / expectedSnapshotHash: \`${state.snapshotHash}\` (${hashStatusNote})`,
     ...(state.recentEditSummary
       ? [`- Recent user edits since last turn:\n${state.recentEditSummary}`]
       : []),
     `- Scene topology: \`${state.sceneTopology}\` | Continuation context: ${state.hasContinuationContext ? 'yes' : 'no'}`,
     `- Structure: ${state.stagingBlockCount} Staging Macro-Block(s), ${state.beatCount} Execution Macro-State(s), ${state.referenceBindingCount} Reference Binding(s), ${state.tokenMappingCount} Token Mapping(s)`,
+    ...(state.stagingIndexSummary ? [`- Staging blocks: ${state.stagingIndexSummary}`] : []),
+    ...(state.cameraSlotsSummary ? [`- Camera slots: ${state.cameraSlotsSummary}`] : []),
     `- Deterministic Script Supervisor lint: ${state.diagnosticsSummary.errors} error(s), ${state.diagnosticsSummary.warnings} warning(s)`,
   ];
 
@@ -406,35 +414,26 @@ function computeDefaultAutoTools(
   const tools = new Set<ScriptToolName>();
 
   if (focus === 'auto') {
-    tools.add('get_script_overview');
     tools.add('get_script_source');
     tools.add('inspect_lens_slice');
     tools.add('propose_script_patch');
-    tools.add('propose_text_replace');
     tools.add('propose_script_draft');
-    tools.add('propose_script_title');
     tools.add('report_audit_review');
     tools.add('ask_question');
   } else if (focus === 'draft') {
     if (!isEmpty) {
-      tools.add('get_script_overview');
       tools.add('get_script_source');
       tools.add('inspect_lens_slice');
     }
     tools.add('propose_script_draft');
-    tools.add('propose_script_title');
     tools.add('ask_question');
   } else if (focus === 'refine') {
-    tools.add('get_script_overview');
     tools.add('get_script_source');
     tools.add('inspect_lens_slice');
     tools.add('propose_script_patch');
-    tools.add('propose_text_replace');
-    tools.add('propose_script_title');
     tools.add('ask_question');
   } else {
     // focus === 'audit'
-    tools.add('get_script_overview');
     tools.add('get_script_source');
     tools.add('inspect_lens_slice');
     tools.add('report_audit_review');
@@ -589,10 +588,16 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   const diagnosticsFingerprint = computeDiagnosticsFingerprint(diagnostics);
 
   const prevHash = options.previousSnapshotHash?.trim();
-  const changedSinceLastTurn = Boolean(
-    (prevHash && prevHash !== envelope.snapshotHash) ||
-      (options.previousRawText !== undefined && options.previousRawText !== options.rawText)
+  const appliedHash = options.appliedAssistantHash?.trim();
+  const appliedAssistantSuggestion = Boolean(
+    appliedHash && appliedHash === envelope.snapshotHash
   );
+  const changedSinceLastTurn = appliedAssistantSuggestion
+    ? false
+    : Boolean(
+        (prevHash && prevHash !== envelope.snapshotHash) ||
+          (options.previousRawText !== undefined && options.previousRawText !== options.rawText)
+      );
   const trimmedTitle = options.sceneTitle?.trim();
   const recentEditDelta =
     changedSinceLastTurn && options.previousRawText !== undefined
@@ -604,17 +609,32 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
       ? (recentEditDelta?.changedTargetIds ?? [])
       : undefined;
 
+  const stagingIndexSummary =
+    document.stagingMacroBlocks.length > 0
+      ? document.stagingMacroBlocks.map((b) => `${b.id} [${b.header}]`).join(', ')
+      : undefined;
+  const cameraSlotEntries = Object.entries(derived.cameraSlots);
+  const cameraSlotsSummary =
+    cameraSlotEntries.length > 0
+      ? cameraSlotEntries
+          .map(([id, slot]) => `CAM ${id} (${slot.establishedAt})`)
+          .join(', ')
+      : undefined;
+
   const editorState: LiveEditorStateSummary = {
     isEmpty,
     ...(trimmedTitle ? {sceneTitle: trimmedTitle} : {}),
     snapshotHash: envelope.snapshotHash,
     changedSinceLastTurn,
+    ...(appliedAssistantSuggestion ? {appliedAssistantSuggestion: true} : {}),
     ...(changedTargetIds !== undefined ? {changedTargetIds} : {}),
     ...(recentEditSummary ? {recentEditSummary} : {}),
     sceneTopology: derived.sceneTopology,
     hasContinuationContext: derived.hasContinuationContext,
     stagingBlockCount,
     beatCount,
+    ...(stagingIndexSummary ? {stagingIndexSummary} : {}),
+    ...(cameraSlotsSummary ? {cameraSlotsSummary} : {}),
     referenceBindingCount: derived.referenceBindings.length,
     tokenMappingCount: derived.tokenMappings.length,
     diagnosticsFingerprint,
@@ -739,7 +759,11 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     options.previousDiagnosticsFingerprint !== undefined &&
     options.previousDiagnosticsFingerprint !== diagnosticsFingerprint;
   const liveEditorStateMode: 'full' | 'unchanged' =
-    !hasPreviousInteraction || changedSinceLastTurn || sceneTitleChanged || diagnosticsChanged
+    !hasPreviousInteraction ||
+    changedSinceLastTurn ||
+    appliedAssistantSuggestion ||
+    sceneTitleChanged ||
+    diagnosticsChanged
       ? 'full'
       : 'unchanged';
 

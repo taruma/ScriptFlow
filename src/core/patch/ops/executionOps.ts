@@ -56,7 +56,20 @@ export function applyExecutionOp(
         exec.macroStates.unshift(created);
         return null;
       }
-      const afterIdx = exec.macroStates.findIndex((m) => m.id === op.afterMacroStateId);
+      let afterIdx = exec.macroStates.findIndex((m) => m.id === op.afterMacroStateId);
+      if (afterIdx === -1) {
+        const posMatch = /^S(\d+)$/i.exec(op.afterMacroStateId.trim());
+        if (posMatch) {
+          const posIdx = Number.parseInt(posMatch[1], 10) - 1;
+          if (
+            posIdx >= 0 &&
+            posIdx < exec.macroStates.length &&
+            exec.macroStates[posIdx].id.startsWith('__new_')
+          ) {
+            afterIdx = posIdx;
+          }
+        }
+      }
       if (afterIdx === -1) {
         return createOpError(
           opIndex,

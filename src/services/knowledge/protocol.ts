@@ -62,80 +62,53 @@ export const BUILTIN_AUTEUR_SKILLS: readonly AuteurSkillDefinition[] =
 
 export const DEFAULT_TOOL_PROTOCOL_CORE = [
   '- Staging-first safety: never assume editor text has changed until the user applies a staged suggestion. Every edit, draft, or audit review must be staged through its dedicated tool.',
-  '- Read-before-write on changed scripts: whenever `<live_editor_state>` indicates the live script changed since the prior turn or after a `<prior_session_recap>` bridge on a non-empty script, call `get_script_source` (targeting the changed/affected `MB#` / `S#` IDs or omitting `targetIds` for full source) before calling `propose_script_patch`, `propose_text_replace`, or `propose_script_draft`—never reconstruct text from prior-turn memory.',
+  '- Read & round efficiency: use `<live_editor_state>` for `snapshotHash`, `Staging blocks` (`MB#`), `Camera slots`, `sceneTopology`, and deterministic lint diagnostics—call `get_script_source` only when you need exact line wording or when `<live_editor_state>` indicates manual edits since the prior turn (prefer targeted `targetIds` for localized edits). Batch multi-lens audits via `inspect_lens_slice({ presets: [...] })` and multi-beat insertions via `insert_states`.',
   '- Self-repair on tool errors: whenever a tool returns `is_error: true` (`ok: false`), inspect `errors`, `introducedErrors`, `diagnostics`, and `repairHint`, fix the issue, and retry before giving your final reply.',
 ].join('\n');
 
 export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
   {
-    name: 'get_script_overview',
-    label: 'Inspect Overview',
-    category: 'inspect',
-    defaultDescription:
-      'Returns a compact read-only overview of the current Auteur Script: sceneTitle, snapshotHash, sceneTopology, staging Macro-Blocks (MB#), Macro-State count, camera slots, reference/token counts, and active Script Supervisor diagnostics.',
-    defaultProtocolGuidance:
-      '- `get_script_overview`: call to inspect exact `MB#`, `MB#.#`, `S#`, `S#.#` IDs, `sceneTopology`, camera slots, and active deterministic lint diagnostics.',
-  },
-  {
     name: 'get_script_source',
     label: 'Read Script Source',
     category: 'inspect',
     defaultDescription:
-      'Reads the current Auteur Script—or a targeted subset via targetIds (MB#, header names like AESTHETIC/EXECUTION, or S#)—as compact canonical v0.4.0 plain text with optional ID annotations.',
+      'Reads the current Auteur Script—or a targeted subset via targetIds (MB#, header names like AESTHETIC/EXECUTION, or S#)—as compact canonical v0.4.0 plain text with optional MB#/S# annotations.',
     defaultProtocolGuidance:
-      '- `get_script_source`: whenever `<live_editor_state>` indicates the script changed since the prior turn, call `get_script_source` before editing (preferring `targetIds`, e.g., `["MB0", "S3", "S4"]`, for localized edits; omit `targetIds` when you need the complete compact `v0.4.0` plain text).',
+      '- `get_script_source`: whenever `<live_editor_state>` indicates the script changed since the prior turn (or after a history recap on a non-empty script), call `get_script_source` before editing (preferring `targetIds`, e.g., `["MB0", "S3", "S4"]`, for localized edits; omit `targetIds` for full source).',
   },
   {
     name: 'inspect_lens_slice',
     label: 'Inspect Lens Slice',
     category: 'inspect',
     defaultDescription:
-      'Extracts a focused read-only JSON slice of the current script using one of the 5 built-in Script Supervisor audit presets or a custom composable LensSliceSpec (including surgical macroStateIds and includeStaging) with resolved camera framing.',
+      'Extracts a focused read-only JSON slice (with resolved camera framing and topology checklists) for one `preset` or a deduplicated `presets` array of Script Supervisor audit lenses, optionally scoped by `macroStateIds` or `includeStaging: false`.',
     defaultProtocolGuidance:
-      '- `inspect_lens_slice`: use surgical `macroStateIds` / `includeStaging: false` for targeted inspection, and issue parallel preset calls when auditing multiple Script Supervisor lenses.',
+      '- `inspect_lens_slice`: pass `presets: [...]` to audit multiple lenses in one deduplicated call, and use `macroStateIds` / `includeStaging: false` for targeted inspection.',
   },
   {
     name: 'propose_script_patch',
-    label: 'Stage AST Patch',
+    label: 'Stage Patch',
     category: 'mutation',
     defaultDescription:
-      'Dry-runs a transactional, ID-addressed AuteurPatch against the current script with rejectOnNewErrors=true. If valid and lint-clean, stages a reviewable PatchSuggestion without mutating the editor; if invalid or lint-rejected, returns structured errors and repairHint for self-repair.',
+      'Dry-runs and stages targeted edits (`set_block`, `insert_block`, `delete_block`, `replace_state`, `insert_states`, `delete_state`, `reorder_state`, `replace_text`) using canonical v0.4.0 plain text and/or an optional scene `title`, gated by `expectedSnapshotHash` and deterministic Script Supervisor linting.',
     defaultProtocolGuidance:
-      '- `propose_script_patch`: use for structural AST edits (inserting, deleting, reordering, or rewriting Macro-Blocks, Macro-States, Sub-States, or `[AESTHETIC]` entries).',
-  },
-  {
-    name: 'propose_text_replace',
-    label: 'Stage Text Replace',
-    category: 'mutation',
-    defaultDescription:
-      'Performs 1 to 20 atomic literal or regex find-and-replace rules across the script body or scoped targetIds (MB# / S#), preserving [HEADER] lines and dry-running the deterministic Script Supervisor linter (rejectOnNewErrors=true) before staging a reviewable PatchSuggestion.',
-    defaultProtocolGuidance:
-      '- `propose_text_replace`: use for fast literal or regex find-and-replace (renaming characters/props/tokens or pattern substitutions across the whole script or scoped `targetIds`).',
+      '- `propose_script_patch`: use for all targeted edits, multi-beat insertions (`insert_states`), literal/regex renames (`replace_text`), and scene renames (`title`, alone or combined with `ops`). Write canonical `v0.4.0` text without `# MB#` / `S#:` prefixes or Markdown fences.',
   },
   {
     name: 'propose_script_draft',
     label: 'Compile Draft',
     category: 'mutation',
     defaultDescription:
-      'Validates and compiles a full AuteurScriptDraft JSON into canonical v0.4.0 plain text and stages a reviewable DraftSuggestion without overwriting the editor.',
+      'Parses and lint-checks a full canonical v0.4.0 plain-text `scriptText` (with optional `title` and `summary`) and stages a reviewable DraftSuggestion without overwriting the editor.',
     defaultProtocolGuidance:
-      '- `propose_script_draft`: stage a complete, lint-clean `AuteurScriptDraft` ([INTENT], [LOGIC], [AESTHETIC] as `key_value`, [OPENING], and [EXECUTION]). Use for empty scripts or explicit full rewrites (prefer `propose_script_patch` / `propose_text_replace` for targeted edits on existing scripts). If `draft_craft` is in the Available Skill Directory and not yet loaded in this session, call `load_auteur_skill` for `draft_craft` before drafting.',
-  },
-  {
-    name: 'propose_script_title',
-    label: 'Suggest Scene Title',
-    category: 'mutation',
-    defaultDescription:
-      'Stages a dedicated TitleSuggestion card to rename the active scene independently of script body edits.',
-    defaultProtocolGuidance:
-      '- `propose_script_title`: propose or update the scene title independently of script body edits.',
+      '- `propose_script_draft`: stage a complete, lint-clean canonical `v0.4.0` `scriptText` (`[INTENT]`, `[LOGIC]`, `[AESTHETIC]`, `[OPENING]`, and `[EXECUTION]`). Use for empty scripts or explicit full rewrites (prefer `propose_script_patch` for targeted edits). If `draft_craft` is in the Available Skill Directory and not yet loaded, call `load_auteur_skill` for `draft_craft` before drafting.',
   },
   {
     name: 'report_audit_review',
     label: 'Stage Audit Review',
     category: 'audit',
     defaultDescription:
-      'Validates a structured Script Supervisor AuteurReview (including dry-running any embedded suggestedPatch payloads against active lint rules) and stages clickable AuditReviewSuggestion items.',
+      'Validates a structured Script Supervisor AuteurReview (dry-running any embedded text-first `suggestedPatch` payloads against active lint rules) and stages clickable AuditReviewSuggestion items.',
     defaultProtocolGuidance:
       '- `report_audit_review`: report structured Script Supervisor continuity issues referencing exact `targetId` (`MB#`, `S#`, `S#.#`) and verified `suggestedPatch` fixes when helpful.',
   },
@@ -189,20 +162,15 @@ export function buildToolProtocolRuntimeHeader(
     `- Active focus: \`${focus}\` | Allowed tools this turn: ${allowedToolNames.map((t) => `\`${t}\``).join(', ')}.`
   );
 
-  if (
-    hasTool('propose_script_patch') ||
-    hasTool('propose_text_replace') ||
-    hasTool('report_audit_review')
-  ) {
+  if (hasTool('propose_script_patch') || hasTool('report_audit_review')) {
     lines.push(
-      '- Optimistic concurrency & fresh-read rule: always pass the latest `expectedSnapshotHash` from `<live_editor_state>` (or `get_script_overview`) on `propose_script_patch`, `propose_text_replace`, and any embedded `suggestedPatch` inside `report_audit_review`; whenever `<live_editor_state>` indicates edits since the prior turn, read updated source via `get_script_source` before proposing changes.'
+      '- Optimistic concurrency & fresh-read rule: always pass the latest `expectedSnapshotHash` from `<live_editor_state>` (or `get_script_source`) on `propose_script_patch` and any embedded `suggestedPatch` inside `report_audit_review`; whenever `<live_editor_state>` indicates manual edits since the prior turn, read updated source via `get_script_source` before proposing changes.'
     );
   }
 
   if (
     !enforceToolLinterGate &&
     (hasTool('propose_script_patch') ||
-      hasTool('propose_text_replace') ||
       hasTool('propose_script_draft') ||
       hasTool('report_audit_review'))
   ) {
@@ -277,7 +245,7 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
 
   if (focus === 'auto' && allowedToolNames.length > 0) {
     lines.push(
-      '- Auto routing: choose the minimal matching tool(s) above—`propose_script_draft` for empty scripts or full rewrites, `propose_script_patch` / `propose_text_replace` for targeted edits, `propose_script_title` for title updates, `report_audit_review` for audits, or respond directly in prose for pure questions.'
+      '- Auto routing: choose the minimal matching tool(s) above—`propose_script_draft` for empty scripts or full rewrites, `propose_script_patch` for targeted edits, renames (`replace_text`), or scene title updates (`title`), `report_audit_review` for audits, or respond directly in prose for pure questions.'
     );
   }
 

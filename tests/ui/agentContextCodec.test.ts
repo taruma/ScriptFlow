@@ -435,9 +435,9 @@ describe('agentContextCodec', () => {
       enforceToolLinterGate: false,
       toolOverrides: {
         ask_question: {activationMode: 'enabled'},
-        propose_text_replace: {
+        propose_script_patch: {
           activationMode: 'disabled',
-          protocolGuidanceOverride: '- Custom text replace guidance.',
+          protocolGuidanceOverride: '- Custom patch guidance.',
         },
       },
     };
@@ -452,7 +452,7 @@ describe('agentContextCodec', () => {
     expect(parsed.pack.skills?.enforceToolLinterGate).toBe(false);
     expect(parsed.pack.skills?.toolOverrides.ask_question).toEqual({activationMode: 'enabled'});
 
-    // Unrecognized tool override emits sanitizer warning
+    // Retired / unrecognized tool overrides emit non-fatal sanitizer warnings
     const withUnknownTool = parseAgentContextPack(
       JSON.stringify({
         format: AUTEUR_AGENT_CONTEXT_PACK_FORMAT,
@@ -460,6 +460,7 @@ describe('agentContextCodec', () => {
         skills: {
           toolOverrides: {
             fake_tool_xyz: {activationMode: 'disabled'},
+            propose_text_replace: {activationMode: 'disabled'},
             ask_question: {activationMode: 'disabled'},
           },
         },
@@ -468,19 +469,19 @@ describe('agentContextCodec', () => {
     expect(withUnknownTool.ok).toBe(true);
     if (withUnknownTool.ok) {
       expect(withUnknownTool.warnings).toEqual([
-        'Ignored 1 unrecognized function tool override.',
+        'Ignored 2 unrecognized function tool overrides.',
       ]);
       expect(Object.keys(withUnknownTool.pack.skills?.toolOverrides ?? {})).toEqual([
         'ask_question',
       ]);
     }
 
-    // Selective Merge: include only ask_question override, skip protocol & propose_text_replace
+    // Selective Merge: include only ask_question override, skip protocol & propose_script_patch
     const localSkills: AiSkillsState = {
       ...DEFAULT_AI_SKILLS_STATE,
       toolProtocolOverride: '- Keep local core protocol.',
       toolOverrides: {
-        propose_script_title: {activationMode: 'disabled'},
+        propose_script_draft: {activationMode: 'disabled'},
       },
     };
     const analysis = analyzeAgentContextImport(
@@ -506,7 +507,7 @@ describe('agentContextCodec', () => {
     expect(merged.skills.toolProtocolOverride).toBe('- Keep local core protocol.');
     expect(merged.skills.enforceToolLinterGate).toBe(true);
     expect(merged.skills.toolOverrides).toEqual({
-      propose_script_title: {activationMode: 'disabled'},
+      propose_script_draft: {activationMode: 'disabled'},
       ask_question: {activationMode: 'enabled'},
     });
 
@@ -624,6 +625,6 @@ describe('agentContextCodec', () => {
       exportedAt: '2026-11-26T09:00:00.000Z',
     });
     expect(reExported.pack.packVersion).toBe(1);
-    expect(reExported.pack.skills?.knowledgeVersion).toBe('0.4.0-k5');
+    expect(reExported.pack.skills?.knowledgeVersion).toBe('0.4.0-k6');
   });
 });

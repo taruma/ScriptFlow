@@ -38,6 +38,7 @@ export interface LintDelta {
 export interface PatchSuggestion {
   id: string;
   kind: 'patch';
+  title?: string;
   summary: string;
   baseSnapshotHash: string;
   nextSnapshotHash: string;
@@ -259,12 +260,12 @@ export function buildPatchRepairHint(
 
   if (errors.some((e) => e.code === 'SNAPSHOT_MISMATCH')) {
     hints.push(
-      `Call get_script_overview or update expectedSnapshotHash to "${currentSnapshotHash}".`
+      `Call get_script_source or update expectedSnapshotHash to "${currentSnapshotHash}".`
     );
   }
   if (errors.some((e) => e.code === 'TARGET_NOT_FOUND')) {
     hints.push(
-      'Inspect current IDs (MB#, MB#.#, S#, S#.#) via get_script_overview or inspect_lens_slice and target valid existing IDs.'
+      'Inspect current IDs (MB#, S#) via get_script_source or inspect_lens_slice and target valid existing IDs.'
     );
   }
   if (errors.some((e) => e.code === 'VALIDATION_ERROR')) {
@@ -338,6 +339,7 @@ export type BuildPatchSuggestionResult =
 function assemblePatchSuggestion(params: {
   rawText: string;
   candidateRawText: string;
+  title?: string;
   summary: string;
   affectedIds: string[];
   opsCount: number;
@@ -358,6 +360,7 @@ function assemblePatchSuggestion(params: {
   return {
     id: params.nextId(),
     kind: 'patch',
+    ...(params.title ? {title: params.title} : {}),
     summary: params.summary,
     baseSnapshotHash: params.beforeEnvelope.snapshotHash,
     nextSnapshotHash: params.nextEnvelope.snapshotHash,
@@ -381,7 +384,7 @@ function assemblePatchSuggestion(params: {
 
 /**
  * Shared PatchSuggestion builder (optionally linter-gated via `rejectOnNewErrors`,
- * defaulting to `true`) from a pre-computed `candidateRawText` (used by `propose_text_replace`).
+ * defaulting to `true`) from a pre-computed `candidateRawText`.
  */
 export function buildPatchSuggestionFromCandidateText(
   rawText: string,
@@ -454,7 +457,7 @@ export function buildPatchSuggestion(
   patch: AuteurPatch,
   ruleOverrides: LintRuleOverrides | undefined,
   nextId: () => string,
-  options?: {rejectOnNewErrors?: boolean}
+  options?: {rejectOnNewErrors?: boolean; title?: string}
 ): BuildPatchSuggestionResult {
   const rejectOnNewErrors = options?.rejectOnNewErrors ?? true;
   const beforeEnvelope = toAuteurEnvelope(rawText, ruleOverrides);
@@ -484,6 +487,7 @@ export function buildPatchSuggestion(
   const suggestion = assemblePatchSuggestion({
     rawText,
     candidateRawText: applied.nextRawText,
+    ...(options?.title ? {title: options.title} : {}),
     summary,
     affectedIds,
     opsCount: applied.appliedOpsCount,
