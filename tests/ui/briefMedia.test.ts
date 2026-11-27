@@ -439,6 +439,42 @@ describe('Interactions API multimodal input builder & trace sanitization', () =>
     const imageBlock = sanitized[0]?.content.find((b) => b.type === 'image');
     expect(String(imageBlock?.data)).toContain('base64');
     expect(String(imageBlock?.data)).toContain('omitted');
+
+    // Per-turn composer attachments (origin: 'message') use clean [Attached ...] framing without @handles
+    const messagePayload = buildInitialInteractionInput('Compare this clip.', [
+      {
+        origin: 'message',
+        handle: '',
+        label: 'Render 01',
+        kind: 'video',
+        source: 'files_api',
+        mimeType: 'video/mp4',
+        fileName: 'render_01.mp4',
+        uri: 'https://generativelanguage.googleapis.com/v1beta/files/r01',
+        processingMode: 'agentic',
+        fingerprint: 'msg_fp_1',
+      },
+      {
+        origin: 'message',
+        handle: '',
+        label: 'Beat notes',
+        kind: 'document',
+        source: 'inline',
+        mimeType: 'text/markdown',
+        fileName: 'beat_notes.md',
+        inlineText: 'Keep the pause before the door opens.',
+        fingerprint: 'msg_fp_2',
+      },
+    ]) as Array<{type: string; content: Array<Record<string, unknown>>}>;
+    const msgBlocks = messagePayload[0]!.content;
+    expect(msgBlocks).toContainEqual({
+      type: 'text',
+      text: '[Attached video: render_01.mp4]',
+    });
+    expect(msgBlocks).toContainEqual({
+      type: 'text',
+      text: '[Attached document: beat_notes.md]\nKeep the pause before the door opens.',
+    });
   });
 });
 

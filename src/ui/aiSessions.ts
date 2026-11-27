@@ -24,6 +24,7 @@ export {
   selectRecentSessionsForScript,
   sortAiSessions,
   stripBriefMediaForStorage,
+  stripMessageAttachmentsForStorage,
   type AiSessionContinuityState,
   type AiSessionConversationJsonPayload,
   type AiSessionConversationSuggestionDetails,

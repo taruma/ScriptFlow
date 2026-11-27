@@ -30,11 +30,13 @@ import {
   focusToLegacyMode,
   formatQuestionAnswersPrompt,
   getLatestActiveQuickScan,
+  hasAnyOmittedOrExpiredMessageAttachments,
   isReferenceAttachmentExpired,
   isSuggestionStale,
   type AiChatMessage,
   type AiTargetScope,
   type AuditQuickCheckId,
+  type ChatMessageAttachment,
   type DraftBriefState,
   type QuestionAnswerDraft,
 } from '../../../ui/aiAssistant.ts';
@@ -92,6 +94,11 @@ export interface SubmitPromptOptions {
   displayText?: string;
   scopeLabel?: string;
   askQuestionMode?: AskQuestionMode;
+  composerAttachments?: {
+    messageAttachments: ChatMessageAttachment[];
+    agentAttachments: AgentMediaAttachment[];
+    onRestoreOnFailure?: () => void;
+  };
 }
 
 export interface UseAiChatOrchestratorOptions {
@@ -589,7 +596,9 @@ export function useAiChatOrchestrator({
     activeFocus: AssistantFocus;
     legacyMode: ReturnType<typeof focusToLegacyMode>;
     effectiveAskMode: AskQuestionMode;
-    attachments: readonly AgentMediaAttachment[];
+    briefAttachments: readonly AgentMediaAttachment[];
+    composerAttachments?: readonly AgentMediaAttachment[];
+    onRestoreAttachmentsOnFailure?: () => void;
     previousInteractionId?: string;
     resumeFunctionResults?: readonly PendingToolResultStep[];
   }
@@ -602,7 +611,9 @@ export function useAiChatOrchestrator({
       activeFocus,
       legacyMode,
       effectiveAskMode,
-      attachments,
+      briefAttachments,
+      composerAttachments = [],
+      onRestoreAttachmentsOnFailure,
       previousInteractionId,
       resumeFunctionResults,
     }: ExecuteAgentTurnParams) => {
@@ -718,7 +729,11 @@ export function useAiChatOrchestrator({
           },
         });
 
-      let sentAttachmentsForAttempt: readonly AgentMediaAttachment[] = attachments;
+      const initialAttachments: readonly AgentMediaAttachment[] = [
+        ...briefAttachments,
+        ...composerAttachments,
+      ];
+      let sentBriefAttachmentsForAttempt: readonly AgentMediaAttachment[] = briefAttachments;
 
       try {
         let bridgedKind: 'expired_chain' | 'cross_script' | undefined;
@@ -730,6 +745,8 @@ export function useAiChatOrchestrator({
         const hasExpiredBriefFiles = latestContextRef.current.brief.references.some((ref) =>
           Boolean(ref.attachment && isReferenceAttachmentExpired(ref.attachment))
         );
+        const hasExpiredOrOmittedMessageMedia =
+          hasAnyOmittedOrExpiredMessageAttachments(priorMessagesForRecap);
 
         if (needsRecapBridgeRef.current && priorMessagesForRecap.length > 0) {
           attemptPrevId = undefined;
@@ -742,7 +759,9 @@ export function useAiChatOrchestrator({
             currentScriptTitle: sceneTitle,
             isCrossScript: true,
             hasOmittedMedia:
-              Boolean(activeSessionMetaRef.current?.hasOmittedMedia) || hasExpiredBriefFiles,
+              Boolean(activeSessionMetaRef.current?.hasOmittedMedia) ||
+              hasExpiredBriefFiles ||
+              hasExpiredOrOmittedMessageMedia,
           });
           bridgedKind = 'cross_script';
         }
@@ -754,10 +773,12 @@ export function useAiChatOrchestrator({
             attemptResumeResults,
             attemptRecap,
             attemptPrompt,
-            attachments
+            initialAttachments
           );
         } catch (firstErr) {
-          const sentFilesApiThisAttempt = attachments.some((att) => att.source === 'files_api');
+          const sentFilesApiThisAttempt = initialAttachments.some(
+            (att) => att.source === 'files_api'
+          );
           const canRecoverViaRecap =
             firstErr instanceof GeminiServiceError &&
             Boolean(attemptPrevId) &&
@@ -766,11 +787,15 @@ export function useAiChatOrchestrator({
               (firstErr.code === 'file_unavailable' && !sentFilesApiThisAttempt));
 
           if (canRecoverViaRecap) {
-            const retryAttachments = collectPendingBriefAttachments(
+            const retryBriefAttachments = collectPendingBriefAttachments(
               latestContextRef.current.brief,
               new Set(),
               false
             );
+            const retryAttachments: readonly AgentMediaAttachment[] = [
+              ...retryBriefAttachments,
+              ...composerAttachments,
+            ];
             lastInteractionIdRef.current = undefined;
             pendingQuestionRef.current = null;
             sentAttachmentFingerprintsRef.current.clear();
@@ -785,12 +810,13 @@ export function useAiChatOrchestrator({
               hasOmittedMedia:
                 Boolean(activeSessionMetaRef.current?.hasOmittedMedia) ||
                 hasExpiredBriefFiles ||
+                hasExpiredOrOmittedMessageMedia ||
                 firstErr.code === 'file_unavailable',
             });
             const retryPrompt = attemptPrompt.trim()
               ? attemptPrompt
               : (fallbackPromptOnExpired ?? 'Continue from our previous discussion.');
-            sentAttachmentsForAttempt = retryAttachments;
+            sentBriefAttachmentsForAttempt = retryBriefAttachments;
             result = await runSingleAttempt(
               undefined,
               undefined,
@@ -810,7 +836,7 @@ export function useAiChatOrchestrator({
         if (result.interactionId) {
           lastInteractionIdRef.current = result.interactionId;
           onHasActiveInteractionChange(true);
-          for (const att of sentAttachmentsForAttempt) {
+          for (const att of sentBriefAttachmentsForAttempt) {
             sentAttachmentFingerprintsRef.current.add(att.fingerprint);
           }
         }
@@ -852,6 +878,7 @@ export function useAiChatOrchestrator({
         markDirtyForPersist();
       } catch (err) {
         if (activeRunIdRef.current !== runId) return;
+        onRestoreAttachmentsOnFailure?.();
         const serviceErr =
           err instanceof GeminiServiceError
             ? err
@@ -933,11 +960,13 @@ export function useAiChatOrchestrator({
 
       const scopeLabel = options?.scopeLabel ?? (useTargetScope ? activeTarget.label : undefined);
       const briefSummary = briefIsActive ? briefSummaryLabel : undefined;
-      const pendingAttachments = collectPendingBriefAttachments(
+      const pendingBriefAttachments = collectPendingBriefAttachments(
         brief,
         sentAttachmentFingerprintsRef.current,
         Boolean(lastInteractionIdRef.current)
       );
+      const composerMessageAttachments = options?.composerAttachments?.messageAttachments ?? [];
+      const composerAgentAttachments = options?.composerAttachments?.agentAttachments ?? [];
 
       const userMessageId = `msg-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       const userMessage: AiChatMessage = {
@@ -948,6 +977,9 @@ export function useAiChatOrchestrator({
         text: options?.displayText ?? trimmed,
         ...(scopeLabel ? {scopeLabel} : {}),
         ...(briefSummary ? {briefSummary} : {}),
+        ...(composerMessageAttachments.length > 0
+          ? {attachments: composerMessageAttachments}
+          : {}),
         ...(effectiveAskMode === 'ask_first' ? {askFirst: true} : {}),
       };
 
@@ -966,7 +998,8 @@ export function useAiChatOrchestrator({
         if (
           pending.interactionId &&
           pending.interactionId === lastInteractionIdRef.current &&
-          pendingAttachments.length === 0
+          pendingBriefAttachments.length === 0 &&
+          composerAgentAttachments.length === 0
         ) {
           const dismissPayload = {
             ...buildQuestionToolResultPayload(pending.suggestion, {}, 'dismissed'),
@@ -992,7 +1025,9 @@ export function useAiChatOrchestrator({
         activeFocus,
         legacyMode,
         effectiveAskMode,
-        attachments: pendingAttachments,
+        briefAttachments: pendingBriefAttachments,
+        composerAttachments: composerAgentAttachments,
+        onRestoreAttachmentsOnFailure: options?.composerAttachments?.onRestoreOnFailure,
         previousInteractionId,
         resumeFunctionResults,
       });
@@ -1217,7 +1252,7 @@ export function useAiChatOrchestrator({
           activeFocus: focus,
           legacyMode: focusToLegacyMode(focus, isEmpty),
           effectiveAskMode: followupAskMode,
-          attachments: [],
+          briefAttachments: [],
           previousInteractionId: pending.interactionId,
           resumeFunctionResults,
         });

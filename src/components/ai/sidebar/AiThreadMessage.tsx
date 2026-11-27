@@ -25,6 +25,7 @@ import {
   type AiLoadedSkillItem,
   type AiToolCallItem,
   type AuditQuickCheckId,
+  type ChatMessageAttachment,
   type QuestionAnswerDraft,
 } from '../../../ui/aiAssistant.ts';
 import {estimateTraceCost, formatEstimatedUsd} from '../../../ui/aiPricing.ts';
@@ -39,6 +40,7 @@ import {
 import type {AiInspectableTrace} from '../../AiTraceModal.tsx';
 import {MarkdownContent} from '../../MarkdownContent.tsx';
 import {QuickScanCard} from '../../QuickScanCard.tsx';
+import {ChatAttachmentChipList} from './ChatAttachmentChipList.tsx';
 import {ReasoningAccordion} from './ReasoningAccordion.tsx';
 
 const EMPTY_TOOL_CALLS: readonly AiToolCallItem[] = [];
@@ -87,6 +89,7 @@ export interface AiThreadMessageProps {
   onDismissSuggestion: (messageId: string, suggestionId: string) => void;
   onQuickAudit: (checkId: AuditQuickCheckId) => void;
   onOpenSettings: () => void;
+  onInspectAttachment?: (item: ChatMessageAttachment) => void;
 }
 
 export const AiThreadMessage = memo(function AiThreadMessage({
@@ -115,6 +118,7 @@ export const AiThreadMessage = memo(function AiThreadMessage({
   onDismissSuggestion,
   onQuickAudit,
   onOpenSettings,
+  onInspectAttachment,
 }: AiThreadMessageProps) {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [copiedReply, setCopiedReply] = useState(false);
@@ -181,6 +185,12 @@ export const AiThreadMessage = memo(function AiThreadMessage({
                 </span>
               )}
             </div>
+          )}
+          {msg.attachments && msg.attachments.length > 0 && (
+            <ChatAttachmentChipList
+              attachments={msg.attachments}
+              onInspectAttachment={onInspectAttachment}
+            />
           )}
           <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
         </div>

@@ -34,9 +34,12 @@ import type {QuickScanResult} from '../services/geminiDecisions.ts';
 import type {DraftSuggestion, PatchSuggestion, TitleSuggestion} from '../services/scriptTools.ts';
 import {
   buildAiTargetOptions,
+  chatAttachmentToPreviewEntry,
   isNearScrollBottom,
   reconcileTargetScope,
+  type ChatMessageAttachment,
   type DraftBriefState,
+  type StagedComposerAttachment,
 } from '../ui/aiAssistant.ts';
 import {aggregateSessionCost, formatEstimatedUsd} from '../ui/aiPricing.ts';
 import {
@@ -59,6 +62,7 @@ import type {AiInspectableTrace} from './AiTraceModal.tsx';
 import {AiComposerDock} from './ai/sidebar/AiComposerDock.tsx';
 import {AiRecentSessionsList} from './ai/sidebar/AiRecentSessionsList.tsx';
 import {AiThreadMessage} from './ai/sidebar/AiThreadMessage.tsx';
+import {ComposerCloudFilesModal} from './ai/sidebar/ComposerCloudFilesModal.tsx';
 import {
   buildSessionCostTooltip,
   HoverTooltipPortal,
@@ -70,7 +74,9 @@ import {
   type AiLivePatchActionHandlers,
 } from './ai/sidebar/useAiChatOrchestrator.ts';
 import {useAiSessionPersistence} from './ai/sidebar/useAiSessionPersistence.ts';
+import {useComposerAttachments} from './ai/sidebar/useComposerAttachments.ts';
 import {useSidebarResize} from './ai/sidebar/useSidebarResize.ts';
+import {BriefMediaLightbox} from './ai/brief/BriefMediaLightbox.tsx';
 
 const AiSettingsModal = lazy(() =>
   import('./AiSettingsModal.tsx').then((mod) => ({default: mod.AiSettingsModal}))
@@ -181,6 +187,9 @@ export function AiAssistantSidebar({
   const [lastTurnBriefContext, setLastTurnBriefContext] = useState<string | undefined>(undefined);
   const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
   const [sessionCostTooltip, setSessionCostTooltip] = useState<ActivityHoverTooltip | null>(null);
+  const [inspectedChatAttachment, setInspectedChatAttachment] = useState<
+    ChatMessageAttachment | StagedComposerAttachment | null
+  >(null);
 
   const sidebarRef = useRef<HTMLElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -188,7 +197,13 @@ export function AiAssistantSidebar({
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const handleOpenSettings = useCallback(() => setIsSettingsOpen(true), []);
   const briefCtrl = useAiBriefController();
+  const composerAttach = useComposerAttachments({
+    apiKey: settings.apiKey,
+    hasApiKey,
+    onOpenSettings: handleOpenSettings,
+  });
   const resizeCtrl = useSidebarResize({isOpen, inputValue, sidebarRef, composerRef});
   const sessionPersistence = useAiSessionPersistence({
     scriptSessionKey,
@@ -269,7 +284,6 @@ export function AiAssistantSidebar({
     [selectedTargetKey, targetOptions]
   );
 
-  const handleOpenSettings = useCallback(() => setIsSettingsOpen(true), []);
   const handleOpenBrief = useCallback(
     () => briefCtrl.setIsBriefOpen(true),
     [briefCtrl.setIsBriefOpen]
@@ -292,16 +306,20 @@ export function AiAssistantSidebar({
 
   const handleResetChatUi = useCallback(() => {
     setInspectedTrace(null);
+    setInspectedChatAttachment(null);
     setSessionCostTooltip(null);
     shouldAutoScrollRef.current = true;
     setIsScrolledUp(false);
     setAskFirstEnabled(false);
-  }, []);
+    composerAttach.clearAllStaged();
+  }, [composerAttach.clearAllStaged]);
 
   const handleScriptSwitchReset = useCallback(() => {
     setSelectedTargetKey('whole');
+    setInspectedChatAttachment(null);
     briefCtrl.resetBrief();
-  }, [briefCtrl.resetBrief]);
+    composerAttach.clearAllStaged();
+  }, [briefCtrl.resetBrief, composerAttach.clearAllStaged]);
 
   const handleDraftApplied = useCallback(() => {
     briefCtrl.setIsBriefOpen(false);
@@ -312,13 +330,15 @@ export function AiAssistantSidebar({
       setFocus(state.focus);
       setSelectedTargetKey(state.selectedTargetKey);
       briefCtrl.replaceBrief(state.brief);
+      composerAttach.clearAllStaged();
       setInspectedTrace(null);
+      setInspectedChatAttachment(null);
       setSessionCostTooltip(null);
       shouldAutoScrollRef.current = true;
       setIsScrolledUp(false);
       setAskFirstEnabled(false);
     },
-    [briefCtrl.replaceBrief]
+    [briefCtrl.replaceBrief, composerAttach.clearAllStaged]
   );
 
   const chat = useAiChatOrchestrator({
@@ -477,19 +497,47 @@ export function AiAssistantSidebar({
     el.scrollTop = el.scrollHeight;
   }, [isOpen, streamingScrollKey]);
 
+  useEffect(() => {
+    if (!inspectedChatAttachment) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setInspectedChatAttachment(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, {capture: true});
+    return () => document.removeEventListener('keydown', handleKeyDown, {capture: true});
+  }, [inspectedChatAttachment]);
+
   const handleComposerSend = useCallback(() => {
     const trimmed = inputValue.trim();
-    if (!trimmed || chat.isStreaming) return;
+    if (!trimmed || chat.isStreaming || !composerAttach.canSendAttachments) return;
     const turnAskMode: AskQuestionMode =
       effectiveAskFirstEnabled && focus !== 'audit' ? 'ask_first' : 'off';
+    const consumed = composerAttach.consumeReadyForSend();
     setInputValue('');
     if (askFirstEnabled) {
       setAskFirstEnabled(false);
     }
-    void chat.submitPrompt(trimmed, {askQuestionMode: turnAskMode});
+    void chat.submitPrompt(trimmed, {
+      askQuestionMode: turnAskMode,
+      ...(consumed.messageAttachments.length > 0
+        ? {
+            composerAttachments: {
+              messageAttachments: consumed.messageAttachments,
+              agentAttachments: consumed.agentAttachments,
+              onRestoreOnFailure: () => composerAttach.restoreStaged(consumed.snapshotStaged),
+            },
+          }
+        : {}),
+    });
   }, [
     inputValue,
     chat.isStreaming,
+    composerAttach.canSendAttachments,
+    composerAttach.consumeReadyForSend,
+    composerAttach.restoreStaged,
     askFirstEnabled,
     effectiveAskFirstEnabled,
     focus,
@@ -745,6 +793,7 @@ export function AiAssistantSidebar({
                     onDismissSuggestion={chat.markSuggestionDismissed}
                     onQuickAudit={chat.handleQuickAudit}
                     onOpenSettings={handleOpenSettings}
+                    onInspectAttachment={setInspectedChatAttachment}
                   />
                 ))
               )}
@@ -787,6 +836,19 @@ export function AiAssistantSidebar({
             hasApiKey={hasApiKey}
             modelShortLabel={modelOption.shortLabel}
             reasoningLabel={reasoningOption.label}
+            stagedAttachments={composerAttach.stagedAttachments}
+            composerAttachError={composerAttach.composerAttachError}
+            isYoutubeBarOpen={composerAttach.isYoutubeBarOpen}
+            hasPendingUploads={composerAttach.hasPendingUploads}
+            hasErroredAttachments={composerAttach.hasErroredAttachments}
+            onAddLocalFiles={composerAttach.addLocalFiles}
+            onOpenCloudFilesModal={() => composerAttach.setIsCloudModalOpen(true)}
+            onToggleYoutubeBar={composerAttach.setIsYoutubeBarOpen}
+            onAddYoutubeDraft={composerAttach.addFromEntryDraft}
+            onRemoveStagedAttachment={composerAttach.removeStaged}
+            onToggleStagedVideoMode={composerAttach.toggleVideoMode}
+            onInspectStagedAttachment={setInspectedChatAttachment}
+            onDismissAttachError={() => composerAttach.setComposerAttachError(null)}
             onInputChange={setInputValue}
             onComposerKeyDown={handleComposerKeyDown}
             onComposerSend={handleComposerSend}
@@ -900,6 +962,24 @@ export function AiAssistantSidebar({
           />
         </Suspense>
       )}
+
+      <ComposerCloudFilesModal
+        isOpen={composerAttach.isCloudModalOpen}
+        apiKey={settings.apiKey}
+        hasApiKey={hasApiKey}
+        attachedUris={composerAttach.stagedUris}
+        onClose={() => composerAttach.setIsCloudModalOpen(false)}
+        onOpenSettings={handleOpenSettings}
+        onAttachDraft={composerAttach.addFromEntryDraft}
+      />
+
+      <BriefMediaLightbox
+        hoverPreview={null}
+        inspectedEntry={
+          inspectedChatAttachment ? chatAttachmentToPreviewEntry(inspectedChatAttachment) : null
+        }
+        onCloseInspect={() => setInspectedChatAttachment(null)}
+      />
     </>
   );
 }

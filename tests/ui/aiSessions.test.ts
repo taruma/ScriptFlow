@@ -24,6 +24,7 @@ import {
   selectAiSessionsToPrune,
   selectRecentSessionsForScript,
   stripBriefMediaForStorage,
+  stripMessageAttachmentsForStorage,
   type AiSessionConversationJsonPayload,
   type AiSessionJsonExportPayload,
   type AiSessionRecord,
@@ -779,5 +780,132 @@ describe('aiSessions domain & storage codec', () => {
     });
     expect(assistantTurn.metrics?.estimatedCostUsd).toBeGreaterThan(0);
     expect((assistantTurn as {trace?: unknown}).trace).toBeUndefined();
+  });
+
+  it('persists remote YouTube/Files API user message attachments while stripping inline payloads across storage, search, and exports', () => {
+    const nowMs = Date.parse('2026-11-27T12:00:00.000Z');
+    const futureIso = '2026-11-28T12:00:00.000Z';
+
+    const messages: AiChatMessage[] = [
+      {
+        id: 'u-att-1',
+        role: 'user',
+        mode: 'refine',
+        focus: 'auto',
+        text: 'Compare the generated render against my notes.',
+        attachments: [
+          {
+            id: 'att-inline',
+            kind: 'document',
+            label: 'notes',
+            fileName: 'director_notes.md',
+            mimeType: 'text/markdown',
+            sizeBytes: 512,
+            source: 'inline',
+            attachment: {
+              source: 'inline',
+              mimeType: 'text/markdown',
+              fileName: 'director_notes.md',
+              inlineText: 'Hold 1.5s before turning.',
+              fingerprint: 'fp-notes',
+            },
+          },
+          {
+            id: 'att-cloud',
+            kind: 'video',
+            label: 'Render 1',
+            fileName: 'render_take1.mp4',
+            mimeType: 'video/mp4',
+            sizeBytes: 2_000_000,
+            source: 'files_api',
+            attachment: {
+              source: 'files_api',
+              mimeType: 'video/mp4',
+              fileName: 'render_take1.mp4',
+              sizeBytes: 2_000_000,
+              uri: 'https://generativelanguage.googleapis.com/v1beta/files/rt1',
+              filesApiName: 'files/rt1',
+              expirationTime: futureIso,
+              processingMode: 'agentic',
+              localMediaUrl: 'blob:http://localhost/rt1',
+              fingerprint: 'fp-rt1',
+            },
+          },
+        ],
+      },
+      {
+        id: 'a-att-1',
+        role: 'assistant',
+        mode: 'refine',
+        focus: 'auto',
+        text: 'Looks solid, though S2 pacing runs slightly fast.',
+      },
+    ];
+
+    const {messages: strippedMsgs, hadMedia} = stripMessageAttachmentsForStorage(messages, nowMs);
+    expect(hadMedia).toBe(true);
+    expect(strippedMsgs[0].attachments?.[0].omitted).toBe(true);
+    expect(strippedMsgs[0].attachments?.[0].attachment).toBeUndefined();
+    expect(strippedMsgs[0].attachments?.[1].omitted).toBeUndefined();
+    expect(strippedMsgs[0].attachments?.[1].attachment).toEqual({
+      source: 'files_api',
+      mimeType: 'video/mp4',
+      fileName: 'render_take1.mp4',
+      sizeBytes: 2_000_000,
+      uri: 'https://generativelanguage.googleapis.com/v1beta/files/rt1',
+      filesApiName: 'files/rt1',
+      expirationTime: futureIso,
+      processingMode: 'agentic',
+      fingerprint: 'fp-rt1',
+    });
+
+    const session = makeSampleSession({messages});
+    const compacted = compactSessionForStorage(session);
+    expect(compacted.hasOmittedMedia).toBe(true);
+
+    const hydrated = hydrateSessionFromStorage(compacted);
+    expect(hydrated.messages[0].attachments?.[1].attachment?.uri).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/files/rt1'
+    );
+
+    const matched = filterAiSessions(
+      [
+        {
+          session: hydrated,
+          scriptStatus: 'current',
+          resolvedScriptTitle: 'Rooftop Scene',
+        },
+      ],
+      {query: 'render_take1', filter: 'all'}
+    );
+    expect(matched).toHaveLength(1);
+
+    const md = formatAiSessionAsMarkdown(hydrated);
+    expect(md).toContain('**Attachments:**');
+    expect(md).toContain('director_notes.md');
+    expect(md).toContain('render_take1.mp4 (video · Files API · agentic)');
+
+    const convExport = buildAiSessionConversationJsonExport(hydrated, {now: new Date(nowMs)});
+    const parsed = JSON.parse(convExport.content) as AiSessionConversationJsonPayload;
+    expect(parsed.conversation[0].attachments).toEqual([
+      {
+        kind: 'document',
+        label: 'notes',
+        fileName: 'director_notes.md',
+        mimeType: 'text/markdown',
+        source: 'inline',
+        omitted: true,
+      },
+      {
+        kind: 'video',
+        label: 'Render 1',
+        fileName: 'render_take1.mp4',
+        mimeType: 'video/mp4',
+        source: 'files_api',
+        uri: 'https://generativelanguage.googleapis.com/v1beta/files/rt1',
+        expirationTime: futureIso,
+        processingMode: 'agentic',
+      },
+    ]);
   });
 });

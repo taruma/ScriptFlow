@@ -7,6 +7,10 @@ import type {GeminiModelId} from '../aiSettings.ts';
 import type {ScriptRecord} from '../library/dbTypes.ts';
 import {formatExportTimestamp, slugifyFilename} from '../scriptLibraryCodec.ts';
 import {
+  formatChatAttachmentSummary,
+  sanitizeChatAttachmentForStorage,
+} from './chatAttachments.ts';
+import {
   formatAttachmentTag,
   formatSceneBriefContext,
   isReferenceAttachmentExpired,
@@ -15,6 +19,7 @@ import {
   EMPTY_DRAFT_BRIEF,
   type AiChatMessage,
   type AiLoadedSkillItem,
+  type ChatMessageAttachment,
   type DraftBriefState,
   type QuestionResponseRecord,
   type ReferenceAttachment,
@@ -222,13 +227,48 @@ export function normalizeMessagesForStorage(messages: readonly AiChatMessage[]):
 }
 
 /**
- * Normalizes messages, strips Brief attachments, and deduplicates identical `systemInstruction`
+ * Strips heavy binary/inline payloads from per-turn `AiChatMessage.attachments`
+ * while preserving lightweight `youtube` and `files_api` URI metadata.
+ */
+export function stripMessageAttachmentsForStorage(
+  messages: readonly AiChatMessage[],
+  nowMs: number = Date.now()
+): {
+  messages: AiChatMessage[];
+  hadMedia: boolean;
+} {
+  let hadMedia = false;
+  const cleanMessages = messages.map((msg) => {
+    if (!msg.attachments || msg.attachments.length === 0) {
+      return msg;
+    }
+    const cleanAttachments: ChatMessageAttachment[] = msg.attachments.map((att) => {
+      const sanitized = sanitizeChatAttachmentForStorage(att, nowMs);
+      if (sanitized.hadOmittedMedia) {
+        hadMedia = true;
+      }
+      return sanitized.item;
+    });
+    return {
+      ...msg,
+      attachments: cleanAttachments,
+    };
+  });
+  return {messages: cleanMessages, hadMedia};
+}
+
+/**
+ * Normalizes messages, strips Brief & message attachments, and deduplicates identical `systemInstruction`
  * strings across multi-round traces into `traceSystemInstructions` for compact IndexedDB storage
  * while keeping 100% Trace Inspector parity after hydration.
  */
 export function compactSessionForStorage(record: AiSessionRecord): AiSessionRecord {
-  const normalizedMessages = normalizeMessagesForStorage(record.messages);
-  const {brief: strippedBrief, hadMedia} = stripBriefMediaForStorage(record.brief ?? EMPTY_DRAFT_BRIEF);
+  const {messages: strippedMessages, hadMedia: hadMessageMedia} = stripMessageAttachmentsForStorage(
+    normalizeMessagesForStorage(record.messages)
+  );
+  const {brief: strippedBrief, hadMedia: hadBriefMedia} = stripBriefMediaForStorage(
+    record.brief ?? EMPTY_DRAFT_BRIEF
+  );
 
   const dict: Record<string, string> = {};
   const textToKey = new Map<string, string>();
@@ -268,7 +308,7 @@ export function compactSessionForStorage(record: AiSessionRecord): AiSessionReco
     return `${TRACE_SYS_REF_PREFIX}${key}`;
   };
 
-  const compactedMessages = normalizedMessages.map((msg) => {
+  const compactedMessages = strippedMessages.map((msg) => {
     if (!msg.trace || !Array.isArray(msg.trace.rounds) || msg.trace.rounds.length === 0) {
       return msg;
     }
@@ -293,7 +333,7 @@ export function compactSessionForStorage(record: AiSessionRecord): AiSessionReco
   const costSummary = aggregateSessionCost(compactedMessages);
   const userTurnCount = compactedMessages.filter((msg) => msg.role === 'user').length;
   const hasDictEntries = Object.keys(dict).length > 0;
-  const hasOmittedMedia = Boolean(record.hasOmittedMedia || hadMedia);
+  const hasOmittedMedia = Boolean(record.hasOmittedMedia || hadBriefMedia || hadMessageMedia);
 
   const clean: AiSessionRecord = {
     ...record,
@@ -571,7 +611,15 @@ export function filterAiSessions(
       return true;
     }
 
-    return session.messages.some((msg) => msg.text.toLowerCase().includes(needle));
+    return session.messages.some(
+      (msg) =>
+        msg.text.toLowerCase().includes(needle) ||
+        (msg.attachments ?? []).some(
+          (att) =>
+            att.label.toLowerCase().includes(needle) ||
+            (att.fileName?.toLowerCase().includes(needle) ?? false)
+        )
+    );
   });
 }
 
@@ -620,6 +668,9 @@ export function formatAiSessionAsMarkdown(
     lines.push('');
     if (msg.role === 'user') {
       lines.push(`### User (${msg.focus})`);
+      if (msg.attachments && msg.attachments.length > 0) {
+        lines.push(`- **Attachments:** ${msg.attachments.map(formatChatAttachmentSummary).join(', ')}`);
+      }
       lines.push(msg.text || '_Empty prompt_');
       continue;
     }
@@ -918,6 +969,17 @@ export interface AiSessionConversationTurn {
   text: string;
   scopeLabel?: string;
   briefSummary?: string;
+  attachments?: Array<{
+    kind: string;
+    label: string;
+    fileName?: string;
+    mimeType: string;
+    source: string;
+    uri?: string;
+    expirationTime?: string;
+    processingMode?: string;
+    omitted?: boolean;
+  }>;
   askFirst?: boolean;
   thoughtSummary?: string;
   skillsLoaded?: AiLoadedSkillItem[];
@@ -1136,8 +1198,14 @@ export function buildAiSessionConversationJsonExport(
   const now = options?.now ?? new Date();
   const fallbackNowMs = now.getTime();
   const hydrated = hydrateSessionFromStorage(sanitizeAiSessionRecord(session));
-  const {brief: cleanBrief, hadMedia} = stripBriefMediaForStorage(hydrated.brief, fallbackNowMs);
-  const normalizedMessages = normalizeMessagesForStorage(hydrated.messages);
+  const {brief: cleanBrief, hadMedia: hadBriefMedia} = stripBriefMediaForStorage(
+    hydrated.brief,
+    fallbackNowMs
+  );
+  const {messages: normalizedMessages, hadMedia: hadMessageMedia} = stripMessageAttachmentsForStorage(
+    normalizeMessagesForStorage(hydrated.messages),
+    fallbackNowMs
+  );
 
   const skillsMap = new Map<string, AiLoadedSkillItem>();
   const toolStats = new Map<string, AiSessionToolUsageStat>();
@@ -1165,6 +1233,25 @@ export function buildAiSessionConversationJsonExport(
         text: msg.text,
         ...(msg.scopeLabel ? {scopeLabel: msg.scopeLabel} : {}),
         ...(msg.briefSummary ? {briefSummary: msg.briefSummary} : {}),
+        ...(msg.attachments && msg.attachments.length > 0
+          ? {
+              attachments: msg.attachments.map((att) => ({
+                kind: att.kind,
+                label: att.label,
+                ...(att.fileName ? {fileName: att.fileName} : {}),
+                mimeType: att.mimeType,
+                source: att.source,
+                ...(att.attachment?.uri ? {uri: att.attachment.uri} : {}),
+                ...(att.attachment?.expirationTime
+                  ? {expirationTime: att.attachment.expirationTime}
+                  : {}),
+                ...(att.attachment?.processingMode
+                  ? {processingMode: att.attachment.processingMode}
+                  : {}),
+                ...(att.omitted ? {omitted: true} : {}),
+              })),
+            }
+          : {}),
         ...(msg.askFirst ? {askFirst: true} : {}),
       };
     }
@@ -1271,7 +1358,7 @@ export function buildAiSessionConversationJsonExport(
 
   const costSummary = aggregateSessionCost(normalizedMessages, fallbackNowMs);
   const turnCount = normalizedMessages.filter((m) => m.role === 'user').length;
-  const hasOmittedMedia = Boolean(hydrated.hasOmittedMedia || hadMedia);
+  const hasOmittedMedia = Boolean(hydrated.hasOmittedMedia || hadBriefMedia || hadMessageMedia);
   const scriptSnapshot =
     typeof hydrated.continuity.lastTurnRawText === 'string' &&
     hydrated.continuity.lastTurnRawText.trim().length > 0

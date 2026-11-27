@@ -1,4 +1,7 @@
-import type {AiChatMessage} from '../../ui/aiAssistant.ts';
+import {
+  formatChatAttachmentSummary,
+  type AiChatMessage,
+} from '../../ui/aiAssistant.ts';
 import {describeStagedSuggestion} from '../../ui/aiSessions.ts';
 
 export interface BuildPriorSessionRecapOptions {
@@ -22,8 +25,12 @@ function truncateMiddleOrEnd(text: string, maxChars: number): string {
 function formatMessageEntry(msg: AiChatMessage): string {
   if (msg.role === 'user') {
     const scope = msg.scopeLabel ? ` [scope: ${msg.scopeLabel}]` : '';
+    const attachmentsLine =
+      msg.attachments && msg.attachments.length > 0
+        ? `\nAttachments: ${msg.attachments.map(formatChatAttachmentSummary).join(', ')}`
+        : '';
     const promptText = truncateMiddleOrEnd(msg.text || '(empty prompt)', MAX_SINGLE_MESSAGE_CHARS);
-    return `[User · ${msg.focus}${scope}]\n${promptText}`;
+    return `[User · ${msg.focus}${scope}]${attachmentsLine}\n${promptText}`;
   }
 
   const parts: string[] = [];

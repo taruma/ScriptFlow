@@ -88,6 +88,31 @@ export const EMPTY_DRAFT_BRIEF: DraftBriefState = {
   subtext: '',
 };
 
+export interface ChatMessageAttachment {
+  id: string;
+  kind: Exclude<ReferenceKind, 'text'>;
+  label: string;
+  fileName?: string;
+  mimeType: string;
+  sizeBytes?: number;
+  source: ReferenceSourceKind;
+  attachment?: ReferenceAttachment;
+  omitted?: boolean;
+}
+
+export interface StagedComposerAttachment {
+  id: string;
+  kind: Exclude<ReferenceKind, 'text'>;
+  label: string;
+  fileName?: string;
+  mimeType: string;
+  sizeBytes?: number;
+  source: ReferenceSourceKind;
+  status: 'uploading' | 'processing' | 'ready' | 'error';
+  error?: string;
+  attachment?: ReferenceAttachment;
+}
+
 export interface AiChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -96,6 +121,7 @@ export interface AiChatMessage {
   text: string;
   scopeLabel?: string;
   briefSummary?: string;
+  attachments?: ChatMessageAttachment[];
   askFirst?: boolean;
   thoughtSummary?: string;
   toolCalls?: AiToolCallItem[];

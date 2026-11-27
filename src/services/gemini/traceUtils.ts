@@ -23,6 +23,8 @@ export function buildInitialInteractionInput(
   const blocks: Array<Record<string, unknown>> = [];
 
   for (const att of attachments) {
+    const isMessageAttachment = att.origin === 'message';
+    const messageDisplayName = att.fileName?.trim() || att.label.trim() || att.mimeType;
     const labelText = [
       att.handle || `@${att.kind}`,
       att.label ? `(${att.label})` : '',
@@ -33,15 +35,23 @@ export function buildInitialInteractionInput(
 
     if (att.source === 'inline' && typeof att.inlineText === 'string') {
       const fileHeader = att.fileName ? ` · ${att.fileName}` : '';
+      const header = isMessageAttachment
+        ? `[Attached ${att.kind}: ${messageDisplayName}]`
+        : `[Reference ${labelText}${fileHeader}]`;
       blocks.push({
         type: 'text',
-        text: `[Reference ${labelText}${fileHeader}]\n${att.inlineText}`,
+        text: `${header}\n${att.inlineText}`,
       });
       continue;
     }
 
     if (att.source === 'inline' && att.inlineBase64) {
-      blocks.push({type: 'text', text: `[Reference ${labelText}]`});
+      blocks.push({
+        type: 'text',
+        text: isMessageAttachment
+          ? `[Attached ${att.kind}: ${messageDisplayName}]`
+          : `[Reference ${labelText}]`,
+      });
       blocks.push({
         type: att.kind === 'image' ? 'image' : att.kind,
         data: att.inlineBase64,
@@ -51,7 +61,12 @@ export function buildInitialInteractionInput(
     }
 
     if (att.source === 'youtube' && att.uri) {
-      blocks.push({type: 'text', text: `[Reference ${labelText} — YouTube video]`});
+      blocks.push({
+        type: 'text',
+        text: isMessageAttachment
+          ? `[Attached ${att.kind}: ${messageDisplayName} — YouTube video]`
+          : `[Reference ${labelText} — YouTube video]`,
+      });
       blocks.push({
         type: 'video',
         uri: att.uri,
@@ -61,7 +76,12 @@ export function buildInitialInteractionInput(
     }
 
     if (att.source === 'files_api' && att.uri) {
-      blocks.push({type: 'text', text: `[Reference ${labelText}]`});
+      blocks.push({
+        type: 'text',
+        text: isMessageAttachment
+          ? `[Attached ${att.kind}: ${messageDisplayName}]`
+          : `[Reference ${labelText}]`,
+      });
       if (att.kind === 'video') {
         blocks.push({
           type: 'video',

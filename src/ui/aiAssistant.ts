@@ -11,6 +11,7 @@ export {
   type AiToolCallItem,
   type AuditQuickCheckId,
   type AuditQuickCheckOption,
+  type ChatMessageAttachment,
   type DraftBriefState,
   type EditorJumpTarget,
   type FormattedQuestionAnswers,
@@ -20,6 +21,7 @@ export {
   type ReferenceEntry,
   type ReferenceKind,
   type ReferenceSourceKind,
+  type StagedComposerAttachment,
   type ToolCallTooltipInfo,
   type VideoProcessingMode,
 } from './ai/types.ts';
@@ -65,3 +67,14 @@ export {
   summarizeTurnActivity,
   type TurnActivitySummary,
 } from './ai/turnActivity.ts';
+
+export {
+  chatAttachmentToPreviewEntry,
+  chatAttachmentToStaged,
+  collectReadyComposerAttachments,
+  formatChatAttachmentSummary,
+  hasAnyOmittedOrExpiredMessageAttachments,
+  isPersistableRemotePreviewUrl,
+  sanitizeChatAttachmentForStorage,
+  toAgentMediaAttachmentFromChat,
+} from './ai/chatAttachments.ts';

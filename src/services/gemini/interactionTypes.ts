@@ -120,6 +120,8 @@ export interface InteractionStreamEventLike {
 }
 
 export interface AgentMediaAttachment {
+  /** Whether this attachment originates from persistent Scene Brief (`'brief'`, default) or a per-turn composer message (`'message'`). */
+  origin?: 'brief' | 'message';
   handle: string;
   label: string;
   note?: string;

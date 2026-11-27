@@ -42,6 +42,24 @@ describe('sessionRecap builder', () => {
         mode: 'refine',
         focus: 'refine',
         scopeLabel: 'S1',
+        attachments: [
+          {
+            id: 'a-clip',
+            kind: 'video',
+            label: 'Result 01',
+            fileName: 'result_01.mp4',
+            mimeType: 'video/mp4',
+            source: 'files_api',
+            attachment: {
+              source: 'files_api',
+              mimeType: 'video/mp4',
+              fileName: 'result_01.mp4',
+              uri: 'https://generativelanguage.googleapis.com/v1beta/files/r01',
+              processingMode: 'agentic',
+              fingerprint: 'fp-r01',
+            },
+          },
+        ],
         text: 'Tighten S1 blocking and add foghorn foley.',
       },
       {
@@ -91,6 +109,7 @@ describe('sessionRecap builder', () => {
     expect(recap).toContain('Harbor Pier Draft 2');
     expect(recap).toContain('Binary media attachments from earlier turns are not persisted');
     expect(recap).toContain('First draft prompt: nocturnal harbor pier');
+    expect(recap).toContain('Attachments: result_01.mp4 (video · Files API · agentic)');
     expect(recap).toContain('[QUESTION ANSWERED] Camera feel check => lens: 35mm handheld — stay tight on hands');
     expect(recap).toContain('[APPLIED] patch: Add foghorn foley to S1');
   });

@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Per-Turn Composer `+` Attachments (`src/components/ai/sidebar/useComposerAttachments.ts`, `ChatAttachmentChipList.tsx`, `ComposerCloudFilesModal.tsx`, `src/ui/ai/chatAttachments.ts`)**:
+  - Added a **`+`** attach menu, drag-and-drop target, and clipboard image paste directly inside `AiComposerDock` for turn-scoped files without mutating `<scene_brief>` or Quick Scan: local images/text attach inline, while video, audio, PDF, and `>256 KB` text files auto-upload via Gemini Files API with inline chip progress/abort.
+  - Added a **`Gemini Cloud Files (48h)…`** picker modal (`ComposerCloudFilesModal`) to reuse existing cloud uploads across new sessions, an inline **`YouTube URL…`** bar, per-chip `Static` / `Agentic` toggling on videos, click-to-inspect `BriefMediaLightbox` previews, automatic chip restore on turn failure/Stop, and clean `[Attached ...]` wire framing in `traceUtils.ts`.
+  - Stored per-turn `AiChatMessage.attachments` separately from `session.brief` in IndexedDB (`stripMessageAttachmentsForStorage` keeping `youtube` and `files_api` URIs while omitting heavy inline blobs), rendered chips inside `AiThreadMessage` and `AiSessionPreviewPane`, and included summaries in Markdown/JSON exports and `<prior_session_recap>`.
+
 ### Changed
 - **Persistent YouTube & Gemini Files API URI References Across AI Sessions (`src/ui/ai/sessionStore.ts`, `src/components/ai/brief/ReferenceEntryCard.tsx`, `src/components/ai/brief/BriefMediaLightbox.tsx`, `src/components/ai/sidebar/useAiChatOrchestrator.ts`)**:
   - Preserved lightweight `youtube` URLs (including `https://` thumbnails) and `files_api` URI + `expirationTime` metadata inside `stripBriefMediaForStorage()` while still stripping `inlineBase64`, `inlineText`, and ephemeral `blob:`/`data:` URLs to `omittedAttachmentTag`, keeping `formatSceneBriefContext()` byte-identical across reloads and exports.

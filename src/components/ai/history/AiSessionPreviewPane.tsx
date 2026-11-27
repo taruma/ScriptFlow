@@ -43,6 +43,7 @@ import {formatRelativeUpdatedTime} from '../../../ui/scriptLibraryView.ts';
 import {UI_TOKENS} from '../../../ui/tokens/ui.ts';
 import type {AiInspectableTrace} from '../../AiTraceModal.tsx';
 import {MarkdownContent} from '../../MarkdownContent.tsx';
+import {ChatAttachmentChipList} from '../sidebar/ChatAttachmentChipList.tsx';
 import {ReasoningAccordion} from '../sidebar/ReasoningAccordion.tsx';
 
 export interface AiSessionPreviewPaneProps {
@@ -576,6 +577,9 @@ function HistoryMessageRow({
                 </span>
               )}
             </div>
+          )}
+          {msg.attachments && msg.attachments.length > 0 && (
+            <ChatAttachmentChipList attachments={msg.attachments} />
           )}
           <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
         </div>
