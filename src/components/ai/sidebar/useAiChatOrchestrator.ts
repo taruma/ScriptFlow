@@ -642,7 +642,8 @@ export function useAiChatOrchestrator({
         attemptPrevId: string | undefined,
         attemptResumeResults: readonly PendingToolResultStep[] | undefined,
         attemptRecap: string | undefined,
-        attemptPrompt: string
+        attemptPrompt: string,
+        attemptAttachments: readonly AgentMediaAttachment[]
       ) =>
         runGeminiAgentTurn({
           apiKey,
@@ -671,7 +672,7 @@ export function useAiChatOrchestrator({
           referenceHandles: activeReferenceHandles,
           briefContext: activeBriefContext,
           askQuestionMode: effectiveAskMode,
-          attachments,
+          attachments: attemptAttachments,
           ...(attemptResumeResults ? {resumeFunctionResults: attemptResumeResults} : {}),
           ...(attemptRecap ? {priorSessionRecap: attemptRecap} : {}),
           signal: controller.signal,
@@ -716,6 +717,8 @@ export function useAiChatOrchestrator({
           },
         });
 
+      let sentAttachmentsForAttempt: readonly AgentMediaAttachment[] = attachments;
+
       try {
         let bridgedKind: 'expired_chain' | 'cross_script' | undefined;
         let attemptPrevId = previousInteractionId;
@@ -744,17 +747,27 @@ export function useAiChatOrchestrator({
             attemptPrevId,
             attemptResumeResults,
             attemptRecap,
-            attemptPrompt
+            attemptPrompt,
+            attachments
           );
         } catch (firstErr) {
-          if (
+          const sentFilesApiThisAttempt = attachments.some((att) => att.source === 'files_api');
+          const canRecoverViaRecap =
             firstErr instanceof GeminiServiceError &&
-            firstErr.code === 'interaction_expired' &&
-            attemptPrevId &&
-            !controller.signal.aborted
-          ) {
+            Boolean(attemptPrevId) &&
+            !controller.signal.aborted &&
+            (firstErr.code === 'interaction_expired' ||
+              (firstErr.code === 'file_unavailable' && !sentFilesApiThisAttempt));
+
+          if (canRecoverViaRecap) {
+            const retryAttachments = collectPendingBriefAttachments(
+              latestContextRef.current.brief,
+              new Set(),
+              false
+            );
             lastInteractionIdRef.current = undefined;
             pendingQuestionRef.current = null;
+            sentAttachmentFingerprintsRef.current.clear();
             onHasActiveInteractionChange(false);
             setMessages((prev) => resetAssistantTurnForRetryInMessages(prev, assistantMessageId));
             bridgedKind = 'expired_chain';
@@ -763,12 +776,21 @@ export function useAiChatOrchestrator({
               originalScriptTitle: sceneTitle,
               currentScriptTitle: sceneTitle,
               isCrossScript: false,
-              hasOmittedMedia: Boolean(activeSessionMetaRef.current?.hasOmittedMedia),
+              hasOmittedMedia:
+                Boolean(activeSessionMetaRef.current?.hasOmittedMedia) ||
+                firstErr.code === 'file_unavailable',
             });
             const retryPrompt = attemptPrompt.trim()
               ? attemptPrompt
               : (fallbackPromptOnExpired ?? 'Continue from our previous discussion.');
-            result = await runSingleAttempt(undefined, undefined, expiredRecap, retryPrompt);
+            sentAttachmentsForAttempt = retryAttachments;
+            result = await runSingleAttempt(
+              undefined,
+              undefined,
+              expiredRecap,
+              retryPrompt,
+              retryAttachments
+            );
           } else {
             throw firstErr;
           }
@@ -781,7 +803,7 @@ export function useAiChatOrchestrator({
         if (result.interactionId) {
           lastInteractionIdRef.current = result.interactionId;
           onHasActiveInteractionChange(true);
-          for (const att of attachments) {
+          for (const att of sentAttachmentsForAttempt) {
             sentAttachmentFingerprintsRef.current.add(att.fingerprint);
           }
         }

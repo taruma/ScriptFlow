@@ -904,6 +904,69 @@ describe('geminiInteractions streaming agent client', () => {
     expect(plain404WithoutPrev.code).toBe('model_not_found');
   });
 
+  it('classifies Gemini Files API permission/expiration errors as file_unavailable without blaming the API key', () => {
+    const file403 = classifyGeminiError(
+      Object.assign(
+        new Error('PERMISSION_DENIED: You do not have permission to access the File abc123 or it may not exist.'),
+        {status: 403}
+      ),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(file403.code).toBe('file_unavailable');
+    expect(file403.message).toContain('48-hour');
+
+    const file403NoPrev = classifyGeminiError(
+      Object.assign(
+        new Error('PERMISSION_DENIED: You do not have permission to access the File abc123 or it may not exist.'),
+        {status: 403}
+      ),
+      undefined,
+      {hadPreviousInteraction: false}
+    );
+    expect(file403NoPrev.code).toBe('file_unavailable');
+
+    const file400 = classifyGeminiError(
+      Object.assign(new Error('FAILED_PRECONDITION: File files/abc123 is not in an ACTIVE state'), {
+        status: 400,
+      }),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(file400.code).toBe('file_unavailable');
+
+    const file404 = classifyGeminiError(
+      Object.assign(new Error('File files/abc123 not found or expired'), {status: 404}),
+      undefined,
+      {hadPreviousInteraction: false}
+    );
+    expect(file404.code).toBe('file_unavailable');
+
+    const interaction403 = classifyGeminiError(
+      Object.assign(
+        new Error('PERMISSION_DENIED: Interaction int-123 does not belong to this project'),
+        {status: 403}
+      ),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(interaction403.code).toBe('interaction_expired');
+
+    const key403 = classifyGeminiError(
+      Object.assign(new Error('PERMISSION_DENIED: API key not valid'), {status: 403}),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(key403.code).toBe('invalid_api_key');
+
+    const genericPerm403 = classifyGeminiError(
+      Object.assign(new Error('PERMISSION_DENIED: Caller does not have permission'), {status: 403}),
+      undefined,
+      {hadPreviousInteraction: true}
+    );
+    expect(genericPerm403.code).toBe('invalid_api_key');
+  });
+
   it('prepends priorSessionRecap into Round 1 input while keeping Zone 1 system_instruction frozen', async () => {
     const capturedRequests: Array<Record<string, unknown>> = [];
     const fakeClient: InteractionsClientLike = {

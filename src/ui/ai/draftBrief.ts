@@ -1,7 +1,12 @@
 import type {AssistantFocus} from '../../services/auteurKnowledge.ts';
 import type {AgentMediaAttachment} from '../../services/geminiInteractions.ts';
 import type {AssistantMode} from '../../services/scriptTools.ts';
-import type {DraftBriefState, ReferenceEntry, ReferenceKind} from './types.ts';
+import type {
+  DraftBriefState,
+  ReferenceAttachment,
+  ReferenceEntry,
+  ReferenceKind,
+} from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Unified Focus & Collapsible Brief / Refs Helpers
@@ -182,6 +187,22 @@ export function formatReferenceEntriesForPrompt(references: readonly ReferenceEn
 }
 
 /**
+ * Returns true when a Gemini Files API reference attachment has a parsed `expirationTime`
+ * at or before `nowMs` (preventing dead 48-hour URIs from breaking future turns).
+ */
+export function isReferenceAttachmentExpired(
+  att: Pick<ReferenceAttachment, 'source' | 'expirationTime'>,
+  nowMs: number = Date.now()
+): boolean {
+  if (att.source !== 'files_api') return false;
+  if (typeof att.expirationTime !== 'string' || att.expirationTime.trim().length === 0) {
+    return false;
+  }
+  const expiresAtMs = Date.parse(att.expirationTime);
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+}
+
+/**
  * Selects which Brief multimodal attachments should be delivered on the upcoming turn.
  * Because ScriptFlow chains server-side state via `previous_interaction_id`, each attachment
  * is transmitted only once per conversation chain (or all active attachments on a fresh chain).
@@ -189,7 +210,8 @@ export function formatReferenceEntriesForPrompt(references: readonly ReferenceEn
 export function collectPendingBriefAttachments(
   brief: DraftBriefState,
   sentFingerprints: ReadonlySet<string>,
-  hasActiveInteractionChain: boolean
+  hasActiveInteractionChain: boolean,
+  nowMs: number = Date.now()
 ): AgentMediaAttachment[] {
   if (!isDraftBriefActive(brief)) return [];
 
@@ -197,6 +219,7 @@ export function collectPendingBriefAttachments(
   for (const entry of brief.references) {
     const att = entry.attachment;
     if (!att) continue;
+    if (isReferenceAttachmentExpired(att, nowMs)) continue;
     if (hasActiveInteractionChain && sentFingerprints.has(att.fingerprint)) {
       continue;
     }

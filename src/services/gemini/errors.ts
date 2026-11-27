@@ -50,6 +50,64 @@ function extractRawErrorMessage(error: unknown): string {
   return 'Unknown Gemini API error.';
 }
 
+function isApiKeyCredentialError(lower: string): boolean {
+  return (
+    lower.includes('api_key_invalid') ||
+    lower.includes('api key not valid') ||
+    lower.includes('invalid api key') ||
+    lower.includes('unauthenticated')
+  );
+}
+
+function isFileUnavailableError(status: number | undefined, lower: string): boolean {
+  if (isApiKeyCredentialError(lower)) return false;
+
+  const mentionsFile =
+    lower.includes('you do not have permission to access the file') ||
+    /\bfiles\/[a-z0-9_-]+/i.test(lower) ||
+    /\bfile\b/.test(lower);
+  if (!mentionsFile) return false;
+
+  return (
+    status === 403 ||
+    status === 404 ||
+    status === 400 ||
+    lower.includes('permission_denied') ||
+    lower.includes('do not have permission') ||
+    lower.includes('not_found') ||
+    lower.includes('not found') ||
+    lower.includes('expired') ||
+    lower.includes('not in an active state') ||
+    lower.includes('failed_precondition')
+  );
+}
+
+function isInteractionUnavailableError(
+  status: number | undefined,
+  lower: string,
+  hadPreviousInteraction?: boolean
+): boolean {
+  if (!hadPreviousInteraction || isApiKeyCredentialError(lower)) return false;
+
+  const mentionsInteraction =
+    lower.includes('interaction') || lower.includes('previous_interaction');
+  if (mentionsInteraction) {
+    return (
+      status === 400 ||
+      status === 403 ||
+      status === 404 ||
+      lower.includes('not_found') ||
+      lower.includes('not found') ||
+      lower.includes('expired') ||
+      lower.includes('invalid') ||
+      lower.includes('permission_denied') ||
+      lower.includes('do not have permission')
+    );
+  }
+
+  return status === 404 && !lower.includes('model');
+}
+
 /**
  * Normalizes SDK, HTTP, SSE, network, and abort errors into clean user-facing GeminiServiceError instances.
  */
@@ -70,14 +128,27 @@ export function classifyGeminiError(
   const rawMessage = extractRawErrorMessage(error);
   const lower = rawMessage.toLowerCase();
 
+  if (isFileUnavailableError(status, lower)) {
+    return new GeminiServiceError(
+      'file_unavailable',
+      'A Gemini Files API attachment expired (48-hour limit) or belongs to a different API key. Re-upload or remove it in Scene Brief and try again.',
+      {status, cause: error}
+    );
+  }
+
+  if (isInteractionUnavailableError(status, lower, options?.hadPreviousInteraction)) {
+    return new GeminiServiceError(
+      'interaction_expired',
+      'Previous Gemini session chain expired or is unavailable for this API key.',
+      {status, cause: error}
+    );
+  }
+
   if (
     status === 401 ||
     status === 403 ||
-    lower.includes('api_key_invalid') ||
-    lower.includes('api key not valid') ||
-    lower.includes('invalid api key') ||
-    lower.includes('permission_denied') ||
-    lower.includes('unauthenticated')
+    isApiKeyCredentialError(lower) ||
+    lower.includes('permission_denied')
   ) {
     return new GeminiServiceError(
       'invalid_api_key',
@@ -96,25 +167,6 @@ export function classifyGeminiError(
     return new GeminiServiceError(
       'quota_exceeded',
       'Gemini API rate limit or quota exceeded. Wait a moment, switch to Gemini 4 Hydrogen, or check your billing tier.',
-      {status, cause: error}
-    );
-  }
-
-  if (
-    options?.hadPreviousInteraction &&
-    (status === 404 ||
-      status === 400 ||
-      lower.includes('not_found') ||
-      lower.includes('not found') ||
-      lower.includes('expired') ||
-      lower.includes('invalid')) &&
-    (lower.includes('interaction') ||
-      lower.includes('previous_interaction') ||
-      (status === 404 && !lower.includes('model')))
-  ) {
-    return new GeminiServiceError(
-      'interaction_expired',
-      'Previous Gemini session chain expired or is unavailable for this API key.',
       {status, cause: error}
     );
   }

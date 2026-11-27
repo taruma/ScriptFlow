@@ -55,6 +55,7 @@ export {
   getNextReferenceHandle,
   hasDraftBriefContent,
   isDraftBriefActive,
+  isReferenceAttachmentExpired,
 } from './ai/draftBrief.ts';
 
 export {

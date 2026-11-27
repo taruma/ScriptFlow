@@ -97,6 +97,7 @@ describe('aiAssistant pure UI sidebar & target-scoping helpers', () => {
     expect(shouldShowSettingsLinkForError('missing_api_key')).toBe(true);
     expect(shouldShowSettingsLinkForError('invalid_api_key')).toBe(true);
     expect(shouldShowSettingsLinkForError('model_not_found')).toBe(true);
+    expect(shouldShowSettingsLinkForError('file_unavailable')).toBe(false);
     expect(shouldShowSettingsLinkForError('network_error')).toBe(false);
     expect(shouldShowSettingsLinkForError('aborted')).toBe(false);
   });

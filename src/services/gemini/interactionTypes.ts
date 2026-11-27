@@ -17,6 +17,7 @@ export type GeminiErrorCode =
   | 'invalid_api_key'
   | 'quota_exceeded'
   | 'model_not_found'
+  | 'file_unavailable'
   | 'interaction_expired'
   | 'network_error'
   | 'aborted'

@@ -16,6 +16,7 @@ import {
   collectPendingBriefAttachments,
   formatReferenceEntriesForPrompt,
   getNextReferenceHandle,
+  isReferenceAttachmentExpired,
   type DraftBriefState,
   type ReferenceEntry,
 } from '../../src/ui/aiAssistant.ts';
@@ -236,6 +237,108 @@ describe('multimodal ReferenceEntry handle numbering, manifest & send-once track
 
     // Paused brief: sends nothing
     expect(collectPendingBriefAttachments({...brief, enabled: false}, new Set(), false)).toEqual([]);
+  });
+
+  it('detects expired Gemini Files API attachments and skips them in collectPendingBriefAttachments', () => {
+    const nowMs = Date.parse('2026-11-27T12:00:00.000Z');
+    const pastIso = '2026-11-27T11:59:59.000Z';
+    const futureIso = '2026-11-28T12:00:00.000Z';
+
+    expect(isReferenceAttachmentExpired({source: 'files_api', expirationTime: pastIso}, nowMs)).toBe(
+      true
+    );
+    expect(
+      isReferenceAttachmentExpired(
+        {source: 'files_api', expirationTime: '2026-11-27T12:00:00.000Z'},
+        nowMs
+      )
+    ).toBe(true);
+    expect(
+      isReferenceAttachmentExpired({source: 'files_api', expirationTime: futureIso}, nowMs)
+    ).toBe(false);
+    expect(isReferenceAttachmentExpired({source: 'files_api'}, nowMs)).toBe(false);
+    expect(
+      isReferenceAttachmentExpired({source: 'files_api', expirationTime: 'not-a-date'}, nowMs)
+    ).toBe(false);
+    expect(
+      isReferenceAttachmentExpired({source: 'inline', expirationTime: pastIso}, nowMs)
+    ).toBe(false);
+    expect(
+      isReferenceAttachmentExpired({source: 'youtube', expirationTime: pastIso}, nowMs)
+    ).toBe(false);
+
+    const brief: DraftBriefState = {
+      enabled: true,
+      references: [
+        {
+          id: 'r-expired',
+          handle: '@video1',
+          kind: 'video',
+          label: 'Expired Clip',
+          attachment: {
+            source: 'files_api',
+            mimeType: 'video/mp4',
+            uri: 'https://generativelanguage.googleapis.com/v1beta/files/expired1',
+            expirationTime: pastIso,
+            fingerprint: 'fp_expired',
+          },
+        },
+        {
+          id: 'r-active-file',
+          handle: '@video2',
+          kind: 'video',
+          label: 'Active Clip',
+          attachment: {
+            source: 'files_api',
+            mimeType: 'video/mp4',
+            uri: 'https://generativelanguage.googleapis.com/v1beta/files/active2',
+            expirationTime: futureIso,
+            fingerprint: 'fp_active_file',
+          },
+        },
+        {
+          id: 'r-inline',
+          handle: '@image1',
+          kind: 'image',
+          label: 'Mark',
+          attachment: {
+            source: 'inline',
+            mimeType: 'image/jpeg',
+            inlineBase64: 'AAAA',
+            fingerprint: 'fp_inline',
+          },
+        },
+        {
+          id: 'r-youtube',
+          handle: '@video3',
+          kind: 'video',
+          label: 'YT Ref',
+          attachment: {
+            source: 'youtube',
+            mimeType: 'video/youtube',
+            uri: 'https://www.youtube.com/watch?v=9hE5-98ZeCg',
+            fingerprint: 'fp_yt',
+          },
+        },
+      ],
+      specs: '',
+      subtext: '',
+    };
+
+    const freshPending = collectPendingBriefAttachments(brief, new Set(), false, nowMs);
+    expect(freshPending.map((a) => a.fingerprint)).toEqual([
+      'fp_active_file',
+      'fp_inline',
+      'fp_yt',
+    ]);
+
+    const chainedPending = collectPendingBriefAttachments(
+      brief,
+      new Set(['fp_inline']),
+      true,
+      nowMs
+    );
+    expect(chainedPending.map((a) => a.fingerprint)).toEqual(['fp_active_file', 'fp_yt']);
   });
 });
 
