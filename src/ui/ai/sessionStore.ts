@@ -6,13 +6,18 @@ import {aggregateSessionCost, estimateTraceCost} from '../aiPricing.ts';
 import type {GeminiModelId} from '../aiSettings.ts';
 import type {ScriptRecord} from '../library/dbTypes.ts';
 import {formatExportTimestamp, slugifyFilename} from '../scriptLibraryCodec.ts';
-import {formatAttachmentTag, formatSceneBriefContext} from './draftBrief.ts';
+import {
+  formatAttachmentTag,
+  formatSceneBriefContext,
+  isReferenceAttachmentExpired,
+} from './draftBrief.ts';
 import {
   EMPTY_DRAFT_BRIEF,
   type AiChatMessage,
   type AiLoadedSkillItem,
   type DraftBriefState,
   type QuestionResponseRecord,
+  type ReferenceAttachment,
   type ReferenceEntry,
 } from './types.ts';
 
@@ -118,12 +123,21 @@ export function parseScriptSessionKey(key: string): {kind: 'custom' | 'example';
   return {kind: 'custom', id: trimmed};
 }
 
+function isPersistableRemoteUrl(url?: string): boolean {
+  return typeof url === 'string' && /^https?:\/\//i.test(url.trim());
+}
+
 /**
- * Strips binary/file attachments from DraftBriefState so persisted history stays text-only,
- * while recording `omittedAttachmentTag` so `formatSceneBriefContext` matches `lastTurnBriefContext`
- * byte-for-byte while `previous_interaction_id` remains active.
+ * Strips heavy binary/inline media payloads (`inlineBase64`, `inlineText`, `blob:`/`data:` URLs)
+ * from DraftBriefState so persisted history stays compact while keeping `omittedAttachmentTag`
+ * aligned with `formatSceneBriefContext`. Lightweight remote references (`youtube` URLs and
+ * `files_api` URIs with expiration metadata) are preserved without `localMediaUrl` / binary blobs
+ * so they survive reloads and exports with byte-identical `formatSceneBriefContext()` output.
  */
-export function stripBriefMediaForStorage(brief: DraftBriefState): {
+export function stripBriefMediaForStorage(
+  brief: DraftBriefState,
+  nowMs: number = Date.now()
+): {
   brief: DraftBriefState;
   hadMedia: boolean;
 } {
@@ -131,7 +145,40 @@ export function stripBriefMediaForStorage(brief: DraftBriefState): {
   const cleanRefs: ReferenceEntry[] = [];
 
   for (const entry of brief.references) {
-    const hasAttachment = Boolean(entry.attachment);
+    const att = entry.attachment;
+    const remoteUri = att?.uri?.trim() ?? '';
+    if (att && (att.source === 'youtube' || att.source === 'files_api') && remoteUri.length > 0) {
+      const persistedAttachment: ReferenceAttachment = {
+        source: att.source,
+        mimeType: att.mimeType,
+        uri: remoteUri,
+        fingerprint: att.fingerprint,
+        ...(att.fileName ? {fileName: att.fileName} : {}),
+        ...(att.sizeBytes !== undefined ? {sizeBytes: att.sizeBytes} : {}),
+        ...(att.width ? {width: att.width} : {}),
+        ...(att.height ? {height: att.height} : {}),
+        ...(isPersistableRemoteUrl(att.previewUrl) ? {previewUrl: att.previewUrl!.trim()} : {}),
+        ...(att.filesApiName ? {filesApiName: att.filesApiName} : {}),
+        ...(att.expirationTime ? {expirationTime: att.expirationTime} : {}),
+        ...(att.processingMode ? {processingMode: att.processingMode} : {}),
+      };
+
+      if (isReferenceAttachmentExpired(persistedAttachment, nowMs)) {
+        hadMedia = true;
+      }
+
+      cleanRefs.push({
+        id: entry.id,
+        handle: entry.handle,
+        kind: entry.kind,
+        label: entry.label,
+        ...(entry.note !== undefined ? {note: entry.note} : {}),
+        attachment: persistedAttachment,
+      });
+      continue;
+    }
+
+    const hasAttachment = Boolean(att);
     const preservedTag = hasAttachment
       ? formatAttachmentTag(entry)
       : entry.omittedAttachmentTag?.trim() ?? '';
@@ -1089,7 +1136,7 @@ export function buildAiSessionConversationJsonExport(
   const now = options?.now ?? new Date();
   const fallbackNowMs = now.getTime();
   const hydrated = hydrateSessionFromStorage(sanitizeAiSessionRecord(session));
-  const {brief: cleanBrief, hadMedia} = stripBriefMediaForStorage(hydrated.brief);
+  const {brief: cleanBrief, hadMedia} = stripBriefMediaForStorage(hydrated.brief, fallbackNowMs);
   const normalizedMessages = normalizeMessagesForStorage(hydrated.messages);
 
   const skillsMap = new Map<string, AiLoadedSkillItem>();

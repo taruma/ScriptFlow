@@ -1,6 +1,9 @@
 import {createPortal} from 'react-dom';
 import {ExternalLink, Music, X} from 'lucide-react';
-import type {ReferenceEntry} from '../../../ui/aiAssistant.ts';
+import {
+  isReferenceAttachmentExpired,
+  type ReferenceEntry,
+} from '../../../ui/aiAssistant.ts';
 import {
   buildTextExcerpt,
   extractYouTubeVideoId,
@@ -205,33 +208,44 @@ export function BriefMediaLightbox({
                     </pre>
                   </div>
                 ) : (
-                  <div className="w-full max-w-lg rounded-xl border border-border-main bg-surface p-4 space-y-2.5 text-xs">
-                    <p className="text-text-muted leading-relaxed">{labels.previewNoLocalMedia}</p>
-                    <div className="space-y-1 font-mono text-[11px] text-text-body">
-                      {inspectedEntry.attachment.fileName && (
-                        <div>
-                          <span className="text-text-faint">File: </span>
-                          {inspectedEntry.attachment.fileName}
+                  (() => {
+                    const isExpired = isReferenceAttachmentExpired(inspectedEntry.attachment);
+                    return (
+                      <div className="w-full max-w-lg rounded-xl border border-border-main bg-surface p-4 space-y-2.5 text-xs">
+                        <p
+                          className={`leading-relaxed ${
+                            isExpired ? 'text-red-600 dark:text-red-400' : 'text-text-muted'
+                          }`}
+                        >
+                          {isExpired ? labels.previewExpiredMedia : labels.previewNoLocalMedia}
+                        </p>
+                        <div className="space-y-1 font-mono text-[11px] text-text-body">
+                          {inspectedEntry.attachment.fileName && (
+                            <div>
+                              <span className="text-text-faint">File: </span>
+                              {inspectedEntry.attachment.fileName}
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-text-faint">MIME: </span>
+                            {inspectedEntry.attachment.mimeType}
+                          </div>
+                          {inspectedEntry.attachment.uri && (
+                            <div className="break-all">
+                              <span className="text-text-faint">{labels.previewFilesApiUriLabel}: </span>
+                              {inspectedEntry.attachment.uri}
+                            </div>
+                          )}
+                          {formatExpirationLabel(inspectedEntry.attachment.expirationTime) && (
+                            <div>
+                              <span className="text-text-faint">{labels.previewExpiresLabel}: </span>
+                              {formatExpirationLabel(inspectedEntry.attachment.expirationTime)}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      <div>
-                        <span className="text-text-faint">MIME: </span>
-                        {inspectedEntry.attachment.mimeType}
                       </div>
-                      {inspectedEntry.attachment.uri && (
-                        <div className="break-all">
-                          <span className="text-text-faint">{labels.previewFilesApiUriLabel}: </span>
-                          {inspectedEntry.attachment.uri}
-                        </div>
-                      )}
-                      {formatExpirationLabel(inspectedEntry.attachment.expirationTime) && (
-                        <div>
-                          <span className="text-text-faint">{labels.previewExpiresLabel}: </span>
-                          {formatExpirationLabel(inspectedEntry.attachment.expirationTime)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })()
                 )}
               </div>
             </div>

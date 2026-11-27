@@ -130,7 +130,11 @@ function makeSampleSession(overrides: Partial<AiSessionRecord> = {}): AiSessionR
 }
 
 describe('aiSessions domain & storage codec', () => {
-  it('strips binary/file media from Brief while keeping formatSceneBriefContext byte-identical for cache stability', () => {
+  it('strips binary/inline media while preserving lightweight YouTube and Files API URI metadata with byte-identical Brief text', () => {
+    const nowMs = Date.parse('2026-11-27T12:00:00.000Z');
+    const futureIso = '2026-11-28T12:00:00.000Z';
+    const pastIso = '2026-11-27T11:00:00.000Z';
+
     const briefWithMedia: DraftBriefState = {
       enabled: true,
       specs: '16:9 · 24fps',
@@ -158,24 +162,123 @@ describe('aiSessions domain & storage codec', () => {
           label: 'Prev shot',
           attachment: {
             source: 'youtube',
-            mimeType: 'video/mp4',
+            mimeType: 'video/youtube',
             uri: 'https://youtu.be/abc',
+            previewUrl: 'https://img.youtube.com/vi/abc/hqdefault.jpg',
+            processingMode: 'agentic',
             fingerprint: 'fp-yt',
+          },
+        },
+        {
+          id: 'ref-3',
+          handle: '@video2',
+          kind: 'video',
+          label: 'Generated clip',
+          attachment: {
+            source: 'files_api',
+            mimeType: 'video/mp4',
+            fileName: 'clip.mp4',
+            sizeBytes: 102400,
+            uri: 'https://generativelanguage.googleapis.com/v1beta/files/active1',
+            filesApiName: 'files/active1',
+            expirationTime: futureIso,
+            processingMode: 'static',
+            localMediaUrl: 'blob:http://localhost/1',
+            previewUrl: 'blob:http://localhost/2',
+            fingerprint: 'fp-files-active',
+          },
+        },
+        {
+          id: 'ref-4',
+          handle: '@doc1',
+          kind: 'document',
+          label: 'Old PDF',
+          attachment: {
+            source: 'files_api',
+            mimeType: 'application/pdf',
+            fileName: 'old.pdf',
+            sizeBytes: 20480,
+            uri: 'https://generativelanguage.googleapis.com/v1beta/files/expired1',
+            filesApiName: 'files/expired1',
+            expirationTime: pastIso,
+            localMediaUrl: 'blob:http://localhost/3',
+            fingerprint: 'fp-files-expired',
           },
         },
       ],
     };
 
     const beforeText = formatSceneBriefContext(briefWithMedia);
-    const {brief: stripped, hadMedia} = stripBriefMediaForStorage(briefWithMedia);
+    const {brief: stripped, hadMedia} = stripBriefMediaForStorage(briefWithMedia, nowMs);
     const afterText = formatSceneBriefContext(stripped);
 
     expect(hadMedia).toBe(true);
     expect(stripped.references[0].attachment).toBeUndefined();
     expect(stripped.references[0].omittedAttachmentTag).toBe('[attached image: nadia.jpg]');
-    expect(stripped.references[1].attachment).toBeUndefined();
-    expect(stripped.references[1].omittedAttachmentTag).toBe('[YouTube video]');
+
+    expect(stripped.references[1].omittedAttachmentTag).toBeUndefined();
+    expect(stripped.references[1].attachment).toEqual({
+      source: 'youtube',
+      mimeType: 'video/youtube',
+      uri: 'https://youtu.be/abc',
+      previewUrl: 'https://img.youtube.com/vi/abc/hqdefault.jpg',
+      processingMode: 'agentic',
+      fingerprint: 'fp-yt',
+    });
+
+    expect(stripped.references[2].omittedAttachmentTag).toBeUndefined();
+    expect(stripped.references[2].attachment).toEqual({
+      source: 'files_api',
+      mimeType: 'video/mp4',
+      fileName: 'clip.mp4',
+      sizeBytes: 102400,
+      uri: 'https://generativelanguage.googleapis.com/v1beta/files/active1',
+      filesApiName: 'files/active1',
+      expirationTime: futureIso,
+      processingMode: 'static',
+      fingerprint: 'fp-files-active',
+    });
+
+    expect(stripped.references[3].omittedAttachmentTag).toBeUndefined();
+    expect(stripped.references[3].attachment).toEqual({
+      source: 'files_api',
+      mimeType: 'application/pdf',
+      fileName: 'old.pdf',
+      sizeBytes: 20480,
+      uri: 'https://generativelanguage.googleapis.com/v1beta/files/expired1',
+      filesApiName: 'files/expired1',
+      expirationTime: pastIso,
+      fingerprint: 'fp-files-expired',
+    });
+
     expect(afterText).toBe(beforeText);
+
+    // Active-only YouTube + active Files API Brief should report hadMedia: false
+    const activeRemoteOnly: DraftBriefState = {
+      enabled: true,
+      specs: '',
+      subtext: '',
+      references: [briefWithMedia.references[1], briefWithMedia.references[2]],
+    };
+    expect(stripBriefMediaForStorage(activeRemoteOnly, nowMs).hadMedia).toBe(false);
+
+    // Expired Files API entry alone flips hadMedia: true
+    const expiredRemoteOnly: DraftBriefState = {
+      enabled: true,
+      specs: '',
+      subtext: '',
+      references: [briefWithMedia.references[3]],
+    };
+    expect(stripBriefMediaForStorage(expiredRemoteOnly, nowMs).hadMedia).toBe(true);
+
+    // Compaction + hydration round-trips preserved remote attachments cleanly
+    const session = makeSampleSession({brief: activeRemoteOnly});
+    const compacted = compactSessionForStorage(session);
+    const hydrated = hydrateSessionFromStorage(compacted);
+    expect(hydrated.brief.references[0].attachment?.uri).toBe('https://youtu.be/abc');
+    expect(hydrated.brief.references[1].attachment?.uri).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/files/active1'
+    );
   });
 
   it('deduplicates repeated Zone 1 systemInstruction strings across rounds and hydrates identically', () => {

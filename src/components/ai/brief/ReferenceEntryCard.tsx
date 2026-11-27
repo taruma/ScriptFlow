@@ -9,7 +9,11 @@ import {
   Tag,
   Trash2,
 } from 'lucide-react';
-import type {ReferenceEntry, VideoProcessingMode} from '../../../ui/aiAssistant.ts';
+import {
+  isReferenceAttachmentExpired,
+  type ReferenceEntry,
+  type VideoProcessingMode,
+} from '../../../ui/aiAssistant.ts';
 import {
   buildAttachmentFingerprint,
   buildTextExcerpt,
@@ -44,6 +48,7 @@ export const ReferenceEntryCard = memo(function ReferenceEntryCard({
   const att = entry.attachment;
   const isYoutube = att?.source === 'youtube';
   const isFilesApi = att?.source === 'files_api';
+  const isExpiredFilesApi = Boolean(att && isReferenceAttachmentExpired(att));
   const isInlineText = att?.source === 'inline' && typeof att.inlineText === 'string';
   const previewUrl = att?.previewUrl;
   const localVideoSrc = entry.kind === 'video' && !isYoutube ? att?.localMediaUrl : undefined;
@@ -63,7 +68,7 @@ export const ReferenceEntryCard = memo(function ReferenceEntryCard({
     metaParts.push(formatByteSize(att.sizeBytes));
   }
   if (isFilesApi) {
-    metaParts.push('48h');
+    metaParts.push(isExpiredFilesApi ? labels.cardFilesApiExpiredMeta : '48h');
   }
   const metaCaption = metaParts.join(' · ');
   const textSnippet = isInlineText
@@ -111,7 +116,7 @@ export const ReferenceEntryCard = memo(function ReferenceEntryCard({
         }
         className={`group/preview relative w-full rounded-lg overflow-hidden border border-border-subtle bg-surface-muted flex items-center justify-center ${
           isInspectable ? 'cursor-pointer' : ''
-        }`}
+        } ${isExpiredFilesApi ? 'opacity-70' : ''}`}
       >
         {previewUrl ? (
           <img
@@ -222,24 +227,29 @@ export const ReferenceEntryCard = memo(function ReferenceEntryCard({
         {/* Bottom-left Source Badge */}
         {(isFilesApi || isYoutube || isInlineText) && (
           <span
+            title={isExpiredFilesApi ? labels.cardFilesApiExpiredTitle : undefined}
             className={`absolute bottom-1 left-1 rounded border px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wider z-10 ${
               isYoutube
                 ? 'auteur-phase-intent'
-                : isFilesApi
-                  ? 'auteur-phase-aesthetic'
-                  : 'border-border-main bg-surface/90 text-text-body'
+                : isExpiredFilesApi
+                  ? 'border-red-500/40 bg-red-500/15 text-red-700 dark:text-red-300'
+                  : isFilesApi
+                    ? 'auteur-phase-aesthetic'
+                    : 'border-border-main bg-surface/90 text-text-body'
             }`}
           >
             {isYoutube
               ? labels.cardYoutubeBadge
-              : isFilesApi
-                ? labels.cardFilesApiBadge
-                : labels.cardInlineTextBadge}
+              : isExpiredFilesApi
+                ? labels.cardFilesApiExpiredBadge
+                : isFilesApi
+                  ? labels.cardFilesApiBadge
+                  : labels.cardInlineTextBadge}
           </span>
         )}
 
         {/* Bottom-right Video Processing Toggle (Static / Agentic) */}
-        {entry.kind === 'video' && att && (
+        {entry.kind === 'video' && att && !isExpiredFilesApi && (
           <button
             type="button"
             onClick={(event) => {

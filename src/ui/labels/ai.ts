@@ -222,6 +222,8 @@ export const AI_LABELS = {
         `${lines.toLocaleString()} ${lines === 1 ? 'line' : 'lines'} · ${chars.toLocaleString()} chars`,
       previewNoLocalMedia:
         'Hosted on Gemini Cloud (Files API). Gemini reads this asset directly via its URI during AI turns.',
+      previewExpiredMedia:
+        'This Gemini Files API asset has expired (48-hour limit) and is skipped on new AI turns. Re-upload it via Files API or remove this reference.',
       filesApiRedirectNotice: (fileName: string) =>
         `"${fileName}" uses Gemini Files API (for video, audio, PDFs, or large files).`,
       filesApiRedirectAction: 'Upload via Files API',
@@ -257,6 +259,10 @@ export const AI_LABELS = {
       filesApiCloseButton: 'Close',
       cardMapToName: 'Label',
       cardFilesApiBadge: 'FILES API',
+      cardFilesApiExpiredBadge: 'EXPIRED',
+      cardFilesApiExpiredMeta: 'Expired (48h)',
+      cardFilesApiExpiredTitle:
+        'Gemini Files API link expired after 48 hours and will be skipped — re-upload or remove.',
       cardYoutubeBadge: 'YT',
       cardInlineTextBadge: 'TEXT',
       cardManualBadge: 'HANDLE',

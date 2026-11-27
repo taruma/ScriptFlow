@@ -30,6 +30,7 @@ import {
   focusToLegacyMode,
   formatQuestionAnswersPrompt,
   getLatestActiveQuickScan,
+  isReferenceAttachmentExpired,
   isSuggestionStale,
   type AiChatMessage,
   type AiTargetScope,
@@ -726,6 +727,10 @@ export function useAiChatOrchestrator({
         let attemptPrompt = prompt;
         let attemptRecap: string | undefined;
 
+        const hasExpiredBriefFiles = latestContextRef.current.brief.references.some((ref) =>
+          Boolean(ref.attachment && isReferenceAttachmentExpired(ref.attachment))
+        );
+
         if (needsRecapBridgeRef.current && priorMessagesForRecap.length > 0) {
           attemptPrevId = undefined;
           attemptResumeResults = undefined;
@@ -736,7 +741,8 @@ export function useAiChatOrchestrator({
             originalScriptTitle: crossScriptSourceRef.current?.originalScriptTitle,
             currentScriptTitle: sceneTitle,
             isCrossScript: true,
-            hasOmittedMedia: Boolean(activeSessionMetaRef.current?.hasOmittedMedia),
+            hasOmittedMedia:
+              Boolean(activeSessionMetaRef.current?.hasOmittedMedia) || hasExpiredBriefFiles,
           });
           bridgedKind = 'cross_script';
         }
@@ -778,6 +784,7 @@ export function useAiChatOrchestrator({
               isCrossScript: false,
               hasOmittedMedia:
                 Boolean(activeSessionMetaRef.current?.hasOmittedMedia) ||
+                hasExpiredBriefFiles ||
                 firstErr.code === 'file_unavailable',
             });
             const retryPrompt = attemptPrompt.trim()
