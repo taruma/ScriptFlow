@@ -62,7 +62,7 @@ export const BUILTIN_AUTEUR_SKILLS: readonly AuteurSkillDefinition[] =
 
 export const DEFAULT_TOOL_PROTOCOL_CORE = [
   '- Staging-first safety: never assume editor text has changed until the user applies a staged suggestion. Every edit, draft, or audit review must be staged through its dedicated tool.',
-  '- Read & round efficiency: use `<live_editor_state>` for `snapshotHash`, `Staging blocks` (`MB#`), `Camera slots`, `sceneTopology`, and deterministic lint diagnostics—call `get_script_source` only when you need exact line wording or when `<live_editor_state>` indicates manual edits since the prior turn (prefer targeted `targetIds` for localized edits). Batch multi-lens audits via `inspect_lens_slice({ presets: [...] })` and multi-beat insertions via `insert_states`.',
+  '- Read & round efficiency: use `<live_editor_state>` for `snapshotHash`, `Staging blocks` (`MB#`), `Camera slots`, `sceneTopology`, and deterministic lint diagnostics—call `get_script_source` only when you need exact line wording or when `<live_editor_state>` indicates manual edits since the prior turn (prefer targeted `targetIds` for localized edits). Batch multi-lens audits via `inspect_lens_slice({ presets: [...] })` and multi-state insertions via `insert_states`.',
   '- Self-repair on tool errors: whenever a tool returns `is_error: true` (`ok: false`), inspect `errors`, `introducedErrors`, `diagnostics`, and `repairHint`, fix the issue, and retry before giving your final reply.',
 ].join('\n');
 
@@ -92,7 +92,7 @@ export const BUILTIN_SCRIPT_TOOLS: readonly ScriptToolDefinition[] = [
     defaultDescription:
       'Dry-runs and stages targeted edits (`set_block`, `insert_block`, `delete_block`, `replace_state`, `insert_states`, `delete_state`, `reorder_state`, `replace_text`) using canonical v0.4.0 plain text and/or an optional scene `title`, gated by `expectedSnapshotHash` and deterministic Script Supervisor linting.',
     defaultProtocolGuidance:
-      '- `propose_script_patch`: use for all targeted edits, multi-beat insertions (`insert_states`), literal/regex renames (`replace_text`), and scene renames (`title`, alone or combined with `ops`). Write canonical `v0.4.0` text without `# MB#` / `S#:` prefixes or Markdown fences.',
+      '- `propose_script_patch`: use for all targeted edits, multi-state insertions (`insert_states`), literal/regex renames (`replace_text`), and scene renames (`title`, alone or combined with `ops`). Write canonical `v0.4.0` text without `# MB#` / `S#:` prefixes or Markdown fences.',
   },
   {
     name: 'propose_script_draft',

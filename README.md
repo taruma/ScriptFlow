@@ -13,7 +13,7 @@
   <a href="docs/release/v1.1.0.md"><img src="https://img.shields.io/badge/version-1.1.0-blue.svg?style=flat-square" alt="ScriptFlow v1.1.0" /></a>
   <a href="docs/GRAMMAR_CONTRACT.md"><img src="https://img.shields.io/badge/Auteur_Script-v0.4.0-emerald.svg?style=flat-square" alt="Auteur Script v0.4.0" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square" alt="License MIT" /></a>
-  <a href="#available-commands"><img src="https://img.shields.io/badge/tests-371%20passed-brightgreen.svg?style=flat-square" alt="Vitest 371 Passed" /></a>
+  <a href="#available-commands"><img src="https://img.shields.io/badge/tests-405%20passed-brightgreen.svg?style=flat-square" alt="Vitest 405 Passed" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-7.0-blue.svg?style=flat-square" alt="TypeScript 7.0" /></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square" alt="React 19" /></a>
   <a href="https://reactflow.dev/"><img src="https://img.shields.io/badge/React_Flow-13-ff0072.svg?style=flat-square" alt="React Flow 13" /></a>
@@ -64,7 +64,7 @@ Live Mode, Graph View, Source Mode, deterministic Script Supervisor diagnostics,
 
 5. **Optional Browser-Local BYOK AI Assistant, Session History & Layer 2.5 Quick Scan**
    - Lazy-loaded right-side AI Canvas Sidebar (`@google/genai` Interactions API streaming across Gemini 4 `Hydrogen` / `Neon` / `Carbon`, `Gemini 3.8 Flash`, and `Gemini 3.5 Flash-Lite`, with `Low` / `Medium` / `High` reasoning, cache-stable 3-Zone prompt prefixing, and `localStorage` or `sessionStorage` BYOK key storage).
-   - Unified `Auto` / `Draft` / `Refine` / `Audit` focus bar exposing all 10 strictly read-only/staging browser tools consistently in `Auto`, delta-only turn context & recent-edit diff tracking, On-Demand extension skills (`0.4.0-k5` including `draft_interview`), stepped `1 / N` pause-and-resume clarifying interviews (`Ask First` / `ask_question`), compact collapsible Layer 2.5 **Quick Scan** (`gemini-decision-1` on `v1beta`), detached **AI Session History** (`AiSessionHistoryModal` with `<prior_session_recap>` expired-chain bridging and `.md` / evaluation-ready Full Conversation `.json` / Full Payload `.json` exports), multimodal **Scene Brief & References** modal, 5-tab **Context Inspector** with unified JSON pack Export/Import, Live Mode hover-to-diff margin indicators, USD cost tracking, and opt-in sanitized **Trace Inspector**.
+   - Unified `Auto` / `Draft` / `Refine` / `Audit` focus bar exposing all 7 strictly read-only/staging text-first browser tools consistently in `Auto`, delta-only turn context & recent-edit diff tracking, On-Demand extension skills (`0.4.0-k6` including `draft_interview`), stepped `1 / N` pause-and-resume clarifying interviews (`Ask First` / `ask_question`), compact collapsible Layer 2.5 **Quick Scan** (`gemini-decision-1` on `v1beta`), detached **AI Session History** (`AiSessionHistoryModal` with `<prior_session_recap>` expired-chain bridging and `.md` / evaluation-ready Full Conversation `.json` / Full Payload `.json` exports), multimodal **Scene Brief & References** modal, 5-tab **Context Inspector** with unified JSON pack Export/Import, Live Mode hover-to-diff margin indicators, USD cost tracking, and opt-in sanitized **Trace Inspector**.
 
 6. **Programmatic JSON IR, Debug Inspector & 4-Mode Themes**
    - Pure TypeScript + Zod `AuteurScriptIR`, `AuteurEnvelope`, transactional `applyAuteurPatch()`, `projectAuteurPatchPreview()`, Composable Lens Slicer (`AUDIT_LENS_PRESETS`), `getAuteurJsonSchemas()`, and zero-cost-when-closed 5-tab `JsonIrDebugDrawer`.
@@ -149,7 +149,7 @@ ScriptFlow runs **100% client-side in your browser**—no backend server or prox
 | Command | Task | Description |
 | :--- | :--- | :--- |
 | `npm run dev` | **Local Studio** | Starts Vite development server at `http://localhost:3000` |
-| `npm test` | **Unit Test Suite** | Runs `371` deterministic tests across `33` files via Vitest |
+| `npm test` | **Unit Test Suite** | Runs `405` deterministic tests across `36` files via Vitest |
 | `npm run lint` | **Type Check** | Runs strict TypeScript type-checking (`tsc --noEmit`) |
 | `npm run build` | **Typecheck & Bundle** | Runs `tsc --noEmit && vite build` to emit `dist/` |
 | `npm run preview` | **Preview Build** | Serves the production Vite build locally |
@@ -183,7 +183,7 @@ graph TD
 | [`docs/UI_PHILOSOPHY.md`](docs/UI_PHILOSOPHY.md) | Asymmetric `40/60` Live, Source & Graph View layout principles, Waterfall editing, Library/History UX, AI Canvas UX, and 4-mode theme palette. |
 | [`docs/GRAPH_VIEW.md`](docs/GRAPH_VIEW.md) | Technical architecture & plain-text extraction reference for the read-only Graph View (`src/ui/canvas/` + `src/components/canvas/`). |
 | [`docs/UI_LABELING.md`](docs/UI_LABELING.md) | Single Source of Truth UI copy contract (`APP_META`, `MACRO_BLOCK_META`, `UI_LABELS`), Auteur Script UI vocabulary, and theme labels. |
-| [`docs/AI_ASSISTANT_WALKTHROUGH.md`](docs/AI_ASSISTANT_WALKTHROUGH.md) | End-to-end guide to BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus, all 10 local AI tools, Quick Scan, Brief modal, Context Inspector, and Trace Inspector. |
+| [`docs/AI_ASSISTANT_WALKTHROUGH.md`](docs/AI_ASSISTANT_WALKTHROUGH.md) | End-to-end guide to BYOK setup, `Auto`/`Draft`/`Refine`/`Audit` focus, all 7 local AI tools, Quick Scan, Brief modal, Context Inspector, and Trace Inspector. |
 
 ---
 
@@ -193,7 +193,7 @@ graph TD
 * **UI & Styling**: [React 19](https://react.dev/), [Tailwind CSS v4](https://tailwindcss.com/), [Lucide React](https://lucide.dev/), [Vite 8](https://vite.dev/)
 * **Graph View & Drag-and-Drop**: [React Flow (`@xyflow/react`)](https://reactflow.dev/) (`v13`), [`@dnd-kit`](https://dndkit.com/)
 * **Optional AI Runtime (BYOK)**: [`@google/genai`](https://github.com/googleapis/js-genai) (Interactions API, `v1beta` Decisions API, Files API)
-* **Local Persistence & Testing**: Browser IndexedDB + `localStorage`, [Vitest](https://vitest.dev/) (`371` tests across `33` files)
+* **Local Persistence & Testing**: Browser IndexedDB + `localStorage`, [Vitest](https://vitest.dev/) (`405` tests across `36` files)
 
 ---
 
@@ -206,7 +206,7 @@ graph TD
 * **Attribution**: If ScriptFlow inspires your writing, toolmaking, or cinema study, a shout-out or link back to [github.com/taruma/ScriptFlow](https://github.com/taruma/ScriptFlow) is always appreciated!
 
 > [!WARNING]
-> **Vibe-Coded Disclaimer**: This software was built through exploratory AI-assisted pair programming and rapid iterations. While backed by 371 unit tests and strict TypeScript checks, always back up important scripts (via `File ▾ → Backup All Scripts`).
+> **Vibe-Coded Disclaimer**: This software was built through exploratory AI-assisted pair programming and rapid iterations. While backed by 405 unit tests and strict TypeScript checks, always back up important scripts (via `File ▾ → Backup All Scripts`).
 
 ---
 

@@ -572,7 +572,7 @@ export const AI_LABELS = {
           'All tools are currently inactive or disabled — the next turn runs in Pure Conversation Mode with zero tool schemas sent.',
         toolsListHeading: 'Function Tools',
         toolsListDesc:
-          'Control per-tool activation (Auto exposes all 10 tools consistently with Ask First enforced via turn directive, Always On forces exposure, Disabled removes schema & guidance) and customize each tool’s prompt guidance or API description.',
+          'Control per-tool activation (Auto exposes all 7 tools consistently with Ask First enforced via turn directive, Always On forces exposure, Disabled removes schema & guidance) and customize each tool’s prompt guidance or API description.',
         activationModeGroupAria: (label: string) => `Activation mode for ${label}`,
         activationModes: {
           auto: 'Auto',
