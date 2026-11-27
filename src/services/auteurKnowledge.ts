@@ -67,6 +67,7 @@ export {
   buildToolProtocolRuntimeHeader,
   computeAllowedToolNames,
   computeDiagnosticsFingerprint,
+  computeFocusPermittedToolNames,
   getLensAuditChecklist,
   resolveScriptTools,
 };
@@ -365,24 +366,54 @@ function resolveBriefContextDelta(
   };
 }
 
+function buildFocusDirectiveText(
+  focus: AssistantFocus,
+  focusPermittedToolNames: readonly ScriptToolName[],
+  allowedToolNames: readonly ScriptToolName[]
+): string {
+  if (focus === 'auto' || allowedToolNames.length === 0) {
+    return '';
+  }
+
+  const permittedList =
+    focusPermittedToolNames.length > 0
+      ? focusPermittedToolNames.map((t) => `\`${t}\``).join(', ')
+      : 'none';
+
+  switch (focus) {
+    case 'draft':
+      return `[Focus: Draft] Prioritize drafting a complete canonical v0.4.0 script via \`propose_script_draft\`. Permitted tools this turn: ${permittedList}. Do not call non-permitted tools.`;
+    case 'refine':
+      return `[Focus: Refine] Prioritize targeted edits via \`propose_script_patch\` (using \`get_script_source\` / \`inspect_lens_slice\` when needed). Permitted tools this turn: ${permittedList}. Do not call non-permitted tools.`;
+    case 'audit':
+      return `[Focus: Audit] Inspect the script via \`inspect_lens_slice\` / \`get_script_source\` and report findings via \`report_audit_review\`. Permitted tools this turn: ${permittedList}. Do not call \`propose_script_patch\`, \`propose_script_draft\`, or \`ask_question\` on this turn.`;
+  }
+}
+
 function buildAskDirectiveText(
   focus: AssistantFocus,
-  allowedToolNames: readonly ScriptToolName[],
+  focusPermittedToolNames: readonly ScriptToolName[],
   askQuestionMode: AskQuestionMode
 ): string {
-  if (focus === 'audit' || !allowedToolNames.includes('ask_question')) {
+  if (focus === 'audit' || !focusPermittedToolNames.includes('ask_question')) {
     return '';
   }
 
   if (askQuestionMode === 'ask_first') {
-    return '<turn_directive>[Ask First: ON] The user explicitly requested clarifying questions before drafting or editing. If drafting an open scene, load `draft_interview` first (when available), then call `ask_question` with 1–4 concise, high-leverage directorial questions (2–5 short options each; omit `multiSelect` or set `false` for single-select picks, set `multiSelect: true` when choices combine, and never include an "Other" option since every question already provides an inline additive note field). Do not stage a draft or patch in this same turn—calling `ask_question` pauses the turn immediately until the user answers or skips.</turn_directive>';
+    return '[Ask First: ON] The user explicitly requested clarifying questions before drafting or editing. If drafting an open scene, load `draft_interview` first (when available), then call `ask_question` with 1–4 concise, high-leverage directorial questions (2–5 short options each; omit `multiSelect` or set `false` for single-select picks, set `multiSelect: true` when choices combine, and never include an "Other" option since every question already provides an inline additive note field). Do not stage a draft or patch in this same turn—calling `ask_question` pauses the turn immediately until the user answers or skips.';
   }
 
   if (askQuestionMode === 'followup') {
-    return '<turn_directive>[Clarifying follow-up] The user just responded to your clarifying questions (answers, additive notes, or Skip & Proceed). If you have enough direction—or if the user skipped with "Your call"—proceed directly to drafting or staging your patch. Only call `ask_question` again if a critical blocker remains.</turn_directive>';
+    return '[Clarifying follow-up] The user just responded to your clarifying questions (answers, additive notes, or Skip & Proceed). If you have enough direction—or if the user skipped with "Your call"—proceed directly to drafting or staging your patch. Only call `ask_question` again if a critical blocker remains.';
   }
 
   return '';
+}
+
+function buildTurnDirectiveText(focusDirectiveText: string, askDirectiveText: string): string {
+  const parts = [focusDirectiveText, askDirectiveText].filter((p) => p.trim().length > 0);
+  if (parts.length === 0) return '';
+  return `<turn_directive>\n${parts.join('\n')}\n</turn_directive>`;
 }
 
 function buildActiveSkillsSectionText(activeSkills: readonly ResolvedAuteurSkill[]): string {
@@ -406,10 +437,34 @@ function buildSkillDirectorySectionText(availableSkills: readonly ResolvedAuteur
 }
 
 function computeDefaultAutoTools(
-  focus: AssistantFocus,
-  isEmpty: boolean,
+  _focus: AssistantFocus,
+  _isEmpty: boolean,
   hasAvailableSkills: boolean,
   _askQuestionMode: AskQuestionMode = 'off'
+): Set<ScriptToolName> {
+  // Zone 1 prefix stability: expose all 6 static tools (+ load_auteur_skill when skills exist)
+  // consistently across every focus and editor state; Focus & Ask First rules are enforced in Zone 3
+  // (<turn_directive>) and at runtime inside executeScriptToolCall().
+  const tools = new Set<ScriptToolName>([
+    'get_script_source',
+    'inspect_lens_slice',
+    'propose_script_patch',
+    'propose_script_draft',
+    'report_audit_review',
+    'ask_question',
+  ]);
+
+  if (hasAvailableSkills) {
+    tools.add('load_auteur_skill');
+  }
+
+  return tools;
+}
+
+function getFocusBaselineTools(
+  focus: AssistantFocus,
+  isEmpty: boolean,
+  hasAvailableSkills: boolean
 ): Set<ScriptToolName> {
   const tools = new Set<ScriptToolName>();
 
@@ -444,6 +499,20 @@ function computeDefaultAutoTools(
   }
 
   return tools;
+}
+
+function computeFocusPermittedToolNames(
+  focus: AssistantFocus,
+  isEmpty: boolean,
+  resolvedTools: readonly ResolvedScriptTool[]
+): ScriptToolName[] {
+  const hasAvailableSkills = resolvedTools.some(
+    (t) => t.name === 'load_auteur_skill' && t.status === 'active'
+  );
+  const baseline = getFocusBaselineTools(focus, isEmpty, hasAvailableSkills);
+  return resolvedTools
+    .filter((tool) => tool.status === 'active' && (tool.reason === 'forced_on' || baseline.has(tool.name)))
+    .map((tool) => tool.name);
 }
 
 function resolveScriptTools(params: {
@@ -737,6 +806,11 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
   const allowedToolNames = resolvedTools
     .filter((tool) => tool.status === 'active')
     .map((tool) => tool.name);
+  const focusPermittedToolNames = computeFocusPermittedToolNames(
+    options.focus,
+    isEmpty,
+    resolvedTools
+  );
 
   const trimmedCraftOverride = options.foundationalCraftOverride?.trim();
   const isCraftOverridden = Boolean(trimmedCraftOverride && trimmedCraftOverride.length > 0);
@@ -773,11 +847,17 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     options.previousBriefContext,
     hasPreviousInteraction
   );
+  const focusDirectiveText = buildFocusDirectiveText(
+    options.focus,
+    focusPermittedToolNames,
+    allowedToolNames
+  );
   const askDirectiveText = buildAskDirectiveText(
     options.focus,
-    allowedToolNames,
+    focusPermittedToolNames,
     effectiveAskQuestionMode
   );
+  const turnDirectiveText = buildTurnDirectiveText(focusDirectiveText, askDirectiveText);
   const activeSkillsText = buildActiveSkillsSectionText(activeSkills);
   const skillDirectoryText = buildSkillDirectorySectionText(availableSkills);
   const toolProtocolText = buildToolProtocolBlock({
@@ -832,7 +912,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     },
   };
 
-  const turnContextText = [liveEditorStateText, briefDelta.text, askDirectiveText]
+  const turnContextText = [liveEditorStateText, briefDelta.text, turnDirectiveText]
     .filter((block) => block.trim().length > 0)
     .join('\n\n');
 
@@ -841,7 +921,9 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     liveEditorStateText,
     briefDelivery: briefDelta.delivery,
     sceneBriefText: briefDelta.text,
+    focusDirectiveText,
     askDirectiveText,
+    turnDirectiveText,
     text: turnContextText,
   };
 
@@ -867,6 +949,7 @@ export function composeAgentContext(options: ComposeAgentContextOptions): Compos
     mutedSkills,
     resolvedTools,
     allowedToolNames,
+    focusPermittedToolNames,
     enforceToolLinterGate,
     sections,
     turnContext,

@@ -147,19 +147,19 @@ export interface ToolProtocolRuntimeHeaderParams {
 export function buildToolProtocolRuntimeHeader(
   params: ToolProtocolRuntimeHeaderParams
 ): string[] {
-  const {focus, allowedToolNames, enforceToolLinterGate = true} = params;
+  const {allowedToolNames, enforceToolLinterGate = true} = params;
   const hasTool = (name: ScriptToolName) => allowedToolNames.includes(name);
   const lines: string[] = [];
 
   if (allowedToolNames.length === 0) {
     lines.push(
-      `- Active focus: \`${focus}\` | Allowed tools this turn: none (pure conversation mode — respond directly in prose without calling tools).`
+      '- Allowed tools: none (pure conversation mode — respond directly in prose without calling tools).'
     );
     return lines;
   }
 
   lines.push(
-    `- Active focus: \`${focus}\` | Allowed tools this turn: ${allowedToolNames.map((t) => `\`${t}\``).join(', ')}.`
+    `- Allowed tools: ${allowedToolNames.map((t) => `\`${t}\``).join(', ')} (per-turn focus routing and Ask First gating are applied via \`<turn_directive>\`).`
   );
 
   if (hasTool('propose_script_patch') || hasTool('report_audit_review')) {
@@ -243,9 +243,9 @@ export function buildToolProtocolBlock(params: ToolProtocolParams): string {
     }
   }
 
-  if (focus === 'auto' && allowedToolNames.length > 0) {
+  if (allowedToolNames.length > 0) {
     lines.push(
-      '- Auto routing: choose the minimal matching tool(s) above—`propose_script_draft` for empty scripts or full rewrites, `propose_script_patch` for targeted edits, renames (`replace_text`), or scene title updates (`title`), `report_audit_review` for audits, or respond directly in prose for pure questions.'
+      '- Routing: follow any `[Focus: ...]` directive in `<turn_directive>`; otherwise choose the minimal matching tool(s) above—`propose_script_draft` for empty scripts or full rewrites, `propose_script_patch` for targeted edits, renames (`replace_text`), or scene title updates (`title`), `report_audit_review` for audits, or respond directly in prose for pure questions.'
     );
   }
 

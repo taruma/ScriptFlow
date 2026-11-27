@@ -571,27 +571,32 @@ describe('Phase 3A hardening: JSON Schema sanitization & lint-gated draft stagin
 describe('ask_question opt-in clarifying workflow', () => {
   const sampleScript = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
-  it('keeps ask_question declared in Auto/Draft/Refine for cache stability while gating execution strictly via Ask First', () => {
+  it('keeps Zone 1 tools frozen across Auto/Draft/Refine/Audit while gating execution via focusPermittedToolNames & Ask First', () => {
     for (const focus of ['auto', 'draft', 'refine'] as const) {
       const ctx = composeAgentContext({focus, rawText: sampleScript});
       expect(ctx.allowedToolNames).toContain('ask_question');
+      expect(ctx.focusPermittedToolNames).toContain('ask_question');
       expect(buildToolDeclarationsForContext(ctx).map((t) => t.name)).toContain('ask_question');
       expect(ctx.turnContext.askDirectiveText).toBe('');
     }
 
     const auditDefault = composeAgentContext({focus: 'audit', rawText: sampleScript});
-    expect(auditDefault.allowedToolNames).not.toContain('ask_question');
-    expect(buildToolDeclarationsForContext(auditDefault).map((t) => t.name)).not.toContain(
-      'ask_question'
-    );
+    // Zone 1 stays frozen (declared tools include all 7 tools), while runtime permission excludes ask_question / patch / draft
+    expect(auditDefault.allowedToolNames).toContain('ask_question');
+    expect(buildToolDeclarationsForContext(auditDefault).map((t) => t.name)).toContain('ask_question');
+    expect(auditDefault.focusPermittedToolNames).not.toContain('ask_question');
+    expect(auditDefault.focusPermittedToolNames).not.toContain('propose_script_patch');
+    expect(auditDefault.focusPermittedToolNames).not.toContain('propose_script_draft');
+    expect(auditDefault.turnContext.turnDirectiveText).toContain('[Focus: Audit]');
 
     const askFirstAuto = composeAgentContext({
       focus: 'auto',
       rawText: sampleScript,
       askQuestionMode: 'ask_first',
     });
-    expect(askFirstAuto.allowedToolNames).toContain('ask_question');
+    expect(askFirstAuto.focusPermittedToolNames).toContain('ask_question');
     expect(askFirstAuto.turnContext.askDirectiveText).toContain('[Ask First: ON]');
+    expect(askFirstAuto.turnContext.turnDirectiveText).toContain('<turn_directive>');
     expect(buildToolDeclarationsForContext(askFirstAuto).map((t) => t.name)).toContain(
       'ask_question'
     );
@@ -601,17 +606,54 @@ describe('ask_question opt-in clarifying workflow', () => {
       rawText: '',
       askQuestionMode: 'followup',
     });
-    expect(followupDraft.allowedToolNames).toContain('ask_question');
+    expect(followupDraft.focusPermittedToolNames).toContain('ask_question');
     expect(followupDraft.turnContext.askDirectiveText).toContain('[Clarifying follow-up]');
+    expect(followupDraft.turnContext.turnDirectiveText).toContain('[Focus: Draft]');
 
-    // Audit focus always suppresses ask_question even if requested
+    // Audit focus suppresses Ask First & blocks non-audit tools at runtime unless forced Always On
     const auditBlocked = composeAgentContext({
       focus: 'audit',
       rawText: sampleScript,
       askQuestionMode: 'ask_first',
     });
-    expect(auditBlocked.allowedToolNames).not.toContain('ask_question');
+    expect(auditBlocked.focusPermittedToolNames).not.toContain('ask_question');
     expect(auditBlocked.turnContext.askDirectiveText).toBe('');
+    expect(auditBlocked.turnContext.turnDirectiveText).toContain('[Focus: Audit]');
+
+    const auditPatchBlocked = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {title: 'New Title'},
+      },
+      {mode: 'check', rawText: sampleScript, composedContext: auditBlocked}
+    );
+    expect(auditPatchBlocked.ok).toBe(false);
+    expect(String((auditPatchBlocked.result as {error?: string}).error)).toContain('audit focus');
+
+    const auditAskBlocked = executeScriptToolCall(
+      {
+        name: 'ask_question',
+        arguments: {questions: [{question: 'Topology?', options: ['Oner', 'Coverage']}]},
+      },
+      {mode: 'check', rawText: sampleScript, askQuestionMode: 'ask_first', composedContext: auditBlocked}
+    );
+    expect(auditAskBlocked.ok).toBe(false);
+
+    // Forced Always On permits a non-focus tool (e.g. propose_script_patch inside audit focus)
+    const auditForcedPatchCtx = composeAgentContext({
+      focus: 'audit',
+      rawText: sampleScript,
+      toolOverrides: {propose_script_patch: {activationMode: 'enabled'}},
+    });
+    expect(auditForcedPatchCtx.focusPermittedToolNames).toContain('propose_script_patch');
+    const auditForcedPatchRes = executeScriptToolCall(
+      {
+        name: 'propose_script_patch',
+        arguments: {title: 'Focused Forced Rename'},
+      },
+      {mode: 'check', rawText: sampleScript, composedContext: auditForcedPatchCtx}
+    );
+    expect(auditForcedPatchRes.ok).toBe(true);
   });
 
   it('validates, sanitizes, stages, and supersedes QuestionSuggestion cards cleanly', () => {

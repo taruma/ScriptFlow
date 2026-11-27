@@ -268,7 +268,8 @@ export const AI_LABELS = {
       cardManualBadge: 'HANDLE',
       cardVideoModeStatic: 'Static',
       cardVideoModeAgentic: 'Agentic',
-      cardVideoModeTitle: 'Toggle Static (1 fps) vs. Agentic video understanding',
+      cardVideoModeTitle:
+        'Toggle Static (1 fps — preserves multi-turn prompt caching on short clips) vs. Agentic video understanding (best for long videos or one-shot analysis)',
       emptyRefsHint:
         'Drop an image or text file, attach a YouTube link, or upload video/audio/PDF via Files API.',
       handlePlaceholder: '@image1',
@@ -565,14 +566,14 @@ export const AI_LABELS = {
         linterGateBypassedBadge: 'Bypassed',
         coreProtocolHeading: 'Core Tool & Safety Protocol',
         coreProtocolDesc:
-          'Foundational tool-use safety rules injected into the cache-stable System Instruction whenever at least one tool is active. Live focus and active tool names stay auto-synced below (expectedSnapshotHash travels with Live Editor State per turn).',
+          'Foundational tool-use safety rules injected into the cache-stable System Instruction whenever at least one tool is active. Focus routing, Ask First, and expectedSnapshotHash travel per turn to keep this prefix frozen.',
         coreProtocolRuntimeHeaderLabel: 'Auto-Synced Runtime Header (Cache-Stable Preview)',
         coreProtocolTextareaAria: 'Core Tool and Safety Protocol instructions',
         pureChatNotice:
           'All tools are currently inactive or disabled — the next turn runs in Pure Conversation Mode with zero tool schemas sent.',
         toolsListHeading: 'Function Tools',
         toolsListDesc:
-          'Control per-tool activation (Auto exposes all 7 tools consistently with Ask First enforced via turn directive, Always On forces exposure, Disabled removes schema & guidance) and customize each tool’s prompt guidance or API description.',
+          'Control per-tool activation (Auto keeps all 7 tools declared in Zone 1 for cache stability while enforcing Focus & Ask First per turn via Turn Directive; Always On forces permission across focus modes; Disabled removes schema & guidance) and customize each tool’s prompt guidance or API description.',
         activationModeGroupAria: (label: string) => `Activation mode for ${label}`,
         activationModes: {
           auto: 'Auto',
@@ -588,6 +589,7 @@ export const AI_LABELS = {
         statusActiveAuto: 'Active · Auto',
         statusActiveForced: 'Active · Always On',
         statusInactiveFocus: (focusLabel: string) => `Inactive in ${focusLabel}`,
+        statusCachedGatedFocus: (focusLabel: string) => `Cached · Gated in ${focusLabel}`,
         statusInactiveNoSkills: 'Inactive · No available skills',
         statusDisabled: 'Disabled',
         expandToolAria: (label: string) => `Inspect or customize ${label}`,
@@ -757,7 +759,7 @@ export const AI_LABELS = {
         'No active Scene Brief attached. Open Brief in the sidebar to add cast refs, specs, or additional instructions.',
       cachedSceneBrief:
         'Scene Brief already sent earlier in this conversation chain and remains cached in history.',
-      emptyTurnDirective: 'Ask First is OFF — no turn directive will be prepended.',
+      emptyTurnDirective: 'Auto focus & Ask First OFF — no turn directive will be prepended.',
       emptyActiveSkills:
         'No pinned skills. All non-muted skills stay in the On-Demand Skill Directory until you pin one.',
       emptyAvailableSkills: 'All non-muted skills are currently pinned.',

@@ -65,7 +65,7 @@ export {
 
 /**
  * Executes a single local read-only/staging tool call strictly scoped to the turn's
- * allowed tools (`context.allowedTools` / `context.composedContext` / `MODE_TOOL_NAMES[context.mode]`).
+ * permitted tools (`context.allowedTools` / `context.composedContext.focusPermittedToolNames` / `MODE_TOOL_NAMES[context.mode]`).
  * Never mutates `context.rawText`.
  */
 export function executeScriptToolCall(
@@ -73,7 +73,10 @@ export function executeScriptToolCall(
   context: ScriptToolContext
 ): ScriptToolExecutionResult {
   const allowedTools =
-    context.allowedTools ?? context.composedContext?.allowedToolNames ?? MODE_TOOL_NAMES[context.mode];
+    context.allowedTools ??
+    context.composedContext?.focusPermittedToolNames ??
+    context.composedContext?.allowedToolNames ??
+    MODE_TOOL_NAMES[context.mode];
   const scopeLabel = context.composedContext
     ? `${context.composedContext.focus} focus`
     : `"${context.mode}" mode`;

@@ -9,6 +9,7 @@ import {
   buildRecentEditSummary,
   composeAgentContext,
   computeAllowedToolNames,
+  computeFocusPermittedToolNames,
   getLensAuditChecklist,
   type LensAuditChecklist,
 } from '../../src/services/auteurKnowledge.ts';
@@ -32,12 +33,12 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
   const MONTAGE_SCRIPT = TEST_CRAFT_EXEMPLARS['heist-montage'].content;
   const INTERROGATION_SCRIPT = TEST_CRAFT_EXEMPLARS['interrogation-coverage'].content;
 
-  it('exposes all 7 tools consistently in Auto regardless of emptiness, while scoping Draft/Refine/Audit cleanly', () => {
+  it('keeps Zone 1 systemInstruction & tool declarations frozen across Focus modes while enforcing focusPermittedToolNames via turn_directive', () => {
     expect(assistantModeToFocus('check')).toBe('audit');
     expect(assistantModeToFocus('refine')).toBe('refine');
     expect(assistantModeToFocus('draft')).toBe('draft');
 
-    const expectedAutoTools = [
+    const expectedFrozenTools = [
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
@@ -47,54 +48,68 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
       'load_auteur_skill',
     ];
 
-    // auto + empty script -> exposes all 7 tools consistently for frozen [tools] prefix caching
     const autoEmpty = composeAgentContext({focus: 'auto', rawText: '   '});
-    expect(autoEmpty.editorState.isEmpty).toBe(true);
-    expect(autoEmpty.allowedToolNames).toEqual(expectedAutoTools);
-
-    // auto + existing script -> identical 7 tools
     const autoExisting = composeAgentContext({focus: 'auto', rawText: INTERROGATION_SCRIPT});
-    expect(autoExisting.editorState.isEmpty).toBe(false);
-    expect(autoExisting.allowedToolNames).toEqual(expectedAutoTools);
-
-    // draft + empty vs non-empty (non-empty Draft gains inspect tools)
     const draftEmpty = composeAgentContext({focus: 'draft', rawText: ''});
-    expect(draftEmpty.allowedToolNames).toEqual([
+    const draftExisting = composeAgentContext({focus: 'draft', rawText: INTERROGATION_SCRIPT});
+    const refineCtx = composeAgentContext({focus: 'refine', rawText: INTERROGATION_SCRIPT});
+    const auditCtx = composeAgentContext({focus: 'audit', rawText: INTERROGATION_SCRIPT});
+
+    expect(autoEmpty.editorState.isEmpty).toBe(true);
+    expect(autoExisting.editorState.isEmpty).toBe(false);
+
+    // Zone 1 tools & systemInstruction stay byte-for-byte identical across every Focus and emptiness state
+    for (const ctx of [autoEmpty, autoExisting, draftEmpty, draftExisting, refineCtx, auditCtx]) {
+      expect(ctx.allowedToolNames).toEqual(expectedFrozenTools);
+      expect(ctx.systemInstruction).toBe(autoExisting.systemInstruction);
+      expect(JSON.stringify(buildToolDeclarationsForContext(ctx))).toBe(
+        JSON.stringify(buildToolDeclarationsForContext(autoExisting))
+      );
+    }
+
+    // Per-focus permitted sets & Zone 3 <turn_directive> routing
+    expect(autoEmpty.focusPermittedToolNames).toEqual(expectedFrozenTools);
+    expect(autoEmpty.turnContext.focusDirectiveText).toBe('');
+    expect(autoEmpty.turnContext.turnDirectiveText).toBe('');
+
+    expect(draftEmpty.focusPermittedToolNames).toEqual([
       'propose_script_draft',
       'ask_question',
       'load_auteur_skill',
     ]);
-    const draftExisting = composeAgentContext({focus: 'draft', rawText: INTERROGATION_SCRIPT});
-    expect(draftExisting.allowedToolNames).toEqual([
+    expect(draftEmpty.turnContext.focusDirectiveText).toContain('[Focus: Draft]');
+    expect(draftEmpty.turnContext.turnDirectiveText).toContain('<turn_directive>');
+
+    expect(draftExisting.focusPermittedToolNames).toEqual([
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_draft',
       'ask_question',
       'load_auteur_skill',
     ]);
-
-    // refine & audit focus
-    const refineCtx = composeAgentContext({focus: 'refine', rawText: INTERROGATION_SCRIPT});
-    expect(refineCtx.allowedToolNames).toEqual([
+    expect(refineCtx.focusPermittedToolNames).toEqual([
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
       'ask_question',
       'load_auteur_skill',
     ]);
-    const auditCtx = composeAgentContext({focus: 'audit', rawText: INTERROGATION_SCRIPT});
-    expect(auditCtx.allowedToolNames).toEqual([
+    expect(refineCtx.turnContext.focusDirectiveText).toContain('[Focus: Refine]');
+
+    expect(auditCtx.focusPermittedToolNames).toEqual([
       'get_script_source',
       'inspect_lens_slice',
       'report_audit_review',
       'load_auteur_skill',
     ]);
-    // Audit never exposes ask_question even if explicitly requested
-    expect(computeAllowedToolNames('audit', false, true, 'ask_first')).not.toContain(
-      'ask_question'
-    );
+    expect(auditCtx.turnContext.focusDirectiveText).toContain('[Focus: Audit]');
+    expect(auditCtx.turnContext.askDirectiveText).toBe('');
+    expect(
+      computeFocusPermittedToolNames('audit', false, auditCtx.resolvedTools)
+    ).not.toContain('ask_question');
+    expect(computeAllowedToolNames('audit', false, true, 'ask_first')).toContain('ask_question');
 
-    // When zero skills are available (all muted), load_auteur_skill is omitted entirely
+    // When zero skills are available (all muted), load_auteur_skill is omitted from both declared and permitted tools
     const allMutedOverrides = Object.fromEntries(
       BUILTIN_AUTEUR_SKILLS.map((s) => [s.id, {pinMode: 'muted' as const}])
     );
@@ -105,6 +120,14 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     });
     expect(noSkillsCtx.availableSkills).toHaveLength(0);
     expect(noSkillsCtx.allowedToolNames).toEqual([
+      'get_script_source',
+      'inspect_lens_slice',
+      'propose_script_patch',
+      'propose_script_draft',
+      'report_audit_review',
+      'ask_question',
+    ]);
+    expect(noSkillsCtx.focusPermittedToolNames).toEqual([
       'get_script_source',
       'inspect_lens_slice',
       'propose_script_patch',
@@ -265,10 +288,12 @@ describe('Phase 1 Unified Auteur Agent: Knowledge Registry, Context Composer & D
     expect(turn1Ctx.sections.toolProtocol.text).not.toContain(turn1Ctx.editorState.snapshotHash);
     expect(turn1Ctx.systemInstruction).not.toContain('## Live Editor State');
     expect(turn1Ctx.systemInstruction).not.toContain('## Scene Brief & References');
-    expect(turn1Ctx.systemInstruction).not.toContain('<turn_directive>');
+    expect(turn1Ctx.systemInstruction).not.toContain('</turn_directive>');
+    expect(turn1Ctx.systemInstruction).not.toContain('[Focus: Audit]');
     expect(turn1Ctx.turnContext.liveEditorStateMode).toBe('full');
     expect(turn1Ctx.turnContext.briefDelivery).toBe('full');
     expect(turn1Ctx.turnContext.askDirectiveText).toContain('[Ask First: ON]');
+    expect(turn1Ctx.turnContext.turnDirectiveText).toContain('</turn_directive>');
 
     // Turn 2: script drafted + lint errors + Brief edited + Ask First turned OFF -> Zone 1 & tools stay identical!
     const turn2Ctx = composeAgentContext({

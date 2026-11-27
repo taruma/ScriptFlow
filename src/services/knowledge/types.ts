@@ -161,7 +161,9 @@ export interface ComposedTurnContext {
   liveEditorStateText: string;
   briefDelivery: BriefContextDelivery;
   sceneBriefText: string;
+  focusDirectiveText: string;
   askDirectiveText: string;
+  turnDirectiveText: string;
   text: string;
 }
 
@@ -232,6 +234,7 @@ export interface ComposedAgentContext {
   mutedSkills: ResolvedAuteurSkill[];
   resolvedTools: ResolvedScriptTool[];
   allowedToolNames: ScriptToolName[];
+  focusPermittedToolNames: ScriptToolName[];
   enforceToolLinterGate: boolean;
   sections: ComposedSystemSections;
   turnContext: ComposedTurnContext;

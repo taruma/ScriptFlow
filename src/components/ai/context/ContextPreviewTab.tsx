@@ -160,11 +160,11 @@ export function ContextPreviewTab({composedContext, onJumpToTab}: ContextPreview
       title: labels.sectionTurnDirective,
       editable: false,
       badgeLabel:
-        composedContext.turnContext.askDirectiveText.trim().length > 0
+        composedContext.turnContext.turnDirectiveText.trim().length > 0
           ? labels.turnDirectiveActiveBadge
           : labels.turnDirectiveOffBadge,
-      badgeAccent: composedContext.turnContext.askDirectiveText.trim().length > 0,
-      body: composedContext.turnContext.askDirectiveText,
+      badgeAccent: composedContext.turnContext.turnDirectiveText.trim().length > 0,
+      body: composedContext.turnContext.turnDirectiveText,
       emptyNote: labels.emptyTurnDirective,
     },
   ];

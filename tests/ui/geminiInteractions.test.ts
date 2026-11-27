@@ -532,11 +532,16 @@ describe('geminiInteractions streaming agent client', () => {
     expect(trace.rounds[0].status).toBe('requires_action');
     expect(trace.rounds[0].request.previous_interaction_id).toBe('int-prev-0');
     expect(trace.rounds[0].request.toolNames).toEqual([
-      ...MODE_TOOL_NAMES.refine,
+      'get_script_source',
+      'inspect_lens_slice',
+      'propose_script_patch',
+      'propose_script_draft',
+      'report_audit_review',
       'ask_question',
       'load_auteur_skill',
     ]);
     expect(String(trace.rounds[0].request.input)).toContain('<live_editor_state>');
+    expect(String(trace.rounds[0].request.input)).toContain('[Focus: Refine]');
     expect(String(trace.rounds[0].request.input)).toContain('Have Nadia cross the room.');
     expect(trace.rounds[0].toolCalls).toHaveLength(1);
     expect(trace.rounds[0].toolCalls[0].ok).toBe(false);

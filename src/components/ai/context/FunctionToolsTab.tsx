@@ -17,13 +17,20 @@ const ACTIVATION_MODES: readonly ToolActivationMode[] = ['auto', 'enabled', 'dis
 
 function getToolStatusBadge(
   tool: ResolvedScriptTool,
-  focusLabel: string
+  focusLabel: string,
+  isGatedByFocus: boolean
 ): {label: string; className: string} {
   const labels = UI_LABELS.ai.contextInspector.functionTools;
   if (tool.status === 'disabled') {
     return {
       label: labels.statusDisabled,
       className: 'border-border-subtle bg-surface-subtle text-text-faint',
+    };
+  }
+  if (isGatedByFocus) {
+    return {
+      label: labels.statusCachedGatedFocus(focusLabel),
+      className: 'border-border-main bg-surface text-text-muted',
     };
   }
   if (tool.status === 'active') {
@@ -300,7 +307,10 @@ export function FunctionToolsTab({
         {composedContext.resolvedTools.map((tool) => {
           const isExpanded = Boolean(expandedToolNames[tool.name]);
           const isSchemaOpen = Boolean(expandedSchemaNames[tool.name]);
-          const statusBadge = getToolStatusBadge(tool, focusLabel);
+          const isGatedByFocus =
+            tool.status === 'active' &&
+            !composedContext.focusPermittedToolNames.includes(tool.name);
+          const statusBadge = getToolStatusBadge(tool, focusLabel, isGatedByFocus);
           const hasTextOverride = tool.isDescriptionOverridden || tool.isProtocolGuidanceOverridden;
           const hasAnyOverride = Boolean(skillsState.toolOverrides?.[tool.name]);
 
