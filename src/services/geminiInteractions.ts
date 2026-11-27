@@ -13,6 +13,7 @@ import {
   type AgentToolCallTrace,
   type AgentTraceError,
   type AgentTurnTrace,
+  type InteractionFaultLike,
   type InteractionsClientLike,
   type InteractionStreamEventLike,
   type PendingFunctionCall,
@@ -52,6 +53,7 @@ export {
   type AgentToolCallTrace,
   type AgentTraceError,
   type AgentTurnTrace,
+  type InteractionFaultLike,
   type InteractionsClientLike,
   type InteractionStreamEventLike,
   type PendingQuestionPause,
@@ -85,6 +87,7 @@ async function consumeInteractionStream(
 ): Promise<RoundStreamOutcome> {
   let interactionId: string | null = null;
   let status: string | null = null;
+  let faults: InteractionFaultLike[] | undefined;
   let usage: Record<string, unknown> | undefined;
   let streamedText = '';
   let streamedThought = '';
@@ -112,6 +115,13 @@ async function consumeInteractionStream(
         }
         if (typeof event.interaction?.status === 'string' && event.interaction.status.length > 0) {
           status = event.interaction.status;
+        }
+        break;
+      }
+
+      case 'interaction.status_update': {
+        if (typeof event.status === 'string' && event.status.length > 0) {
+          status = event.status;
         }
         break;
       }
@@ -198,6 +208,24 @@ async function consumeInteractionStream(
         ) {
           usage = {...event.interaction.usage};
         }
+        if (Array.isArray(event.interaction?.faults) && event.interaction.faults.length > 0) {
+          const parsedFaults = event.interaction.faults
+            .filter((entry): entry is InteractionFaultLike =>
+              Boolean(entry && typeof entry === 'object')
+            )
+            .map((entry) => ({
+              ...(typeof entry.code === 'string' && entry.code.trim().length > 0
+                ? {code: entry.code.trim()}
+                : {}),
+              ...(typeof entry.message === 'string' && entry.message.trim().length > 0
+                ? {message: entry.message.trim()}
+                : {}),
+            }))
+            .filter((entry) => Boolean(entry.code || entry.message));
+          if (parsedFaults.length > 0) {
+            faults = parsedFaults;
+          }
+        }
         completedSteps = event.interaction?.steps;
         break;
       }
@@ -240,11 +268,47 @@ async function consumeInteractionStream(
   return {
     interactionId,
     status,
+    ...(faults && faults.length > 0 ? {faults} : {}),
     ...(usage ? {usage} : {}),
     text: streamedText,
     thoughtSummary: streamedThought,
     functionCalls: collectedCalls,
   };
+}
+
+const TERMINAL_FAILURE_STATUSES = new Set([
+  'failed',
+  'incomplete',
+  'cancelled',
+  'max_turns_exceeded',
+]);
+
+function formatFaultsSummary(faults?: readonly InteractionFaultLike[]): string {
+  if (!faults || faults.length === 0) return '';
+  return faults
+    .map((f) => [f.code, f.message].filter(Boolean).join(': '))
+    .filter((line) => line.length > 0)
+    .join('; ');
+}
+
+function buildTerminalStatusFailureMessage(
+  status: string,
+  faults?: readonly InteractionFaultLike[]
+): string {
+  const faultDetail = formatFaultsSummary(faults);
+  const suffix = faultDetail ? ` (${faultDetail})` : '';
+  switch (status) {
+    case 'failed':
+      return `Gemini returned status "failed" without completing a response${suffix} — often caused by a malformed tool call on a smaller model or complex schema. Try again or switch to a full Flash / Gemini 4 model.`;
+    case 'incomplete':
+      return `Gemini returned status "incomplete" before finishing its response${suffix} (possible output limit or interrupted tool call). Try again or narrow the request.`;
+    case 'cancelled':
+      return `Gemini cancelled this interaction before completing a response${suffix}.`;
+    case 'max_turns_exceeded':
+      return `Gemini reached its server-side step limit before completing a response${suffix}.`;
+    default:
+      return `Gemini ended this interaction with status "${status}"${suffix}.`;
+  }
 }
 
 /**
@@ -450,15 +514,15 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
       const hasPriorThought = accumulatedThought.length > 0;
       let insertedTextBoundary = false;
       let insertedThoughtBoundary = false;
+      let roundInteractionId: string | null = null;
 
       const roundCallbacks: AgentStreamCallbacks = {
         ...options.callbacks,
         onInteractionId: (interactionId: string) => {
-          currentInteractionId = interactionId;
+          roundInteractionId = interactionId;
           if (activeRound) {
             activeRound.interactionId = interactionId;
           }
-          options.callbacks?.onInteractionId?.(interactionId);
         },
         onTextDelta: options.callbacks?.onTextDelta
           ? (deltaText: string) => {
@@ -489,13 +553,16 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
         Boolean(currentInteractionId)
       );
 
-      if (outcome.interactionId) {
-        currentInteractionId = outcome.interactionId;
-        activeRound.interactionId = outcome.interactionId;
+      const resolvedRoundId = outcome.interactionId ?? roundInteractionId;
+      if (resolvedRoundId) {
+        activeRound.interactionId = resolvedRoundId;
       }
       activeRound.status = outcome.status ?? 'completed';
       if (outcome.usage) {
         activeRound.usage = outcome.usage;
+      }
+      if (outcome.faults && outcome.faults.length > 0) {
+        activeRound.faults = outcome.faults;
       }
 
       if (outcome.text.length > 0) {
@@ -507,7 +574,26 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
           : outcome.thoughtSummary;
       }
 
+      const normalizedStatus = (outcome.status ?? '').trim().toLowerCase();
+      if (TERMINAL_FAILURE_STATUSES.has(normalizedStatus)) {
+        throw new GeminiServiceError(
+          'api_error',
+          buildTerminalStatusFailureMessage(normalizedStatus, outcome.faults)
+        );
+      }
+
+      if (resolvedRoundId) {
+        currentInteractionId = resolvedRoundId;
+        options.callbacks?.onInteractionId?.(resolvedRoundId);
+      }
+
       if (outcome.functionCalls.length === 0) {
+        if (accumulatedText.trim().length === 0 && stagedSuggestions.length === 0) {
+          throw new GeminiServiceError(
+            'api_error',
+            'Gemini finished this turn without returning any text or tool call. Try again or switch to a full Flash / Gemini 4 model.'
+          );
+        }
         activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
         activeRound = null;
         break;
@@ -677,7 +763,12 @@ export async function runGeminiAgentTurn(options: RunAgentTurnOptions): Promise<
     });
     if (activeRound) {
       activeRound.durationMs = Math.max(0, getNow() - activeRoundStartMs);
-      activeRound.status = classified.code === 'aborted' ? 'aborted' : 'error';
+      const existingStatus = (activeRound.status ?? '').trim().toLowerCase();
+      if (classified.code === 'aborted') {
+        activeRound.status = 'aborted';
+      } else if (!TERMINAL_FAILURE_STATUSES.has(existingStatus)) {
+        activeRound.status = 'error';
+      }
       activeRound = null;
     }
     const safeMessage = redactSecret(classified.message, apiKey);

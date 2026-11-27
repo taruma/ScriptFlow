@@ -80,6 +80,19 @@ export function RoundTraceCard({round}: RoundTraceCardProps) {
         </div>
       )}
 
+      {round.faults && round.faults.length > 0 && (
+        <div className="flex items-start gap-2 px-3.5 py-2 border-b border-border-subtle bg-red-500/5 text-[11px] text-red-700 dark:text-red-300">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <div className="space-y-0.5 min-w-0">
+            {round.faults.map((fault, idx) => (
+              <div key={`${fault.code ?? 'fault'}-${idx}`} className="font-mono text-[10.5px] break-words">
+                {[fault.code, fault.message].filter(Boolean).join(': ')}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Expandable Section: Request Sent */}
       <div className="border-b border-border-subtle last:border-b-0">
         <button

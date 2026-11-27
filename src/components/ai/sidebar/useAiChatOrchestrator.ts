@@ -689,11 +689,6 @@ export function useAiChatOrchestrator({
           ...(attemptRecap ? {priorSessionRecap: attemptRecap} : {}),
           signal: controller.signal,
           callbacks: {
-            onInteractionId: (interactionId) => {
-              if (activeRunIdRef.current !== runId) return;
-              lastInteractionIdRef.current = interactionId;
-              onHasActiveInteractionChange(true);
-            },
             onThoughtSummaryDelta: (delta) => {
               if (activeRunIdRef.current !== runId) return;
               setMessages((prev) =>

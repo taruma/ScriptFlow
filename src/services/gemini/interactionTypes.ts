@@ -50,12 +50,18 @@ export interface AgentRoundRequestTrace {
   input: unknown;
 }
 
+export interface InteractionFaultLike {
+  code?: string;
+  message?: string;
+}
+
 export interface AgentRoundTrace {
   /** 1-based round number within this turn. */
   roundIndex: number;
   durationMs: number;
   interactionId: string | null;
   status: string | null;
+  faults?: InteractionFaultLike[];
   usage?: Record<string, unknown>;
   request: AgentRoundRequestTrace;
   toolCalls: AgentToolCallTrace[];
@@ -105,11 +111,13 @@ export interface InteractionsClientLike {
 export interface InteractionStreamEventLike {
   event_type: string;
   index?: number;
+  status?: string;
   interaction?: {
     id?: string;
     status?: string;
     steps?: Array<Record<string, unknown>>;
     usage?: Record<string, unknown>;
+    faults?: InteractionFaultLike[];
   };
   step?: Record<string, unknown>;
   delta?: Record<string, unknown>;
@@ -221,6 +229,7 @@ export interface TrackedStreamingFunctionCall {
 export interface RoundStreamOutcome {
   interactionId: string | null;
   status: string | null;
+  faults?: InteractionFaultLike[];
   usage?: Record<string, unknown>;
   text: string;
   thoughtSummary: string;

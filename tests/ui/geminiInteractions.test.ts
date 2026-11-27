@@ -967,6 +967,136 @@ describe('geminiInteractions streaming agent client', () => {
     expect(genericPerm403.code).toBe('invalid_api_key');
   });
 
+  it('throws an explicit GeminiServiceError on failed/incomplete/empty rounds without poisoning finalInteractionId', async () => {
+    let callIndex = 0;
+    const emittedInteractionIds: string[] = [];
+    const fakeClient: InteractionsClientLike = {
+      interactions: {
+        create: async () => {
+          callIndex += 1;
+          if (callIndex === 1) {
+            return asAsyncStream([
+              {event_type: 'interaction.created', interaction: {id: 'int-ok-1', status: 'in_progress'}},
+              {
+                event_type: 'step.start',
+                index: 0,
+                step: {
+                  type: 'function_call',
+                  id: 'call-skill-1',
+                  name: 'load_auteur_skill',
+                  arguments: {skillId: 'draft_craft'},
+                },
+              },
+              {event_type: 'step.stop', index: 0},
+              {
+                event_type: 'interaction.completed',
+                interaction: {id: 'int-ok-1', status: 'requires_action'},
+              },
+            ]);
+          }
+          return asAsyncStream([
+            {event_type: 'interaction.created', interaction: {id: 'int-failed-2', status: 'in_progress'}},
+            {
+              event_type: 'step.delta',
+              index: 0,
+              delta: {type: 'thought_summary', content: {type: 'text', text: 'Planning draft...'}},
+            },
+            {
+              event_type: 'interaction.completed',
+              interaction: {
+                id: 'int-failed-2',
+                status: 'failed',
+                faults: [{code: 'MALFORMED_FUNCTION_CALL', message: 'Invalid draft schema enum'}],
+                usage: {total_output_tokens: 2721, total_thought_tokens: 7023},
+              },
+            },
+          ]);
+        },
+      },
+    };
+
+    let caught: unknown;
+    try {
+      await runGeminiAgentTurn({
+        apiKey: 'AIza-test',
+        model: 'gemini-3.5-flash-lite',
+        reasoningLevel: 'high',
+        mode: 'draft',
+        focus: 'auto',
+        prompt: 'Create script from video.',
+        rawText: '',
+        callbacks: {
+          onInteractionId: (id) => emittedInteractionIds.push(id),
+        },
+        createClient: () => fakeClient,
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(GeminiServiceError);
+    const serviceErr = caught as GeminiServiceError;
+    expect(serviceErr.code).toBe('api_error');
+    expect(serviceErr.message).toContain('"failed"');
+    expect(serviceErr.message).toContain('MALFORMED_FUNCTION_CALL: Invalid draft schema enum');
+    expect(emittedInteractionIds).toEqual(['int-ok-1']);
+    expect(serviceErr.trace?.finalInteractionId).toBe('int-ok-1');
+    expect(serviceErr.trace?.rounds[1]?.status).toBe('failed');
+    expect(serviceErr.trace?.rounds[1]?.faults).toEqual([
+      {code: 'MALFORMED_FUNCTION_CALL', message: 'Invalid draft schema enum'},
+    ]);
+
+    const incompleteClient: InteractionsClientLike = {
+      interactions: {
+        create: async () =>
+          asAsyncStream([
+            {event_type: 'interaction.created', interaction: {id: 'int-inc-1', status: 'in_progress'}},
+            {
+              event_type: 'interaction.completed',
+              interaction: {id: 'int-inc-1', status: 'incomplete'},
+            },
+          ]),
+      },
+    };
+    await expect(
+      runGeminiAgentTurn({
+        apiKey: 'AIza-test',
+        model: 'gemini-4-hydrogen',
+        reasoningLevel: 'low',
+        mode: 'refine',
+        focus: 'auto',
+        prompt: 'Tighten S1.',
+        rawText: SAMPLE_SCRIPT,
+        createClient: () => incompleteClient,
+      })
+    ).rejects.toThrow('"incomplete"');
+
+    const emptyCompletedClient: InteractionsClientLike = {
+      interactions: {
+        create: async () =>
+          asAsyncStream([
+            {event_type: 'interaction.created', interaction: {id: 'int-empty-1', status: 'in_progress'}},
+            {
+              event_type: 'interaction.completed',
+              interaction: {id: 'int-empty-1', status: 'completed'},
+            },
+          ]),
+      },
+    };
+    await expect(
+      runGeminiAgentTurn({
+        apiKey: 'AIza-test',
+        model: 'gemini-4-hydrogen',
+        reasoningLevel: 'low',
+        mode: 'refine',
+        focus: 'auto',
+        prompt: 'Tighten S1.',
+        rawText: SAMPLE_SCRIPT,
+        createClient: () => emptyCompletedClient,
+      })
+    ).rejects.toThrow('without returning any text or tool call');
+  });
+
   it('prepends priorSessionRecap into Round 1 input while keeping Zone 1 system_instruction frozen', async () => {
     const capturedRequests: Array<Record<string, unknown>> = [];
     const fakeClient: InteractionsClientLike = {
