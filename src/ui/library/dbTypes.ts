@@ -107,6 +107,7 @@ export interface ScriptLibraryStore {
     patch: {title?: string; pinned?: boolean}
   ): Promise<AiSessionRecord | null>;
   deleteAiSession(id: string): Promise<void>;
+  bulkDeleteAiSessions(ids: readonly string[]): Promise<void>;
   reconcileFallbackStorage(): Promise<FallbackReconcileResult>;
   migrateFromLegacyLocalStorage(options?: LegacyMigrationOptions): Promise<LegacyMigrationResult>;
 }

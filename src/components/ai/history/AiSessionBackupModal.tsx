@@ -5,6 +5,8 @@ import {
   formatBackupByteSize,
   hasSessionTraces,
   selectSessionsForBackup,
+  writeLastAiHistoryBackupMeta,
+  type AiHistoryLastBackupMeta,
   type AiSessionBackupScope,
   type ResolvedAiSessionSummary,
 } from '../../../ui/aiSessions.ts';
@@ -18,6 +20,7 @@ export interface AiSessionBackupModalProps {
   onClose: () => void;
   resolvedSessions: readonly ResolvedAiSessionSummary[];
   initialSelectedIds?: ReadonlySet<string>;
+  onBackupDownloaded?: (meta: AiHistoryLastBackupMeta) => void;
 }
 
 export function AiSessionBackupModal(props: AiSessionBackupModalProps) {
@@ -29,6 +32,7 @@ function AiSessionBackupModalContent({
   onClose,
   resolvedSessions,
   initialSelectedIds,
+  onBackupDownloaded,
 }: Omit<AiSessionBackupModalProps, 'isOpen'>) {
   const historyLabels = UI_LABELS.ai.history;
   const labels = historyLabels.backup;
@@ -105,6 +109,14 @@ function AiSessionBackupModalContent({
   const handleDownload = () => {
     if (!builtBackup) return;
     triggerTextFileDownload(builtBackup.filename, builtBackup.content, builtBackup.mimeType);
+    const meta: AiHistoryLastBackupMeta = {
+      exportedAt: Date.now(),
+      sessionCount: builtBackup.sessionCount,
+      scope,
+      includesTraces: includeTraces,
+    };
+    writeLastAiHistoryBackupMeta(meta);
+    onBackupDownloaded?.(meta);
     onClose();
   };
 

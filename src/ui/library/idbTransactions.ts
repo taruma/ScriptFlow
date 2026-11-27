@@ -494,3 +494,26 @@ export function idbDeleteAiSession(db: IDBDatabase, id: string): Promise<void> {
     tx.onabort = () => reject(tx.error ?? new Error('AI session delete transaction aborted.'));
   });
 }
+
+export function idbBulkDeleteAiSessions(
+  db: IDBDatabase,
+  ids: readonly string[]
+): Promise<void> {
+  if (ids.length === 0 || !db.objectStoreNames.contains(AI_SESSIONS_STORE_NAME)) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(AI_SESSIONS_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(AI_SESSIONS_STORE_NAME);
+    for (const id of ids) {
+      const cleanId = id.trim();
+      if (cleanId) {
+        store.delete(cleanId);
+      }
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to delete AI sessions.'));
+    tx.onabort = () =>
+      reject(tx.error ?? new Error('AI sessions bulk delete transaction aborted.'));
+  });
+}

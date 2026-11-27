@@ -1033,6 +1033,23 @@ export const AI_LABELS = {
       importButton: 'Import',
       importButtonTitle: 'Inspect and import AI chat sessions from a JSON backup',
       importButtonAria: 'Import AI chat sessions',
+      cleanupButton: 'Clean up',
+      cleanupButtonTitle: 'Reclaim storage by stripping old API traces or deleting stale sessions',
+      cleanupButtonAria: 'Clean up AI chat history',
+      storageSummary: (count: number, formattedTotal: string) =>
+        `${count} ${count === 1 ? 'session' : 'sessions'} · ${formattedTotal}`,
+      storageTracesHint: (formattedTraces: string) => `${formattedTraces} traces`,
+      lastBackupLabel: (relativeTime: string) => `Last backup: ${relativeTime}`,
+      lastBackupNever: 'Not backed up yet',
+      lastBackupUpdatedSince: (count: number) => `${count} updated since`,
+      lastBackupTooltip: (dateStr: string, count: number, includesTraces: boolean) =>
+        `Exported ${dateStr} (${count} ${count === 1 ? 'session' : 'sessions'}, ${
+          includesTraces ? 'with API traces' : 'without traces'
+        })`,
+      cleanupSuccessStrippedToast: (count: number, formattedFreed: string) =>
+        `Stripped API traces from ${count} ${count === 1 ? 'session' : 'sessions'} (freed ~${formattedFreed}).`,
+      cleanupSuccessDeletedToast: (count: number, formattedFreed: string) =>
+        `Deleted ${count} ${count === 1 ? 'session' : 'sessions'} (freed ~${formattedFreed}).`,
       importSuccessToast: (added: number, forked: number) => {
         const total = added + forked;
         if (forked > 0 && added > 0) {
@@ -1109,6 +1126,51 @@ export const AI_LABELS = {
           count > 0 ? `Import ${count} ${count === 1 ? 'Session' : 'Sessions'}` : 'Import Selected',
         importingButton: 'Importing…',
         importErrorTitle: 'Could not import file',
+      },
+      cleanup: {
+        dialogAria: 'Clean Up AI Chat History',
+        title: 'Clean Up AI Chat History',
+        subtitle:
+          'Reclaim local storage by stripping heavy API traces or removing stale sessions.',
+        closeAria: 'Close Clean Up AI Chat History',
+        actionHeading: 'Cleanup Mode',
+        actionStripLabel: 'Strip API traces only',
+        actionStripDesc:
+          'Removes raw Gemini API trace rounds and system instructions while preserving transcripts, thinking summaries, tool calls, suggestions, Brief, cost totals, and resume recap.',
+        actionDeleteLabel: 'Delete matching sessions',
+        actionDeleteDesc:
+          'Permanently removes the matched sessions from local storage. Your scripts are never affected.',
+        filtersHeading: 'Filter Sessions',
+        ageLabel: 'Age',
+        ageAny: 'Any time',
+        age7d: 'Older than 7d',
+        age30d: 'Older than 30d',
+        age90d: 'Older than 90d',
+        scriptLabel: 'Script',
+        scriptAll: 'All scripts',
+        scriptOrphaned: 'Orphaned (script deleted)',
+        onlyWithTracesLabel: 'Only sessions containing API traces',
+        includePinnedLabel: 'Include pinned sessions',
+        previewHeading: (matchedCount: number, actionableCount: number, freedSize: string) =>
+          actionableCount === 0
+            ? 'No matching sessions to update'
+            : `${actionableCount} of ${matchedCount} matched · ~${freedSize} freed`,
+        emptyMatchHint: 'No saved sessions match the selected cleanup filters.',
+        noTracesToStripHint: 'Matched sessions do not contain any API traces to strip.',
+        backupFirstButton: 'Backup matching first',
+        backupFirstDoneButton: 'Backup downloaded',
+        cancelButton: 'Cancel',
+        confirmStripButton: (count: number) =>
+          count > 0 ? `Strip Traces (${count})` : 'Strip Traces',
+        confirmDeleteButton: (count: number) =>
+          count > 0 ? `Delete ${count} ${count === 1 ? 'Session' : 'Sessions'}` : 'Delete',
+        processingButton: 'Cleaning up…',
+        deleteConfirmTitle: 'Delete Matched AI Sessions?',
+        deleteConfirmMessage: (count: number, formattedFreed: string) =>
+          `Permanently delete ${count} ${
+            count === 1 ? 'AI session' : 'AI sessions'
+          } (reclaiming ~${formattedFreed})? Your scripts will not be affected.`,
+        deleteConfirmLabel: 'Delete Sessions',
       },
     },
   },

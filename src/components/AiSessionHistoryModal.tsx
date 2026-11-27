@@ -1,12 +1,28 @@
 import {lazy, Suspense, useEffect, useMemo, useState} from 'react';
-import {FolderArchive, History, Pin, Search, Upload, X} from 'lucide-react';
+import {
+  Clock,
+  FolderArchive,
+  HardDrive,
+  History,
+  Pin,
+  Search,
+  Sparkles,
+  Upload,
+  X,
+} from 'lucide-react';
 import type {BundledExample} from '../data/examples/index.ts';
 import {formatEstimatedUsd} from '../ui/aiPricing.ts';
 import {useAiSettings} from '../ui/aiSettings.ts';
 import {
+  computeAiSessionsStorageStats,
+  countSessionsUpdatedSinceBackup,
   filterAiSessions,
+  formatBackupByteSize,
+  readLastAiHistoryBackupMeta,
   resolveSessionScriptStatus,
   sortAiSessions,
+  stripTracesFromSession,
+  type AiHistoryLastBackupMeta,
   type AiSessionFilterTab,
   type AiSessionRecord,
   type ResolvedAiSessionSummary,
@@ -18,6 +34,7 @@ import {UI_TOKENS} from '../ui/tokens/ui.ts';
 import type {AiInspectableTrace} from './AiTraceModal.tsx';
 import {ConfirmDialog, type ConfirmDialogRequest} from './ConfirmDialog.tsx';
 import {AiSessionBackupModal} from './ai/history/AiSessionBackupModal.tsx';
+import {AiSessionCleanupModal} from './ai/history/AiSessionCleanupModal.tsx';
 import {AiSessionImportModal} from './ai/history/AiSessionImportModal.tsx';
 import {AiSessionPreviewPane} from './ai/history/AiSessionPreviewPane.tsx';
 
@@ -67,7 +84,11 @@ function AiSessionHistoryModalContent({
   const [confirmRequest, setConfirmRequest] = useState<ConfirmDialogRequest | null>(null);
   const [isBackupOpen, setIsBackupOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [isCleanupOpen, setIsCleanupOpen] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [lastBackupMeta, setLastBackupMeta] = useState<AiHistoryLastBackupMeta | null>(() =>
+    readLastAiHistoryBackupMeta()
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +146,13 @@ function AiSessionHistoryModalContent({
     [filteredSessions, selectedId]
   );
 
+  const storageStats = useMemo(() => computeAiSessionsStorageStats(sessions), [sessions]);
+
+  const updatedSinceBackupCount = useMemo(
+    () => countSessionsUpdatedSinceBackup(sessions, lastBackupMeta),
+    [sessions, lastBackupMeta]
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
@@ -132,21 +160,23 @@ function AiSessionHistoryModalContent({
         !inspectedTrace &&
         !confirmRequest &&
         !isBackupOpen &&
-        !isImportOpen
+        !isImportOpen &&
+        !isCleanupOpen
       ) {
         event.preventDefault();
         onClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, inspectedTrace, confirmRequest, isBackupOpen, isImportOpen]);
+    return () =>
+      document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, inspectedTrace, confirmRequest, isBackupOpen, isImportOpen, isCleanupOpen]);
 
   useEffect(() => {
-    if (!importNotice) return;
-    const timer = window.setTimeout(() => setImportNotice(null), 5000);
+    if (!statusNotice) return;
+    const timer = window.setTimeout(() => setStatusNotice(null), 5000);
     return () => window.clearTimeout(timer);
-  }, [importNotice]);
+  }, [statusNotice]);
 
   const handleConfirmImport = async (
     recordsToWrite: readonly AiSessionRecord[],
@@ -160,7 +190,31 @@ function AiSessionHistoryModalContent({
       setSearchQuery('');
       setSelectedId(saved[0].id);
     }
-    setImportNotice(labels.importSuccessToast(stats.addedCount, stats.forkedCount));
+    setStatusNotice(labels.importSuccessToast(stats.addedCount, stats.forkedCount));
+    onSessionsChanged?.();
+  };
+
+  const handleStripTraces = async (
+    targets: readonly AiSessionRecord[],
+    estimatedFreedBytes: number
+  ) => {
+    const stripped = targets.map((sess) => stripTracesFromSession(sess));
+    await scriptLibraryDb.bulkPutAiSessions(stripped);
+    const updatedList = await scriptLibraryDb.listAiSessions();
+    setSessions(updatedList);
+    setStatusNotice(
+      labels.cleanupSuccessStrippedToast(stripped.length, formatBackupByteSize(estimatedFreedBytes))
+    );
+    onSessionsChanged?.();
+  };
+
+  const handleDeleteSessions = async (ids: readonly string[], estimatedFreedBytes: number) => {
+    await scriptLibraryDb.bulkDeleteAiSessions(ids);
+    const updatedList = await scriptLibraryDb.listAiSessions();
+    setSessions(updatedList);
+    setStatusNotice(
+      labels.cleanupSuccessDeletedToast(ids.length, formatBackupByteSize(estimatedFreedBytes))
+    );
     onSessionsChanged?.();
   };
 
@@ -260,6 +314,17 @@ function AiSessionHistoryModalContent({
               <button
                 type="button"
                 disabled={sessions.length === 0 || isLoading}
+                onClick={() => setIsCleanupOpen(true)}
+                title={labels.cleanupButtonTitle}
+                aria-label={labels.cleanupButtonAria}
+                className={`${UI_TOKENS.button.actionPill} disabled:opacity-45 disabled:cursor-not-allowed`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                <span className="hidden sm:inline">{labels.cleanupButton}</span>
+              </button>
+              <button
+                type="button"
+                disabled={sessions.length === 0 || isLoading}
                 onClick={() => setIsBackupOpen(true)}
                 title={labels.backupButtonTitle}
                 aria-label={labels.backupButtonAria}
@@ -290,12 +355,59 @@ function AiSessionHistoryModalContent({
             </div>
           </div>
 
-          {importNotice && (
+          {/* Quiet Storage & Last Backup Indicator Strip */}
+          <div className="px-4 py-1.5 border-b border-border-subtle bg-surface-subtle/50 flex flex-wrap items-center justify-between gap-2 text-[11px] text-text-muted shrink-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <HardDrive className="h-3 w-3 text-text-faint shrink-0" />
+              <span className="font-medium text-text-body tabular-nums">
+                {labels.storageSummary(
+                  storageStats.sessionCount,
+                  formatBackupByteSize(storageStats.totalBytes)
+                )}
+              </span>
+              {storageStats.traceBytes > 0 && (
+                <span className="rounded border border-border-subtle bg-surface px-1.5 py-0.25 font-mono text-[10px] text-text-muted tabular-nums">
+                  {labels.storageTracesHint(formatBackupByteSize(storageStats.traceBytes))}
+                </span>
+              )}
+            </div>
+
+            <div
+              title={
+                lastBackupMeta
+                  ? labels.lastBackupTooltip(
+                      new Date(lastBackupMeta.exportedAt).toLocaleString(),
+                      lastBackupMeta.sessionCount,
+                      lastBackupMeta.includesTraces
+                    )
+                  : undefined
+              }
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              <Clock className="h-3 w-3 text-text-faint shrink-0" />
+              {lastBackupMeta ? (
+                <>
+                  <span>
+                    {labels.lastBackupLabel(formatRelativeUpdatedTime(lastBackupMeta.exportedAt))}
+                  </span>
+                  {updatedSinceBackupCount > 0 && (
+                    <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.25 text-[10px] font-medium text-amber-700 dark:text-amber-300 tabular-nums">
+                      {labels.lastBackupUpdatedSince(updatedSinceBackupCount)}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-text-faint">{labels.lastBackupNever}</span>
+              )}
+            </div>
+          </div>
+
+          {statusNotice && (
             <div className="px-4 py-2 border-b border-border-subtle bg-surface-subtle/80 text-xs text-text-main flex items-center justify-between gap-2 shrink-0">
-              <span>{importNotice}</span>
+              <span>{statusNotice}</span>
               <button
                 type="button"
-                onClick={() => setImportNotice(null)}
+                onClick={() => setStatusNotice(null)}
                 aria-label={labels.closeAria}
                 className="text-text-faint hover:text-text-main cursor-pointer"
               >
@@ -464,6 +576,7 @@ function AiSessionHistoryModalContent({
         onClose={() => setIsBackupOpen(false)}
         resolvedSessions={resolvedSessions}
         initialSelectedIds={selectedId ? new Set([selectedId]) : undefined}
+        onBackupDownloaded={setLastBackupMeta}
       />
 
       <AiSessionImportModal
@@ -474,6 +587,16 @@ function AiSessionHistoryModalContent({
         customScripts={customScripts}
         examples={examples}
         onConfirmImport={handleConfirmImport}
+      />
+
+      <AiSessionCleanupModal
+        isOpen={isCleanupOpen}
+        onClose={() => setIsCleanupOpen(false)}
+        resolvedSessions={resolvedSessions}
+        storageStats={storageStats}
+        onBackupRecorded={setLastBackupMeta}
+        onStripTraces={handleStripTraces}
+        onDeleteSessions={handleDeleteSessions}
       />
 
       <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />

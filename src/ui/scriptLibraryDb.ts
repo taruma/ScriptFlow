@@ -60,6 +60,7 @@ import {
 import {
   getDefaultIndexedDB,
   idbBulkDelete,
+  idbBulkDeleteAiSessions,
   idbBulkPut,
   idbBulkPutAiSessions,
   idbBulkPutSnapshots,
@@ -739,6 +740,26 @@ export function createScriptLibraryStore(
         () => {
           const sessMap = ensureFallbackAiSessionsMap();
           if (sessMap.delete(cleanId)) {
+            persistFallbackAiSessionsMap(fallbackStorageKey, sessMap);
+          }
+        }
+      );
+    },
+
+    async bulkDeleteAiSessions(ids: readonly string[]): Promise<void> {
+      const cleanIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+      if (cleanIds.length === 0) return;
+      return runWithFallback(
+        (db) => idbBulkDeleteAiSessions(db, cleanIds),
+        () => {
+          const sessMap = ensureFallbackAiSessionsMap();
+          let changed = false;
+          for (const id of cleanIds) {
+            if (sessMap.delete(id)) {
+              changed = true;
+            }
+          }
+          if (changed) {
             persistFallbackAiSessionsMap(fallbackStorageKey, sessMap);
           }
         }

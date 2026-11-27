@@ -1768,6 +1768,36 @@ describe('scriptLibraryDb aiSessions store (detached from script deletion)', () 
     expect(savedFallback).toHaveLength(5);
     expect(await fallbackStore.listAiSessions()).toHaveLength(5);
   });
+
+  it('bulkDeleteAiSessions deletes multiple sessions in IndexedDB and fallback mode', async () => {
+    const memoryStorage = createMemoryStorage();
+    vi.stubGlobal('window', {localStorage: memoryStorage});
+    vi.stubGlobal('IDBKeyRange', {only: (value: string) => ({only: value})});
+    const mockIdb = createMockIndexedDbFactory();
+    const idbStore = createScriptLibraryStore({
+      indexedDB: mockIdb.factory,
+      fallbackStorageKey: 'test-ai-bulk-del-idb',
+    });
+
+    await idbStore.bulkPutAiSessions([
+      makeTestAiSession({id: 'd1', updatedAt: 100}),
+      makeTestAiSession({id: 'd2', updatedAt: 200}),
+      makeTestAiSession({id: 'd3', updatedAt: 300}),
+    ]);
+    await idbStore.bulkDeleteAiSessions(['d1', 'd3']);
+    expect((await idbStore.listAiSessions()).map((s) => s.id)).toEqual(['d2']);
+
+    const fallbackStore = createScriptLibraryStore({
+      indexedDB: null,
+      fallbackStorageKey: 'test-ai-bulk-del-fallback',
+    });
+    await fallbackStore.bulkPutAiSessions([
+      makeTestAiSession({id: 'f1', updatedAt: 100}),
+      makeTestAiSession({id: 'f2', updatedAt: 200}),
+    ]);
+    await fallbackStore.bulkDeleteAiSessions(['f1']);
+    expect((await fallbackStore.listAiSessions()).map((s) => s.id)).toEqual(['f2']);
+  });
 });
 
 describe('scriptLibrary hydration reconciliation', () => {

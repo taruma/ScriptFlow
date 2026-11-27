@@ -6,6 +6,7 @@ import {
   type AiChatMessage,
 } from '../../src/ui/aiAssistant.ts';
 import {
+  AI_HISTORY_LAST_BACKUP_STORAGE_KEY,
   AI_SESSIONS_BACKUP_FORMAT,
   AI_SESSIONS_BACKUP_VERSION,
   AI_SESSION_SCHEMA_VERSION,
@@ -14,13 +15,19 @@ import {
   buildAiSessionJsonExport,
   buildAiSessionsBackupExport,
   compactSessionForStorage,
+  computeAiSessionsStorageStats,
+  countSessionsUpdatedSinceBackup,
+  estimateCleanupImpact,
   formatBackupByteSize,
   hasSessionTraces,
   parseAiSessionsImport,
   prepareSelectedAiSessionsImport,
+  readLastAiHistoryBackupMeta,
   resolveSessionScriptStatus,
   selectSessionsForBackup,
+  selectSessionsForCleanup,
   stripTracesFromSession,
+  writeLastAiHistoryBackupMeta,
   type AiSessionRecord,
 } from '../../src/ui/aiSessions.ts';
 import type {ScriptRecord} from '../../src/ui/scriptLibraryDb.ts';
@@ -316,5 +323,114 @@ describe('aiSessionBackup codec & preflight engine', () => {
     expect(prepared.recordsToWrite.map((r) => r.id)).toEqual(['aisess-forked-1', 'brand-new']);
     expect(prepared.recordsToWrite[0].title).toBe('Rooftop Edit (Imported)');
     expect(prepared.recordsToWrite[0].titleIsCustom).toBe(true);
+  });
+
+  it('computes storage stats, filters cleanup candidates safely, and estimates reclaimed bytes', () => {
+    const dayMs = 86_400_000;
+    const nowMs = 100 * dayMs;
+
+    const oldTrace = makeSession({
+      id: 'old-trace',
+      updatedAt: nowMs - 40 * dayMs,
+      scriptSessionKey: 'custom:script-1',
+      scriptId: 'script-1',
+    });
+    const oldPinned = makeSession({
+      id: 'old-pinned',
+      pinned: true,
+      updatedAt: nowMs - 60 * dayMs,
+      scriptSessionKey: 'custom:deleted-script',
+      scriptId: 'deleted-script',
+    });
+    const recentNoTrace = stripTracesFromSession(
+      makeSession({
+        id: 'recent-notrace',
+        updatedAt: nowMs - 2 * dayMs,
+        scriptSessionKey: 'custom:deleted-script',
+        scriptId: 'deleted-script',
+      })
+    );
+
+    const sessions = [oldTrace, oldPinned, recentNoTrace];
+    const stats = computeAiSessionsStorageStats(sessions);
+    expect(stats.sessionCount).toBe(3);
+    expect(stats.sessionsWithTracesCount).toBe(2);
+    expect(stats.traceBytes).toBeGreaterThan(0);
+    expect(stats.totalBytes).toBe(stats.conversationBytes + stats.traceBytes);
+
+    const summaries = sessions.map((sess) =>
+      resolveSessionScriptStatus(sess, 'custom:script-1', CUSTOM_SCRIPTS, EXAMPLES)
+    );
+
+    // Default safety: exclude pinned
+    const olderThan30 = selectSessionsForCleanup(summaries, {
+      agePreset: '30d',
+      scriptFilter: 'all',
+      onlyWithTraces: true,
+      includePinned: false,
+      nowMs,
+    });
+    expect(olderThan30.map((s) => s.session.id)).toEqual(['old-trace']);
+
+    // Include pinned + orphaned filter
+    const orphanedAll = selectSessionsForCleanup(summaries, {
+      agePreset: 'any',
+      scriptFilter: 'orphaned',
+      onlyWithTraces: false,
+      includePinned: true,
+      nowMs,
+    });
+    expect(orphanedAll.map((s) => s.session.id)).toEqual(['old-pinned', 'recent-notrace']);
+
+    const stripImpact = estimateCleanupImpact(orphanedAll, 'strip_traces', stats);
+    expect(stripImpact.matchedCount).toBe(2);
+    expect(stripImpact.actionableCount).toBe(1);
+    expect(stripImpact.estimatedBytesFreed).toBe(stats.byId['old-pinned'].traceBytes);
+
+    const deleteImpact = estimateCleanupImpact(orphanedAll, 'delete', stats);
+    expect(deleteImpact.actionableCount).toBe(2);
+    expect(deleteImpact.estimatedBytesFreed).toBe(
+      stats.byId['old-pinned'].totalBytes + stats.byId['recent-notrace'].totalBytes
+    );
+  });
+
+  it('persists last-backup metadata safely and counts sessions updated since last backup', () => {
+    const store = new Map<string, string>();
+    const storage: Pick<Storage, 'getItem' | 'setItem'> = {
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => {
+        store.set(key, value);
+      },
+    };
+
+    expect(readLastAiHistoryBackupMeta(storage)).toBeNull();
+    store.set(AI_HISTORY_LAST_BACKUP_STORAGE_KEY, '{corrupt');
+    expect(readLastAiHistoryBackupMeta(storage)).toBeNull();
+
+    writeLastAiHistoryBackupMeta(
+      {
+        exportedAt: 5000,
+        sessionCount: 2,
+        scope: 'all',
+        includesTraces: true,
+      },
+      storage
+    );
+
+    const meta = readLastAiHistoryBackupMeta(storage);
+    expect(meta).toEqual({
+      exportedAt: 5000,
+      sessionCount: 2,
+      scope: 'all',
+      includesTraces: true,
+    });
+
+    const sessions = [
+      makeSession({id: 's1', updatedAt: 4000}),
+      makeSession({id: 's2', updatedAt: 7000}),
+      makeSession({id: 's3', updatedAt: 9000}),
+    ];
+    expect(countSessionsUpdatedSinceBackup(sessions, meta)).toBe(2);
+    expect(countSessionsUpdatedSinceBackup(sessions, null)).toBe(0);
   });
 });

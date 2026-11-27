@@ -661,3 +661,228 @@ export function prepareSelectedAiSessionsImport(
     skippedCount,
   };
 }
+
+export interface AiSessionStorageEntry {
+  sessionId: string;
+  totalBytes: number;
+  strippedBytes: number;
+  traceBytes: number;
+  hasTraces: boolean;
+}
+
+export interface AiSessionsStorageStats {
+  sessionCount: number;
+  totalBytes: number;
+  traceBytes: number;
+  conversationBytes: number;
+  sessionsWithTracesCount: number;
+  byId: Record<string, AiSessionStorageEntry>;
+}
+
+export function computeAiSessionsStorageStats(
+  sessions: readonly AiSessionRecord[]
+): AiSessionsStorageStats {
+  let totalBytes = 0;
+  let traceBytes = 0;
+  let sessionsWithTracesCount = 0;
+  const byId: Record<string, AiSessionStorageEntry> = {};
+
+  for (const session of sessions) {
+    const compacted = compactSessionForStorage(session);
+    const sessionTotalBytes = measureUtf8Bytes(JSON.stringify(compacted));
+    const hasTraces = hasSessionTraces(compacted);
+    const strippedBytes = hasTraces
+      ? measureUtf8Bytes(JSON.stringify(stripTracesFromSession(compacted)))
+      : sessionTotalBytes;
+    const sessionTraceBytes = hasTraces ? Math.max(0, sessionTotalBytes - strippedBytes) : 0;
+
+    if (hasTraces) {
+      sessionsWithTracesCount += 1;
+    }
+    totalBytes += sessionTotalBytes;
+    traceBytes += sessionTraceBytes;
+
+    byId[session.id] = {
+      sessionId: session.id,
+      totalBytes: sessionTotalBytes,
+      strippedBytes,
+      traceBytes: sessionTraceBytes,
+      hasTraces,
+    };
+  }
+
+  return {
+    sessionCount: sessions.length,
+    totalBytes,
+    traceBytes,
+    conversationBytes: Math.max(0, totalBytes - traceBytes),
+    sessionsWithTracesCount,
+    byId,
+  };
+}
+
+export type AiSessionCleanupAgePreset = 'any' | '7d' | '30d' | '90d';
+export type AiSessionCleanupScriptFilter = 'all' | 'orphaned' | string;
+export type AiSessionCleanupAction = 'strip_traces' | 'delete';
+
+export interface AiSessionCleanupCriteria {
+  agePreset: AiSessionCleanupAgePreset;
+  scriptFilter: AiSessionCleanupScriptFilter;
+  onlyWithTraces: boolean;
+  includePinned: boolean;
+  nowMs?: number;
+}
+
+const CLEANUP_AGE_MS: Record<Exclude<AiSessionCleanupAgePreset, 'any'>, number> = {
+  '7d': 7 * 86_400_000,
+  '30d': 30 * 86_400_000,
+  '90d': 90 * 86_400_000,
+};
+
+export function selectSessionsForCleanup(
+  resolvedSessions: readonly ResolvedAiSessionSummary[],
+  criteria: AiSessionCleanupCriteria
+): ResolvedAiSessionSummary[] {
+  const nowMs = criteria.nowMs ?? Date.now();
+  const ageCutoffMs = criteria.agePreset === 'any' ? null : CLEANUP_AGE_MS[criteria.agePreset];
+
+  return resolvedSessions.filter((item) => {
+    const {session, scriptStatus} = item;
+    if (!criteria.includePinned && session.pinned) {
+      return false;
+    }
+    if (ageCutoffMs !== null && nowMs - session.updatedAt < ageCutoffMs) {
+      return false;
+    }
+    if (criteria.scriptFilter === 'orphaned') {
+      if (scriptStatus !== 'deleted') return false;
+    } else if (criteria.scriptFilter !== 'all') {
+      if (session.scriptSessionKey !== criteria.scriptFilter) return false;
+    }
+    if (criteria.onlyWithTraces && !hasSessionTraces(session)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function estimateCleanupImpact(
+  matched: readonly ResolvedAiSessionSummary[],
+  action: AiSessionCleanupAction,
+  storageStats: AiSessionsStorageStats
+): {
+  matchedCount: number;
+  actionableCount: number;
+  estimatedBytesFreed: number;
+} {
+  let actionableCount = 0;
+  let estimatedBytesFreed = 0;
+
+  for (const item of matched) {
+    const entry = storageStats.byId[item.session.id];
+    if (!entry) continue;
+    if (action === 'delete') {
+      actionableCount += 1;
+      estimatedBytesFreed += entry.totalBytes;
+    } else if (entry.hasTraces) {
+      actionableCount += 1;
+      estimatedBytesFreed += entry.traceBytes;
+    }
+  }
+
+  return {
+    matchedCount: matched.length,
+    actionableCount,
+    estimatedBytesFreed,
+  };
+}
+
+export const AI_HISTORY_LAST_BACKUP_STORAGE_KEY =
+  'auteur-scriptflow-ai-history-last-backup-v1' as const;
+
+export interface AiHistoryLastBackupMeta {
+  exportedAt: number;
+  sessionCount: number;
+  scope: AiSessionBackupScope | 'cleanup_pre_backup';
+  includesTraces: boolean;
+}
+
+const VALID_BACKUP_SCOPES = new Set<string>([
+  'all',
+  'current_script',
+  'pinned',
+  'selected',
+  'cleanup_pre_backup',
+]);
+
+function getDefaultStorage(): Storage | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage;
+    }
+  } catch {
+    // Ignore storage access errors in sandboxed/private modes
+  }
+  return null;
+}
+
+export function readLastAiHistoryBackupMeta(
+  storage: Pick<Storage, 'getItem'> | null = getDefaultStorage()
+): AiHistoryLastBackupMeta | null {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(AI_HISTORY_LAST_BACKUP_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AiHistoryLastBackupMeta>;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof parsed.exportedAt !== 'number' ||
+      !Number.isFinite(parsed.exportedAt) ||
+      parsed.exportedAt < 0 ||
+      typeof parsed.sessionCount !== 'number' ||
+      !Number.isFinite(parsed.sessionCount) ||
+      parsed.sessionCount < 0
+    ) {
+      return null;
+    }
+    const scope =
+      typeof parsed.scope === 'string' && VALID_BACKUP_SCOPES.has(parsed.scope)
+        ? (parsed.scope as AiHistoryLastBackupMeta['scope'])
+        : 'all';
+    return {
+      exportedAt: parsed.exportedAt,
+      sessionCount: Math.floor(parsed.sessionCount),
+      scope,
+      includesTraces: parsed.includesTraces !== false,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastAiHistoryBackupMeta(
+  meta: AiHistoryLastBackupMeta,
+  storage: Pick<Storage, 'setItem'> | null = getDefaultStorage()
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(AI_HISTORY_LAST_BACKUP_STORAGE_KEY, JSON.stringify(meta));
+  } catch {
+    // Ignore quota or private-mode errors
+  }
+}
+
+export function countSessionsUpdatedSinceBackup(
+  sessions: readonly AiSessionRecord[],
+  lastBackup: AiHistoryLastBackupMeta | null
+): number {
+  if (!lastBackup) return 0;
+  let count = 0;
+  for (const session of sessions) {
+    if (session.updatedAt > lastBackup.exportedAt) {
+      count += 1;
+    }
+  }
+  return count;
+}
