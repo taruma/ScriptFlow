@@ -1227,5 +1227,15 @@ export const AI_LABELS = {
         deleteConfirmLabel: 'Delete Sessions',
       },
     },
+    guide: {
+      buttonTitle: 'AI Assistant guide & cache tips',
+      buttonAria: 'Open AI Assistant Guide',
+      dialogAria: 'AI Assistant Guide',
+      title: 'AI Assistant Guide',
+      subtitle: 'Workflow modes, Scene Brief vs. + attachments, and prompt cache tips',
+      tabsAria: 'AI Assistant Guide sections',
+      closeAria: 'Close AI Assistant Guide',
+      doneButton: 'Done',
+    },
   },
 } as const;

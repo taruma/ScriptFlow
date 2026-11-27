@@ -1,0 +1,20 @@
+[
+  {
+    "id": "workflow",
+    "label": "Workflow & Modes",
+    "summary": "Focus tabs, Scope, Ask First, Quick Scan vs. Deep Audit, and craft skills.",
+    "file": "workflow.md"
+  },
+  {
+    "id": "attachments",
+    "label": "Brief & Attachments",
+    "summary": "Persistent Scene Brief references vs. turn-scoped + files, YouTube, and <section> tags.",
+    "file": "attachments.md"
+  },
+  {
+    "id": "cache_cost",
+    "label": "Cache & Cost Tips",
+    "summary": "How implicit prefix caching works and practical ways to maximize hit rate.",
+    "file": "cache-and-cost.md"
+  }
+]

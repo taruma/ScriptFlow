@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Markdown-Driven AI Assistant Guide Modal (`src/data/guide/`, `src/components/AiGuideModal.tsx`, `src/components/AiAssistantSidebar.tsx`)**:
+  - Added a quiet **`?`** icon button beside **History** and **Context** in the AI Sidebar header opening a lazy-loaded, 3-tab **AI Assistant Guide** modal (**Workflow & Modes**, **Brief & Attachments**, and **Cache & Cost Tips**).
+  - Decoupled all guide copy into standalone `.md` documents (`workflow.md`, `attachments.md`, `cache-and-cost.md`) indexed by `catalog.json` and loaded via Vite `?raw` glob in `src/data/guide/index.ts`, rendered through `MarkdownContent`.
 - **Prompt Cache Hit/Miss & Savings Telemetry (`src/ui/aiPricing.ts`, `ReasoningAccordion.tsx`, `HoverTooltipPortal.tsx`, `AiComposerDock.tsx`, `AiTraceModal.tsx`, `RoundTraceCard.tsx`, `src/ui/ai/sessionStore.ts`)**:
   - Added pure cache-analytics helpers (`computeCacheStats`, `formatCacheHitPercent`) and per-turn / cumulative session fields (`cacheHitRate`, `cacheSavingsUsd`, `cacheEligibleInputTokens`, `cacheMissedTokens`, excluding fixed-rate Decisions API Quick Scans from diluting chat cache ratios).
   - Surfaced compact inline `X% hit` / `0% miss` pills next to turn and session cost badges with upgraded hover tooltips (`Cache: X% hit · Y% miss (-$saved)`, `Input (miss)`, `Cached (hit)`), added a **Cache** summary row and per-round cache badges inside **AI Trace Inspector** (`AiTraceModal` + `RoundTraceCard`), and exported cache hit rates and estimated savings inside Markdown and Full Conversation `.json` history downloads.

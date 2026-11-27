@@ -13,6 +13,7 @@ import {
 import {
   ArrowDown,
   ArrowRightLeft,
+  HelpCircle,
   History,
   KeyRound,
   Layers,
@@ -99,6 +100,10 @@ const AiBriefModal = lazy(() =>
   import('./AiBriefModal.tsx').then((mod) => ({default: mod.AiBriefModal}))
 );
 
+const AiGuideModal = lazy(() =>
+  import('./AiGuideModal.tsx').then((mod) => ({default: mod.AiGuideModal}))
+);
+
 export type {AiLivePatchActionHandlers};
 
 export interface ExternalAiSessionLoadRequest {
@@ -180,6 +185,7 @@ export function AiAssistantSidebar({
   const [inputValue, setInputValue] = useState<string>('');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
+  const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [contextInitialTab, setContextInitialTab] = useState<ContextInspectorTabId>('preview');
   const [inspectedTrace, setInspectedTrace] = useState<AiInspectableTrace | null>(null);
   const [hasActiveInteraction, setHasActiveInteraction] = useState<boolean>(false);
@@ -625,6 +631,16 @@ export function AiAssistantSidebar({
 
               <button
                 type="button"
+                onClick={() => setIsGuideOpen(true)}
+                title={UI_LABELS.ai.guide.buttonTitle}
+                aria-label={UI_LABELS.ai.guide.buttonAria}
+                className={UI_TOKENS.button.iconGhost}
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleOpenContext('preview')}
                 title={UI_LABELS.ai.contextButtonTitle}
                 aria-label={UI_LABELS.ai.contextButtonAria(
@@ -976,6 +992,12 @@ export function AiAssistantSidebar({
             trace={inspectedTrace}
             onClose={() => setInspectedTrace(null)}
           />
+        </Suspense>
+      )}
+
+      {isGuideOpen && (
+        <Suspense fallback={null}>
+          <AiGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
         </Suspense>
       )}
 
