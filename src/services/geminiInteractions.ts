@@ -67,6 +67,7 @@ export {
   type GeminiErrorCode,
 } from './gemini/errors.ts';
 export {
+  aggregateRoundUsage,
   buildInitialInteractionInput,
   sanitizeTraceInput,
 } from './gemini/traceUtils.ts';

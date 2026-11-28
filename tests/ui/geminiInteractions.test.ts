@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {toAuteurEnvelope} from '../../src/core/index.ts';
 import {
+  aggregateRoundUsage,
   classifyGeminiError,
   GeminiServiceError,
   MAX_AGENT_TOOL_ROUNDS,
@@ -1587,5 +1588,215 @@ describe('geminiInteractions streaming agent client', () => {
     expect((armedRes.toolTraces[0].result.errors as Array<{code: string}>)[0]?.code).toBe(
       'STALE_CONTEXT_READ_REQUIRED'
     );
+  });
+
+  it('aggregates per-modality token arrays across multi-round turns without mutating round entries', () => {
+    const round1InputModality = [
+      {modality: 'text', tokens: 7439},
+      {modality: 'image', tokens: 3192},
+    ];
+    const round2CachedModality = [
+      {modality: 'text', tokens: 8299},
+      {modality: 'image', tokens: 2333},
+      {modality: 'video', tokens: 1200},
+    ];
+    const round3CachedModality = [
+      {modality: 'text', tokens: 11857},
+      {modality: 'image', tokens: 2280},
+    ];
+
+    const aggregated = aggregateRoundUsage([
+      {
+        roundIndex: 1,
+        durationMs: 1000,
+        interactionId: 'int-r1',
+        status: 'requires_action',
+        request: {
+          model: 'gemini-4-hydrogen',
+          previous_interaction_id: null,
+          generation_config: {thinking_level: 'medium', thinking_summaries: 'auto'},
+          toolNames: [],
+          systemInstruction: '',
+          input: 'hi',
+        },
+        toolCalls: [],
+        usage: {
+          total_input_tokens: 10631,
+          total_cached_tokens: 0,
+          total_output_tokens: 97,
+          input_tokens_by_modality: round1InputModality,
+          output_tokens_by_modality: [{modality: 'text', tokens: 97}],
+        },
+      },
+      {
+        roundIndex: 2,
+        durationMs: 1000,
+        interactionId: 'int-r2',
+        status: 'requires_action',
+        request: {
+          model: 'gemini-4-hydrogen',
+          previous_interaction_id: 'int-r1',
+          generation_config: {thinking_level: 'medium', thinking_summaries: 'auto'},
+          toolNames: [],
+          systemInstruction: '',
+          input: [],
+        },
+        toolCalls: [],
+        usage: {
+          total_input_tokens: 15744,
+          total_cached_tokens: 11832,
+          total_output_tokens: 400,
+          input_tokens_by_modality: [
+            {modality: 'text', tokens: 11352},
+            {modality: 'image', tokens: 3192},
+            {modality: 'video', tokens: 1200},
+          ],
+          cached_tokens_by_modality: round2CachedModality,
+          output_tokens_by_modality: [],
+        },
+      },
+      {
+        roundIndex: 3,
+        durationMs: 1000,
+        interactionId: 'int-r3',
+        status: 'completed',
+        request: {
+          model: 'gemini-4-hydrogen',
+          previous_interaction_id: 'int-r2',
+          generation_config: {thinking_level: 'medium', thinking_summaries: 'auto'},
+          toolNames: [],
+          systemInstruction: '',
+          input: [],
+        },
+        toolCalls: [],
+        usage: {
+          total_input_tokens: 19786,
+          total_cached_tokens: 14137,
+          total_output_tokens: 453,
+          input_tokens_by_modality: [
+            {modality: 'text', tokens: 16594},
+            {modality: 'image', tokens: 3192},
+          ],
+          cached_tokens_by_modality: round3CachedModality,
+          output_tokens_by_modality: [{modality: 'text', tokens: 453}],
+        },
+      },
+    ]);
+
+    expect(aggregated).toEqual({
+      total_input_tokens: 46161,
+      total_cached_tokens: 25969,
+      total_output_tokens: 950,
+      input_tokens_by_modality: [
+        {modality: 'text', tokens: 35385},
+        {modality: 'image', tokens: 9576},
+        {modality: 'video', tokens: 1200},
+      ],
+      cached_tokens_by_modality: [
+        {modality: 'text', tokens: 20156},
+        {modality: 'image', tokens: 4613},
+        {modality: 'video', tokens: 1200},
+      ],
+      output_tokens_by_modality: [{modality: 'text', tokens: 550}],
+    });
+
+    // Original round arrays remain unmutated
+    expect(round1InputModality).toEqual([
+      {modality: 'text', tokens: 7439},
+      {modality: 'image', tokens: 3192},
+    ]);
+    expect(round2CachedModality).toEqual([
+      {modality: 'text', tokens: 8299},
+      {modality: 'image', tokens: 2333},
+      {modality: 'video', tokens: 1200},
+    ]);
+  });
+
+  it('merges per-modality usage in runGeminiAgentTurn trace across tool rounds', async () => {
+    const roundStreams: InteractionStreamEventLike[][] = [
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-mod-1', status: 'in_progress'}},
+        {
+          event_type: 'step.start',
+          index: 0,
+          step: {
+            type: 'function_call',
+            id: 'call-mod-1',
+            name: 'get_script_source',
+            arguments: {targetIds: ['MB0']},
+          },
+        },
+        {event_type: 'step.stop', index: 0},
+        {
+          event_type: 'interaction.completed',
+          interaction: {
+            id: 'int-mod-1',
+            status: 'requires_action',
+            usage: {
+              total_input_tokens: 1000,
+              total_cached_tokens: 0,
+              total_output_tokens: 50,
+              input_tokens_by_modality: [
+                {modality: 'text', tokens: 700},
+                {modality: 'image', tokens: 300},
+              ],
+              output_tokens_by_modality: [{modality: 'text', tokens: 50}],
+            },
+          },
+        },
+      ],
+      [
+        {event_type: 'interaction.created', interaction: {id: 'int-mod-2', status: 'in_progress'}},
+        {event_type: 'step.delta', index: 0, delta: {type: 'text', text: 'Done.'}},
+        {
+          event_type: 'interaction.completed',
+          interaction: {
+            id: 'int-mod-2',
+            status: 'completed',
+            usage: {
+              total_input_tokens: 1500,
+              total_cached_tokens: 900,
+              total_output_tokens: 80,
+              input_tokens_by_modality: [
+                {modality: 'text', tokens: 1200},
+                {modality: 'image', tokens: 300},
+              ],
+              cached_tokens_by_modality: [
+                {modality: 'text', tokens: 650},
+                {modality: 'image', tokens: 250},
+              ],
+              output_tokens_by_modality: [{modality: 'text', tokens: 80}],
+            },
+          },
+        },
+      ],
+    ];
+
+    const res = await runGeminiAgentTurn({
+      apiKey: 'AIza-modality-test',
+      model: 'gemini-4-hydrogen',
+      reasoningLevel: 'low',
+      mode: 'refine',
+      prompt: 'Check MB0.',
+      rawText: SAMPLE_SCRIPT,
+      createClient: () => ({
+        interactions: {create: async () => asAsyncStream(roundStreams.shift() ?? [])},
+      }),
+    });
+
+    expect(res.trace.usage).toEqual({
+      total_input_tokens: 2500,
+      total_cached_tokens: 900,
+      total_output_tokens: 130,
+      input_tokens_by_modality: [
+        {modality: 'text', tokens: 1900},
+        {modality: 'image', tokens: 600},
+      ],
+      cached_tokens_by_modality: [
+        {modality: 'text', tokens: 650},
+        {modality: 'image', tokens: 250},
+      ],
+      output_tokens_by_modality: [{modality: 'text', tokens: 130}],
+    });
   });
 });

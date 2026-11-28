@@ -235,6 +235,50 @@ export function redactSecret(text: string, secret: string): string {
   return text.split(secret).join('[REDACTED]');
 }
 
+interface ModalityTokenEntry {
+  modality: string;
+  tokens: number;
+}
+
+function isModalityTokenEntry(value: unknown): value is ModalityTokenEntry {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.modality === 'string' &&
+    typeof record.tokens === 'number' &&
+    Number.isFinite(record.tokens)
+  );
+}
+
+function isModalityTokenArray(value: unknown): value is ModalityTokenEntry[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isModalityTokenEntry);
+}
+
+function mergeModalityTokenArrays(
+  existing: unknown,
+  incoming: readonly ModalityTokenEntry[]
+): ModalityTokenEntry[] {
+  const totalsByModality = new Map<string, number>();
+
+  if (isModalityTokenArray(existing)) {
+    for (const entry of existing) {
+      totalsByModality.set(
+        entry.modality,
+        (totalsByModality.get(entry.modality) ?? 0) + entry.tokens
+      );
+    }
+  }
+
+  for (const entry of incoming) {
+    totalsByModality.set(
+      entry.modality,
+      (totalsByModality.get(entry.modality) ?? 0) + entry.tokens
+    );
+  }
+
+  return Array.from(totalsByModality, ([modality, tokens]) => ({modality, tokens}));
+}
+
 export function aggregateRoundUsage(
   rounds: readonly AgentRoundTrace[]
 ): Record<string, unknown> | undefined {
@@ -243,7 +287,6 @@ export function aggregateRoundUsage(
     .filter((u): u is Record<string, unknown> => Boolean(u && typeof u === 'object'));
 
   if (usages.length === 0) return undefined;
-  if (usages.length === 1) return {...usages[0]};
 
   const aggregated: Record<string, unknown> = {};
   for (const usage of usages) {
@@ -251,6 +294,10 @@ export function aggregateRoundUsage(
       if (typeof value === 'number' && Number.isFinite(value)) {
         const prev = aggregated[key];
         aggregated[key] = typeof prev === 'number' ? prev + value : value;
+      } else if (isModalityTokenArray(value)) {
+        aggregated[key] = mergeModalityTokenArrays(aggregated[key], value);
+      } else if (Array.isArray(value) && value.length === 0 && isModalityTokenArray(aggregated[key])) {
+        continue;
       } else {
         aggregated[key] = value;
       }
